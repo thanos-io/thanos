@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
@@ -29,6 +30,8 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	t.Parallel()
+
 	now := model.Now()
 	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
@@ -323,71 +326,138 @@ func TestWriter(t *testing.T) {
 				},
 			},
 		},
+		"should succeed on series with utf-8 labels": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: append(lbls,
+								labelpb.ZLabel{Name: "label:name", Value: "label:value"},   // UTF-8 instance name
+								labelpb.ZLabel{Name: "region:name", Value: "region:value"}, // UTF-8 region name
+							),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels: append(lbls,
+						labelpb.ZLabel{Name: "label:name", Value: "label:value"},
+						labelpb.ZLabel{Name: "region:name", Value: "region:value"},
+					),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
 	}
 
 	for testName, testData := range tests {
 		t.Run(testName, func(t *testing.T) {
-			dir := t.TempDir()
-			logger := log.NewNopLogger()
+			t.Run("proto_writer", func(t *testing.T) {
+				logger, m, app := setupMultitsdb(t, testData.maxExemplars)
 
-			m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:       (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
-				RetentionDuration:      (6 * time.Hour).Milliseconds(),
-				NoLockfile:             true,
-				MaxExemplars:           testData.maxExemplars,
-				EnableExemplarStorage:  true,
-				EnableNativeHistograms: true,
-			},
-				labels.FromStrings("replica", "01"),
-				"tenant_id",
-				nil,
-				false,
-				metadata.NoneFunc,
-			)
-			t.Cleanup(func() { testutil.Ok(t, m.Close()) })
+				w := NewWriter(logger, m, testData.opts)
 
-			testutil.Ok(t, m.Flush())
-			testutil.Ok(t, m.Open())
+				for idx, req := range testData.reqs {
+					err := w.Write(context.Background(), tenancy.DefaultTenant, req.Timeseries)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			app, err := m.TenantAppendable(tenancy.DefaultTenant)
-			testutil.Ok(t, err)
-
-			testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
-				_, err = app.Appender(context.Background())
-				return err
-			}))
-
-			w := NewWriter(logger, m, testData.opts)
-
-			for idx, req := range testData.reqs {
-				err = w.Write(context.Background(), tenancy.DefaultTenant, req)
-
-				// We expect no error on any request except the last one
-				// which may error (and in that case we assert on it).
-				if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
-					testutil.Ok(t, err)
-				} else {
-					testutil.NotOk(t, err)
-					testutil.Equals(t, testData.expectedErr.Error(), err.Error())
+					// We expect no error on any request except the last one
+					// which may error (and in that case we assert on it).
+					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
+						testutil.Ok(t, err)
+					} else {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, testData.expectedErr.Error(), err.Error())
+					}
 				}
-			}
 
-			// On each expected series, assert we have a ref available.
-			a, err := app.Appender(context.Background())
-			testutil.Ok(t, err)
-			gr := a.(storage.GetRef)
+				assertWrittenData(t, app, testData.expectedIngested)
+			})
 
-			for _, ts := range testData.expectedIngested {
-				l := labelpb.ZLabelsToPromLabels(ts.Labels)
-				ref, _ := gr.GetRef(l, l.Hash())
-				testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
-			}
+			t.Run("capnproto_writer", func(t *testing.T) {
+				logger, m, app := setupMultitsdb(t, testData.maxExemplars)
+
+				opts := &CapNProtoWriterOptions{}
+				if testData.opts != nil {
+					opts.TooFarInFutureTimeWindow = testData.opts.TooFarInFutureTimeWindow
+				}
+				w := NewCapNProtoWriter(logger, m, opts)
+
+				for idx, req := range testData.reqs {
+					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(capnpReq)
+					testutil.Ok(t, err)
+					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
+
+					// We expect no error on any request except the last one
+					// which may error (and in that case we assert on it).
+					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
+						testutil.Ok(t, err)
+					} else {
+						testutil.NotOk(t, err)
+						testutil.Equals(t, testData.expectedErr.Error(), err.Error())
+					}
+				}
+
+				assertWrittenData(t, app, testData.expectedIngested)
+			})
 		})
 	}
+}
+
+func assertWrittenData(t *testing.T, app Appendable, expectedIngested []prompb.TimeSeries) {
+	// On each expected series, assert we have a ref available.
+	a, err := app.Appender(context.Background())
+	testutil.Ok(t, err)
+	gr := a.(storage.GetRef)
+
+	for _, ts := range expectedIngested {
+		l := labelpb.ZLabelsToPromLabels(ts.Labels)
+		ref, _ := gr.GetRef(l, l.Hash())
+		testutil.Assert(t, ref != 0, fmt.Sprintf("appender should have reference to series %v", ts))
+	}
+}
+
+func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, Appendable) {
+	dir := t.TempDir()
+	logger := log.NewNopLogger()
+
+	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:       (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
+		RetentionDuration:      (6 * time.Hour).Milliseconds(),
+		NoLockfile:             true,
+		MaxExemplars:           maxExemplars,
+		EnableExemplarStorage:  true,
+		EnableNativeHistograms: true,
+	},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	t.Cleanup(func() { testutil.Ok(t, m.Close()) })
+
+	testutil.Ok(t, m.Flush())
+	testutil.Ok(t, m.Open())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	app, err := m.TenantAppendable(tenancy.DefaultTenant)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		_, err = app.Appender(context.Background())
+		return err
+	}))
+	return logger, m, app
 }
 
 func BenchmarkWriterTimeSeriesWithSingleLabel_10(b *testing.B)   { benchmarkWriter(b, 1, 10, false) }
@@ -435,6 +505,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		"tenant_id",
 		nil,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
@@ -465,8 +536,8 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		for b.Loop() {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 
@@ -476,8 +547,8 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq))
+		for b.Loop() {
+			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
 
@@ -492,12 +563,12 @@ func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bo
 	// Generate some labels first.
 	l := make([]labelpb.ZLabel, 0, numLabels)
 	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
-	for i := 0; i < numLabels; i++ {
+	for i := range numLabels {
 		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
 	}
 
 	ts := make([]prompb.TimeSeries, numSeries)
-	for j := 0; j < numSeries; j++ {
+	for j := range numSeries {
 		ts[j] = prompb.TimeSeries{
 			Labels: l,
 		}

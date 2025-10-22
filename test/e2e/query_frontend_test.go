@@ -5,14 +5,12 @@ package e2e_test
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
+	"os"
 	"reflect"
 	"regexp"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -21,9 +19,8 @@ import (
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -33,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/cacheutil"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -270,7 +268,7 @@ func TestQueryFrontend(t *testing.T) {
 
 	t.Run("query frontend splitting works for labels names API", func(t *testing.T) {
 		// LabelNames and LabelValues API should still work via query frontend.
-		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -289,7 +287,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelNames(t, ctx, queryFrontend.Endpoint("http"), nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) > 0
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -310,7 +308,7 @@ func TestQueryFrontend(t *testing.T) {
 	})
 
 	t.Run("query frontend splitting works for labels values API", func(t *testing.T) {
-		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -329,7 +327,7 @@ func TestQueryFrontend(t *testing.T) {
 			e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tripperware", "labels"))),
 		)
 
-		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), func(res []string) bool {
+		labelValues(t, ctx, queryFrontend.Endpoint("http"), "instance", nil, timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)), timestamp.FromTime(predefTimestamp.Add(time.Hour)), 0, func(res []string) bool {
 			return len(res) == 1 && res[0] == "localhost:9090"
 		})
 		testutil.Ok(t, q.WaitSumMetricsWithOptions(
@@ -357,6 +355,7 @@ func TestQueryFrontend(t *testing.T) {
 			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(predefTimestamp.Add(-time.Hour)),
 			timestamp.FromTime(predefTimestamp.Add(time.Hour)),
+			0,
 			func(res []map[string]string) bool {
 				if len(res) != 1 {
 					return false
@@ -395,6 +394,7 @@ func TestQueryFrontend(t *testing.T) {
 			[]*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")},
 			timestamp.FromTime(predefTimestamp.Add(-24*time.Hour)),
 			timestamp.FromTime(predefTimestamp.Add(time.Hour)),
+			0,
 			func(res []map[string]string) bool {
 				if len(res) != 1 {
 					return false
@@ -585,36 +585,31 @@ func TestRangeQueryShardingWithRandomData(t *testing.T) {
 
 	ctx := context.Background()
 	timeSeries := []labels.Labels{
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/metrics"),
 	}
 
-	// Ensure labels are ordered.
-	for _, ts := range timeSeries {
-		sort.Slice(ts, func(i, j int) bool {
-			return ts[i].Name < ts[j].Name
-		})
-	}
+	timeSeries = sortLabels(timeSeries)
 
 	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
-	for _, labels := range timeSeries {
-		labelspb := make([]prompb.Label, 0, len(labels))
-		for _, label := range labels {
+	for _, lbls := range timeSeries {
+		labelspb := make([]prompb.Label, 0, lbls.Len())
+		lbls.Range(func(l labels.Label) {
 			labelspb = append(labelspb, prompb.Label{
-				Name:  string(label.Name),
-				Value: string(label.Value),
+				Name:  l.Name,
+				Value: l.Value,
 			})
-		}
+		})
 		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
 			Samples: []prompb.Sample{
@@ -762,7 +757,7 @@ func TestRangeQueryDynamicHorizontalSharding(t *testing.T) {
 	// make sure that we don't break cortex cache code.
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "cortex_cache_fetched_keys_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
-	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_new_total"))
+	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_new_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_added_total"))
 	testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(4), "querier_cache_misses_total"))
 
@@ -790,36 +785,32 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 	ctx := context.Background()
 
 	timeSeries := []labels.Labels{
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "1"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "2"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "3"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "4"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "5"}, {Name: "handler", Value: "/metrics"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/"}},
-		{{Name: labels.MetricName, Value: "http_requests_total"}, {Name: "pod", Value: "6"}, {Name: "handler", Value: "/metrics"}},
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "1", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "2", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "3", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "4", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "5", "handler", "/metrics"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/"),
+		labels.FromStrings(labels.MetricName, "http_requests_total", "pod", "6", "handler", "/metrics"),
 	}
 
-	// Ensure labels are ordered.
-	for _, ts := range timeSeries {
-		sort.Slice(ts, func(i, j int) bool {
-			return ts[i].Name < ts[j].Name
-		})
-	}
+	// Ensure lbl are ordered.
+	timeSeries = sortLabels(timeSeries)
 
 	samplespb := make([]prompb.TimeSeries, 0, len(timeSeries))
-	for _, labels := range timeSeries {
-		labelspb := make([]prompb.Label, 0, len(labels))
-		for _, label := range labels {
+	for _, lbl := range timeSeries {
+		labelspb := make([]prompb.Label, 0, lbl.Len())
+		lbl.Range(func(l labels.Label) {
 			labelspb = append(labelspb, prompb.Label{
-				Name:  string(label.Name),
-				Value: string(label.Value),
+				Name:  l.Name,
+				Value: l.Value,
 			})
-		}
+		})
 		samplespb = append(samplespb, prompb.TimeSeries{
 			Labels: labelspb,
 			Samples: []prompb.Sample{
@@ -833,7 +824,8 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 
 	testutil.Ok(t, remoteWrite(ctx, samplespb, i.Endpoint("remote-write")))
 
-	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).Init()
+	enableFeature := []string{"promql-experimental-functions"}
+	q1 := e2ethanos.NewQuerierBuilder(e, "q1", i.InternalEndpoint("grpc")).WithEnabledFeatures(enableFeature).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q1))
 
 	inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
@@ -847,7 +839,8 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 		QueryRangeConfig: queryfrontend.QueryRangeConfig{
 			AlignRangeWithStep: false,
 		},
-		NumShards: 2,
+		NumShards:      2,
+		EnableFeatures: enableFeature,
 	}
 	qfe := e2ethanos.NewQueryFrontend(e, "query-frontend", "http://"+q1.InternalEndpoint("http"), config, inMemoryCacheConfig)
 	testutil.Ok(t, e2e.StartAndWaitReady(qfe))
@@ -903,6 +896,11 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 			qryFunc:        func() string { return `max by (handler) (sum(http_requests_total) by (pod, handler))` },
 			expectedSeries: 2,
 		},
+		{
+			name:           "aggregations with parameter",
+			qryFunc:        func() string { return `topk(2, limitk by (pod) (4, http_requests_total))` },
+			expectedSeries: 2,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resultWithoutSharding := instantQuery(t, ctx, q1.Endpoint("http"), tc.qryFunc, func() time.Time {
@@ -912,108 +910,6 @@ func TestInstantQueryShardingWithRandomData(t *testing.T) {
 				return predefTimestamp.Time()
 			}, queryOpts, tc.expectedSeries)
 			testutil.Equals(t, resultWithoutSharding, resultWithSharding)
-		})
-	}
-}
-
-func TestQueryFrontendTenantForward(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name                   string
-		customTenantHeaderName string
-		tenantName             string
-	}{
-		{
-			name:                   "default tenant header name with a tenant name",
-			customTenantHeaderName: tenancy.DefaultTenantHeader,
-			tenantName:             "test-tenant",
-		},
-		{
-			name:                   "default tenant header name without a tenant name",
-			customTenantHeaderName: tenancy.DefaultTenantHeader,
-		},
-		{
-			name:                   "custom tenant header name with a tenant name",
-			customTenantHeaderName: "X-Foobar-Tenant",
-			tenantName:             "test-tenant",
-		},
-		{
-			name:                   "custom tenant header name without a tenant name",
-			customTenantHeaderName: "X-Foobar-Tenant",
-		},
-	}
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if tc.tenantName == "" {
-				tc.tenantName = tenancy.DefaultTenant
-			}
-			// Use a shorthash of tc.name as e2e env name because the random name generator is having a collision for
-			// some reason.
-			e2ename := fmt.Sprintf("%x", sha256.Sum256([]byte(tc.name)))[:8]
-			e, err := e2e.New(e2e.WithName(e2ename))
-			testutil.Ok(t, err)
-			t.Cleanup(e2ethanos.CleanScenario(t, e))
-
-			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(http.StatusNoContent)
-				// The tenant header present in the outgoing request should be the default tenant header.
-				testutil.Equals(t, tc.tenantName, r.Header.Get(tenancy.DefaultTenantHeader))
-
-				// In case the query frontend is configured with a custom tenant header name, verify such header
-				// is not present in the outgoing request.
-				if tc.customTenantHeaderName != tenancy.DefaultTenantHeader {
-					testutil.Equals(t, "", r.Header.Get(tc.customTenantHeaderName))
-				}
-
-				// Verify the outgoing request will keep the X-Scope-OrgID header for compatibility with Cortex.
-				testutil.Equals(t, tc.tenantName, r.Header.Get("X-Scope-OrgID"))
-			}))
-			t.Cleanup(ts.Close)
-			tsPort := urlParse(t, ts.URL).Port()
-
-			inMemoryCacheConfig := queryfrontend.CacheProviderConfig{
-				Type: queryfrontend.INMEMORY,
-				Config: queryfrontend.InMemoryResponseCacheConfig{
-					MaxSizeItems: 1000,
-					Validity:     time.Hour,
-				},
-			}
-			queryFrontendConfig := queryfrontend.Config{
-				TenantHeader: tc.customTenantHeaderName,
-			}
-			queryFrontend := e2ethanos.NewQueryFrontend(
-				e,
-				"qfe",
-				fmt.Sprintf("http://%s:%s", e.HostAddr(), tsPort),
-				queryFrontendConfig,
-				inMemoryCacheConfig,
-			)
-			testutil.Ok(t, e2e.StartAndWaitReady(queryFrontend))
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-			t.Cleanup(cancel)
-
-			promClient, err := api.NewClient(api.Config{
-				Address: "http://" + queryFrontend.Endpoint("http"),
-				RoundTripper: tenantRoundTripper{
-					tenant: tc.tenantName,
-					rt:     http.DefaultTransport,
-				},
-			})
-			testutil.Ok(t, err)
-			v1api := v1.NewAPI(promClient)
-
-			r := v1.Range{
-				Start: time.Now().Add(-time.Hour),
-				End:   time.Now(),
-				Step:  time.Minute,
-			}
-
-			_, _, _ = v1api.QueryRange(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", r)
-			_, _, _ = v1api.Query(ctx, "rate(prometheus_tsdb_head_samples_appended_total[5m])", time.Now())
 		})
 	}
 }
@@ -1067,7 +963,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 	// Query once with default-tenant to ensure everything is ready
 	// for the following requests
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 	}, 1)
@@ -1075,7 +971,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 
 	// Query a few times with tenant 1
 	instantQuery(t, ctx, queryFrontend.Endpoint("http"), func() string {
-		return "prometheus_api_remote_read_queries"
+		return "prometheus_remote_read_handler_queries"
 	}, time.Now, promclient.QueryOptions{
 		Deduplicate: true,
 		HTTPHeaders: map[string][]string{"thanos-tenant": {"test-tenant-1"}},
@@ -1200,4 +1096,64 @@ func TestQueryFrontendAnalyze(t *testing.T) {
 	t.Log(strings.TrimSpace(string(body)))
 
 	require.Equal(t, true, r.MatchString(strings.TrimSpace(string(body))))
+}
+
+func TestQueryFrontendReadyOnlyIfDownstreamIsAvailable(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("qfe-analyze")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").Init()
+	qfe := e2ethanos.NewQueryFrontend(e, "1", "http://"+q.InternalEndpoint("http"), queryfrontend.Config{}, queryfrontend.CacheProviderConfig{
+		Type: queryfrontend.INMEMORY,
+	})
+	testutil.Ok(t, qfe.Start())
+
+	l := log.NewLogfmtLogger(os.Stdout)
+
+	timeoutCtx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	t.Cleanup(cancel)
+
+	require.NoError(t, runutil.RetryWithLog(l, 1*time.Second, timeoutCtx.Done(), func() error {
+		resp, err := http.Get(fmt.Sprintf("http://%s/-/ready", qfe.Endpoint("http")))
+		if err != nil {
+			return err
+		}
+		t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+		if resp.StatusCode/100 == 2 {
+			return fmt.Errorf("expected query frontend to be not ready, but it is ready")
+		}
+		return nil
+	}))
+
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	require.NoError(t, runutil.RetryWithLog(l, 1*time.Second, timeoutCtx.Done(), func() error {
+		resp, err := http.Get(fmt.Sprintf("http://%s/-/ready", qfe.Endpoint("http")))
+		if err != nil {
+			return err
+		}
+		t.Cleanup(func() { require.NoError(t, resp.Body.Close()) })
+
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("expected query frontend to be ready (%d), but it is not ready", resp.StatusCode)
+		}
+		return nil
+	}))
+
+}
+
+func sortLabels(timeSeries []labels.Labels) []labels.Labels {
+	for j, ts := range timeSeries {
+		builder := labels.NewBuilder(labels.EmptyLabels())
+		ts.Range(func(l labels.Label) {
+			builder.Set(l.Name, l.Value)
+		})
+
+		timeSeries[j] = builder.Labels()
+	}
+	return timeSeries
 }

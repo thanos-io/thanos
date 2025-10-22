@@ -149,7 +149,7 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
-	@$(PROMU) build --prefix $(PREFIX)
+	@$(PROMU) build -v --prefix $(PREFIX)
 
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild
@@ -295,6 +295,13 @@ proto: ## Generates Go files from Thanos proto files.
 proto: check-git $(GOIMPORTS) $(PROTOC) $(PROTOC_GEN_GOGOFAST)
 	@GOIMPORTS_BIN="$(GOIMPORTS)" PROTOC_BIN="$(PROTOC)" PROTOC_GEN_GOGOFAST_BIN="$(PROTOC_GEN_GOGOFAST)" PROTOC_VERSION="$(PROTOC_VERSION)" scripts/genproto.sh
 
+.PHONY: capnp
+capnp: ## Generates Go files from Thanos capnproto files.
+capnp: check-git
+	capnp compile -I $(shell go list -m -f '{{.Dir}}' capnproto.org/go/capnp/v3)/std -ogo pkg/receive/writecapnp/write_request.capnp
+	@$(GOIMPORTS) -w pkg/receive/writecapnp/write_request.capnp.go
+	go run ./scripts/copyright
+
 .PHONY: tarballs-release
 tarballs-release: ## Build tarballs.
 tarballs-release: $(PROMU)
@@ -312,7 +319,7 @@ test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@go test -tags slicelabels -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
@@ -333,7 +340,11 @@ test-e2e: docker-e2e $(GOTESPLIT)
 	# NOTE(GiedriusS):
 	# * If you want to limit CPU time available in e2e tests then pass E2E_DOCKER_CPUS environment variable. For example, E2E_DOCKER_CPUS=0.05 limits CPU time available
 	#   to spawned Docker containers to 0.05 cores.
-	@$(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- ${GOTEST_OPTS}
+	@if [ -n "$(SINGLE_E2E_TEST)" ]; then \
+        $(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e -- -tags slicelabels -run $(SINGLE_E2E_TEST) ${GOTEST_OPTS}; \
+    else \
+        $(GOTESPLIT) -total ${GH_PARALLEL} -index ${GH_INDEX} ./test/e2e/... -- -tags slicelabels ${GOTEST_OPTS}; \
+    fi
 
 .PHONY: test-e2e-local
 test-e2e-local: ## Runs all thanos e2e tests locally.
@@ -395,8 +406,7 @@ go-lint: check-git deps $(GOLANGCI_LINT) $(FAILLINT)
 	$(call require_clean_work_tree,'detected not clean work tree before running lint, previous job changed something?')
 	@echo ">> verifying modules being imported"
 	@# TODO(bwplotka): Add, Printf, DefaultRegisterer, NewGaugeFunc and MustRegister once exception are accepted. Add fmt.{Errorf}=github.com/pkg/errors.{Errorf} once https://github.com/fatih/faillint/issues/10 is addressed.
-	@$(FAILLINT) -paths "errors=github.com/pkg/errors,\
-github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
+	@$(FAILLINT) -paths "github.com/prometheus/tsdb=github.com/prometheus/prometheus/tsdb,\
 github.com/prometheus/prometheus/pkg/testutils=github.com/thanos-io/thanos/pkg/testutil,\
 github.com/prometheus/client_golang/prometheus.{DefaultGatherer,DefBuckets,NewUntypedFunc,UntypedFunc},\
 github.com/prometheus/client_golang/prometheus.{NewCounter,NewCounterVec,NewCounterVec,NewGauge,NewGaugeVec,NewGaugeFunc,\
@@ -408,7 +418,7 @@ github.com/prometheus/prometheus/promql/parser.{ParseExpr,ParseMetricSelector}=g
 io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile}" $(shell go list ./... | grep -v "internal/cortex")
 	@$(FAILLINT) -paths "fmt.{Print,Println,Sprint}" -ignore-tests ./...
 	@echo ">> linting all of the Go files GOGC=${GOGC}"
-	@$(GOLANGCI_LINT) run
+	@$(GOLANGCI_LINT) run --build-tags=slicelabels
 	@echo ">> ensuring Copyright headers"
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"

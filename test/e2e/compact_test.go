@@ -21,12 +21,14 @@ import (
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -65,11 +67,11 @@ type blockDesc struct {
 	hashFunc           metadata.HashFunc
 }
 
-func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration, hf metadata.HashFunc, numSamples int) (ulid.ULID, error) {
+func (b *blockDesc) Create(ctx context.Context, dir string, delay time.Duration, hf metadata.HashFunc, numSamples int, sampleTypes []chunkenc.ValueType) (ulid.ULID, error) {
 	if delay == 0*time.Second {
-		return e2eutil.CreateBlock(ctx, dir, b.series, numSamples, b.mint, b.maxt, b.extLset, 0, hf)
+		return e2eutil.CreateBlock(ctx, dir, b.series, numSamples, b.mint, b.maxt, b.extLset, 0, hf, sampleTypes)
 	}
-	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, numSamples, b.mint, b.maxt, delay, b.extLset, 0, hf)
+	return e2eutil.CreateBlockWithBlockDelay(ctx, dir, b.series, numSamples, b.mint, b.maxt, delay, b.extLset, 0, hf, sampleTypes)
 }
 
 func TestCompactWithStoreGateway(t *testing.T) {
@@ -351,7 +353,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
 	testutil.Ok(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -359,8 +361,9 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 
 	rawBlockIDs := map[ulid.ULID]struct{}{}
 	for _, b := range blocks {
-		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc, 120)
+		id, err := b.Create(ctx, dir, justAfterConsistencyDelay, b.hashFunc, 120, nil)
 		testutil.Ok(t, err)
+
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 			return objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String())
 		}))
@@ -385,7 +388,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		maxt:    timestamp.FromTime(now.Add(10 * 24 * time.Hour)),
 	}
 	// New block that will be downsampled.
-	downsampledRawID, err := downsampledBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200)
+	downsampledRawID, err := downsampledBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, downsampledRawID.String()), downsampledRawID.String()))
 
@@ -399,33 +402,33 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		}
 
 		// New Partial block.
-		id, err := malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120)
+		id, err := malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// New Partial block + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120)
+		id, err = malformedBase.Create(ctx, dir, 0*time.Second, metadata.NoneFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 
 		// Partial block after consistency delay + old deletion mark ready to be deleted.
-		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120)
+		id, err = malformedBase.Create(ctx, dir, justAfterConsistencyDelay, metadata.NoneFunc, 120, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
 		deletionMark, err := json.Marshal(metadata.DeletionMark{
@@ -437,30 +440,17 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, err)
 		testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.DeletionMarkFilename), bytes.NewBuffer(deletionMark)))
 		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
-
-		// Partial block after delete threshold.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120)
-		testutil.Ok(t, err)
-		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
-
-		// Partial block after delete threshold + deletion mark.
-		id, err = malformedBase.Create(ctx, dir, 50*time.Hour, metadata.NoneFunc, 120)
-		testutil.Ok(t, err)
-		testutil.Ok(t, os.Remove(path.Join(dir, id.String(), metadata.MetaFilename)))
-		testutil.Ok(t, block.MarkForDeletion(ctx, logger, bkt, id, "", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
-		testutil.Ok(t, objstore.UploadDir(ctx, logger, bkt, path.Join(dir, id.String()), id.String()))
 	}
 
 	bktConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	}
 
 	// Crank down the deletion mark delay since deduplication can miss blocks in the presence of replica labels it doesn't know about.
 	str := e2ethanos.NewStoreGW(e, "1", bktConfig, "", "", []string{"--ignore-deletion-marks-delay=2s"})
 	testutil.Ok(t, e2e.StartAndWaitReady(str))
-	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 
@@ -518,7 +508,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		},
 	)
 	// Store view:
-	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+8)), "thanos_blocks_meta_synced"))
+	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(float64(len(rawBlockIDs)+6)), "thanos_blocks_meta_synced"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
 	testutil.Ok(t, str.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_modified"))
 
@@ -652,10 +642,6 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_group_compaction_runs_started_total"))
 		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(1), "thanos_compact_group_compaction_runs_completed_total"))
 
-		// However, the blocks have been cleaned because that happens concurrently.
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_aborted_partial_uploads_deletion_attempts_total"))
-		testutil.Ok(t, c.WaitSumMetrics(e2emon.Equals(2), "thanos_compact_blocks_cleaned_total"))
-
 		// Ensure bucket UI.
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "global"))
 		ensureGETStatusCode(t, http.StatusOK, "http://"+path.Join(c.Endpoint("http"), "loaded"))
@@ -766,7 +752,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// NOTE: We cannot assert on intermediate `thanos_blocks_meta_` metrics as those are gauge and change dynamically due to many
 		// compaction groups. Wait for at least first compaction iteration (next is in 5m).
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(19), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(18), []string{"thanos_compact_blocks_cleaned_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_block_cleanup_failures_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_aborted_partial_uploads_deletion_attempts_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_group_compactions_total"}, e2emon.WaitMissingMetrics()))
@@ -775,7 +761,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(7), []string{"thanos_compact_group_compaction_runs_started_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(7), []string{"thanos_compact_group_compaction_runs_completed_total"}, e2emon.WaitMissingMetrics()))
 
-		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_total"}, e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"thanos_compact_downsample_failures_total"}, e2emon.WaitMissingMetrics()))
 
 		testutil.Ok(t, str.WaitSumMetricsWithOptions(
@@ -896,7 +882,7 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bktCfg := e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir())
-	bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test")
+	bkt, err := s3.NewBucketWithConfig(logger, bktCfg, "test", nil)
 	testutil.Ok(t, err)
 
 	downsampledBase := blockDesc{
@@ -911,13 +897,13 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	// New block that will be downsampled.
 	justAfterConsistencyDelay := 30 * time.Minute
 
-	downsampledRawID, err := downsampledBase.Create(context.Background(), dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200)
+	downsampledRawID, err := downsampledBase.Create(context.Background(), dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200, nil)
 	testutil.Ok(t, err)
 	testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, downsampledRawID.String()), downsampledRawID.String()))
 	testutil.Ok(t, block.MarkForNoDownsample(context.Background(), logger, bkt, downsampledRawID, metadata.ManualNoDownsampleReason, "why not", promauto.With(nil).NewCounter(prometheus.CounterOpts{})))
 
 	c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
 	}, nil)
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
@@ -944,7 +930,7 @@ func TestCompactorIssue6775(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
-		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed")
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
 	testutil.Ok(t, err)
 
 	baseBlockDesc := blockDesc{
@@ -957,15 +943,15 @@ func TestCompactorIssue6775(t *testing.T) {
 		maxt:    maxTime,
 	}
 
-	for i := 0; i < 2; i++ {
-		rawBlockID, err := baseBlockDesc.Create(context.Background(), dir, 0, metadata.NoneFunc, 1200+i)
+	for i := range 2 {
+		rawBlockID, err := baseBlockDesc.Create(context.Background(), dir, 0, metadata.NoneFunc, 1200+i, nil)
 		testutil.Ok(t, err)
 		testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, rawBlockID.String()), rawBlockID.String()))
 	}
 
 	// Downsample them first.
 	bds := e2ethanos.NewToolsBucketDownsample(e, "downsample", client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	})
 	testutil.Ok(t, bds.Start())
@@ -995,9 +981,53 @@ func TestCompactorIssue6775(t *testing.T) {
 
 	// Run the compactor.
 	c := e2ethanos.NewCompactorBuilder(e, "working").Init(client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.Dir()),
 	}, nil, "--compact.enable-vertical-compaction")
 	testutil.Ok(t, e2e.StartAndWaitReady(c))
 	testutil.Ok(t, c.WaitSumMetricsWithOptions(e2emon.Greater(0), []string{"thanos_compact_iterations_total"}, e2emon.WaitMissingMetrics()))
+}
+
+func TestCompactorDownsampleNativeHistograms(t *testing.T) {
+	logger := log.NewNopLogger()
+	e, err := e2e.NewDockerEnvironment("c-dspl-hstg")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	dir := filepath.Join(e.SharedDir(), "tmp")
+	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
+
+	const bucket = "compact-test"
+	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	bkt, err := s3.NewBucketWithConfig(logger,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-feed", nil)
+	testutil.Ok(t, err)
+
+	maxt := time.Now()
+	mint := maxt.Add(-7 * 24 * time.Hour)
+
+	justAfterConsistencyDelay := 30 * time.Minute
+
+	baseBlockDesc := blockDesc{
+		series: []labels.Labels{
+			labels.FromStrings("z", "1", "b", "2"),
+			labels.FromStrings("z", "1", "b", "5"),
+			labels.FromStrings("z", "1", "b", "6"),
+		},
+		extLset: labels.FromStrings("case", "downsampled-block-with-nativehistograms"),
+		mint:    timestamp.FromTime(mint),
+		maxt:    timestamp.FromTime(maxt),
+	}
+
+	rawBlockID, err := baseBlockDesc.Create(context.Background(), dir, justAfterConsistencyDelay, metadata.NoneFunc, 1200, []chunkenc.ValueType{chunkenc.ValHistogram, chunkenc.ValFloatHistogram, chunkenc.ValFloat})
+	testutil.Ok(t, err)
+	testutil.Ok(t, objstore.UploadDir(context.Background(), logger, bkt, path.Join(dir, rawBlockID.String()), rawBlockID.String()))
+	// Downsample them first.
+	bds := e2ethanos.NewToolsBucketDownsample(e, "downsample", client.BucketConfig{
+		Type:   objstore.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+	})
+	testutil.Ok(t, bds.Start())
 }

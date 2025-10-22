@@ -22,16 +22,19 @@ import (
 	logkit "github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+
+	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 
-	config_util "github.com/prometheus/common/config"
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -79,7 +82,7 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Router Ingestor.
-		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
@@ -104,6 +107,56 @@ func TestReceive(t *testing.T) {
 				"receive":    "receive-ingestor",
 				"replica":    "0",
 				"tenant_id":  "default-tenant",
+			},
+		})
+	})
+
+	t.Run("ingestor_otlp", func(t *testing.T) {
+		/*
+			The single_ingestor suite represents the simplest possible configuration of Thanos Receive.
+			 ┌──────────┐
+			 │  Prom    │
+			 └────┬─────┘
+			      │
+			 ┌────▼─────┐
+			 │ Ingestor │
+			 └────┬─────┘
+			      │
+			 ┌────▼─────┐
+			 │  Query   │
+			 └──────────┘
+			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
+		*/
+
+		t.Parallel()
+		e, err := e2e.NewDockerEnvironment("ingestor-otlp")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup Router Ingestor.
+		i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+		// Setup Otel
+		otel := e2ethanos.NewOtel(e, "1", e2ethanos.DefaultOtelConfig(e2ethanos.OTLPEndpoint(i.InternalEndpoint("remote-write"))), e2ethanos.DefaultOtelImage())
+		testutil.Ok(t, e2e.StartAndWaitReady(otel))
+
+		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+		// We expect the data from each Prometheus instance to be replicated twice across our ingesting instances
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"job":       "otel-collector",
+				"receive":   "receive-ingestor",
+				"tenant_id": "default-tenant",
 			},
 		})
 	})
@@ -134,9 +187,9 @@ func TestReceive(t *testing.T) {
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup Receives
-		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
-		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().Init()
-		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().Init()
+		r1 := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		r2 := e2ethanos.NewReceiveBuilder(e, "2").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		r3 := e2ethanos.NewReceiveBuilder(e, "3").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 
 		testutil.Ok(t, e2e.StartAndWaitReady(r1, r2, r3))
 
@@ -290,9 +343,9 @@ test_metric{a="2", b="2"} 1`)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 		// Setup 3 ingestors.
-		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().Init()
-		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().Init()
-		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().Init()
+		i1 := e2ethanos.NewReceiveBuilder(e, "i1").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		i2 := e2ethanos.NewReceiveBuilder(e, "i2").WithIngestionEnabled().WithExpandedPostingsCache().Init()
+		i3 := e2ethanos.NewReceiveBuilder(e, "i3").WithIngestionEnabled().WithExpandedPostingsCache().Init()
 
 		h := receive.HashringConfig{
 			Endpoints: []receive.Endpoint{
@@ -848,9 +901,9 @@ test_metric{a="2", b="2"} 1`)
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
 				SeriesCount:    "1",
-				MetricInterval: "30",
-				SeriesInterval: "3600",
-				ValueInterval:  "3600",
+				MetricInterval: "3600",
+				SeriesInterval: "30",
+				ValueInterval:  "30",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
 				RemoteWriteInterval: "30s",
@@ -886,9 +939,9 @@ test_metric{a="2", b="2"} 1`)
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
 				SeriesCount:    "1",
-				MetricInterval: "30",
-				SeriesInterval: "3600",
-				ValueInterval:  "3600",
+				MetricInterval: "3600",
+				SeriesInterval: "30",
+				ValueInterval:  "30",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
 				RemoteWriteInterval: "30s",
@@ -1142,11 +1195,92 @@ func TestReceiveExtractsTenant(t *testing.T) {
 			}
 
 			compressed := snappy.Encode(buf, pBuf.Bytes())
-			return client.Store(context.Background(), compressed, 0)
+
+			_, err = client.Store(context.Background(), compressed, 0)
+			return err
 		}))
 
 		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "http-tenant")), e2emon.WaitMissingMetrics()))
 		testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "tenant-3")), e2emon.WaitMissingMetrics()))
 
 	})
+}
+
+func TestReceiveCpnp(t *testing.T) {
+	e, err := e2e.NewDockerEnvironment("receive-cpnp")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	h := receive.HashringConfig{
+		TenantMatcherType: "glob",
+		Tenants: []string{
+			"default*",
+		},
+		Endpoints: []receive.Endpoint{
+			{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(1, h).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	ts := time.Now()
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Exemplars: []prompb.Exemplar{
+						{
+							Labels: []prompb.Label{
+								{Name: "receive", Value: "receive-ingestor"},
+							},
+							Value:     1.2345,
+							Timestamp: timestamp.FromTime(ts),
+						},
+					},
+					Labels: []prompb.Label{
+						{Name: model.MetricNameLabel, Value: "myself"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: timestamp.FromTime(ts)},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	v := instantQuery(t, context.Background(), q.Endpoint("http"), func() string { return "myself" }, func() time.Time { return ts }, promclient.QueryOptions{
+		Deduplicate: false,
+	}, 1)
+
+	v[0].Timestamp = 0
+
+	require.Equal(t, model.Vector{
+		{
+			Metric: model.Metric{
+				model.MetricNameLabel: "myself",
+				"receive":             "receive-ingestor",
+				"tenant_id":           "default-tenant",
+			},
+			Value: 1,
+		},
+	}, v)
+
+	// Verify fix for https://github.com/thanos-io/thanos/issues/8224
+	queryExemplars(
+		t, context.Background(), q.Endpoint("http"), "myself", timestamp.FromTime(ts), timestamp.FromTime(ts), func(data []*exemplarspb.ExemplarData) error {
+			require.Equal(t, "receive", data[0].Exemplars[0].Labels.Labels[0].Name)
+			return nil
+		},
+	)
+
 }

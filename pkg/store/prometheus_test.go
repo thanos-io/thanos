@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 
 	"github.com/pkg/errors"
@@ -26,22 +26,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
 func TestPrometheusStore_Series_e2e(t *testing.T) {
+	t.Parallel()
+
 	testPrometheusStoreSeriesE2e(t, "")
 }
 
 // Regression test for https://github.com/thanos-io/thanos/issues/478.
 func TestPrometheusStore_Series_promOnPath_e2e(t *testing.T) {
+	t.Parallel()
+
 	testPrometheusStoreSeriesE2e(t, "/prometheus/sub/path")
 }
 
 func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
-	defer custom.TolerantVerifyLeak(t)
-
 	p, err := e2eutil.NewPrometheusOnPath(prefix)
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
@@ -170,7 +171,7 @@ func expandChunk(cit chunkenc.Iterator) (res []sample) {
 }
 
 func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -189,8 +190,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
@@ -217,17 +217,6 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 				MaxTime:    baseT + 10000000000,
 			},
 			expectedErr: errors.New("rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)"),
-		},
-		{
-			req: &storepb.SeriesRequest{
-				SkipChunks: true,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_RE, Name: "wrong-chars-in-label-name(hyphen)", Value: "adsf"},
-				},
-				MinTime: baseT - 10000000000,
-				MaxTime: baseT + 10000000000,
-			},
-			expectedErr: errors.New("rpc error: code = InvalidArgument desc = expected 2xx response, got 400. Body: {\"status\":\"error\",\"errorType\":\"bad_data\",\"error\":\"invalid parameter \\\"match[]\\\": 1:7: parse error: unexpected character inside braces: '-'\"}"),
 		},
 		{
 			req: &storepb.SeriesRequest{
@@ -354,7 +343,7 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -371,8 +360,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
@@ -417,7 +405,7 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 }
 
 func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
+	t.Parallel()
 
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
@@ -434,8 +422,7 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testutil.Ok(t, p.Start(ctx, log.NewNopLogger()))
 
@@ -464,25 +451,4 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 		want := xxhash.Sum64(chunk.Raw.Data)
 		testutil.Equals(t, want, got)
 	}
-}
-
-func TestPrometheusStore_Info(t *testing.T) {
-	defer custom.TolerantVerifyLeak(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), nil, component.Sidecar,
-		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
-		func() (int64, int64) { return 123, 456 },
-		nil)
-	testutil.Ok(t, err)
-
-	resp, err := proxy.Info(ctx, &storepb.InfoRequest{})
-	testutil.Ok(t, err)
-
-	testutil.Equals(t, []labelpb.ZLabel{{Name: "region", Value: "eu-west"}}, resp.Labels)
-	testutil.Equals(t, storepb.StoreType_SIDECAR, resp.StoreType)
-	testutil.Equals(t, int64(123), resp.MinTime)
-	testutil.Equals(t, int64(456), resp.MaxTime)
 }

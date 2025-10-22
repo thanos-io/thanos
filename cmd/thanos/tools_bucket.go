@@ -23,7 +23,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/olekukonko/tablewriter"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -54,6 +55,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/promclient"
@@ -109,8 +111,11 @@ type bucketVerifyConfig struct {
 }
 
 type bucketLsConfig struct {
-	output        string
-	excludeDelete bool
+	output              string
+	excludeDelete       bool
+	selectorRelabelConf extflag.PathOrContent
+	filterConf          *store.FilterConfig
+	timeout             time.Duration
 }
 
 type bucketWebConfig struct {
@@ -161,8 +166,9 @@ type bucketMarkBlockConfig struct {
 }
 
 type bucketUploadBlocksConfig struct {
-	path   string
-	labels []string
+	path            string
+	labels          []string
+	uploadCompacted bool
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -180,10 +186,18 @@ func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClaus
 }
 
 func (tbc *bucketLsConfig) registerBucketLsFlag(cmd extkingpin.FlagClause) *bucketLsConfig {
+	tbc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+	tbc.filterConf = &store.FilterConfig{}
+
 	cmd.Flag("output", "Optional format in which to print each block's information. Options are 'json', 'wide' or a custom template.").
 		Short('o').Default("").StringVar(&tbc.output)
 	cmd.Flag("exclude-delete", "Exclude blocks marked for deletion.").
 		Default("false").BoolVar(&tbc.excludeDelete)
+	cmd.Flag("min-time", "Start of time range limit to list blocks. Thanos Tools will list blocks, which were created later than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("0000-01-01T00:00:00Z").SetValue(&tbc.filterConf.MinTime)
+	cmd.Flag("max-time", "End of time range limit to list. Thanos Tools will list only blocks, which were created earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
+		Default("9999-12-31T23:59:59Z").SetValue(&tbc.filterConf.MaxTime)
+	cmd.Flag("timeout", "Timeout to download metadata from remote storage").Default("5m").DurationVar(&tbc.timeout)
 	return tbc
 }
 
@@ -287,6 +301,7 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 func (tbc *bucketUploadBlocksConfig) registerBucketUploadBlocksFlag(cmd extkingpin.FlagClause) *bucketUploadBlocksConfig {
 	cmd.Flag("path", "Path to the directory containing blocks to upload.").Default("./data").StringVar(&tbc.path)
 	cmd.Flag("label", "External labels to add to the uploaded blocks (repeated).").PlaceHolder("key=\"value\"").StringsVar(&tbc.labels)
+	cmd.Flag("shipper.upload-compacted", "If true shipper will try to upload compacted blocks as well.").Default("false").BoolVar(&tbc.uploadCompacted)
 
 	return tbc
 }
@@ -327,7 +342,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -346,7 +361,7 @@ func registerBucketVerify(app extkingpin.AppClause, objStoreConfig *extflag.Path
 			}
 		} else {
 			// nil Prometheus registerer: don't create conflicting metrics.
-			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, component.Bucket.String())
+			backupBkt, err = client.NewBucket(logger, backupconfContentYaml, component.Bucket.String(), nil)
 			if err != nil {
 				return err
 			}
@@ -411,18 +426,36 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		var filters []block.MetadataFilter
+		if tbc.timeout < time.Minute {
+			level.Warn(logger).Log("msg", "Timeout less than 1m could lead to frequent failures")
+		}
+
+		relabelContentYaml, err := tbc.selectorRelabelConf.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of relabel configuration")
+		}
+
+		relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+		if err != nil {
+			return err
+		}
+
+		filters := []block.MetadataFilter{
+			block.NewLabelShardedMetaFilter(relabelConfig),
+			block.NewTimePartitionMetaFilter(tbc.filterConf.MinTime, tbc.filterConf.MaxTime),
+		}
 
 		if tbc.excludeDelete {
 			ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, 0, block.FetcherConcurrency)
 			filters = append(filters, ignoreDeletionMarkFilter)
 		}
+
 		baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
 		fetcher, err := block.NewMetaFetcher(logger, block.FetcherConcurrency, insBkt, baseBlockIDsFetcher, "", extprom.WrapRegistererWithPrefix(extpromPrefix, reg), filters)
 		if err != nil {
@@ -434,7 +467,7 @@ func registerBucketLs(app extkingpin.AppClause, objStoreConfig *extflag.PathOrCo
 
 		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), tbc.timeout)
 		defer cancel()
 
 		var (
@@ -504,7 +537,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 	tbc := &bucketInspectConfig{}
 	tbc.registerBucketInspectFlag(cmd)
 
-	output := cmd.Flag("output", "Output format for result. Currently supports table, cvs, tsv.").Default("table").Enum(outputTypes...)
+	output := cmd.Flag("output", "Output format for result. Currently supports table, csv, tsv.").Default("table").Enum(outputTypes...)
 
 	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
 
@@ -519,7 +552,7 @@ func registerBucketInspect(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -629,7 +662,7 @@ func registerBucketWeb(app extkingpin.AppClause, objStoreConfig *extflag.PathOrC
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Bucket.String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "bucket client")
 		}
@@ -826,7 +859,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Cleanup.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Cleanup.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -870,6 +903,7 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
@@ -883,8 +917,8 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		level.Info(logger).Log("msg", "synced blocks done")
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter, ignoreDeletionMarkFilter.DeletionMarkBlocks())
+		if _, err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "error cleaning blocks")
 		}
 
@@ -1013,12 +1047,12 @@ func getKeysAlphabetically(labels map[string]string) []string {
 // matchesSelector checks if blockMeta contains every label from
 // the selector with the correct value.
 func matchesSelector(blockMeta *metadata.Meta, selectorLabels labels.Labels) bool {
-	for _, l := range selectorLabels {
-		if v, ok := blockMeta.Thanos.Labels[l.Name]; !ok || v != l.Value {
-			return false
-		}
-	}
-	return true
+	matches := true
+	selectorLabels.Range(func(l labels.Label) {
+		val, ok := blockMeta.Thanos.Labels[l.Name]
+		matches = matches && ok && val == l.Value
+	})
+	return matches
 }
 
 // getIndex calculates the index of s in strs.
@@ -1083,7 +1117,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Mark.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Mark.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1163,7 +1197,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Rewrite.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Rewrite.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1232,7 +1266,7 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 				if err != nil {
 					return errors.Wrapf(err, "read meta of %v", id)
 				}
-				b, err := tsdb.OpenBlock(logger, filepath.Join(tbc.tmpDir, id.String()), chunkPool)
+				b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(tbc.tmpDir, id.String()), chunkPool, nil)
 				if err != nil {
 					return errors.Wrapf(err, "open block %v", id)
 				}
@@ -1371,7 +1405,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 			return err
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String(), nil)
 		if err != nil {
 			return err
 		}
@@ -1413,6 +1447,7 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 				ignoreDeletionMarkFilter,
 				stubCounter,
 				stubCounter,
+				0,
 			)
 			if err != nil {
 				return errors.Wrap(err, "create syncer")
@@ -1460,7 +1495,7 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 			return errors.Wrap(err, "unable to parse objstore config")
 		}
 
-		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String())
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Upload.String(), nil)
 		if err != nil {
 			return errors.Wrap(err, "unable to create bucket")
 		}
@@ -1468,8 +1503,16 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		s := shipper.New(logger, reg, tbc.path, bkt, func() labels.Labels { return lset }, metadata.BucketUploadSource,
-			nil, false, metadata.HashFunc(""), shipper.DefaultMetaFilename)
+		s := shipper.New(
+			bkt,
+			tbc.path,
+			shipper.WithLogger(logger),
+			shipper.WithRegisterer(reg),
+			shipper.WithSource(metadata.BucketUploadSource),
+			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
+			shipper.WithLabels(func() labels.Labels { return lset }),
+			shipper.WithUploadCompacted(tbc.uploadCompacted),
+		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {

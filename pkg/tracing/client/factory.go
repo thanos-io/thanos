@@ -36,7 +36,7 @@ const (
 
 type TracingConfig struct {
 	Type   TracingProvider `yaml:"type"`
-	Config interface{}     `yaml:"config"`
+	Config any             `yaml:"config"`
 }
 
 func NewTracer(ctx context.Context, logger log.Logger, metrics *prometheus.Registry, confContentYaml []byte) (opentracing.Tracer, io.Closer, error) {

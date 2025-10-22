@@ -6,11 +6,12 @@ package compact
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"path/filepath"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"
@@ -68,7 +69,7 @@ func (p *tsdbBasedPlanner) plan(noCompactMarked map[ulid.ULID]*metadata.NoCompac
 	}
 	// No overlapping blocks, do compaction the usual way.
 
-	// We do not include a recently producted block with max(minTime), so the block which was just uploaded to bucket.
+	// We do not include a recently produced block with max(minTime), so the block which was just uploaded to bucket.
 	// This gives users a window of a full block size maintenance if needed.
 	if _, excluded := noCompactMarked[metasByMinTime[len(metasByMinTime)-1].ULID]; !excluded {
 		notExcludedMetasByMinTime = notExcludedMetasByMinTime[:len(notExcludedMetasByMinTime)-1]
@@ -200,7 +201,7 @@ func splitByRange(metasByMinTime []*metadata.Meta, tr int64) [][]*metadata.Meta 
 			t0 = tr * ((m.MinTime - tr + 1) / tr)
 		}
 
-		// Skip blocks that don't fall into the range. This can happen via mis-alignment or
+		// Skip blocks that don't fall into the range. This can happen via misalignment or
 		// by being the multiple of the intended range.
 		if m.MaxTime > t0+tr {
 			i++
@@ -307,12 +308,8 @@ func WithLargeTotalIndexSizeFilter(with *tsdbBasedPlanner, bkt objstore.Bucket, 
 func (t *largeTotalIndexSizeFilter) plan(ctx context.Context, extraNoCompactMarked map[ulid.ULID]*metadata.NoCompactMark, metasByMinTime []*metadata.Meta) ([]*metadata.Meta, error) {
 	noCompactMarked := t.noCompBlocksFunc()
 	copiedNoCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, len(noCompactMarked)+len(extraNoCompactMarked))
-	for k, v := range noCompactMarked {
-		copiedNoCompactMarked[k] = v
-	}
-	for k, v := range extraNoCompactMarked {
-		copiedNoCompactMarked[k] = v
-	}
+	maps.Copy(copiedNoCompactMarked, noCompactMarked)
+	maps.Copy(copiedNoCompactMarked, extraNoCompactMarked)
 
 PlanLoop:
 	for {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
+	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
 // HTTPConfig is a structure that allows pointing to various HTTP endpoint, e.g ruler connecting to queriers.
@@ -162,21 +164,28 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		// If an authorization_credentials is provided, create a round tripper that will set the
 		// Authorization header correctly on each request.
 		if cfg.Authorization != nil && len(cfg.Authorization.Credentials) > 0 {
-			rt = config_util.NewAuthorizationCredentialsRoundTripper(cfg.Authorization.Type, cfg.Authorization.Credentials, rt)
+			rt = config_util.NewAuthorizationCredentialsRoundTripper(cfg.Authorization.Type, config_util.NewInlineSecret(string(cfg.Authorization.Credentials)), rt)
 		} else if cfg.Authorization != nil && len(cfg.Authorization.CredentialsFile) > 0 {
-			rt = config_util.NewAuthorizationCredentialsFileRoundTripper(cfg.Authorization.Type, cfg.Authorization.CredentialsFile, rt)
+			rt = config_util.NewAuthorizationCredentialsRoundTripper(cfg.Authorization.Type, config_util.NewFileSecret(cfg.Authorization.CredentialsFile), rt)
 		}
 		// Backwards compatibility, be nice with importers who would not have
 		// called Validate().
 		if len(cfg.BearerToken) > 0 {
-			rt = config_util.NewAuthorizationCredentialsRoundTripper("Bearer", cfg.BearerToken, rt)
+			rt = config_util.NewAuthorizationCredentialsRoundTripper("Bearer", config_util.NewInlineSecret(string(cfg.BearerToken)), rt)
 		} else if len(cfg.BearerTokenFile) > 0 {
-			rt = config_util.NewAuthorizationCredentialsFileRoundTripper("Bearer", cfg.BearerTokenFile, rt)
+			rt = config_util.NewAuthorizationCredentialsRoundTripper("Bearer", config_util.NewFileSecret(cfg.BearerTokenFile), rt)
 		}
 
 		if cfg.BasicAuth != nil {
 			// TODO(yeya24): expose UsernameFile as a config.
-			rt = config_util.NewBasicAuthRoundTripper(cfg.BasicAuth.Username, cfg.BasicAuth.Password, "", cfg.BasicAuth.PasswordFile, rt)
+			username := config_util.NewInlineSecret(cfg.BasicAuth.Username)
+			var password config_util.SecretReader
+			if len(cfg.BasicAuth.PasswordFile) > 0 {
+				password = config_util.NewFileSecret(cfg.BasicAuth.PasswordFile)
+			} else {
+				password = config_util.NewInlineSecret(string(cfg.BasicAuth.Password))
+			}
+			rt = config_util.NewBasicAuthRoundTripper(username, password, rt)
 		}
 		// Return a new configured RoundTripper.
 		return rt, nil
@@ -192,11 +201,18 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		return newRT(tlsConfig)
 	}
 
-	return config_util.NewTLSRoundTripper(tlsConfig, config_util.TLSRoundTripperSettings{
-		CAFile:   cfg.TLSConfig.CAFile,
-		CertFile: cfg.TLSConfig.CertFile,
-		KeyFile:  cfg.TLSConfig.KeyFile,
-	}, newRT)
+	rtConfig := config_util.TLSRoundTripperSettings{
+		Cert: config_util.NewFileSecret(cfg.TLSConfig.CAFile),
+	}
+	if len(cfg.TLSConfig.CertFile) > 0 {
+		rtConfig.Cert = config_util.NewFileSecret(cfg.TLSConfig.CertFile)
+	}
+
+	if len(cfg.TLSConfig.KeyFile) > 0 {
+		rtConfig.Key = config_util.NewFileSecret(cfg.TLSConfig.KeyFile)
+	}
+
+	return config_util.NewTLSRoundTripper(tlsConfig, rtConfig, newRT)
 }
 
 // NewHTTPClient returns a new HTTP client.
@@ -275,9 +291,7 @@ func (u userAgentRoundTripper) RoundTrip(r *http.Request) (*http.Response, error
 		r2 := new(http.Request)
 		*r2 = *r
 		r2.Header = make(http.Header)
-		for k, s := range r.Header {
-			r2.Header[k] = s
-		}
+		maps.Copy(r2.Header, r.Header)
 		r2.Header.Set("User-Agent", u.name)
 		r = r2
 	}
@@ -316,7 +330,7 @@ func (c HTTPFileSDConfig) convert() (file.SDConfig, error) {
 }
 
 type AddressProvider interface {
-	Resolve(context.Context, []string) error
+	Resolve(context.Context, []string, bool) error
 	Addresses() []string
 }
 
@@ -349,7 +363,7 @@ func NewClient(logger log.Logger, cfg HTTPEndpointsConfig, client *http.Client, 
 		}
 		// We provide an empty registry and ignore metrics for now.
 		sdReg := prometheus.NewRegistry()
-		fileSD, err := file.NewDiscovery(&fileSDCfg, logger, fileSDCfg.NewDiscovererMetrics(sdReg, discovery.NewRefreshMetrics(sdReg)))
+		fileSD, err := file.NewDiscovery(&fileSDCfg, logutil.GoKitLogToSlog(logger), fileSDCfg.NewDiscovererMetrics(sdReg, discovery.NewRefreshMetrics(sdReg)))
 		if err != nil {
 			return nil, err
 		}
@@ -419,5 +433,5 @@ func (c *HTTPClient) Discover(ctx context.Context) {
 
 // Resolve refreshes and resolves the list of targets.
 func (c *HTTPClient) Resolve(ctx context.Context) error {
-	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...))
+	return c.provider.Resolve(ctx, append(c.fileSDCache.Addresses(), c.staticAddresses...), true)
 }

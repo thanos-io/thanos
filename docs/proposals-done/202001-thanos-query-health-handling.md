@@ -35,7 +35,7 @@ Thus, this logic needs to be changed somehow. There are a few possible options:
 2. Another option could be introduced such as `--store.hold-timeout` which would be `--store.unhealthy-timeout`'s brother and we would hold the StoreAPI nodes for `max(hold_timeout, unhealthy_timeout)`.
 3. Another option such as `--store.strict-mode` could be introduced which means that we would always retain the last information of the StoreAPI nodes of the last successful check.
 4. The StoreAPI node specification format that is used in `--store` could be extended to include another flag which would let specify the previous option per-specific node.
-5. Instead of extending the specification format, we could move the same inforamtion to the command line options themselves. This would increase the explicitness of this new mode i.e. that it only applies to statically defined nodes.
+5. Instead of extending the specification format, we could move the same information to the command line options themselves. This would increase the explicitness of this new mode i.e. that it only applies to statically defined nodes.
 
 Lets look through their pros and cons:
 

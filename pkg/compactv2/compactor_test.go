@@ -14,7 +14,8 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
 func TestCompactor_WriteSeries_e2e(t *testing.T) {
@@ -612,7 +614,7 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 				testutil.Ok(t, createBlockSeries(bdir, b))
 				// Meta does not matter, but let's create for OpenBlock to work.
 				testutil.Ok(t, metadata.Meta{BlockMeta: tsdb.BlockMeta{Version: 1, ULID: id}}.WriteToDir(logger, bdir))
-				block, err := tsdb.OpenBlock(logger, bdir, chunkPool)
+				block, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), bdir, chunkPool, nil)
 				testutil.Ok(t, err)
 				blocks = append(blocks, block)
 			}
@@ -653,7 +655,7 @@ type seriesSamples struct {
 func readBlockSeries(t *testing.T, bDir string) []seriesSamples {
 	ctx := context.Background()
 
-	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename))
+	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename), index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 	defer indexr.Close()
 

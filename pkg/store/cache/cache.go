@@ -9,7 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -99,7 +100,7 @@ func NewCommonMetrics(reg prometheus.Registerer) *CommonMetrics {
 // CacheKey defines cache key used in index cache.
 type CacheKey struct {
 	Block string
-	Key   interface{}
+	Key   any
 
 	Compression string
 }

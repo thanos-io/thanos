@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -36,16 +37,17 @@ const (
 )
 
 var (
-	errCanceled              = httpgrpc.Errorf(StatusClientClosedRequest, context.Canceled.Error())
-	errDeadlineExceeded      = httpgrpc.Errorf(http.StatusGatewayTimeout, context.DeadlineExceeded.Error())
+	errCanceled              = httpgrpc.Errorf(StatusClientClosedRequest, "%s", context.Canceled.Error())
+	errDeadlineExceeded      = httpgrpc.Errorf(http.StatusGatewayTimeout, "%s", context.DeadlineExceeded.Error())
 	errRequestEntityTooLarge = httpgrpc.Errorf(http.StatusRequestEntityTooLarge, "http: request body too large")
 )
 
 // Config for a Handler.
 type HandlerConfig struct {
-	LogQueriesLongerThan time.Duration `yaml:"log_queries_longer_than"`
-	MaxBodySize          int64         `yaml:"max_body_size"`
-	QueryStatsEnabled    bool          `yaml:"query_stats_enabled"`
+	LogQueriesLongerThan    time.Duration `yaml:"log_queries_longer_than"`
+	MaxBodySize             int64         `yaml:"max_body_size"`
+	QueryStatsEnabled       bool          `yaml:"query_stats_enabled"`
+	SlowQueryLogsUserHeader string        `yaml:"slow_query_logs_user_header"`
 }
 
 // Handler accepts queries and forwards them to RoundTripper. It can log slow queries,
@@ -131,9 +133,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hs := w.Header()
-	for h, vs := range resp.Header {
-		hs[h] = vs
-	}
+	maps.Copy(hs, resp.Header)
 
 	if f.cfg.QueryStatsEnabled {
 		writeServiceTimingHeader(queryResponseTime, hs, stats)
@@ -147,21 +147,36 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check whether we should parse the query string.
-	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 && queryResponseTime > f.cfg.LogQueriesLongerThan
+	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 &&
+		queryResponseTime > f.cfg.LogQueriesLongerThan &&
+		isQueryEndpoint(r.URL.Path)
 	if shouldReportSlowQuery || f.cfg.QueryStatsEnabled {
 		queryString = f.parseRequestQueryString(r, buf)
 	}
 
 	if shouldReportSlowQuery {
-		f.reportSlowQuery(r, hs, queryString, queryResponseTime)
+		f.reportSlowQuery(r, hs, queryString, queryResponseTime, stats)
 	}
 	if f.cfg.QueryStatsEnabled {
 		f.reportQueryStats(r, queryString, queryResponseTime, stats)
 	}
 }
 
+// isQueryEndpoint returns true if the path is any of the Prometheus HTTP API,
+// query-related endpoints.
+// Example: /api/v1/query, /api/v1/query_range, /api/v1/series, /api/v1/label, /api/v1/labels
+func isQueryEndpoint(path string) bool {
+	return strings.HasPrefix(path, "/api/v1")
+}
+
 // reportSlowQuery reports slow queries.
-func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, queryString url.Values, queryResponseTime time.Duration) {
+func (f *Handler) reportSlowQuery(
+	r *http.Request,
+	responseHeaders http.Header,
+	queryString url.Values,
+	queryResponseTime time.Duration,
+	stats *querier_stats.Stats,
+) {
 	// NOTE(GiedriusS): see https://github.com/grafana/grafana/pull/60301 for more info.
 	grafanaDashboardUID := "-"
 	if dashboardUID := r.Header.Get("X-Dashboard-Uid"); dashboardUID != "" {
@@ -176,9 +191,15 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		thanosTraceID = traceID
 	}
 
-	remoteUser, _, _ := r.BasicAuth()
+	var remoteUser string
+	// Prefer reading remote user from header. Fall back to the value of basic authentication.
+	if f.cfg.SlowQueryLogsUserHeader != "" {
+		remoteUser = r.Header.Get(f.cfg.SlowQueryLogsUserHeader)
+	} else {
+		remoteUser, _, _ = r.BasicAuth()
+	}
 
-	logMessage := append([]interface{}{
+	logMessage := append([]any{
 		"msg", "slow query detected",
 		"method", r.Method,
 		"host", r.Host,
@@ -190,6 +211,9 @@ func (f *Handler) reportSlowQuery(r *http.Request, responseHeaders http.Header, 
 		"grafana_panel_id", grafanaPanelID,
 		"trace_id", thanosTraceID,
 	}, formatQueryString(queryString)...)
+
+	logMessage = addQueryRangeToLogMessage(logMessage, queryString)
+	logMessage = f.addStatsToLogMessage(logMessage, stats)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -212,7 +236,7 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 	f.activeUsers.UpdateUserTimestamp(userID, time.Now())
 
 	// Log stats.
-	logMessage := append([]interface{}{
+	logMessage := append([]any{
 		"msg", "query stats",
 		"component", "query-frontend",
 		"method", r.Method,
@@ -224,6 +248,8 @@ func (f *Handler) reportQueryStats(r *http.Request, queryString url.Values, quer
 		"fetched_series_count", numSeries,
 		"fetched_chunks_bytes", numBytes,
 	}, formatQueryString(queryString)...)
+	f.addStatsToLogMessage(logMessage, stats)
+	addQueryRangeToLogMessage(logMessage, queryString)
 
 	level.Info(util_log.WithContext(r.Context(), f.log)).Log(logMessage...)
 }
@@ -242,11 +268,45 @@ func (f *Handler) parseRequestQueryString(r *http.Request, bodyBuf bytes.Buffer)
 	return r.Form
 }
 
-func formatQueryString(queryString url.Values) (fields []interface{}) {
+func formatQueryString(queryString url.Values) (fields []any) {
 	for k, v := range queryString {
 		fields = append(fields, fmt.Sprintf("param_%s", k), strings.Join(v, ","))
 	}
 	return fields
+}
+
+func (f *Handler) addStatsToLogMessage(message []any, stats *querier_stats.Stats) []any {
+	if stats != nil {
+		message = append(message, "peak_samples", stats.LoadPeakSamples())
+		message = append(message, "total_samples_loaded", stats.LoadTotalSamples())
+	}
+
+	return message
+}
+
+func addQueryRangeToLogMessage(logMessage []any, queryString url.Values) []any {
+	queryRange := extractQueryRange(queryString)
+	if queryRange != time.Duration(0) {
+		logMessage = append(logMessage, "query_range_hours", int(queryRange.Hours()))
+		logMessage = append(logMessage, "query_range_human", queryRange.String())
+	}
+	return logMessage
+}
+
+// extractQueryRange extracts query range from query string.
+// If start and end are not provided or are invalid, it returns a duration with zero-value.
+func extractQueryRange(queryString url.Values) time.Duration {
+	startStr := queryString.Get("start")
+	endStr := queryString.Get("end")
+	var queryRange = time.Duration(0)
+	if startStr != "" && endStr != "" {
+		start, serr := util.ParseTime(startStr)
+		end, eerr := util.ParseTime(endStr)
+		if serr == nil && eerr == nil {
+			queryRange = time.Duration(end-start) * time.Millisecond
+		}
+	}
+	return queryRange
 }
 
 func writeError(w http.ResponseWriter, err error) {

@@ -5,24 +5,21 @@ package extpromql
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
-	"github.com/thanos-io/promql-engine/execution/function"
+	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(function.XFunctions)+len(parser.Functions))
-	for k, v := range parser.Functions {
-		allFuncs[k] = v
-	}
-	for k, v := range function.XFunctions {
-		allFuncs[k] = v
-	}
+	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
+	maps.Copy(allFuncs, parser.Functions)
+	maps.Copy(allFuncs, parse.XFunctions)
 	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
 	defer p.Close()
 	return p.ParseExpr()
@@ -43,16 +40,7 @@ func ParseMetricSelector(input string) ([]*labels.Matcher, error) {
 		return nil, fmt.Errorf("expected type *parser.VectorSelector, got %T", expr)
 	}
 
-	matchers := make([]*labels.Matcher, len(vs.LabelMatchers))
-	for i, lm := range vs.LabelMatchers {
-		matchers[i] = &labels.Matcher{
-			Type:  lm.Type,
-			Name:  lm.Name,
-			Value: lm.Value,
-		}
-	}
-
-	return matchers, nil
+	return vs.LabelMatchers, nil
 }
 
 func isEmptyNameMatcherErr(err error) bool {

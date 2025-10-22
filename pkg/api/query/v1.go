@@ -27,7 +27,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-kit/log"
@@ -44,9 +43,8 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
-	promqlapi "github.com/thanos-io/promql-engine/api"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/thanos-io/promql-engine/engine"
-	"github.com/thanos-io/promql-engine/logicalplan"
 
 	"github.com/thanos-io/thanos/pkg/api"
 	"github.com/thanos-io/thanos/pkg/exemplars"
@@ -61,6 +59,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/status"
+	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
@@ -70,6 +70,7 @@ import (
 )
 
 const (
+	QueryParam               = "query"
 	DedupParam               = "dedup"
 	PartialResponseParam     = "partial_response"
 	MaxSourceResolutionParam = "max_source_resolution"
@@ -82,87 +83,26 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	RuleNameParam            = "rule_name[]"
+	RuleGroupParam           = "rule_group[]"
+	FileParam                = "file[]"
 )
-
-type PromqlEngineType string
-
-const (
-	PromqlEnginePrometheus PromqlEngineType = "prometheus"
-	PromqlEngineThanos     PromqlEngineType = "thanos"
-)
-
-type ThanosEngine interface {
-	promql.QueryEngine
-	NewInstantQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, plan logicalplan.Node, ts time.Time) (promql.Query, error)
-	NewRangeQueryFromPlan(ctx context.Context, q storage.Queryable, opts promql.QueryOpts, root logicalplan.Node, start, end time.Time, step time.Duration) (promql.Query, error)
-}
-
-type QueryEngineFactory struct {
-	engineOpts            promql.EngineOpts
-	remoteEngineEndpoints promqlapi.RemoteEndpoints
-
-	createPrometheusEngine sync.Once
-	prometheusEngine       promql.QueryEngine
-
-	createThanosEngine sync.Once
-	thanosEngine       ThanosEngine
-	enableXFunctions   bool
-}
-
-func (f *QueryEngineFactory) GetPrometheusEngine() promql.QueryEngine {
-	f.createPrometheusEngine.Do(func() {
-		if f.prometheusEngine != nil {
-			return
-		}
-		f.prometheusEngine = promql.NewEngine(f.engineOpts)
-	})
-
-	return f.prometheusEngine
-}
-
-func (f *QueryEngineFactory) GetThanosEngine() ThanosEngine {
-	f.createThanosEngine.Do(func() {
-		opts := engine.Opts{
-			EngineOpts:       f.engineOpts,
-			Engine:           f.GetPrometheusEngine(),
-			EnableAnalysis:   true,
-			EnableXFunctions: f.enableXFunctions,
-		}
-		if f.thanosEngine != nil {
-			return
-		}
-		if f.remoteEngineEndpoints == nil {
-			f.thanosEngine = engine.New(opts)
-		} else {
-			f.thanosEngine = engine.NewDistributedEngine(opts, f.remoteEngineEndpoints)
-		}
-	})
-
-	return f.thanosEngine
-}
-
-func NewQueryEngineFactory(engineOpts promql.EngineOpts, remoteEngineEndpoints promqlapi.RemoteEndpoints, enableExtendedFunctions bool) *QueryEngineFactory {
-	return &QueryEngineFactory{
-		engineOpts:            engineOpts,
-		remoteEngineEndpoints: remoteEngineEndpoints,
-		enableXFunctions:      enableExtendedFunctions,
-	}
-}
 
 // QueryAPI is an API used by Thanos Querier.
 type QueryAPI struct {
-	baseAPI         *api.BaseAPI
-	logger          log.Logger
-	gate            gate.Gate
-	queryableCreate query.QueryableCreator
-	// queryEngine returns appropriate promql.Engine for a query with a given step.
-	engineFactory       *QueryEngineFactory
-	defaultEngine       PromqlEngineType
-	lookbackDeltaCreate func(int64) time.Duration
-	ruleGroups          rules.UnaryClient
-	targets             targets.UnaryClient
-	metadatas           metadata.UnaryClient
-	exemplars           exemplars.UnaryClient
+	baseAPI               *api.BaseAPI
+	logger                log.Logger
+	gate                  gate.Gate
+	queryableCreate       query.QueryableCreator
+	remoteEndpointsCreate query.RemoteEndpointsCreator
+	queryCreate           queryCreator
+	defaultEngine         PromqlEngineType
+	lookbackDeltaCreate   func(int64) time.Duration
+	ruleGroups            rules.UnaryClient
+	targets               targets.UnaryClient
+	metadatas             metadata.UnaryClient
+	exemplars             exemplars.UnaryClient
+	status                status.UnaryClient
 
 	enableAutodownsampling              bool
 	enableQueryPartialResponse          bool
@@ -170,10 +110,12 @@ type QueryAPI struct {
 	enableTargetPartialResponse         bool
 	enableMetricMetadataPartialResponse bool
 	enableExemplarPartialResponse       bool
+	enableStatusPartialResponse         bool
 	disableCORS                         bool
 
 	replicaLabels  []string
 	endpointStatus func() []query.EndpointStatus
+	tsdbSelector   *store.TSDBSelector
 
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
@@ -194,20 +136,23 @@ type QueryAPI struct {
 func NewQueryAPI(
 	logger log.Logger,
 	endpointStatus func() []query.EndpointStatus,
-	engineFactory *QueryEngineFactory,
+	queryCreate *QueryFactory,
 	defaultEngine PromqlEngineType,
 	lookbackDeltaCreate func(int64) time.Duration,
-	c query.QueryableCreator,
+	queryableCreate query.QueryableCreator,
+	remoteEndpointsCreate query.RemoteEndpointsCreator,
 	ruleGroups rules.UnaryClient,
 	targets targets.UnaryClient,
 	metadatas metadata.UnaryClient,
 	exemplars exemplars.UnaryClient,
+	status status.UnaryClient,
 	enableAutodownsampling bool,
 	enableQueryPartialResponse bool,
 	enableRulePartialResponse bool,
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableStatusPartialResponse bool,
 	replicaLabels []string,
 	flagsMap map[string]string,
 	defaultRangeQueryStep time.Duration,
@@ -222,6 +167,7 @@ func NewQueryAPI(
 	tenantCertField string,
 	enforceTenancy bool,
 	tenantLabel string,
+	tsdbSelector *store.TSDBSelector,
 ) *QueryAPI {
 	if statsAggregatorFactory == nil {
 		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
@@ -229,21 +175,24 @@ func NewQueryAPI(
 	return &QueryAPI{
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
-		engineFactory:                          engineFactory,
+		queryCreate:                            queryCreate,
 		defaultEngine:                          defaultEngine,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
-		queryableCreate:                        c,
+		queryableCreate:                        queryableCreate,
+		remoteEndpointsCreate:                  remoteEndpointsCreate,
 		gate:                                   gate,
 		ruleGroups:                             ruleGroups,
 		targets:                                targets,
 		metadatas:                              metadatas,
 		exemplars:                              exemplars,
+		status:                                 status,
 		enableAutodownsampling:                 enableAutodownsampling,
 		enableQueryPartialResponse:             enableQueryPartialResponse,
 		enableRulePartialResponse:              enableRulePartialResponse,
 		enableTargetPartialResponse:            enableTargetPartialResponse,
 		enableMetricMetadataPartialResponse:    enableMetricMetadataPartialResponse,
 		enableExemplarPartialResponse:          enableExemplarPartialResponse,
+		enableStatusPartialResponse:            enableStatusPartialResponse,
 		replicaLabels:                          replicaLabels,
 		endpointStatus:                         endpointStatus,
 		defaultRangeQueryStep:                  defaultRangeQueryStep,
@@ -256,6 +205,7 @@ func NewQueryAPI(
 		tenantCertField:                        tenantCertField,
 		enforceTenancy:                         enforceTenancy,
 		tenantLabel:                            tenantLabel,
+		tsdbSelector:                           tsdbSelector,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
@@ -302,6 +252,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
 	r.Post("/query_exemplars", instr("exemplars", NewExemplarsHandler(qapi.exemplars, qapi.enableExemplarPartialResponse)))
+
+	r.Get("/status/tsdb", instr("status_tsdb", qapi.tsdbStatus))
 }
 
 type queryData struct {
@@ -336,24 +288,22 @@ func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplicatio
 	return enableDeduplication, nil
 }
 
-func (qapi *QueryAPI) parseEngineParam(r *http.Request) (queryEngine promql.QueryEngine, e PromqlEngineType, _ *api.ApiError) {
-	var engine promql.QueryEngine
+func (qapi *QueryAPI) parseQueryParam(r *http.Request) string {
+	return r.FormValue(QueryParam)
+}
 
-	param := PromqlEngineType(r.FormValue("engine"))
+func (qapi *QueryAPI) parseEngineParam(r *http.Request) (e PromqlEngineType, _ *api.ApiError) {
+	param := PromqlEngineType(r.FormValue(EngineParam))
 	if param == "" {
 		param = qapi.defaultEngine
 	}
-
 	switch param {
-	case PromqlEnginePrometheus:
-		engine = qapi.engineFactory.GetPrometheusEngine()
-	case PromqlEngineThanos:
-		engine = qapi.engineFactory.GetThanosEngine()
+	case PromqlEnginePrometheus, PromqlEngineThanos:
 	default:
-		return nil, param, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("'%s' bad engine", param)}
+		return param, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("'%s' bad engine", param)}
 	}
 
-	return engine, param, nil
+	return param, nil
 }
 
 func (qapi *QueryAPI) parseReplicaLabelsParam(r *http.Request) (replicaLabels []string, _ *api.ApiError) {
@@ -471,17 +421,29 @@ func (qapi *QueryAPI) getQueryExplain(query promql.Query) (*engine.ExplainOutput
 		return eq.Explain(), nil
 	}
 	return nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("Query not explainable")}
-
 }
 
-func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request, query promql.Query) (queryTelemetry, error) {
-	if r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1" {
-		if eq, ok := query.(engine.ExplainableQuery); ok {
-			return processAnalysis(eq.Analyze()), nil
+func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
+	return (r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1")
+}
+
+func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryTelemetry, error) {
+	if eq, ok := query.(engine.ExplainableQuery); ok {
+		if analyze := eq.Analyze(); analyze != nil {
+			return processAnalysis(analyze), nil
+		} else {
+			return queryTelemetry{}, errors.Errorf("Query: %v not analyzable", query)
 		}
-		return queryTelemetry{}, errors.Errorf("Query not analyzable; change engine to 'thanos'")
 	}
-	return queryTelemetry{}, nil
+
+	var warning error
+	if engineType == PromqlEngineThanos {
+		warning = errors.New("Query fallback to prometheus engine; not analyzable.")
+	} else {
+		warning = errors.New("Query not analyzable; change engine to 'thanos'.")
+	}
+
+	return queryTelemetry{}, warning
 }
 
 func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
@@ -491,13 +453,13 @@ func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
 	analysis.PeakSamples = a.PeakSamples()
 	analysis.TotalSamples = a.TotalSamples()
 	for _, c := range a.Children {
-		analysis.Children = append(analysis.Children, processAnalysis(&c))
+		analysis.Children = append(analysis.Children, processAnalysis(c))
 	}
 	return analysis
 }
 
-func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
-	engine, engineParam, apiErr := qapi.parseEngineParam(r)
+func (qapi *QueryAPI) queryExplain(r *http.Request) (any, []error, *api.ApiError, func()) {
+	engineParam, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
@@ -505,6 +467,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	if engineParam != PromqlEngineThanos {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("engine type must be 'thanos'")}, func() {}
 	}
+	queryParam := qapi.parseQueryParam(r)
 
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
@@ -562,18 +525,17 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewInstantQuery(
-		ctx,
-		qapi.queryableCreate(
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
+	)
+	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
+		queryable := qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
 			storeDebugMatchers,
@@ -582,13 +544,19 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		r.FormValue("query"),
-		ts,
-	)
+		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
+		queryOpts := &engine.QueryOpts{
+			LookbackDeltaParam: lookbackDelta,
+		}
 
-	if err != nil {
+		var qErr error
+		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
+		return qErr
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
@@ -600,7 +568,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (interface{}, []error, *api.
 	return explanation, nil, nil, func() {}
 }
 
-func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func()) {
 	ts, err := parseTimeParam(r, "time", qapi.baseAPI.Now())
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
@@ -648,10 +616,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		return nil, nil, apiErr, func() {}
 	}
 
-	engine, _, apiErr := qapi.parseEngineParam(r)
+	engineParam, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
+	queryParam := qapi.parseQueryParam(r)
 
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
@@ -662,20 +631,19 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-
-	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(ctx, "promql_instant_query")
-	defer span.Finish()
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
+		warnings    []error
+	)
 
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewInstantQuery(
-		ctx,
-		qapi.queryableCreate(
+	if err := tracing.DoInSpanWithErr(ctx, "instant_query_create", func(ctx context.Context) error {
+		queryable := qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
 			storeDebugMatchers,
@@ -684,29 +652,32 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		queryStr,
-		ts,
-	)
+		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
+		queryOpts := &engine.QueryOpts{
+			LookbackDeltaParam: lookbackDelta,
+		}
 
-	if err != nil {
+		var qErr error
+		qry, qErr = qapi.queryCreate.makeInstantQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, ts)
+		return qErr
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	res := qry.Exec(ctx)
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
-	}
 
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
 	beforeRange := time.Now()
+
+	var res *promql.Result
+	tracing.DoInSpan(ctx, "instant_query_exec", func(ctx context.Context) {
+		res = qry.Exec(ctx)
+	})
 	if res.Err != nil {
 		switch res.Err.(type) {
 		case promql.ErrQueryCanceled:
@@ -718,6 +689,17 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	// this prevents a panic when annotations are concurrently accessed
+	safeWarnings := annotations.New().Merge(res.Warnings)
+	warnings = append(warnings, safeWarnings.AsErrors()...)
+
+	var analysis queryTelemetry
+	if qapi.parseQueryAnalyzeParam(r) {
+		analysis, err = analyzeQueryOutput(qry, engineParam)
+		if err != nil {
+			warnings = append(warnings, err)
+		}
+	}
 
 	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
 	for i := range seriesStats {
@@ -735,11 +717,11 @@ func (qapi *QueryAPI) query(r *http.Request) (interface{}, []error, *api.ApiErro
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings.AsErrors(), nil, qry.Close
+	}, warnings, nil, qry.Close
 }
 
-func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
-	engine, engineParam, apiErr := qapi.parseEngineParam(r)
+func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (any, []error, *api.ApiError, func()) {
+	engineParam, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
@@ -747,6 +729,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 	if engineParam != PromqlEngineThanos {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("engine type must be 'thanos'")}, func() {}
 	}
+	queryParam := qapi.parseQueryParam(r)
 
 	start, err := parseTime(r.FormValue("start"))
 	if err != nil {
@@ -830,18 +813,17 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-
-	tenant, err := tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
 	if err != nil {
-		apiErr = &api.ApiError{Typ: api.ErrorBadData, Err: err}
-		return nil, nil, apiErr, func() {}
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
-	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
 
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewRangeQuery(
-		ctx,
-		qapi.queryableCreate(
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
+	)
+	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
+		queryable := qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
 			storeDebugMatchers,
@@ -850,14 +832,19 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		r.FormValue("query"),
-		start,
-		end,
-		step,
-	)
-	if err != nil {
+		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
+		queryOpts := &engine.QueryOpts{
+			LookbackDeltaParam: lookbackDelta,
+		}
+
+		var qErr error
+		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
+		return qErr
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
@@ -869,7 +856,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (interface{}, []error, 
 	return explanation, nil, nil, func() {}
 }
 
-func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, func()) {
 	start, err := parseTime(r.FormValue("start"))
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
@@ -943,10 +930,11 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		return nil, nil, apiErr, func() {}
 	}
 
-	engine, _, apiErr := qapi.parseEngineParam(r)
+	engineParam, apiErr := qapi.parseEngineParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
 	}
+	queryParam := qapi.parseQueryParam(r)
 
 	lookbackDelta := qapi.lookbackDeltaCreate(maxSourceResolution)
 	// Get custom lookback delta from request.
@@ -957,23 +945,18 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-
-	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.FormValue("query"))
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	// Record the query range requested.
-	qapi.queryRangeHist.Observe(end.Sub(start).Seconds())
-
-	// We are starting promQL tracing span here, because we have no control over promQL code.
-	span, ctx := tracing.StartSpan(ctx, "promql_range_query")
-	defer span.Finish()
-
-	var seriesStats []storepb.SeriesStatsCounter
-	qry, err := engine.NewRangeQuery(
-		ctx,
-		qapi.queryableCreate(
+	var (
+		qry         promql.Query
+		seriesStats []storepb.SeriesStatsCounter
+		warnings    []error
+	)
+	if err := tracing.DoInSpanWithErr(ctx, "range_query_create", func(ctx context.Context) error {
+		queryable := qapi.queryableCreate(
 			enableDedup,
 			replicaLabels,
 			storeDebugMatchers,
@@ -982,32 +965,31 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 			false,
 			shardInfo,
 			query.NewAggregateStatsReporter(&seriesStats),
-		),
-		promql.NewPrometheusQueryOpts(false, lookbackDelta),
-		queryStr,
-		start,
-		end,
-		step,
-	)
-	if err != nil {
+		)
+		remoteEndpoints := qapi.remoteEndpointsCreate(
+			replicaLabels,
+			enablePartialResponse,
+		)
+		queryOpts := &engine.QueryOpts{
+			LookbackDeltaParam: lookbackDelta,
+		}
+
+		var qErr error
+		qry, qErr = qapi.queryCreate.makeRangeQuery(ctx, engineParam, queryable, remoteEndpoints, planOrQuery{query: queryStr}, queryOpts, start, end, step)
+		return qErr
+	}); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
-	res := qry.Exec(ctx)
-
-	analysis, err := qapi.parseQueryAnalyzeParam(r, qry)
-	if err != nil {
-		return nil, nil, apiErr, func() {}
-	}
-
-	tracing.DoInSpan(ctx, "query_gate_ismyturn", func(ctx context.Context) {
-		err = qapi.gate.Start(ctx)
-	})
-	if err != nil {
+	if err := tracing.DoInSpanWithErr(ctx, "query_gate_ismyturn", qapi.gate.Start); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, qry.Close
 	}
 	defer qapi.gate.Done()
 
+	var res *promql.Result
+	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+		res = qry.Exec(ctx)
+	})
 	beforeRange := time.Now()
 	if res.Err != nil {
 		switch res.Err.(type) {
@@ -1018,6 +1000,18 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: res.Err}, qry.Close
 	}
+	// this prevents a panic when annotations are concurrently accessed
+	safeWarnings := annotations.New().Merge(res.Warnings)
+	warnings = append(warnings, safeWarnings.AsErrors()...)
+
+	var analysis queryTelemetry
+	if qapi.parseQueryAnalyzeParam(r) {
+		analysis, err = analyzeQueryOutput(qry, engineParam)
+		if err != nil {
+			warnings = append(warnings, err)
+		}
+	}
+
 	aggregator := qapi.seriesStatsAggregatorFactory.NewAggregator(tenant)
 	for i := range seriesStats {
 		aggregator.Aggregate(seriesStats[i])
@@ -1034,14 +1028,15 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (interface{}, []error, *api.Ap
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, res.Warnings.AsErrors(), nil, qry.Close
+	}, warnings, nil, qry.Close
 }
 
-func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) labelValues(r *http.Request) (any, []error, *api.ApiError, func()) {
 	ctx := r.Context()
 	name := route.Param(ctx, "name")
 
-	if !model.LabelNameRE.MatchString(name) {
+	label := model.LabelName(name)
+	if !label.IsValid() {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}, func() {}
 	}
 
@@ -1058,6 +1053,11 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
+	}
+
+	limit, err := parseLimitParam(r.FormValue("limit"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
 	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
@@ -1081,6 +1081,10 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 	}
 	defer runutil.CloseWithLogOnErr(qapi.logger, q, "queryable labelValues")
 
+	hints := &storage.LabelHints{
+		Limit: toHintLimit(limit),
+	}
+
 	var (
 		vals     []string
 		warnings annotations.Annotations
@@ -1089,7 +1093,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		var callWarnings annotations.Annotations
 		labelValuesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			vals, callWarnings, err = q.LabelValues(ctx, name, matchers...)
+			vals, callWarnings, err = q.LabelValues(ctx, name, hints, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
@@ -1105,7 +1109,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		}
 		sort.Strings(vals)
 	} else {
-		vals, warnings, err = q.LabelValues(ctx, name)
+		vals, warnings, err = q.LabelValues(ctx, name, hints)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 		}
@@ -1115,10 +1119,15 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (interface{}, []error, *api.A
 		vals = make([]string, 0)
 	}
 
+	if limit > 0 && len(vals) > limit {
+		vals = vals[:limit]
+		warnings = warnings.Add(errors.New("results truncated due to limit"))
+	}
+
 	return vals, warnings.AsErrors(), nil, func() {}
 }
 
-func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) series(r *http.Request) (any, []error, *api.ApiError, func()) {
 	if err := r.ParseForm(); err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}, func() {}
 	}
@@ -1153,6 +1162,11 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		return nil, nil, apiErr, func() {}
 	}
 
+	limit, err := parseLimitParam(r.FormValue("limit"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
 	enablePartialResponse, apiErr := qapi.parsePartialResponseParam(r, qapi.enableQueryPartialResponse)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
@@ -1168,7 +1182,6 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		nil,
 		query.NoopSeriesStatsReporter,
 	).Querier(timestamp.FromTime(start), timestamp.FromTime(end))
-
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 	}
@@ -1178,21 +1191,34 @@ func (qapi *QueryAPI) series(r *http.Request) (interface{}, []error, *api.ApiErr
 		metrics = []labels.Labels{}
 		sets    []storage.SeriesSet
 	)
-	for _, mset := range matcherSets {
-		sets = append(sets, q.Select(ctx, false, nil, mset...))
+
+	hints := &storage.SelectHints{
+		Limit: toHintLimit(limit),
+		Start: start.UnixMilli(),
+		End:   end.UnixMilli(),
 	}
 
-	set := storage.NewMergeSeriesSet(sets, storage.ChainedSeriesMerge)
+	for _, mset := range matcherSets {
+		sets = append(sets, q.Select(ctx, false, hints, mset...))
+	}
+
+	set := storage.NewMergeSeriesSet(sets, 0, storage.ChainedSeriesMerge)
+	warnings := set.Warnings()
 	for set.Next() {
 		metrics = append(metrics, set.At().Labels())
+		if limit > 0 && len(metrics) > limit {
+			metrics = metrics[:limit]
+			warnings.Add(errors.New("results truncated due to limit"))
+			return metrics, warnings.AsErrors(), nil, func() {}
+		}
 	}
 	if set.Err() != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: set.Err()}, func() {}
 	}
-	return metrics, set.Warnings().AsErrors(), nil, func() {}
+	return metrics, warnings.AsErrors(), nil, func() {}
 }
 
-func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) labelNames(r *http.Request) (any, []error, *api.ApiError, func()) {
 	start, end, err := parseMetadataTimeRange(r, qapi.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
@@ -1206,6 +1232,11 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 	storeDebugMatchers, apiErr := qapi.parseStoreDebugMatchersParam(r)
 	if apiErr != nil {
 		return nil, nil, apiErr, func() {}
+	}
+
+	limit, err := parseLimitParam(r.FormValue("limit"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
 
 	matcherSets, ctx, err := tenancy.RewriteLabelMatchers(r.Context(), r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, r.Form[MatcherParam])
@@ -1234,11 +1265,15 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		warnings annotations.Annotations
 	)
 
+	hints := &storage.LabelHints{
+		Limit: toHintLimit(limit),
+	}
+
 	if len(matcherSets) > 0 {
 		var callWarnings annotations.Annotations
 		labelNamesSet := make(map[string]struct{})
 		for _, matchers := range matcherSets {
-			names, callWarnings, err = q.LabelNames(ctx, matchers...)
+			names, callWarnings, err = q.LabelNames(ctx, hints, matchers...)
 			if err != nil {
 				return nil, nil, &api.ApiError{Typ: api.ErrorExec, Err: err}, func() {}
 			}
@@ -1254,7 +1289,7 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		}
 		sort.Strings(names)
 	} else {
-		names, warnings, err = q.LabelNames(ctx)
+		names, warnings, err = q.LabelNames(ctx, hints)
 	}
 
 	if err != nil {
@@ -1264,30 +1299,48 @@ func (qapi *QueryAPI) labelNames(r *http.Request) (interface{}, []error, *api.Ap
 		names = make([]string, 0)
 	}
 
+	if limit > 0 && len(names) > limit {
+		names = names[:limit]
+		warnings = warnings.Add(errors.New("results truncated due to limit"))
+	}
+
 	return names, warnings.AsErrors(), nil, func() {}
 }
 
-func (qapi *QueryAPI) stores(_ *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (qapi *QueryAPI) stores(_ *http.Request) (any, []error, *api.ApiError, func()) {
 	statuses := make(map[string][]query.EndpointStatus)
 	for _, status := range qapi.endpointStatus() {
 		// Don't consider an endpoint if we cannot retrieve component type.
 		if status.ComponentType == nil {
 			continue
 		}
-		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], status)
+
+		// Apply TSDBSelector filtering to LabelSets if selector is configured
+		filteredStatus := status
+		if qapi.tsdbSelector != nil && len(status.LabelSets) > 0 {
+			matches, filteredLabelSets := qapi.tsdbSelector.MatchLabelSets(status.LabelSets...)
+			if !matches {
+				continue
+			}
+			if filteredLabelSets != nil {
+				filteredStatus.LabelSets = filteredLabelSets
+			}
+		}
+
+		statuses[status.ComponentType.String()] = append(statuses[status.ComponentType.String()], filteredStatus)
 	}
 	return statuses, nil, nil, func() {}
 }
 
 // NewTargetsHandler created handler compatible with HTTP /api/v1/targets https://prometheus.io/docs/prometheus/latest/querying/api/#targets
 // which uses gRPC Unary Targets API.
-func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError, func()) {
+func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	return func(r *http.Request) (any, []error, *api.ApiError, func()) {
 		stateParam := r.URL.Query().Get("state")
 		state, ok := targetspb.TargetsRequest_State_value[strings.ToUpper(stateParam)]
 		if !ok {
@@ -1313,13 +1366,13 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 
 // NewAlertsHandler created handler compatible with HTTP /api/v1/alerts https://prometheus.io/docs/prometheus/latest/querying/api/#alerts
 // which uses gRPC Unary Rules API (Rules API works for both /alerts and /rules).
-func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError, func()) {
+func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	return func(r *http.Request) (any, []error, *api.ApiError, func()) {
 		span, ctx := tracing.StartSpan(r.Context(), "receive_http_request")
 		defer span.Finish()
 
@@ -1359,13 +1412,13 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
-func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError, func()) {
+func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	return func(r *http.Request) (any, []error, *api.ApiError, func()) {
 		span, ctx := tracing.StartSpan(r.Context(), "receive_http_request")
 		defer span.Finish()
 
@@ -1393,6 +1446,9 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			Type:                    rulespb.RulesRequest_Type(typ),
 			PartialResponseStrategy: ps,
 			MatcherString:           r.Form[MatcherParam],
+			RuleName:                r.Form[RuleNameParam],
+			RuleGroup:               r.Form[RuleGroupParam],
+			File:                    r.Form[FileParam],
 		}
 		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
 			groups, warnings, err = client.Rules(ctx, req)
@@ -1406,13 +1462,13 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 
 // NewExemplarsHandler creates handler compatible with HTTP /api/v1/query_exemplars https://prometheus.io/docs/prometheus/latest/querying/api/#querying-exemplars
 // which uses gRPC Unary Exemplars API.
-func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError, func()) {
+func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	return func(r *http.Request) (any, []error, *api.ApiError, func()) {
 		span, ctx := tracing.StartSpan(r.Context(), "exemplar_query_request")
 		defer span.Finish()
 
@@ -1422,11 +1478,11 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 			err      error
 		)
 
-		start, err := parseTimeParam(r, "start", infMinTime)
+		start, err := parseTimeParam(r, "start", v1.MinTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
-		end, err := parseTimeParam(r, "end", infMaxTime)
+		end, err := parseTimeParam(r, "end", v1.MaxTime)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}
@@ -1449,17 +1505,12 @@ func NewExemplarsHandler(client exemplars.UnaryClient, enablePartialResponse boo
 	}
 }
 
-var (
-	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
-)
-
 func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Duration) (time.Time, time.Time, error) {
 	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
 	var defaultStartTime, defaultEndTime time.Time
 	if defaultMetadataTimeRange == 0 {
-		defaultStartTime = infMinTime
-		defaultEndTime = infMaxTime
+		defaultStartTime = v1.MinTime
+		defaultEndTime = v1.MaxTime
 	} else {
 		now := time.Now()
 		defaultStartTime = now.Add(-defaultMetadataTimeRange)
@@ -1522,15 +1573,42 @@ func parseDuration(s string) (time.Duration, error) {
 	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
 }
 
+// parseLimitParam returning 0 means no limit is to be applied.
+func parseLimitParam(s string) (int, error) {
+	if s == "" {
+		return 0, nil
+	}
+
+	limit, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, errors.Errorf("cannot parse %q to a valid limit", s)
+	}
+	if limit < 0 {
+		return 0, errors.New("limit must be non-negative")
+	}
+
+	return limit, nil
+}
+
+// toHintLimit increases the API limit, as returned by parseLimitParam, by 1.
+// This allows for emitting warnings when the results are truncated.
+func toHintLimit(limit int) int {
+	// 0 means no limit and avoid int overflow
+	if limit > 0 && limit < math.MaxInt {
+		return limit + 1
+	}
+	return limit
+}
+
 // NewMetricMetadataHandler creates handler compatible with HTTP /api/v1/metadata https://prometheus.io/docs/prometheus/latest/querying/api/#querying-metric-metadata
 // which uses gRPC Unary Metadata API.
-func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (interface{}, []error, *api.ApiError, func()) {
+func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
 	}
 
-	return func(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+	return func(r *http.Request) (any, []error, *api.ApiError, func()) {
 		span, ctx := tracing.StartSpan(r.Context(), "metadata_http_request")
 		defer span.Finish()
 
@@ -1565,4 +1643,91 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 
 		return t, warnings.AsErrors(), nil, func() {}
 	}
+}
+
+func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, func()) {
+	span, ctx := tracing.StartSpan(r.Context(), "tsdb_statistics_query_request")
+	defer span.Finish()
+
+	ps := storepb.PartialResponseStrategy_ABORT
+	if qapi.enableStatusPartialResponse {
+		ps = storepb.PartialResponseStrategy_WARN
+	}
+
+	var (
+		warnings annotations.Annotations
+		err      error
+	)
+
+	limit, err := parseLimitParam(r.FormValue("limit"))
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+	}
+
+	if limit < 1 {
+		// Ensure that a positive limit is always applied.
+		limit = 10
+	}
+
+	var tenant string
+	if qapi.enforceTenancy {
+		tenant, err = tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+	}
+
+	if limit > math.MaxInt32 {
+		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("limit %d overflows int32", limit)}, func() {}
+	}
+	req := &statuspb.TSDBStatisticsRequest{
+		Tenant:                  tenant,
+		Limit:                   int32(limit),
+		PartialResponseStrategy: ps,
+	}
+
+	var stats map[string]*statuspb.TSDBStatisticsEntry
+	tracing.DoInSpan(ctx, "retrieve_tsdb_statistics", func(ctx context.Context) {
+		stats, warnings, err = qapi.status.TSDBStatistics(ctx, req)
+	})
+
+	if err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "retrieving tsdb statistics")}, func() {}
+	}
+
+	if tenant != "" {
+		return convertToTSDBSTatus(stats[tenant], limit), warnings.AsErrors(), nil, func() {}
+	}
+
+	// Merge statistics from all tenants.
+	aggregatedStats := &statuspb.TSDBStatisticsEntry{}
+	for _, v := range stats {
+		aggregatedStats.Merge(v)
+	}
+
+	return convertToTSDBSTatus(aggregatedStats, limit), warnings.AsErrors(), nil, func() {}
+}
+
+func convertToTSDBSTatus(tsdbStatsEntry *statuspb.TSDBStatisticsEntry, limit int) *v1.TSDBStatus {
+	return &v1.TSDBStatus{
+		HeadStats: v1.HeadStats{
+			NumSeries:     tsdbStatsEntry.HeadStatistics.NumSeries,
+			NumLabelPairs: int(tsdbStatsEntry.HeadStatistics.NumLabelPairs),
+			ChunkCount:    tsdbStatsEntry.HeadStatistics.ChunkCount,
+			MinTime:       tsdbStatsEntry.HeadStatistics.MinTime,
+			MaxTime:       tsdbStatsEntry.HeadStatistics.MaxTime,
+		},
+		SeriesCountByMetricName:     convertToTSDBStat(tsdbStatsEntry.SeriesCountByMetricName, limit),
+		LabelValueCountByLabelName:  convertToTSDBStat(tsdbStatsEntry.LabelValueCountByLabelName, limit),
+		MemoryInBytesByLabelName:    convertToTSDBStat(tsdbStatsEntry.MemoryInBytesByLabelName, limit),
+		SeriesCountByLabelValuePair: convertToTSDBStat(tsdbStatsEntry.SeriesCountByLabelValuePair, limit),
+	}
+}
+
+func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
+	if limit > 0 && limit < len(stats) {
+		stats = stats[:limit]
+	}
+
+	return statuspb.ConvertToPrometheusTSDBStat(stats)
 }

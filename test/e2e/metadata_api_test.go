@@ -46,17 +46,13 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	stores := []string{sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")}
-	q := e2ethanos.NewQuerierBuilder(
-		e, "query", stores...).
-		WithMetadataAddresses(stores...).
-		Init()
+	q := e2ethanos.NewQuerierBuilder(e, "query", stores...).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	t.Cleanup(cancel)
 
 	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
-	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{"thanos_query_metadata_apis_dns_provider_results"}, e2emon.WaitMissingMetrics()))
 
 	var promMeta map[string][]metadatapb.Meta
 	// Wait metadata response to be ready as Prometheus gets metadata after scrape.

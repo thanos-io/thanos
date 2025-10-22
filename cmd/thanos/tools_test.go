@@ -4,6 +4,8 @@
 package main
 
 import (
+	"os"
+	"path"
 	"testing"
 
 	"github.com/go-kit/log"
@@ -43,5 +45,15 @@ func Test_CheckRules_Glob(t *testing.T) {
 
 	// invalid path
 	files = &[]string{"./testdata/rules-files/*.yamlaaa"}
+	testutil.NotOk(t, checkRulesFiles(logger, files), "expected err for file %s", files)
+
+	// Unreadble path
+	// Move the initial file to a temp dir and make it unreadble there, in case the process cannot chmod the file in the current dir.
+	filename := "./testdata/rules-files/unreadable_valid.yaml"
+	bytesRead, err := os.ReadFile(filename)
+	testutil.Ok(t, err)
+	filename = path.Join(t.TempDir(), "file.yaml")
+	testutil.Ok(t, os.WriteFile(filename, bytesRead, 0000))
+	files = &[]string{filename}
 	testutil.NotOk(t, checkRulesFiles(logger, files), "expected err for file %s", files)
 }

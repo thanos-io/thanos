@@ -16,7 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -273,7 +273,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			prepare: func(ctx context.Context, t *testing.T, originBucket, targetBucket *objstore.InMemBucket) {
 				ulid := testULID(0)
 				meta := testMeta(ulid)
-				meta.BlockMeta.Compaction.Level = 2
+				meta.Compaction.Level = 2
 
 				b, err := json.Marshal(meta)
 				testutil.Ok(t, err)

@@ -12,16 +12,17 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/thanos-io/objstore"
-	"go.uber.org/goleak"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 
 	"github.com/efficientgo/core/testutil"
 )
 
 func TestMain(m *testing.M) {
-	goleak.VerifyTestMain(m)
+	custom.TolerantVerifyLeakMain(m)
 }
 
 func TestReadMarker(t *testing.T) {

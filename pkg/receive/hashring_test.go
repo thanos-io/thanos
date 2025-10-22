@@ -12,6 +12,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/stretchr/testify/require"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -19,6 +20,8 @@ import (
 )
 
 func TestHashringGet(t *testing.T) {
+	t.Parallel()
+
 	ts := &prompb.TimeSeries{
 		Labels: []labelpb.ZLabel{
 			{
@@ -138,17 +141,74 @@ func TestHashringGet(t *testing.T) {
 				"node6": {},
 			},
 		},
+		{
+			name: "glob hashring match",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"prefix*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+				"node2": {},
+				"node3": {},
+			},
+			tenant: "prefix-1",
+		},
+		{
+			name: "glob hashring not match",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"prefix*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node4": {},
+				"node5": {},
+				"node6": {},
+			},
+			tenant: "suffix-1",
+		},
+		{
+			name: "glob hashring multiple matches",
+			cfg: []HashringConfig{
+				{
+					Endpoints:         []Endpoint{{Address: "node1"}, {Address: "node2"}, {Address: "node3"}},
+					Tenants:           []string{"t1-*", "t2", "t3-*"},
+					TenantMatcherType: TenantMatcherGlob,
+				},
+				{
+					Endpoints: []Endpoint{{Address: "node4"}, {Address: "node5"}, {Address: "node6"}},
+				},
+			},
+			nodes: map[string]struct{}{
+				"node1": {},
+				"node2": {},
+				"node3": {},
+			},
+			tenant: "t2",
+		},
 	} {
-		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg, prometheus.NewRegistry())
 		require.NoError(t, err)
 
-		h, err := hs.Get(tc.tenant, ts)
+		h, err := hs.GetN(tc.tenant, ts, 0)
 		if tc.nodes != nil {
 			if err != nil {
 				t.Errorf("case %q: got unexpected error: %v", tc.name, err)
 				continue
 			}
-			if _, ok := tc.nodes[h]; !ok {
+			if _, ok := tc.nodes[h.Address]; !ok {
 				t.Errorf("case %q: got unexpected node %q", tc.name, h)
 			}
 			continue
@@ -160,6 +220,8 @@ func TestHashringGet(t *testing.T) {
 }
 
 func TestKetamaHashringGet(t *testing.T) {
+	t.Parallel()
+
 	baseTS := &prompb.TimeSeries{
 		Labels: []labelpb.ZLabel{
 			{
@@ -236,17 +298,21 @@ func TestKetamaHashringGet(t *testing.T) {
 
 			result, err := hashRing.GetN("tenant", test.ts, test.n)
 			require.NoError(t, err)
-			require.Equal(t, test.expectedNode, result)
+			require.Equal(t, test.expectedNode, result.Address)
 		})
 	}
 }
 
 func TestKetamaHashringBadConfigIsRejected(t *testing.T) {
+	t.Parallel()
+
 	_, err := newKetamaHashring([]Endpoint{{Address: "node-1"}}, 1, 2)
 	require.Error(t, err)
 }
 
 func TestKetamaHashringConsistency(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	ringA := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
@@ -267,6 +333,8 @@ func TestKetamaHashringConsistency(t *testing.T) {
 }
 
 func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
@@ -287,6 +355,8 @@ func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 }
 
 func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-3"}}
@@ -307,6 +377,8 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistency(t *testing.T) {
+	t.Parallel()
+
 	series := makeSeries()
 
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-4"}, {Address: "node-5"}}
@@ -327,6 +399,8 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		initialRing []Endpoint
 		resizedRing []Endpoint
@@ -379,6 +453,8 @@ func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
 }
 
 func TestKetamaHashringEvenAZSpread(t *testing.T) {
+	t.Parallel()
+
 	tenant := "default-tenant"
 	ts := &prompb.TimeSeries{
 		Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
@@ -459,7 +535,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 				testutil.Ok(t, err)
 
 				for _, n := range tt.nodes {
-					if !strings.HasPrefix(n.Address, r) {
+					if !strings.HasPrefix(n.Address, r.Address) {
 						continue
 					}
 					azSpread[n.AZ]++
@@ -467,10 +543,7 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 
 			}
 
-			expectedAzSpreadLength := int(tt.replicas)
-			if int(tt.replicas) > len(availableAzs) {
-				expectedAzSpreadLength = len(availableAzs)
-			}
+			expectedAzSpreadLength := min(int(tt.replicas), len(availableAzs))
 			testutil.Equals(t, len(azSpread), expectedAzSpreadLength)
 
 			for _, writeToAz := range azSpread {
@@ -482,6 +555,8 @@ func TestKetamaHashringEvenAZSpread(t *testing.T) {
 }
 
 func TestKetamaHashringEvenNodeSpread(t *testing.T) {
+	t.Parallel()
+
 	tenant := "default-tenant"
 
 	for _, tt := range []struct {
@@ -561,7 +636,7 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 					r, err := hashRing.GetN(tenant, ts, uint64(j))
 					testutil.Ok(t, err)
 
-					nodeSpread[r]++
+					nodeSpread[r.Address]++
 				}
 			}
 			for _, node := range nodeSpread {
@@ -573,6 +648,8 @@ func TestKetamaHashringEvenNodeSpread(t *testing.T) {
 }
 
 func TestInvalidAZHashringCfg(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		cfg           []HashringConfig
 		replicas      uint64
@@ -582,12 +659,196 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 		{
 			cfg:           []HashringConfig{{Endpoints: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}}}},
 			replicas:      2,
+			algorithm:     AlgorithmHashmod,
 			expectedError: "Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.",
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg, prometheus.NewRegistry())
 			require.EqualError(t, err, tt.expectedError)
+		})
+	}
+}
+
+func TestShuffleShardHashring(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		endpoints       []Endpoint
+		tenant          string
+		shuffleShardCfg ShuffleShardingConfig
+		err             string
+		usedNodes       int
+		nodeAddrs       map[string]struct{}
+	}{
+		{
+			usedNodes: 3,
+			name:      "ketama with shuffle sharding",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "tenant-1",
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:   []string{"special-tenant"},
+						ShardSize: 2,
+					},
+				},
+			},
+		},
+		{
+			usedNodes: 3,
+			name:      "ketama with glob tenant override",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "prefix-tenant",
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         3,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+		{
+			name: "big shard size",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "prefix-tenant",
+			err:    `shard size 20 is larger than number of nodes in AZ`,
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         20,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+		{
+			name: "zone awareness disabled",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-2"},
+				{Address: "node-6", AZ: "az-2"},
+				{Address: "node-7", AZ: "az-3"},
+				{Address: "node-8", AZ: "az-3"},
+			},
+			tenant:    "prefix-tenant",
+			usedNodes: 3,
+			nodeAddrs: map[string]struct{}{
+				"node-1": {},
+				"node-2": {},
+				"node-6": {},
+			},
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize:             1,
+				ZoneAwarenessDisabled: true,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         3,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var baseRing Hashring
+			var err error
+
+			baseRing, err = newKetamaHashring(tc.endpoints, SectionsPerNode, 2)
+			require.NoError(t, err)
+
+			// Create the shuffle shard hashring
+			shardRing, err := newShuffleShardHashring(baseRing, tc.shuffleShardCfg, 2, prometheus.NewRegistry(), "test")
+			require.NoError(t, err)
+
+			// Test that the shuffle sharding is consistent
+			usedNodes := make(map[string]struct{})
+
+			// We'll sample multiple times to ensure consistency
+			for i := range 100 {
+				ts := &prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{
+						{
+							Name:  "iteration",
+							Value: fmt.Sprintf("%d", i),
+						},
+					},
+				}
+
+				h, err := shardRing.GetN(tc.tenant, ts, 0)
+				if tc.err != "" {
+					require.Error(t, err)
+					require.Contains(t, err.Error(), tc.err)
+					return
+				}
+				require.NoError(t, err)
+				usedNodes[h.Address] = struct{}{}
+			}
+
+			require.Len(t, usedNodes, tc.usedNodes)
+			if tc.nodeAddrs != nil {
+				require.Len(t, usedNodes, len(tc.nodeAddrs))
+				require.Equal(t, tc.nodeAddrs, usedNodes)
+			}
+
+			// Test consistency - same tenant should always get same nodes.
+			for trial := range 50 {
+				trialNodes := make(map[string]struct{})
+
+				for i := 0; i < 10+trial; i++ {
+					ts := &prompb.TimeSeries{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "iteration",
+								Value: fmt.Sprintf("%d", i),
+							},
+							{
+								Name:  "trial",
+								Value: fmt.Sprintf("%d", trial),
+							},
+						},
+					}
+
+					h, err := shardRing.GetN(tc.tenant, ts, 0)
+					require.NoError(t, err)
+					trialNodes[h.Address] = struct{}{}
+				}
+
+				// Same tenant should get same set of nodes in every trial
+				require.Equal(t, usedNodes, trialNodes, "Inconsistent node sharding between trials")
+			}
 		})
 	}
 }
@@ -595,7 +856,7 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 func makeSeries() []prompb.TimeSeries {
 	numSeries := 10000
 	series := make([]prompb.TimeSeries, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		series[i] = prompb.TimeSeries{
 			Labels: []labelpb.ZLabel{
 				{
@@ -630,13 +891,13 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 		return nil, err
 	}
 	assignments := make(map[string][]prompb.TimeSeries)
-	for i := uint64(0); i < replicas; i++ {
+	for i := range replicas {
 		for _, ts := range series {
 			result, err := hashRing.GetN("tenant", &ts, i)
 			if err != nil {
 				return nil, err
 			}
-			assignments[result] = append(assignments[result], ts)
+			assignments[result.Address] = append(assignments[result.Address], ts)
 
 		}
 	}

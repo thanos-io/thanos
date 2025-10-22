@@ -87,11 +87,9 @@ func (s *InterceptorTestSuite) SetupSuite() {
 			testpb.RegisterTestServiceServer(s.Server, s.TestService)
 
 			w := sync.WaitGroup{}
-			w.Add(1)
-			go func() {
+			w.Go(func() {
 				_ = s.Server.Serve(s.ServerListener)
-				w.Done()
-			}()
+			})
 			if s.Client == nil {
 				s.Client = s.NewClient(s.ClientOpts...)
 			}
@@ -119,7 +117,6 @@ func (s *InterceptorTestSuite) RestartServer(delayedStart time.Duration) <-chan 
 }
 
 func (s *InterceptorTestSuite) NewClient(dialOpts ...grpc.DialOption) testpb.TestServiceClient {
-	newDialOpts := append(dialOpts, grpc.WithBlock())
 	var err error
 	if *flagTls {
 		cp := x509.NewCertPool()
@@ -127,13 +124,11 @@ func (s *InterceptorTestSuite) NewClient(dialOpts ...grpc.DialOption) testpb.Tes
 			s.T().Fatal("failed to append certificate")
 		}
 		creds := credentials.NewTLS(&tls.Config{ServerName: "localhost", RootCAs: cp})
-		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(creds))
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	} else {
-		newDialOpts = append(newDialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	s.clientConn, err = grpc.DialContext(ctx, s.ServerAddr(), newDialOpts...)
+	s.clientConn, err = grpc.NewClient(s.ServerAddr(), dialOpts...)
 	require.NoError(s.T(), err, "must not error on client Dial")
 	return testpb.NewTestServiceClient(s.clientConn)
 }

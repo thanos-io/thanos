@@ -5,7 +5,6 @@ package queryrange
 
 import (
 	"context"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	io "io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/thanos-io/thanos/pkg/extpromql"
 
 	"github.com/stretchr/testify/require"
 	"github.com/weaveworks/common/httpgrpc"
@@ -374,9 +375,12 @@ func Test_evaluateAtModifier(t *testing.T) {
 			[10m:])`,
 		},
 		{
-			// parse error: missing unit character in duration
-			in:                "http_requests_total[5] @ 10.001",
-			expectedErrorCode: http.StatusBadRequest,
+			in:       `irate(kube_pod_info{namespace="test"}[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"}[1h:1m] @ 1546300.800)`,
+		},
+		{
+			in:       `irate(kube_pod_info{namespace="test"} @ end()[1h:1m] @ start())`,
+			expected: `irate(kube_pod_info{namespace="test"} @ 1646300.800 [1h:1m] @ 1546300.800)`,
 		},
 		{
 			// parse error: @ modifier must be preceded by an instant vector selector or range vector selector or a subquery
@@ -384,7 +388,6 @@ func Test_evaluateAtModifier(t *testing.T) {
 			expectedErrorCode: http.StatusBadRequest,
 		},
 	} {
-		tt := tt
 		t.Run(tt.in, func(t *testing.T) {
 			t.Parallel()
 			out, err := EvaluateAtModifierFunction(tt.in, start, end)

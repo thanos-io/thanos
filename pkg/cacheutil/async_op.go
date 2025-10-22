@@ -32,7 +32,7 @@ func NewAsyncOperationProcessor(bufferSize, concurrency int) *AsyncOperationProc
 	}
 
 	p.workers.Add(concurrency)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go p.asyncQueueProcessLoop()
 	}
 
@@ -54,7 +54,14 @@ func (p *AsyncOperationProcessor) asyncQueueProcessLoop() {
 		case op := <-p.asyncQueue:
 			op()
 		case <-p.stop:
-			return
+			// Run all remaining operations before stopping
+			select {
+			case op := <-p.asyncQueue:
+				op()
+				continue
+			default:
+				return
+			}
 		}
 	}
 }

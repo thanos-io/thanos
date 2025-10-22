@@ -109,6 +109,7 @@ func (e errChunk) Appender() (chunkenc.Appender, error)         { return nil, e.
 func (e errChunk) Iterator(chunkenc.Iterator) chunkenc.Iterator { return e.err }
 func (e errChunk) NumSamples() int                              { return 0 }
 func (e errChunk) Compact()                                     {}
+func (e errChunk) Reset(stream []byte)                          {}
 
 func (l *lazyPopulatableChunk) populate() {
 	// TODO(bwplotka): In most cases we don't need to parse anything, just copy. Extend reader/writer for this.
@@ -156,6 +157,13 @@ func (l *lazyPopulatableChunk) NumSamples() int {
 		l.populate()
 	}
 	return l.populated.NumSamples()
+}
+
+func (l *lazyPopulatableChunk) Reset(stream []byte) {
+	if l.populated == nil {
+		l.populate()
+	}
+	l.populated.Reset(stream)
 }
 
 func (l *lazyPopulatableChunk) Compact() {

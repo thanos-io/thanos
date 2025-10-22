@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -92,7 +93,7 @@ func (bapi *BlocksAPI) Register(r *route.Router, tracer opentracing.Tracer, logg
 	r.Post("/blocks/mark", instr("blocks_mark", bapi.markBlock))
 }
 
-func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (bapi *BlocksAPI) markBlock(r *http.Request) (any, []error, *api.ApiError, func()) {
 	if bapi.disableAdminOperations {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.New("Admin operations are disabled")}, func() {}
 	}
@@ -131,7 +132,7 @@ func (bapi *BlocksAPI) markBlock(r *http.Request) (interface{}, []error, *api.Ap
 	return nil, nil, nil, func() {}
 }
 
-func (bapi *BlocksAPI) blocks(r *http.Request) (interface{}, []error, *api.ApiError, func()) {
+func (bapi *BlocksAPI) blocks(r *http.Request) (any, []error, *api.ApiError, func()) {
 	viewParam := r.URL.Query().Get("view")
 	if viewParam == "loaded" {
 		bapi.loadedLock.Lock()

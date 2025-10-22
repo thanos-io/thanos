@@ -8,6 +8,7 @@ import (
 	"os"
 	execlib "os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/efficientgo/e2e"
@@ -22,6 +23,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/objstore/providers/s3"
 	tracingclient "github.com/thanos-io/thanos/pkg/tracing/client"
@@ -175,7 +177,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	                    │           │
 	//	                    └───────────┘
 	bkt1Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt1",
 			AccessKey: e2edb.MinioAccessKey,
@@ -197,7 +199,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
-		Type: client.S3,
+		Type: objstore.S3,
 		Config: s3.Config{
 			Bucket:    "bkt2",
 			AccessKey: e2edb.MinioAccessKey,
@@ -329,19 +331,25 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//                                                                         │   Sidecar  │◄─────┘
 	//                                                                         └────────────┘
 	//
+
+	storeAPIEndpoints := []string{
+		store1.InternalEndpoint("grpc"),
+		store2.InternalEndpoint("grpc"),
+		sidecarHA0.InternalEndpoint("grpc"),
+		sidecarHA1.InternalEndpoint("grpc"),
+		sidecar2.InternalEndpoint("grpc"),
+		receive1.InternalEndpoint("grpc"),
+	}
+
 	query1 := e2edb.NewThanosQuerier(
 		e,
 		"query1",
-		[]string{
-			store1.InternalEndpoint("grpc"),
-			store2.InternalEndpoint("grpc"),
-			sidecarHA0.InternalEndpoint("grpc"),
-			sidecarHA1.InternalEndpoint("grpc"),
-			sidecar2.InternalEndpoint("grpc"),
-			receive1.InternalEndpoint("grpc"),
-		},
+		[]string{},
 		e2edb.WithImage("thanos:latest"),
-		e2edb.WithFlagOverride(map[string]string{"--tracing.config": string(jaegerConfig)}),
+		e2edb.WithFlagOverride(map[string]string{
+			"--tracing.config": string(jaegerConfig),
+			"--endpoint":       strings.Join(storeAPIEndpoints, ","),
+		}),
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(query1))
 

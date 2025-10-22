@@ -23,7 +23,7 @@ type RequestResponse struct {
 func DoRequests(ctx context.Context, downstream Handler, reqs []Request, limits Limits) ([]RequestResponse, error) {
 	tenantIDs, err := tenant.TenantIDs(ctx)
 	if err != nil {
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
+		return nil, httpgrpc.Errorf(http.StatusBadRequest, "%s", err.Error())
 	}
 
 	// If one of the requests fail, we want to be able to cancel the rest of them.
@@ -40,11 +40,8 @@ func DoRequests(ctx context.Context, downstream Handler, reqs []Request, limits 
 	}()
 
 	respChan, errChan := make(chan RequestResponse), make(chan error)
-	parallelism := validation.SmallestPositiveIntPerTenant(tenantIDs, limits.MaxQueryParallelism)
-	if parallelism > len(reqs) {
-		parallelism = len(reqs)
-	}
-	for i := 0; i < parallelism; i++ {
+	parallelism := min(validation.SmallestPositiveIntPerTenant(tenantIDs, limits.MaxQueryParallelism), len(reqs))
+	for range parallelism {
 		go func() {
 			for req := range intermediate {
 				resp, err := downstream.Do(ctx, req)

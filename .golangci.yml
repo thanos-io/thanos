@@ -1,82 +1,68 @@
-# This file contains all available configuration options
-# with their default values.
-
-# options for analysis running
+version: "2"
 run:
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  deadline: 5m
-
-  # exit code when at least one issue was found, default is 1
+  build-tags:
+    - slicelabels
   issues-exit-code: 1
-
-  # which dirs to skip: they won't be analyzed;
-  # can use regexp here: generated.*, regexp is applied on full path;
-  # default value is empty list, but next dirs are always skipped independently
-  # from this option's value:
-  #     vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs:
-    - vendor
-    - internal/cortex
-
-
-# output configuration options
-output:
-  # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: colored-line-number
-
-  # print lines of code with issue, default is true
-  print-issued-lines: true
-
-  # print linter name in the end of issue text, default is true
-  print-linter-name: true
-
 linters:
   enable:
-    # Sorted alphabetically.
-    - errcheck
     - goconst
     - godot
+    - misspell
+    - promlinter
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        - (github.com/go-kit/log.Logger).Log
+        - fmt.Fprintln
+        - fmt.Fprint
+    goconst:
+      min-occurrences: 5
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - promlinter
+        path: _test\.go
+      - linters:
+          - unused
+        text: SourceStoreAPI.implementsStoreAPI
+      - linters:
+          - unused
+        text: SourceStoreAPI.producesBlocks
+      - linters:
+          - unused
+        text: Source.producesBlocks
+      - linters:
+          - unused
+        text: newMockAlertmanager
+      - linters:
+          - unused
+        text: ruleAndAssert
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
     - gofmt
     - goimports
-    - gosimple
-    - govet
-    - ineffassign
-    - misspell
-    - staticcheck
-    - typecheck
-    - unparam
-    - unused
-    - exportloopref
-    - promlinter
-
-linters-settings:
-  errcheck:
-    exclude: ./.errcheck_excludes.txt
-  misspell:
-    locale: US
-  goconst:
-    min-occurrences: 5
-
-issues:
-  exclude-rules:
-    # We don't check metrics naming in the tests.
-    - path: _test\.go
-      linters:
-      - promlinter
-    # These are not being checked since these methods exist
-    # so that no one else could implement them.
-    - linters:
-        - unused
-      text: "SourceStoreAPI.implementsStoreAPI"
-    - linters:
-        - unused
-      text: "SourceStoreAPI.producesBlocks"
-    - linters:
-        - unused
-      text: "Source.producesBlocks"
-    - linters:
-        - unused
-      text: "newMockAlertmanager"
-    - linters:
-        - unused
-      text: "ruleAndAssert"
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$

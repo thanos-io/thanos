@@ -1,8 +1,6 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-//go:build !stringlabels
-
 package labelpb
 
 import (
@@ -13,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/stretchr/testify/require"
 
 	"github.com/efficientgo/core/testutil"
 )
@@ -24,6 +23,7 @@ var testLsetMap = map[string]string{
 	"124134235423534534ffdasdfsf": "1",
 	"":                            "",
 	"b":                           "",
+	"label:name":                  "label:value",
 }
 
 func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
@@ -64,6 +64,16 @@ func TestValidateLabels(t *testing.T) {
 			// No labels at all.
 			labelSet:    []ZLabel{},
 			expectedErr: ErrEmptyLabels,
+		},
+		{
+			// utf-8 case.
+			labelSet: []ZLabel{
+				{
+					Name:  "label:name",
+					Value: "label:value",
+				},
+			},
+			expectedErr: nil,
 		},
 		{
 			// Empty label.
@@ -244,12 +254,12 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 	b.Run("Label", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := LabelSet{Labels: make([]Label, 0, num)}
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls.Labels = append(lbls.Labels, Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
@@ -261,12 +271,12 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 	b.Run("ZLabel", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := ZLabelSet{Labels: make([]ZLabel, 0, num)}
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls.Labels = append(lbls.Labels, ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			data, err := lbls.Marshal()
 			testutil.Ok(b, err)
 
@@ -296,24 +306,24 @@ func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
 	b.Run("ZLabelsToPromLabels", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := make([]ZLabel, num)
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})
 	b.Run("ZLabelsToPromLabelsWithRealloc", func(b *testing.B) {
 		b.ReportAllocs()
 		lbls := make([]ZLabel, num)
-		for i := 0; i < num; i++ {
+		for i := range num {
 			lbls[i] = ZLabel{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)}
 		}
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			ReAllocZLabelsStrings(&lbls, true)
 			ret = ZLabelsToPromLabels(lbls)
 		}
@@ -486,7 +496,7 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 			name: "typical labels under 1KB",
 			lbls: func() []ZLabel {
 				lbls := make([]ZLabel, 10)
-				for i := 0; i < len(lbls); i++ {
+				for i := range lbls {
 					// ZLabel ~20B name, 50B value.
 					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
@@ -497,7 +507,7 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 			name: "bigger labels over 1KB",
 			lbls: func() []ZLabel {
 				lbls := make([]ZLabel, 10)
-				for i := 0; i < len(lbls); i++ {
+				for i := range lbls {
 					//ZLabel ~50B name, 50B value.
 					lbls[i] = ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 				}
@@ -524,10 +534,57 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 
 			b.ReportAllocs()
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for b.Loop() {
 				h = HashWithPrefix(prefix, tcase.lbls)
 			}
 			benchmarkLabelsResult = h
 		})
 	}
+}
+
+func BenchmarkLabelUnmarshal(b *testing.B) {
+	lblset := LabelSet{
+		Labels: []Label{},
+	}
+
+	for i := range 1000 {
+		lblset.Labels = append(lblset.Labels, Label{Name: fmt.Sprintf("label%d", i), Value: fmt.Sprintf("value%d", i)})
+	}
+
+	lblsetm, err := lblset.Marshal()
+	testutil.Ok(b, err)
+
+	b.Run("Unmarshal regular", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := LabelSet{}
+
+			require.NoError(b, l.Unmarshal(lblsetm))
+		}
+	})
+
+	b.Run("Unmarshal ZLabel", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := ZLabelSet{}
+
+			require.NoError(b, l.Unmarshal(lblsetm))
+		}
+	})
+
+	b.Run("Unmarshal easyproto", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			l := CustomLabelset{}
+
+			require.NoError(b, l.UnmarshalProtobuf(lblsetm))
+		}
+	})
+
 }

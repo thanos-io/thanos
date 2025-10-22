@@ -12,7 +12,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	amlabels "github.com/prometheus/alertmanager/pkg/labels"
@@ -115,7 +116,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate from")
 	}
 
-	bkt, err := client.NewBucket(logger, fromConfContentYaml, component.Replicate.String())
+	bkt, err := client.NewBucket(logger, fromConfContentYaml, component.Replicate.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -136,7 +137,7 @@ func RunReplicate(
 		return errors.New("No supported bucket was configured to replicate to")
 	}
 
-	toBkt, err := client.NewBucket(logger, toConfContentYaml, component.Replicate.String())
+	toBkt, err := client.NewBucket(logger, toConfContentYaml, component.Replicate.String(), nil)
 	if err != nil {
 		return err
 	}

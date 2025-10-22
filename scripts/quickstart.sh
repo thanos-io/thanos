@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Starts three Prometheus servers scraping themselves and sidecars for each.
+# Starts three Prometheus servers scraping themselves and sidecars or receivers for each.
 # Two query nodes are started and all are clustered together.
 
 trap 'kill 0' SIGTERM
@@ -20,6 +20,18 @@ fi
 if [ ! $(command -v "$THANOS_EXECUTABLE") ]; then
   echo "Cannot find or execute Thanos binary $THANOS_EXECUTABLE, you can override it by setting the THANOS_EXECUTABLE env variable"
   exit 1
+fi
+
+OBJSTORECFG=""
+if [ -n "${MINIO_ENABLED}" ]; then
+  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+else
+  if [ ! -e "$OBJSTORECFG_FILE" ]; then
+    echo "Cannot find ObjStore config file at path \"$OBJSTORECFG_FILE\". Create a config following https://thanos.io/tip/thanos/storage.md/ and set the OBJSTORECFG_FILE env variable to the file's location."
+    exit 1
+  fi
+
+  OBJSTORECFG="--objstore.config-file      ${OBJSTORECFG_FILE}"
 fi
 
 # Start local object storage, if desired.
@@ -71,10 +83,20 @@ fi
 # Setup alert / rules config file.
 cat >data/rules.yml <<-EOF
 	groups:
-	  - name: example
-	    rules:
-	    - record: job:go_threads:sum
-	      expr: sum(go_threads) by (job)
+    - name: example
+      rules:
+        - record: job:go_threads:sum
+          expr: sum(go_threads) by (job)
+          labels:
+            test: label
+
+    - name: alert
+      rules:
+        - alert: HighGoThreads
+          expr: sum(go_threads) by (job) > 100
+          for: 1m
+          labels:
+            severity: page
 EOF
 
 STORES=""
@@ -140,33 +162,30 @@ done
 
 sleep 0.5
 
-OBJSTORECFG=""
-if [ -n "${MINIO_ENABLED}" ]; then
-  OBJSTORECFG="--objstore.config-file      data/bucket.yml"
+if [ ! -n "${REMOTE_WRITE_ENABLED}" ]; then
+  # Start one sidecar for each Prometheus server.
+  for i in $(seq 0 2); do
+    if [ -z ${CODESPACE_NAME+x} ]; then
+      PROMETHEUS_URL="http://localhost:909${i}"
+    else
+      PROMETHEUS_URL="https://${CODESPACE_NAME}-909${i}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+    fi
+    ${THANOS_EXECUTABLE} sidecar \
+      --debug.name sidecar-"${i}" \
+      --log.level debug \
+      --grpc-address 0.0.0.0:109"${i}"1 \
+      --grpc-grace-period 1s \
+      --http-address 0.0.0.0:109"${i}"2 \
+      --http-grace-period 1s \
+      --prometheus.url "${PROMETHEUS_URL}" \
+      --tsdb.path data/prom"${i}" \
+      ${OBJSTORECFG} &
+
+    STORES="${STORES} --endpoint 127.0.0.1:109${i}1"
+
+    sleep 0.25
+  done
 fi
-
-# Start one sidecar for each Prometheus server.
-for i in $(seq 0 2); do
-  if [ -z ${CODESPACE_NAME+x} ]; then
-    PROMETHEUS_URL="http://localhost:909${i}"
-  else
-    PROMETHEUS_URL="https://${CODESPACE_NAME}-909${i}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
-  fi
-  ${THANOS_EXECUTABLE} sidecar \
-    --debug.name sidecar-"${i}" \
-    --log.level debug \
-    --grpc-address 0.0.0.0:109"${i}"1 \
-    --grpc-grace-period 1s \
-    --http-address 0.0.0.0:109"${i}"2 \
-    --http-grace-period 1s \
-    --prometheus.url "${PROMETHEUS_URL}" \
-    --tsdb.path data/prom"${i}" \
-    ${OBJSTORECFG} &
-
-  STORES="${STORES} --store 127.0.0.1:109${i}1"
-
-  sleep 0.25
-done
 
 sleep 0.5
 
@@ -195,14 +214,14 @@ metafile_content_ttl: 0s
     --store.caching-bucket.config-file=groupcache.yml \
     ${OBJSTORECFG} &
 
-  STORES="${STORES} --store 127.0.0.1:10905"
+  STORES="${STORES} --endpoint 127.0.0.1:10905"
 fi
 
 sleep 0.5
 
 if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
 
-  for i in $(seq 0 1 2); do
+  for i in $(seq 0 2); do
     ${THANOS_EXECUTABLE} receive \
       --debug.name receive${i} \
       --log.level debug \
@@ -217,11 +236,12 @@ if [ -n "${REMOTE_WRITE_ENABLED}" ]; then
       --label "receive_replica=\"${i}\"" \
       --label 'receive="true"' \
       --receive.local-endpoint 127.0.0.1:1${i}907 \
+      --receive.capnproto-address 0.0.0.0:1${i}391 \
       --receive.hashrings '[{"endpoints":["127.0.0.1:10907","127.0.0.1:11907","127.0.0.1:12907"]}]' \
       --remote-write.address 0.0.0.0:1${i}908 \
       ${OBJSTORECFG} &
 
-    STORES="${STORES} --store 127.0.0.1:1${i}907"
+    STORES="${STORES} --endpoint 127.0.0.1:1${i}907"
   done
 
   for i in $(seq 0 1 2); do
@@ -288,7 +308,7 @@ ${THANOS_EXECUTABLE} rule \
   "${REMOTE_WRITE_FLAGS}" \
   ${OBJSTORECFG} &
 
-STORES="${STORES} --store 127.0.0.1:19998"
+STORES="${STORES} --endpoint 127.0.0.1:19998"
 
 # Start two query nodes.
 for i in $(seq 0 1); do

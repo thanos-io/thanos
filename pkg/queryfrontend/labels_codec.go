@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	io "io"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -19,6 +18,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/prometheus/model/timestamp"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
@@ -26,11 +26,6 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/util/spanlogger"
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-)
-
-var (
-	infMinTime = time.Unix(math.MinInt64/1000+62135596801, 0)
-	infMaxTime = time.Unix(math.MaxInt64/1000-62135596801, 999999999)
 )
 
 // labelsCodec is used to encode/decode Thanos labels and series requests and responses.
@@ -107,7 +102,10 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 
 func (c labelsCodec) DecodeRequest(_ context.Context, r *http.Request, forwardHeaders []string) (queryrange.Request, error) {
 	if err := r.ParseForm(); err != nil {
-		return nil, httpgrpc.Errorf(http.StatusBadRequest, err.Error())
+		return nil, httpgrpc.ErrorFromHTTPResponse(&httpgrpc.HTTPResponse{
+			Code: int32(http.StatusBadRequest),
+			Body: []byte(err.Error()),
+		})
 	}
 
 	var (
@@ -207,7 +205,10 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 func (c labelsCodec) DecodeResponse(ctx context.Context, r *http.Response, req queryrange.Request) (queryrange.Response, error) {
 	if r.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(r.Body)
-		return nil, httpgrpc.Errorf(r.StatusCode, string(body))
+		return nil, httpgrpc.ErrorFromHTTPResponse(&httpgrpc.HTTPResponse{
+			Code: int32(r.StatusCode),
+			Body: body,
+		})
 	}
 	log, _ := spanlogger.New(ctx, "ParseQueryResponse") //nolint:ineffassign,staticcheck
 	defer log.Finish()
@@ -394,8 +395,8 @@ func parseMetadataTimeRange(r *http.Request, defaultMetadataTimeRange time.Durat
 	// If start and end time not specified as query parameter, we get the range from the beginning of time by default.
 	var defaultStartTime, defaultEndTime time.Time
 	if defaultMetadataTimeRange == 0 {
-		defaultStartTime = infMinTime
-		defaultEndTime = infMaxTime
+		defaultStartTime = v1.MinTime
+		defaultEndTime = v1.MaxTime
 	} else {
 		now := time.Now()
 		defaultStartTime = now.Add(-defaultMetadataTimeRange)

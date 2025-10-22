@@ -4,6 +4,8 @@
 package main
 
 import (
+	"context"
+	"maps"
 	"net"
 	"net/http"
 	"time"
@@ -34,6 +36,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
+	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -72,10 +75,10 @@ func registerQueryFrontend(app *extkingpin.App) {
 
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
-		Default("true").BoolVar(&cfg.QueryRangeConfig.AlignRangeWithStep)
+		Default("true").BoolVar(&cfg.AlignRangeWithStep)
 
 	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
-		Default("true").BoolVar(&cfg.QueryRangeConfig.RequestDownsampled)
+		Default("true").BoolVar(&cfg.RequestDownsampled)
 
 	cmd.Flag("query-range.split-interval", "Split query range requests by an interval and execute in parallel, it should be greater than 0 when query-range.response-cache-config is configured.").
 		Default("24h").DurationVar(&cfg.QueryRangeConfig.SplitQueriesByInterval)
@@ -83,19 +86,21 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.min-split-interval", "Split query range requests above this interval in query-range.horizontal-shards requests of equal range. "+
 		"Using this parameter is not allowed with query-range.split-interval. "+
 		"One should also set query-range.split-min-horizontal-shards to a value greater than 1 to enable splitting.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.MinQuerySplitInterval)
+		Default("0").DurationVar(&cfg.MinQuerySplitInterval)
 
 	cmd.Flag("query-range.max-split-interval", "Split query range below this interval in query-range.horizontal-shards. Queries with a range longer than this value will be split in multiple requests of this length.").
-		Default("0").DurationVar(&cfg.QueryRangeConfig.MaxQuerySplitInterval)
+		Default("0").DurationVar(&cfg.MaxQuerySplitInterval)
 
 	cmd.Flag("query-range.horizontal-shards", "Split queries in this many requests when query duration is below query-range.max-split-interval.").
-		Default("0").Int64Var(&cfg.QueryRangeConfig.HorizontalShards)
+		Default("0").Int64Var(&cfg.HorizontalShards)
 
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
 
 	cmd.Flag("query-frontend.enable-x-functions", "Enable experimental x- functions in query-frontend. --no-query-frontend.enable-x-functions for disabling.").
 		Default("false").BoolVar(&cfg.EnableXFunctions)
+
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query-frontend)").Default("").StringsVar(&cfg.EnableFeatures)
 
 	cmd.Flag("query-range.max-query-length", "Limit the query time range (end - start time) in the query-frontend, 0 disables it.").
 		Default("0").DurationVar((*time.Duration)(&cfg.QueryRangeConfig.Limits.MaxQueryLength))
@@ -146,6 +151,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.log-queries-longer-than", "Log queries that are slower than the specified duration. "+
 		"Set to 0 to disable. Set to < 0 to enable on all queries.").Default("0").DurationVar(&cfg.CortexHandlerConfig.LogQueriesLongerThan)
 
+	cmd.Flag("query-frontend.force-query-stats", "Enables query statistics for all queries and will export statistics as logs and service headers.").Default("false").BoolVar(&cfg.CortexHandlerConfig.QueryStatsEnabled)
+
 	cmd.Flag("query-frontend.org-id-header", "Deprecation Warning - This flag will be soon deprecated in favor of query-frontend.tenant-header"+
 		" and both flags cannot be used at the same time. "+
 		"Request header names used to identify the source of slow queries (repeated flag). "+
@@ -160,6 +167,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-frontend.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the query-frontend.tenant-header flag value to be ignored.").Hidden().Default("").EnumVar(&cfg.TenantCertField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
 	cmd.Flag("query-frontend.vertical-shards", "Number of shards to use when distributing shardable PromQL queries. For more details, you can refer to the Vertical query sharding proposal: https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md").IntVar(&cfg.NumShards)
+
+	cmd.Flag("query-frontend.slow-query-logs-user-header", "Set the value of the field remote_user in the slow query logs to the value of the given HTTP header. Falls back to reading the user from the basic auth header.").PlaceHolder("<http-header-name>").Default("").StringVar(&cfg.CortexHandlerConfig.SlowQueryLogsUserHeader)
 
 	reqLogConfig := extkingpin.RegisterRequestLoggingFlags(cmd)
 
@@ -266,8 +275,9 @@ func runQueryFrontend(
 			return errors.Wrap(err, "initializing the query range cache config")
 		}
 		cfg.QueryRangeConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{
-			Compression: cfg.CacheCompression,
-			CacheConfig: *cacheConfig,
+			Compression:                cfg.CacheCompression,
+			CacheConfig:                *cacheConfig,
+			CacheQueryableSamplesStats: cfg.CortexHandlerConfig.QueryStatsEnabled,
 		}
 	}
 
@@ -291,8 +301,15 @@ func runQueryFrontend(
 	}
 
 	if cfg.EnableXFunctions {
-		for fname, v := range parse.XFunctions {
-			parser.Functions[fname] = v
+		maps.Copy(parser.Functions, parse.XFunctions)
+	}
+
+	if len(cfg.EnableFeatures) > 0 {
+		for _, feature := range cfg.EnableFeatures {
+			if feature == promqlExperimentalFunctions {
+				parser.EnableExperimentalFunctions = true
+				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+			}
 		}
 	}
 
@@ -311,13 +328,13 @@ func runQueryFrontend(
 		return err
 	}
 
-	roundTripper, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
+	downstreamRT, err := cortexfrontend.NewDownstreamRoundTripper(cfg.DownstreamURL, downstreamTripper)
 	if err != nil {
 		return errors.Wrap(err, "setup downstream roundtripper")
 	}
 
 	// Wrap the downstream RoundTripper into query frontend Tripperware.
-	roundTripper = tripperWare(roundTripper)
+	roundTripper := tripperWare(downstreamRT)
 
 	// Create the query frontend transport.
 	handler := transport.NewHandler(*cfg.CortexHandlerConfig, roundTripper, logger, nil)
@@ -357,9 +374,7 @@ func runQueryFrontend(
 						logger,
 						ins.NewHandler(
 							name,
-							gzhttp.GzipHandler(
-								logMiddleware.HTTPMiddleware(name, f),
-							),
+							logMiddleware.HTTPMiddleware(name, f),
 						),
 						// Cortex frontend middlewares require orgID.
 					),
@@ -381,8 +396,57 @@ func runQueryFrontend(
 		})
 	}
 
+	// Periodically check downstream URL to ensure it is reachable.
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		g.Add(func() error {
+			var firstRun = true
+
+			doCheckDownstream := func() (rerr error) {
+				timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+				defer cancel()
+
+				readinessUrl := cfg.DownstreamURL + "/-/ready"
+				req, err := http.NewRequestWithContext(timeoutCtx, http.MethodGet, readinessUrl, nil)
+				if err != nil {
+					return errors.Wrap(err, "creating request to downstream URL")
+				}
+
+				resp, err := downstreamRT.RoundTrip(req)
+				if err != nil {
+					return errors.Wrapf(err, "roundtripping to downstream URL %s", readinessUrl)
+				}
+				defer runutil.CloseWithErrCapture(&rerr, resp.Body, "downstream health check response body")
+
+				if resp.StatusCode/100 == 4 || resp.StatusCode/100 == 5 {
+					return errors.Errorf("downstream URL %s returned an error: %d", readinessUrl, resp.StatusCode)
+				}
+
+				return nil
+			}
+			for {
+				if !firstRun {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(10 * time.Second):
+					}
+				}
+				firstRun = false
+
+				if err := doCheckDownstream(); err != nil {
+					statusProber.NotReady(err)
+				} else {
+					statusProber.Ready()
+				}
+			}
+		}, func(err error) {
+			cancel()
+		})
+	}
+
 	level.Info(logger).Log("msg", "starting query frontend")
-	statusProber.Ready()
 	return nil
 }
 

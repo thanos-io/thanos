@@ -8,9 +8,11 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -36,14 +38,65 @@ const (
 	RouterOnly     ReceiverMode = "RouterOnly"
 	IngestorOnly   ReceiverMode = "IngestorOnly"
 	RouterIngestor ReceiverMode = "RouterIngestor"
+
+	DefaultCapNProtoPort string = "19391"
 )
 
+type endpoints []Endpoint
+
+func (e endpoints) Len() int {
+	return len(e)
+}
+
+func (e endpoints) Less(i, j int) bool {
+	// Sort by address first, then by CapNProtoAddress.
+	// First sort by address, then by CapNProtoAddress, then by AZ.
+	if e[i].Address == e[j].Address {
+		if e[i].CapNProtoAddress == e[j].CapNProtoAddress {
+			return e[i].AZ < e[j].AZ
+		}
+		return e[i].CapNProtoAddress < e[j].CapNProtoAddress
+	}
+	return e[i].Address < e[j].Address
+}
+func (e endpoints) Swap(i, j int) {
+	e[i], e[j] = e[j], e[i]
+}
+
 type Endpoint struct {
-	Address string `json:"address"`
-	AZ      string `json:"az"`
+	Address          string `json:"address"`
+	CapNProtoAddress string `json:"capnproto_address"`
+	AZ               string `json:"az"`
+}
+
+func (e *Endpoint) String() string {
+	return fmt.Sprintf("addr: %s, capnp_addr: %s, az: %s", e.Address, e.CapNProtoAddress, e.AZ)
+}
+
+func (e *Endpoint) HasAddress(addr string) bool {
+	return e.Address == addr || e.CapNProtoAddress == addr
 }
 
 func (e *Endpoint) UnmarshalJSON(data []byte) error {
+	if err := e.unmarshal(data); err != nil {
+		return err
+	}
+	if e.Address == "" {
+		return errors.New("endpoint address must be set")
+	}
+
+	// If the Cap'n proto address is not set, initialize it
+	// to the existing address using the default cap'n proto server port.
+	if e.CapNProtoAddress != "" {
+		return nil
+	}
+	if parts := strings.SplitN(e.Address, ":", 2); len(parts) <= 2 {
+		e.CapNProtoAddress = parts[0] + ":" + DefaultCapNProtoPort
+	}
+	return nil
+}
+
+func (e *Endpoint) unmarshal(data []byte) error {
 	// First try to unmarshal as a string.
 	err := json.Unmarshal(data, &e.Address)
 	if err == nil {
@@ -53,12 +106,14 @@ func (e *Endpoint) UnmarshalJSON(data []byte) error {
 	// If that fails, try to unmarshal as an endpoint object.
 	type endpointAlias Endpoint
 	var configEndpoint endpointAlias
-	err = json.Unmarshal(data, &configEndpoint)
-	if err == nil {
-		e.Address = configEndpoint.Address
-		e.AZ = configEndpoint.AZ
+	if err := json.Unmarshal(data, &configEndpoint); err != nil {
+		return err
 	}
-	return err
+
+	e.Address = configEndpoint.Address
+	e.AZ = configEndpoint.AZ
+	e.CapNProtoAddress = configEndpoint.CapNProtoAddress
+	return nil
 }
 
 // HashringConfig represents the configuration for a hashring
@@ -70,6 +125,23 @@ type HashringConfig struct {
 	Endpoints         []Endpoint        `json:"endpoints"`
 	Algorithm         HashringAlgorithm `json:"algorithm,omitempty"`
 	ExternalLabels    labels.Labels     `json:"external_labels,omitempty"`
+	// If non-zero then enable shuffle sharding.
+	ShuffleShardingConfig ShuffleShardingConfig `json:"shuffle_sharding_config,omitempty"`
+}
+
+type ShuffleShardingOverrideConfig struct {
+	ShardSize         int           `json:"shard_size"`
+	Tenants           []string      `json:"tenants,omitempty"`
+	TenantMatcherType tenantMatcher `json:"tenant_matcher_type,omitempty"`
+}
+
+type ShuffleShardingConfig struct {
+	ShardSize int `json:"shard_size"`
+	CacheSize int `json:"cache_size"`
+	// ZoneAwarenessDisabled disables zone awareness. We still try to spread the load
+	// across the available zones, but we don't try to balance the shards across zones.
+	ZoneAwarenessDisabled bool                            `json:"zone_awareness_disabled"`
+	Overrides             []ShuffleShardingOverrideConfig `json:"overrides,omitempty"`
 }
 
 type tenantMatcher string

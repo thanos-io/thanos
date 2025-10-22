@@ -5,15 +5,19 @@ package compact
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/thanos-io/objstore"
 
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
 const (
@@ -21,6 +25,34 @@ const (
 	// Keep it long as it is based on block creation time not upload start time.
 	PartialUploadThresholdAge = 2 * 24 * time.Hour
 )
+
+// getOldestModifiedTime returns the oldest modified time of a block in the bucket.
+// If it is not possible to get the last modified timestamp then it falls back to the time
+// encoded in the block's ULID.
+func getOldestModifiedTime(ctx context.Context, blockID ulid.ULID, bkt objstore.Bucket) (time.Time, error) {
+	var lastModifiedTime time.Time
+
+	err := bkt.IterWithAttributes(ctx, blockID.String(), func(attrs objstore.IterObjectAttributes) error {
+		lm, ok := attrs.LastModified()
+		if !ok {
+			return nil
+		}
+		if lm.After(lastModifiedTime) {
+			lastModifiedTime = lm
+		}
+		return nil
+	}, objstore.WithUpdatedAt(), objstore.WithRecursiveIter())
+
+	if err != nil {
+		return timestamp.Time(int64(blockID.Time())), err
+	}
+
+	if lastModifiedTime.IsZero() {
+		return timestamp.Time(int64(blockID.Time())), fmt.Errorf("no last modified time found for block %s, using block creation time instead", blockID.String())
+	}
+
+	return lastModifiedTime, nil
+}
 
 func BestEffortCleanAbortedPartialUploads(
 	ctx context.Context,
@@ -30,26 +62,29 @@ func BestEffortCleanAbortedPartialUploads(
 	deleteAttempts prometheus.Counter,
 	blockCleanups prometheus.Counter,
 	blockCleanupFailures prometheus.Counter,
+	deletionMarkBlocks map[ulid.ULID]*metadata.DeletionMark,
 ) {
 	level.Info(logger).Log("msg", "started cleaning of aborted partial uploads")
 
-	// Delete partial blocks that are older than partialUploadThresholdAge.
-	// TODO(bwplotka): This is can cause data loss if blocks are:
-	// * being uploaded longer than partialUploadThresholdAge
-	// * being uploaded and started after their partialUploadThresholdAge
-	// can be assumed in this case. Keep partialUploadThresholdAge long for now.
-	// Mitigate this by adding ModifiedTime to bkt and check that instead of ULID (block creation time).
 	for id := range partial {
-		if ulid.Now()-id.Time() <= uint64(PartialUploadThresholdAge/time.Millisecond) {
-			// Minimum delay has not expired, ignore for now.
+		// NOTE(GiedriusS): we start to delete blocks from meta.json so at that point they are marked as partial.
+		// If you have multiple compactor shards then they might try to delete the same block here.
+		// We do not want to delete blocks that are marked for deletion, as they are already scheduled for deletion in the blocks cleaner.
+		if _, ok := deletionMarkBlocks[id]; ok {
+			level.Debug(logger).Log("msg", "ignoring block marked for deletion", "block", id)
+			continue
+		}
+
+		lastModifiedTime, err := getOldestModifiedTime(ctx, id, bkt)
+		if err != nil {
+			level.Warn(logger).Log("msg", "failed to get last modified time for block; falling back to block creation time", "block", id, "err", err)
+		}
+		if time.Since(lastModifiedTime) <= PartialUploadThresholdAge {
 			continue
 		}
 
 		deleteAttempts.Inc()
-		level.Info(logger).Log("msg", "found partially uploaded block; marking for deletion", "block", id)
-		// We don't gather any information about deletion marks for partial blocks, so let's simply remove it. We waited
-		// long PartialUploadThresholdAge already.
-		// TODO(bwplotka): Fix some edge cases: https://github.com/thanos-io/thanos/issues/2470 .
+		level.Info(logger).Log("msg", "found partially uploaded block; deleting", "block", id)
 		if err := block.Delete(ctx, logger, bkt, id); err != nil {
 			blockCleanupFailures.Inc()
 			level.Warn(logger).Log("msg", "failed to delete aborted partial upload; will retry in next iteration", "block", id, "thresholdAge", PartialUploadThresholdAge, "err", err)

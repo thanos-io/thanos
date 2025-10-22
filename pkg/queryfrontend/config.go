@@ -82,7 +82,7 @@ type RedisResponseCacheConfig struct {
 // Based on the config type the config is then parsed into a specific cache provider.
 type CacheProviderConfig struct {
 	Type   ResponseCacheProvider `yaml:"type"`
-	Config interface{}           `yaml:"config"`
+	Config any                   `yaml:"config"`
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.
@@ -162,13 +162,15 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		}
 		return &cortexcache.Config{
 			Redis: cortexcache.RedisConfig{
-				Endpoint:   config.Redis.Addr,
-				Timeout:    config.Redis.ReadTimeout,
-				MasterName: config.Redis.MasterName,
-				Expiration: config.Expiration,
-				DB:         config.Redis.DB,
-				Password:   flagext.Secret{Value: config.Redis.Password},
-				Username:   config.Redis.Username,
+				Endpoint:           config.Redis.Addr,
+				Timeout:            config.Redis.ReadTimeout,
+				MasterName:         config.Redis.MasterName,
+				Expiration:         config.Expiration,
+				DB:                 config.Redis.DB,
+				Password:           flagext.Secret{Value: config.Redis.Password},
+				Username:           config.Redis.Username,
+				EnableTLS:          config.Redis.TLSEnabled,
+				InsecureSkipVerify: config.Redis.TLSConfig.InsecureSkipVerify,
 			},
 			Background: cortexcache.BackgroundConfig{
 				WriteBackBuffer:     config.Redis.MaxSetMultiConcurrency * config.Redis.SetMultiBatchSize,
@@ -211,6 +213,7 @@ type Config struct {
 	DefaultTenant          string
 	TenantCertField        string
 	EnableXFunctions       bool
+	EnableFeatures         []string
 }
 
 // QueryRangeConfig holds the config for query range tripperware.
@@ -254,7 +257,12 @@ func (cfg *Config) Validate() error {
 		if cfg.QueryRangeConfig.SplitQueriesByInterval <= 0 && !cfg.isDynamicSplitSet() {
 			return errors.New("split queries or split threshold interval should be greater than 0 when caching is enabled")
 		}
-		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(querier.Config{}); err != nil {
+		// This is instantiated just to make the QFE config comply with validation against the Cortex Querier,
+		// but in Thanos we don't use this configuration at all.
+		ignoredQueryConfig := querier.Config{
+			EnablePerStepStats: cfg.QueryRangeConfig.ResultsCacheConfig.CacheQueryableSamplesStats,
+		}
+		if err := cfg.QueryRangeConfig.ResultsCacheConfig.Validate(ignoredQueryConfig); err != nil {
 			return errors.Wrap(err, "invalid ResultsCache config for query_range tripperware")
 		}
 	}
@@ -279,7 +287,7 @@ func (cfg *Config) Validate() error {
 		}
 	}
 
-	if cfg.LabelsConfig.DefaultTimeRange == 0 {
+	if cfg.DefaultTimeRange == 0 {
 		return errors.New("labels.default-time-range cannot be set to 0")
 	}
 
@@ -291,15 +299,15 @@ func (cfg *Config) Validate() error {
 }
 
 func (cfg *Config) validateDynamicSplitParams() error {
-	if cfg.QueryRangeConfig.HorizontalShards <= 0 {
+	if cfg.HorizontalShards <= 0 {
 		return errors.New("min horizontal shards should be greater than 0 when query split threshold is enabled")
 	}
 
-	if cfg.QueryRangeConfig.MaxQuerySplitInterval <= 0 {
+	if cfg.MaxQuerySplitInterval <= 0 {
 		return errors.New("max query split interval should be greater than 0 when query split threshold is enabled")
 	}
 
-	if cfg.QueryRangeConfig.MinQuerySplitInterval <= 0 {
+	if cfg.MinQuerySplitInterval <= 0 {
 		return errors.New("min query split interval should be greater than 0 when query split threshold is enabled")
 	}
 	return nil
@@ -310,7 +318,7 @@ func (cfg *Config) isStaticSplitSet() bool {
 }
 
 func (cfg *Config) isDynamicSplitSet() bool {
-	return cfg.QueryRangeConfig.MinQuerySplitInterval > 0 ||
-		cfg.QueryRangeConfig.HorizontalShards > 0 ||
-		cfg.QueryRangeConfig.MaxQuerySplitInterval > 0
+	return cfg.MinQuerySplitInterval > 0 ||
+		cfg.HorizontalShards > 0 ||
+		cfg.MaxQuerySplitInterval > 0
 }

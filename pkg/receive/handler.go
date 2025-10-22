@@ -13,8 +13,10 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,6 +37,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/pool"
@@ -66,6 +70,13 @@ const (
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
+)
+
+type ReplicationProtocol string
+
+const (
+	ProtobufReplication  ReplicationProtocol = "protobuf"
+	CapNProtoReplication ReplicationProtocol = "capnproto"
 )
 
 var (
@@ -105,6 +116,9 @@ type Options struct {
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
+	ReplicationProtocol     ReplicationProtocol
+	OtlpEnableTargetInfo    bool
+	OtlpResourceAttributes  []string
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -127,6 +141,9 @@ type Handler struct {
 
 	writeSamplesTotal    *prometheus.HistogramVec
 	writeTimeseriesTotal *prometheus.HistogramVec
+
+	pendingWriteRequests        prometheus.Gauge
+	pendingWriteRequestsCounter atomic.Int32
 
 	Limiter *Limiter
 }
@@ -154,6 +171,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		options:              o,
 		splitTenantLabelName: o.SplitTenantLabelName,
 		peers: newPeerGroup(
+			logger,
 			backoff.Backoff{
 				Factor: 2,
 				Min:    100 * time.Millisecond,
@@ -168,6 +186,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				},
 			),
 			workers,
+			o.ReplicationProtocol,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
 		Limiter:      o.Limiter,
@@ -206,6 +225,12 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The number of sampled received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
+		),
+		pendingWriteRequests: promauto.With(registerer).NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_pending_write_requests",
+				Help: "The number of pending write requests.",
+			},
 		),
 	}
 
@@ -262,6 +287,18 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		),
 	)
 
+	h.router.Post(
+		"/api/v1/otlp",
+		instrf(
+			"otlp",
+			readyf(
+				middleware.RequestID(
+					http.HandlerFunc(h.receiveOTLPHTTP),
+				),
+			),
+		),
+	)
+
 	statusAPI := statusapi.New(statusapi.Options{
 		GetStats: h.getStats,
 		Registry: h.options.Registry,
@@ -297,6 +334,8 @@ func (h *Handler) Hashring(hashring Hashring) {
 				level.Error(h.logger).Log("msg", "closing gRPC connection failed, we might have leaked a file descriptor", "addr", node, "err", err.Error())
 			}
 		}
+
+		h.hashring.Close()
 	}
 
 	h.hashring = hashring
@@ -305,9 +344,9 @@ func (h *Handler) Hashring(hashring Hashring) {
 
 // getSortedStringSliceDiff returns items which are in slice1 but not in slice2.
 // The returned slice also only contains unique items i.e. it is a set.
-func getSortedStringSliceDiff(slice1, slice2 []string) []string {
-	slice1Items := make(map[string]struct{}, len(slice1))
-	slice2Items := make(map[string]struct{}, len(slice2))
+func getSortedStringSliceDiff(slice1, slice2 []Endpoint) []Endpoint {
+	slice1Items := make(map[Endpoint]struct{}, len(slice1))
+	slice2Items := make(map[Endpoint]struct{}, len(slice2))
 
 	for _, s1 := range slice1 {
 		slice1Items[s1] = struct{}{}
@@ -316,7 +355,7 @@ func getSortedStringSliceDiff(slice1, slice2 []string) []string {
 		slice2Items[s2] = struct{}{}
 	}
 
-	var difference = make([]string, 0)
+	var difference = make([]Endpoint, 0)
 	for s1 := range slice1Items {
 		_, s2Contains := slice2Items[s1]
 		if s2Contains {
@@ -324,7 +363,9 @@ func getSortedStringSliceDiff(slice1, slice2 []string) []string {
 		}
 		difference = append(difference, s1)
 	}
-	sort.Strings(difference)
+	slices.SortFunc(difference, func(a, b Endpoint) int {
+		return strings.Compare(a.String(), b.String())
+	})
 
 	return difference
 }
@@ -369,7 +410,7 @@ func getStatsLimitParameter(r *http.Request) (int, error) {
 	return int(statsLimit), nil
 }
 
-func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
 	}
@@ -399,6 +440,7 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 
 // Close stops the Handler.
 func (h *Handler) Close() {
+	_ = h.peers.Close()
 	runutil.CloseWithLogOnErr(h.logger, h.httpSrv, "receive HTTP server")
 }
 
@@ -435,7 +477,7 @@ type replica struct {
 
 // endpointReplica is a pair of a receive endpoint and a write request replica.
 type endpointReplica struct {
-	endpoint string
+	endpoint Endpoint
 	replica  uint64
 }
 
@@ -681,29 +723,38 @@ type remoteWriteParams struct {
 	alreadyReplicated bool
 }
 
-func (h *Handler) gatherWriteStats(localWrites map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
-	var stats tenantRequestStats = make(tenantRequestStats)
+func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
+	var stats = make(tenantRequestStats)
 
-	for er := range localWrites {
-		for tenant, series := range localWrites[er] {
-			samples := 0
+	for _, write := range writes {
+		for er := range write {
+			for tenant, series := range write[er] {
+				samples := 0
 
-			for _, ts := range series.timeSeries {
-				samples += len(ts.Samples)
-			}
+				for _, ts := range series.timeSeries {
+					samples += len(ts.Samples)
+				}
 
-			if st, ok := stats[tenant]; ok {
-				st.timeseries += len(series.timeSeries)
-				st.totalSamples += samples
+				if st, ok := stats[tenant]; ok {
+					st.timeseries += len(series.timeSeries)
+					st.totalSamples += samples
 
-				stats[tenant] = st
-			} else {
-				stats[tenant] = requestStats{
-					timeseries:   len(series.timeSeries),
-					totalSamples: samples,
+					stats[tenant] = st
+				} else {
+					stats[tenant] = requestStats{
+						timeseries:   len(series.timeSeries),
+						totalSamples: samples,
+					}
 				}
 			}
 		}
+	}
+
+	// adjust counters by the replication factor
+	for tenant, st := range stats {
+		st.timeseries /= rf
+		st.totalSamples /= rf
+		stats[tenant] = st
 	}
 
 	return stats
@@ -713,7 +764,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var stats tenantRequestStats = make(tenantRequestStats)
+	var stats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -724,7 +775,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}
 	}()
 
-	logTags := []interface{}{"tenant", params.tenant}
+	logTags := []any{"tenant", params.tenant}
 	if id, ok := middleware.RequestIDFromContext(ctx); ok {
 		logTags = append(logTags, "request-id", id)
 	}
@@ -736,11 +787,14 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		return stats, err
 	}
 
-	stats = h.gatherWriteStats(localWrites)
+	stats = h.gatherWriteStats(len(params.replicas), localWrites, remoteWrites)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
-	maxBufferedResponses := len(localWrites)
+	var maxBufferedResponses int
+	for er := range localWrites {
+		maxBufferedResponses += len(localWrites[er])
+	}
 	for er := range remoteWrites {
 		maxBufferedResponses += len(remoteWrites[er])
 	}
@@ -843,7 +897,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			}
 			endpointReplica := endpointReplica{endpoint: endpoint, replica: rn}
 			var writeDestination = remoteWrites
-			if endpoint == h.options.Endpoint {
+			if endpoint.HasAddress(h.options.Endpoint) {
 				writeDestination = localWrites
 			}
 			writeableSeries, ok := writeDestination[endpointReplica]
@@ -922,9 +976,7 @@ func (h *Handler) sendLocalWrite(
 	}
 
 	for tenant, series := range tenantSeriesMapping {
-		err := h.writer.Write(tracingCtx, tenant, &prompb.WriteRequest{
-			Timeseries: series,
-		})
+		err := h.writer.Write(tracingCtx, tenant, series)
 		if err != nil {
 			span.SetTag("error", true)
 			span.SetTag("error.msg", err.Error())
@@ -936,7 +988,7 @@ func (h *Handler) sendLocalWrite(
 
 }
 
-// sendRemoteWrite sends a write request to the remote node. It takes care of checking wether the endpoint is up or not
+// sendRemoteWrite sends a write request to the remote node. It takes care of checking whether the endpoint is up or not
 // in the peerGroup, correctly marking them as up or down when appropriate.
 // The responses are sent to the responses channel.
 func (h *Handler) sendRemoteWrite(
@@ -975,6 +1027,11 @@ func (h *Handler) sendRemoteWrite(
 			}
 			h.peers.markPeerAvailable(endpoint)
 		} else {
+			h.forwardRequests.WithLabelValues(labelError).Inc()
+			if !alreadyReplicated {
+				h.replications.WithLabelValues(labelError).Inc()
+			}
+
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {
@@ -988,6 +1045,13 @@ func (h *Handler) sendRemoteWrite(
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
+	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
+	// would need to succeed all the time. Another way to think about it is when migrating
+	// from a Sidecar based setup with 2 Prometheus nodes to a Receiver setup, we want to
+	// keep the same guarantees.
+	if h.options.ReplicationFactor == 2 {
+		return 1
+	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
@@ -1005,6 +1069,9 @@ func quorumReached(successes []int, successThreshold int) bool {
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
+
+	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
+	defer h.pendingWriteRequestsCounter.Add(-1)
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
@@ -1285,44 +1352,75 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerWorker(cc *grpc.ClientConn, forwardDelay prometheus.Histogram, asyncWorkerCount uint) *peerWorker {
+func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint) *peerWorker {
 	return &peerWorker{
-		cc:           cc,
+		client:       client,
 		wp:           pool.NewWorkerPool(asyncWorkerCount),
 		forwardDelay: forwardDelay,
 	}
 }
 
 func (pw *peerWorker) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, opts ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	return storepb.NewWriteableStoreClient(pw.cc).RemoteWrite(ctx, in)
+	return pw.client.RemoteWrite(ctx, in)
+}
+
+type peerClient interface {
+	storepb.WriteableStoreClient
+	io.Closer
+}
+
+type protobufPeer struct {
+	storepb.WriteableStoreClient
+	conn *grpc.ClientConn
+}
+
+func newProtobufPeer(conn *grpc.ClientConn) *protobufPeer {
+	return &protobufPeer{
+		WriteableStoreClient: storepb.NewWriteableStoreClient(conn),
+		conn:                 conn,
+	}
+}
+
+func (p protobufPeer) Close() error {
+	return p.conn.Close()
 }
 
 type peerWorker struct {
-	cc *grpc.ClientConn
-	wp pool.WorkerPool
+	client peerClient
+	wp     pool.WorkerPool
 
 	forwardDelay prometheus.Histogram
 }
 
-func newPeerGroup(backoff backoff.Backoff, forwardDelay prometheus.Histogram, asyncForwardWorkersCount uint, dialOpts ...grpc.DialOption) peersContainer {
+func newPeerGroup(
+	logger log.Logger,
+	backoff backoff.Backoff,
+	forwardDelay prometheus.Histogram,
+	asyncForwardWorkersCount uint,
+	replicationProtocol ReplicationProtocol,
+	dialOpts ...grpc.DialOption,
+) *peerGroup {
 	return &peerGroup{
+		logger:                   logger,
 		dialOpts:                 dialOpts,
-		connections:              map[string]*peerWorker{},
+		connections:              map[Endpoint]*peerWorker{},
 		m:                        sync.RWMutex{},
-		dialer:                   grpc.DialContext,
-		peerStates:               make(map[string]*retryState),
+		dialer:                   grpc.NewClient,
+		peerStates:               make(map[Endpoint]*retryState),
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
 		asyncForwardWorkersCount: asyncForwardWorkersCount,
+		replicationProtocol:      replicationProtocol,
 	}
 }
 
 type peersContainer interface {
-	close(string) error
-	getConnection(context.Context, string) (WriteableStoreAsyncClient, error)
-	markPeerUnavailable(string)
-	markPeerAvailable(string)
+	close(Endpoint) error
+	getConnection(context.Context, Endpoint) (WriteableStoreAsyncClient, error)
+	markPeerUnavailable(Endpoint)
+	markPeerAvailable(Endpoint)
 	reset()
+	io.Closer
 }
 
 func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
@@ -1331,7 +1429,7 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 		p.forwardDelay.Observe(time.Since(now).Seconds())
 
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
-			_, err := storepb.NewWriteableStoreClient(p.cc).RemoteWrite(ctx, req)
+			_, err := p.client.RemoteWrite(ctx, req)
 			responseWriter <- newWriteResponse(
 				seriesIDs,
 				errors.Wrapf(err, "forwarding request to endpoint %v", er.endpoint),
@@ -1351,47 +1449,56 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 }
 
 type peerGroup struct {
+	logger                   log.Logger
 	dialOpts                 []grpc.DialOption
-	connections              map[string]*peerWorker
-	peerStates               map[string]*retryState
+	connections              map[Endpoint]*peerWorker
+	peerStates               map[Endpoint]*retryState
 	expBackoff               backoff.Backoff
 	forwardDelay             prometheus.Histogram
 	asyncForwardWorkersCount uint
+	replicationProtocol      ReplicationProtocol
 
 	m sync.RWMutex
 
 	// dialer is used for testing.
-	dialer func(ctx context.Context, target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
+	dialer func(target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
 }
 
-func (p *peerGroup) close(addr string) error {
+func (p *peerGroup) Close() error {
+	for _, c := range p.connections {
+		c.wp.Close()
+	}
+	return nil
+}
+
+func (p *peerGroup) close(endpoint Endpoint) error {
 	p.m.Lock()
 	defer p.m.Unlock()
 
-	c, ok := p.connections[addr]
+	c, ok := p.connections[endpoint]
 	if !ok {
 		// NOTE(GiedriusS): this could be valid case when the connection
 		// was never established.
 		return nil
 	}
 
-	p.connections[addr].wp.Close()
-	delete(p.connections, addr)
-	if err := c.cc.Close(); err != nil {
-		return fmt.Errorf("closing connection for %s", addr)
+	p.connections[endpoint].wp.Close()
+	delete(p.connections, endpoint)
+	if err := c.client.Close(); err != nil {
+		return fmt.Errorf("closing connection for %s", endpoint)
 	}
 
 	return nil
 }
 
-func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableStoreAsyncClient, error) {
-	if !p.isPeerUp(addr) {
+func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (WriteableStoreAsyncClient, error) {
+	if !p.isPeerUp(endpoint) {
 		return nil, errUnavailable
 	}
 
 	// use a RLock first to prevent blocking if we don't need to.
 	p.m.RLock()
-	c, ok := p.connections[addr]
+	c, ok := p.connections[endpoint]
 	p.m.RUnlock()
 	if ok {
 		return c, nil
@@ -1400,29 +1507,40 @@ func (p *peerGroup) getConnection(ctx context.Context, addr string) (WriteableSt
 	p.m.Lock()
 	defer p.m.Unlock()
 	// Make sure that another caller hasn't created the connection since obtaining the write lock.
-	c, ok = p.connections[addr]
+	c, ok = p.connections[endpoint]
 	if ok {
 		return c, nil
 	}
-	conn, err := p.dialer(ctx, addr, p.dialOpts...)
-	if err != nil {
-		p.markPeerUnavailableUnlocked(addr)
-		dialError := errors.Wrap(err, "failed to dial peer")
-		return nil, errors.Wrap(dialError, errUnavailable.Error())
+
+	var client peerClient
+	switch p.replicationProtocol {
+	case CapNProtoReplication:
+		client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger)
+
+	case ProtobufReplication:
+		conn, err := p.dialer(endpoint.Address, p.dialOpts...)
+		if err != nil {
+			p.markPeerUnavailableUnlocked(endpoint)
+			dialError := errors.Wrap(err, "failed to dial peer")
+			return nil, errors.Wrap(dialError, errUnavailable.Error())
+		}
+		client = newProtobufPeer(conn)
+	default:
+		return nil, errors.Errorf("unknown replication protocol %v", p.replicationProtocol)
 	}
 
-	p.connections[addr] = newPeerWorker(conn, p.forwardDelay, p.asyncForwardWorkersCount)
-	return p.connections[addr], nil
+	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount)
+	return p.connections[endpoint], nil
 }
 
-func (p *peerGroup) markPeerUnavailable(addr string) {
+func (p *peerGroup) markPeerUnavailable(addr Endpoint) {
 	p.m.Lock()
 	defer p.m.Unlock()
 
 	p.markPeerUnavailableUnlocked(addr)
 }
 
-func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
+func (p *peerGroup) markPeerUnavailableUnlocked(addr Endpoint) {
 	state, ok := p.peerStates[addr]
 	if !ok {
 		state = &retryState{attempt: -1}
@@ -1432,13 +1550,13 @@ func (p *peerGroup) markPeerUnavailableUnlocked(addr string) {
 	p.peerStates[addr] = state
 }
 
-func (p *peerGroup) markPeerAvailable(addr string) {
+func (p *peerGroup) markPeerAvailable(addr Endpoint) {
 	p.m.Lock()
 	defer p.m.Unlock()
 	delete(p.peerStates, addr)
 }
 
-func (p *peerGroup) isPeerUp(addr string) bool {
+func (p *peerGroup) isPeerUp(addr Endpoint) bool {
 	p.m.RLock()
 	defer p.m.RUnlock()
 	state, ok := p.peerStates[addr]
@@ -1450,5 +1568,5 @@ func (p *peerGroup) isPeerUp(addr string) bool {
 
 func (p *peerGroup) reset() {
 	p.expBackoff.Reset()
-	p.peerStates = make(map[string]*retryState)
+	p.peerStates = make(map[Endpoint]*retryState)
 }

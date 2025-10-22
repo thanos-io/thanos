@@ -42,3 +42,14 @@ validators:
     type: 'ignore'
   - regex: 'twitter\.com'
     type: 'ignore'
+  - regex: 'outshift\.cisco\.com\/blog\/multi-cluster-monitoring'
+    type: 'ignore'
+  # Expired certificate
+  - regex: 'bestpractices\.coreinfrastructure\.org\/projects\/3048'
+    type: 'ignore'
+  # Frequent DNS issues. 
+  - regex: 'build\.thebeat\.co'
+    type: 'ignore'
+  # TLS certificate issues
+  - regex: 'itnext\.io'
+    type: 'ignore'

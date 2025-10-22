@@ -539,7 +539,7 @@ func BenchmarkLabelsCodecEncodeAndDecodeRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			reqEnc, err := codec.EncodeRequest(ctx, req)
 			testutil.Ok(b, err)
 			_, err = codec.DecodeRequest(ctx, reqEnc, nil)
@@ -560,7 +560,7 @@ func BenchmarkLabelsCodecEncodeAndDecodeRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			reqEnc, err := codec.EncodeRequest(ctx, req)
 			testutil.Ok(b, err)
 			_, err = codec.DecodeRequest(ctx, reqEnc, nil)
@@ -583,7 +583,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_, err := codec.DecodeResponse(
 				ctx,
 				makeResponse(seriesData, false),
@@ -603,7 +603,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_, err := codec.DecodeResponse(
 				ctx,
 				makeResponse(seriesDataWithHeaders, true),
@@ -622,7 +622,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_, err := codec.DecodeResponse(
 				ctx,
 				makeResponse(labelsData, false),
@@ -642,7 +642,7 @@ func BenchmarkLabelsCodecDecodeResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for n := 0; n < b.N; n++ {
+		for b.Loop() {
 			_, err := codec.DecodeResponse(
 				ctx,
 				makeResponse(labelsDataWithHeaders, true),
@@ -676,7 +676,7 @@ func benchmarkMergeResponses(b *testing.B, size int) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = codec.MergeResponse(nil, queryResSeries...)
 		}
 	})
@@ -685,7 +685,7 @@ func benchmarkMergeResponses(b *testing.B, size int) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			_, _ = codec.MergeResponse(nil, queryResLabel...)
 		}
 	})
@@ -697,7 +697,7 @@ func makeQueryRangeResponses(size int) ([]queryrange.Response, []queryrange.Resp
 	seriesResp := make([]queryrange.Response, 0, size*2)
 
 	// Generate with some duplicated values.
-	for i := 0; i < size; i++ {
+	for i := range size {
 		labelResp = append(labelResp, &ThanosLabelsResponse{
 			Status: "success",
 			Data:   []string{fmt.Sprintf("data-%d", i), fmt.Sprintf("data-%d", i+1)},

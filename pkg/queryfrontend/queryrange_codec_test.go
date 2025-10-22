@@ -15,6 +15,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 
 	"github.com/efficientgo/core/testutil"
+
 	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/compact"
 )
@@ -298,6 +299,21 @@ func TestQueryRangeCodec_EncodeRequest(t *testing.T) {
 					r.FormValue(queryv1.LookbackDeltaParam) == "1"
 			},
 		},
+		{
+			name: "Request with stats",
+			req: &ThanosQueryRangeRequest{
+				Start: 123000,
+				End:   456000,
+				Step:  1000,
+				Stats: "all",
+			},
+			checkFunc: func(r *http.Request) bool {
+				return r.FormValue("start") == "123" &&
+					r.FormValue("end") == "456" &&
+					r.FormValue("step") == "1" &&
+					r.FormValue("stats") == "all"
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Default partial response value doesn't matter when encoding requests.
@@ -326,9 +342,8 @@ func BenchmarkQueryRangeCodecEncodeAndDecodeRequest(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for n := 0; n < b.N; n++ {
+	for b.Loop() {
 		reqEnc, err := codec.EncodeRequest(ctx, req)
 		testutil.Ok(b, err)
 		_, err = codec.DecodeRequest(ctx, reqEnc, nil)

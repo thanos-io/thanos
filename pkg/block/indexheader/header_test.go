@@ -6,6 +6,7 @@ package indexheader
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -15,8 +16,10 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -29,6 +32,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
+)
+
+var (
+	dummyHistogram = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name: "duration_seconds",
+	})
 )
 
 func TestReaders(t *testing.T) {
@@ -60,7 +69,7 @@ func TestReaders(t *testing.T) {
 		labels.FromStrings("cluster", "a-eu-west-1"),
 		labels.FromStrings("cluster", "b-eu-west-1"),
 		labels.FromStrings("cluster", "c-eu-west-1"),
-	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	}, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
@@ -104,7 +113,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 				testutil.Ok(t, err)
 
 				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
@@ -228,7 +237,7 @@ func TestReaders(t *testing.T) {
 
 			t.Run("lazy binary reader", func(t *testing.T) {
 				fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-				_, err := WriteBinary(ctx, bkt, id, fn)
+				_, err := WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 				testutil.Ok(t, err)
 
 				br, err := NewLazyBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewLazyBinaryReaderMetrics(nil), NewBinaryReaderMetrics(nil), nil, false)
@@ -246,7 +255,7 @@ func TestReaders(t *testing.T) {
 func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerReader Reader) {
 	ctx := context.Background()
 
-	indexReader, err := index.NewReader(indexByteSlice)
+	indexReader, err := index.NewReader(indexByteSlice, index.DecodePostingsRaw)
 	testutil.Ok(t, err)
 	defer func() { _ = indexReader.Close() }()
 
@@ -299,7 +308,7 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 	minStart := int64(math.MaxInt64)
 	maxEnd := int64(math.MinInt64)
 	for il, lname := range expLabelNames {
-		expectedLabelVals, err := indexReader.SortedLabelValues(ctx, lname)
+		expectedLabelVals, err := indexReader.SortedLabelValues(ctx, lname, nil)
 		testutil.Ok(t, err)
 
 		vals, err := headerReader.LabelValues(lname)
@@ -403,9 +412,8 @@ func BenchmarkBinaryWrite(t *testing.B) {
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
 
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
-		_, err := WriteBinary(ctx, bkt, m.ULID, fn)
+	for t.Loop() {
+		_, err := WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 		testutil.Ok(t, err)
 	}
 }
@@ -419,11 +427,10 @@ func BenchmarkBinaryReader(t *testing.B) {
 
 	m := prepareIndexV2Block(t, tmpDir, bkt)
 	fn := filepath.Join(tmpDir, m.ULID.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, m.ULID, fn)
+	_, err = WriteBinary(ctx, bkt, m.ULID, fn, dummyHistogram)
 	testutil.Ok(t, err)
 
-	t.ResetTimer()
-	for i := 0; i < t.N; i++ {
+	for t.Loop() {
 		br, err := newFileBinaryReader(fn, 32, NewBinaryReaderMetrics(nil))
 		testutil.Ok(t, err)
 		testutil.Ok(t, br.Close())
@@ -452,12 +459,12 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	// Generate series labels.
 	seriesLabels := make([]labels.Labels, 0, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		seriesLabels = append(seriesLabels, labels.FromStrings("a", strconv.Itoa(i)))
 	}
 
 	// Create a block.
-	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	id1, err := e2eutil.CreateBlock(ctx, tmpDir, seriesLabels, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(b, err)
 	testutil.Ok(b, block.Upload(ctx, logger, bkt, filepath.Join(tmpDir, id1.String()), metadata.NoneFunc))
 
@@ -467,17 +474,15 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	// Get the offset of each label value symbol.
 	symbolsOffsets := make([]uint32, numSeries)
-	for i := 0; i < numSeries; i++ {
+	for i := range numSeries {
 		o, err := reader.symbols.ReverseLookup(strconv.Itoa(i))
 		testutil.Ok(b, err)
 
 		symbolsOffsets[i] = o
 	}
 
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
-		for i := 0; i < len(symbolsOffsets); i++ {
+	for b.Loop() {
+		for i := range symbolsOffsets {
 			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i]); err != nil {
 				b.Fail()
 			}
@@ -503,9 +508,7 @@ func getSymbolTable(b index.ByteSlice) (map[uint32]string, error) {
 	}
 
 	symbolsTable := make(map[uint32]string, len(symbolsV1)+len(symbolsV2))
-	for o, s := range symbolsV1 {
-		symbolsTable[o] = s
-	}
+	maps.Copy(symbolsTable, symbolsV1)
 	for o, s := range symbolsV2 {
 		symbolsTable[uint32(o)] = s
 	}
@@ -557,8 +560,8 @@ func TestReaderPostingsOffsets(t *testing.T) {
 	possibleClusters := []string{"us-west-2", "us-east-1", "us-east-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-south-1"}
 	possiblePrefixes := []string{"a", "b", "c", "d", "1", "2", "3", "4"}
 	totalValues := []string{}
-	for i := 0; i < len(possibleClusters); i++ {
-		for j := 0; j < len(possiblePrefixes); j++ {
+	for i := range possibleClusters {
+		for j := range possiblePrefixes {
 			totalValues = append(totalValues, fmt.Sprintf("%s-%s", possiblePrefixes[j], possibleClusters[i]))
 		}
 	}
@@ -591,13 +594,13 @@ func TestReaderPostingsOffsets(t *testing.T) {
 	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, bkt.Close()) }()
-	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc)
+	id, err := e2eutil.CreateBlock(ctx, tmpDir, lbls, 100, 0, 1000, labels.FromStrings("ext1", "1"), 124, metadata.NoneFunc, nil)
 	testutil.Ok(t, err)
 
 	testutil.Ok(t, block.Upload(ctx, log.NewNopLogger(), bkt, filepath.Join(tmpDir, id.String()), metadata.NoneFunc))
 
 	fn := filepath.Join(tmpDir, id.String(), block.IndexHeaderFilename)
-	_, err = WriteBinary(ctx, bkt, id, fn)
+	_, err = WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 	testutil.Ok(t, err)
 
 	br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
@@ -605,9 +608,9 @@ func TestReaderPostingsOffsets(t *testing.T) {
 
 	defer func() { testutil.Ok(t, br.Close()) }()
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		vals := make([]string, 0, 15)
-		for j := 0; j < 15; j++ {
+		for range 15 {
 			vals = append(vals, totalValues[rnd.Intn(len(totalValues))])
 		}
 		sort.Strings(vals)

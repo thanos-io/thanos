@@ -49,9 +49,9 @@ func (c CIDRSliceCSV) String() string {
 
 // Set implements flag.Value
 func (c *CIDRSliceCSV) Set(s string) error {
-	parts := strings.Split(s, ",")
+	parts := strings.SplitSeq(s, ",")
 
-	for _, part := range parts {
+	for part := range parts {
 		cidr := &CIDR{}
 		if err := cidr.Set(part); err != nil {
 			return errors.Wrapf(err, "cidr: %s", part)
@@ -64,7 +64,7 @@ func (c *CIDRSliceCSV) Set(s string) error {
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (c *CIDRSliceCSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *CIDRSliceCSV) UnmarshalYAML(unmarshal func(any) error) error {
 	var s string
 	if err := unmarshal(&s); err != nil {
 		return err
@@ -80,6 +80,6 @@ func (c *CIDRSliceCSV) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // MarshalYAML implements yaml.Marshaler.
-func (c CIDRSliceCSV) MarshalYAML() (interface{}, error) {
+func (c CIDRSliceCSV) MarshalYAML() (any, error) {
 	return c.String(), nil
 }

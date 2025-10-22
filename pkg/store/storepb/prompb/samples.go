@@ -61,7 +61,7 @@ func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
 
 // HistogramProtoToHistogram extracts a (normal integer) Histogram from the
 // provided proto message. The caller has to make sure that the proto message
-// represents an interger histogram and not a float histogram.
+// represents an integer histogram and not a float histogram.
 // Copied from https://github.com/prometheus/prometheus/blob/0ab95536115adfe50af249d36d73674be694ca3f/storage/remote/codec.go#L626-L645
 func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 	if hp.IsFloatHistogram() {
@@ -78,6 +78,7 @@ func HistogramProtoToHistogram(hp Histogram) *histogram.Histogram {
 		PositiveBuckets:  hp.GetPositiveDeltas(),
 		NegativeSpans:    spansProtoToSpans(hp.GetNegativeSpans()),
 		NegativeBuckets:  hp.GetNegativeDeltas(),
+		CustomValues:     hp.GetCustomValues(),
 	}
 }
 
@@ -98,6 +99,7 @@ func FloatHistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram
 		PositiveBuckets:  hp.GetPositiveCounts(),
 		NegativeSpans:    spansProtoToSpans(hp.GetNegativeSpans()),
 		NegativeBuckets:  hp.GetNegativeCounts(),
+		CustomValues:     hp.GetCustomValues(),
 	}
 }
 
@@ -120,12 +122,13 @@ func HistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 		PositiveBuckets:  deltasToCounts(hp.GetPositiveDeltas()),
 		NegativeSpans:    spansProtoToSpans(hp.GetNegativeSpans()),
 		NegativeBuckets:  deltasToCounts(hp.GetNegativeDeltas()),
+		CustomValues:     hp.GetCustomValues(),
 	}
 }
 
 func spansProtoToSpans(s []BucketSpan) []histogram.Span {
 	spans := make([]histogram.Span, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		spans[i] = histogram.Span{Offset: s[i].Offset, Length: s[i].Length}
 	}
 
@@ -156,6 +159,7 @@ func HistogramToHistogramProto(timestamp int64, h *histogram.Histogram) Histogra
 		PositiveDeltas: h.PositiveBuckets,
 		ResetHint:      Histogram_ResetHint(h.CounterResetHint),
 		Timestamp:      timestamp,
+		CustomValues:   h.CustomValues,
 	}
 }
 
@@ -173,12 +177,13 @@ func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogra
 		PositiveCounts: fh.PositiveBuckets,
 		ResetHint:      Histogram_ResetHint(fh.CounterResetHint),
 		Timestamp:      timestamp,
+		CustomValues:   fh.CustomValues,
 	}
 }
 
 func spansToSpansProto(s []histogram.Span) []BucketSpan {
 	spans := make([]BucketSpan, len(s))
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		spans[i] = BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
 	}
 

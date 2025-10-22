@@ -92,7 +92,7 @@ Enforcing tenancy label in queries:
 
 #### Apply verification and enforcement logic in the Query Frontend instead of Querier.
 
-The Query Frontend is an optional component on any Thanos deployment, while the Querier is always present. Plus, there might be deployments with multiple Querier layers where one or more might need to apply tenant verification and enforcement. On top of this, doing it in the Querier supports future work on using the [new Thanos PromQL engine](https://github.com/thanos-community/promql-engine), which can potentially make the Query Frontend unnecessary.
+The Query Frontend is an optional component on any Thanos deployment, while the Querier is always present. Plus, there might be deployments with multiple Querier layers where one or more might need to apply tenant verification and enforcement. On top of this, doing it in the Querier supports future work on using the [new Thanos PromQL engine](https://github.com/thanos-io/promql-engine), which can potentially make the Query Frontend unnecessary.
 
 #### Add the tenant identification as an optional field in the Store API protobuffer spec instead of an HTTP header.
 

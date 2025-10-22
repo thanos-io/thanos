@@ -18,6 +18,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	deduppkg "github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -28,6 +29,8 @@ import (
 // this many times and within different interval e.g
 // TODO(bwplotka): Add benchmarks with PromQL involvement.
 func TestQuerySelect(t *testing.T) {
+	t.Parallel()
+
 	tb := testutil.NewTB(t)
 	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchQuerySelect(t, samplesPerSeries, series, true)
@@ -58,7 +61,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	random := rand.New(rand.NewSource(120))
 	var resps []*storepb.SeriesResponse
 	var expectedSeries []labels.Labels
-	for j := 0; j < numOfReplicas; j++ {
+	for j := range numOfReplicas {
 		// Note 0 argument - this is because we want to have two replicas for the same time duration.
 		head, created := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
@@ -68,11 +71,11 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 			PrependLabels:    labels.FromStrings("a_replica", fmt.Sprintf("%d", j)), // a_ prefix so we keep sorted order.
 		})
 		testutil.Ok(t, head.Close())
-		for i := 0; i < len(created); i++ {
+		for i := range created {
 			if !dedup || j == 0 {
 				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					lset = lset[1:]
+					lset = lset.MatchLabels(false, "a_replica")
 				}
 				expectedSeries = append(expectedSeries, lset)
 			}
@@ -87,6 +90,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		logger,
 		math.MinInt64,
 		math.MaxInt64,
+		deduppkg.AlgorithmPenalty,
 		[]string{"a_replica"},
 		nil,
 		newProxyStore(&mockedStoreServer{responses: resps}),

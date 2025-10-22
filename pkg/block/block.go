@@ -19,7 +19,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/thanos-io/objstore"
@@ -130,7 +130,7 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	}
 
 	if checkExternalLabels {
-		if meta.Thanos.Labels == nil || len(meta.Thanos.Labels) == 0 {
+		if len(meta.Thanos.Labels) == 0 {
 			return errors.New("empty external labels are not allowed for Thanos block.")
 		}
 	}
@@ -141,37 +141,27 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 		return errors.Wrap(err, "gather meta file stats")
 	}
 
+	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname), options...); err != nil {
+		return errors.Wrap(err, "upload chunks")
+	}
+
+	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
+		return errors.Wrap(err, "upload index")
+	}
+
+	meta.Thanos.UploadTime = time.Now().UTC()
 	if err := meta.Write(&metaEncoded); err != nil {
 		return errors.Wrap(err, "encode meta file")
 	}
 
-	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname), options...); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload chunks"))
-	}
-
-	if err := objstore.UploadFile(ctx, logger, bkt, filepath.Join(bdir, IndexFilename), path.Join(id.String(), IndexFilename)); err != nil {
-		return cleanUp(logger, bkt, id, errors.Wrap(err, "upload index"))
-	}
-
 	// Meta.json always need to be uploaded as a last item. This will allow to assume block directories without meta file to be pending uploads.
 	if err := bkt.Upload(ctx, path.Join(id.String(), MetaFilename), strings.NewReader(metaEncoded.String())); err != nil {
-		// Don't call cleanUp here. Despite getting error, meta.json may have been uploaded in certain cases,
-		// and even though cleanUp will not see it yet, meta.json may appear in the bucket later.
-		// (Eg. S3 is known to behave this way when it returns 503 "SlowDown" error).
-		// If meta.json is not uploaded, this will produce partial blocks, but such blocks will be cleaned later.
+		// Syncer always checks if meta.json exists in the next iteration and will retry if it does not.
+		// This is to avoid partial uploads.
 		return errors.Wrap(err, "upload meta file")
 	}
 
 	return nil
-}
-
-func cleanUp(logger log.Logger, bkt objstore.Bucket, id ulid.ULID, err error) error {
-	// Cleanup the dir with an uncancelable context.
-	cleanErr := Delete(context.Background(), logger, bkt, id)
-	if cleanErr != nil {
-		return errors.Wrapf(err, "failed to clean block after upload issue. Partial block in system. Err: %s", err.Error())
-	}
-	return err
 }
 
 // MarkForDeletion creates a file which stores information about when the block was marked for deletion.

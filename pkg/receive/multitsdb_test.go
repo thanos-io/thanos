@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -17,7 +18,8 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
@@ -39,25 +41,20 @@ import (
 )
 
 func TestMultiTSDB(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("run fresh", func(t *testing.T) {
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:      (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
-				RetentionDuration:     (6 * time.Hour).Milliseconds(),
-				NoLockfile:            true,
-				MaxExemplars:          100,
-				EnableExemplarStorage: true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+			RetentionDuration:     (6 * time.Hour).Milliseconds(),
+			NoLockfile:            true,
+			MaxExemplars:          100,
+			EnableExemplarStorage: true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
@@ -140,6 +137,7 @@ func TestMultiTSDB(t *testing.T) {
 			"tenant_id",
 			nil,
 			false,
+			false,
 			metadata.NoneFunc,
 		)
 		defer func() { testutil.Ok(t, m.Close()) }()
@@ -172,26 +170,19 @@ func TestMultiTSDB(t *testing.T) {
 
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
-		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
-			},
-			labels.FromStrings("replica", "01"),
-			"tenant_id",
-			nil,
-			false,
-			metadata.NoneFunc,
-		)
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc)
 		defer func() { testutil.Ok(t, m.Close()) }()
 
 		testutil.Ok(t, m.Flush())
 		testutil.Ok(t, m.Open())
 		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
 
-		tenant := m.tenants[testTenant]
+		tenant := m.testGetTenant(testTenant)
 		db := tenant.readyStorage().Get()
 
 		testutil.Equals(t, 0, len(db.Blocks()))
@@ -215,14 +206,13 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan *storepb.Series)
 	respBar := make(chan *storepb.Series)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		ss := m.TSDBLocalClients()
 		testutil.Assert(t, len(ss) == 2)
 
 		for _, s := range ss {
-			s := s
 
-			switch isFoo := strings.Contains(s.String(), "foo"); isFoo {
+			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
 			case true:
 				g.Go(func() error {
 					return getResponses(s, respFoo)
@@ -311,7 +301,7 @@ func testMultiTSDBExemplars(t *testing.T, m *MultiTSDB) {
 	g := &errgroup.Group{}
 	respFoo := make(chan []exemplarspb.ExemplarData)
 	respBar := make(chan []exemplarspb.ExemplarData)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		s := m.TSDBExemplars()
 		testutil.Assert(t, len(s) == 2)
 
@@ -416,6 +406,8 @@ func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarD
 }
 
 func TestMultiTSDBPrune(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		bucket          objstore.Bucket
@@ -450,6 +442,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 				"tenant_id",
 				test.bucket,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -462,12 +455,14 @@ func TestMultiTSDBPrune(t *testing.T) {
 			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
 
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+
+			g := sync.WaitGroup{}
+			defer func() { cancel(); g.Wait() }()
 
 			if test.bucket != nil {
-				go func() {
+				g.Go(func() {
 					testutil.Ok(t, syncTSDBs(ctx, m, 10*time.Millisecond))
-				}()
+				})
 			}
 
 			testutil.Ok(t, m.Prune(ctx))
@@ -507,6 +502,8 @@ func syncTSDBs(ctx context.Context, m *MultiTSDB, interval time.Duration) error 
 }
 
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -518,6 +515,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
 		objstore.NewInMemBucket(),
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -531,7 +529,51 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 }
 
+func TestMultiTSDBAddNewTenant(t *testing.T) {
+	t.Parallel()
+	const iterations = 10
+	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
+	for i := range iterations {
+		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				objstore.NewInMemBucket(),
+				false,
+				false,
+				metadata.NoneFunc,
+			)
+			defer func() { testutil.Ok(t, m.Close()) }()
+
+			concurrency := 50
+			var wg sync.WaitGroup
+			for i := range concurrency {
+				wg.Add(1)
+				// simulate remote write with new tenant concurrently
+				go func(i int) {
+					defer wg.Done()
+					testutil.Ok(t, appendSample(m, fmt.Sprintf("tenant-%d", i), time.UnixMilli(int64(10))))
+				}(i)
+				// simulate read request concurrently
+				go func() {
+					m.TSDBLocalClients()
+				}()
+			}
+			wg.Wait()
+			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
+		})
+	}
+}
+
 func TestAlignedHeadFlush(t *testing.T) {
+	t.Parallel()
+
 	hourInSeconds := int64(1 * 60 * 60)
 
 	tests := []struct {
@@ -580,6 +622,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 				"tenant_id",
 				test.bucket,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -591,8 +634,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 
 			testutil.Ok(t, m.Flush())
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			_, err := m.Sync(ctx)
 			testutil.Ok(t, err)
 
@@ -613,6 +655,8 @@ func TestAlignedHeadFlush(t *testing.T) {
 }
 
 func TestMultiTSDBStats(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tenants       []string
@@ -654,6 +698,7 @@ func TestMultiTSDBStats(t *testing.T) {
 				"tenant_id",
 				nil,
 				false,
+				false,
 				metadata.NoneFunc,
 			)
 			defer func() { testutil.Ok(t, m.Close()) }()
@@ -671,6 +716,8 @@ func TestMultiTSDBStats(t *testing.T) {
 
 // Regression test for https://github.com/thanos-io/thanos/issues/6047.
 func TestMultiTSDBWithNilStore(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
@@ -682,6 +729,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
+		false,
 		false,
 		metadata.NoneFunc,
 	)
@@ -712,6 +760,8 @@ func (s *slowClient) LabelValues(ctx context.Context, r *storepb.LabelValuesRequ
 }
 
 func TestProxyLabelValues(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	m := NewMultiTSDB(
 		dir, nil, prometheus.NewRegistry(), &tsdb.Options{
@@ -724,12 +774,12 @@ func TestProxyLabelValues(t *testing.T) {
 		"tenant_id",
 		nil,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(t, m.Close()) }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		for {
 			select {
@@ -783,7 +833,10 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 
 func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 	proxy := store.NewProxyStore(nil, nil, func() []store.Client {
-		clients := m.TSDBLocalClients()
+		m.mtx.Lock()
+		defer m.mtx.Unlock()
+		clients := make([]store.Client, len(m.tsdbClients))
+		copy(clients, m.tsdbClients)
 		if len(clients) > 0 {
 			clients[0] = &slowClient{clients[0]}
 		}
@@ -814,6 +867,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 		"tenant_id",
 		nil,
 		false,
+		false,
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
@@ -836,14 +890,15 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	l := labels.FromStrings("a", "1", "b", "2")
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		_, _ = a.Append(0, l, int64(i), float64(i))
 	}
 }
 
 func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+	t.Parallel()
+
 	tenant := &tenant{
 		mtx: &sync.RWMutex{},
 	}
@@ -892,7 +947,13 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 			Uploaded: []ulid.ULID{mockBlockIDs[0]},
 		}))
 
-		tenant.ship = shipper.New(log.NewNopLogger(), nil, td, nil, nil, metadata.BucketUploadSource, nil, false, metadata.NoneFunc, "")
+		tenant.ship = shipper.New(
+			nil,
+			td,
+			shipper.WithLogger(log.NewNopLogger()),
+			shipper.WithSource(metadata.BucketUploadSource),
+			shipper.WithHashFunc(metadata.NoneFunc),
+		)
 		require.Equal(t, map[ulid.ULID]struct{}{
 			mockBlockIDs[0]: {},
 		}, tenant.blocksToDelete(nil))

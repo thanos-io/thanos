@@ -4,7 +4,6 @@
 package query
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,9 +13,14 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
@@ -55,6 +59,11 @@ func TestQuerier_Proxy(t *testing.T) {
 	files, err := filepath.Glob("testdata/promql/**/*.test")
 	testutil.Ok(t, err)
 	testutil.Equals(t, 10, len(files), "%v", files)
+	cache, err := storecache.NewMatchersCache()
+	testutil.Ok(t, err)
+
+	// to enable double_exponential_smoothing, refer to https://github.com/prometheus/prometheus/pull/14930
+	parser.EnableExperimentalFunctions = true
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("proxy", func(t *testing.T) {
@@ -63,9 +72,10 @@ func TestQuerier_Proxy(t *testing.T) {
 			logger,
 			nil,
 			store.NewProxyStore(logger, nil, func() []store.Client { return sc.get() },
-				component.Debug, nil, 5*time.Minute, store.EagerRetrieval),
+				component.Debug, labels.EmptyLabels(), 5*time.Minute, store.EagerRetrieval, store.WithMatcherCache(cache)),
 			1000000,
 			5*time.Minute,
+			dedup.AlgorithmPenalty,
 		)
 
 		createQueryableFn := func(stores []*testStore) storage.Queryable {
@@ -76,7 +86,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				// TODO(bwplotka): Parse external labels.
 				sc.append(&storetestutil.TestClient{
 					Name:        fmt.Sprintf("store number %v", i),
-					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, nil), m, st.mint, st.maxt)),
+					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, labels.EmptyLabels()), m, st.mint, st.maxt)),
 					MinTime:     st.mint,
 					MaxTime:     st.maxt,
 				})
@@ -119,21 +129,6 @@ func selectedStore(wrapped storepb.StoreServer, matchers []storepb.LabelMatcher,
 		mint:        mint,
 		maxt:        maxt,
 	}
-}
-
-func (s *selectStore) Info(ctx context.Context, r *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	resp, err := s.StoreServer.Info(ctx, r)
-	if err != nil {
-		return nil, err
-	}
-	if resp.MinTime < s.mint {
-		resp.MinTime = s.mint
-	}
-	if resp.MaxTime > s.maxt {
-		resp.MaxTime = s.maxt
-	}
-	// TODO(bwplotka): Match labelsets and expose only those?
-	return resp, nil
 }
 
 func (s *selectStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {

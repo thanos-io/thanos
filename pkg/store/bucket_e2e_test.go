@@ -17,7 +17,8 @@ import (
 	"github.com/alecthomas/units"
 	"github.com/go-kit/log"
 	"github.com/gogo/status"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"
@@ -96,7 +97,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		mint := timestamp.FromTime(now)
 		now = now.Add(2 * time.Hour)
 		maxt := timestamp.FromTime(now)
@@ -108,9 +109,9 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 
 		// Create two blocks per time slot. Only add 10 samples each so only one chunk
 		// gets created each. This way we can easily verify we got 10 chunks per series below.
-		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
+		id1, err := e2eutil.CreateBlock(ctx, dir, series[:4], 10, mint, maxt, extLset, 0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
-		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0, metadata.NoneFunc)
+		id2, err := e2eutil.CreateBlock(ctx, dir, series[4:], 10, mint, maxt, extLset, 0, metadata.NoneFunc, nil)
 		testutil.Ok(t, err)
 
 		dir1, dir2 := filepath.Join(dir, id1.String()), filepath.Join(dir, id2.String())
@@ -524,7 +525,7 @@ func TestBucketStore_e2e(t *testing.T) {
 type naivePartitioner struct{}
 
 func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
-	for i := 0; i < length; i++ {
+	for i := range length {
 		s, e := rng(i)
 		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
@@ -555,8 +556,9 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 }
 
 func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	t.Parallel()
+
+	ctx := t.Context()
 	bkt := objstore.NewInMemBucket()
 
 	dir := t.TempDir()
@@ -608,6 +610,8 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 }
 
 func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	// The query will fetch 2 series from 6 blocks, so we do expect to hit a total of 12 chunks.
 	expectedChunks := uint64(2 * 6)
 
@@ -643,8 +647,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()
@@ -675,6 +678,47 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	bkt := objstore.NewInMemBucket()
+
+	dir := t.TempDir()
+
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(0), func(_ prometheus.Counter) BytesLimiter {
+		return &bytesLimiterMock{
+			limitFunc: func(_ uint64, dataType StoreDataType) error {
+				if dataType == PostingsFetched {
+					return fmt.Errorf("error reserving data type: PostingsFetched")
+				}
+
+				return nil
+			},
+		}
+	}, emptyRelabelConfig, allowAllFilterConf)
+	testutil.Ok(t, s.store.SyncBlocks(ctx))
+
+	req := &storepb.SeriesRequest{
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+		},
+		MinTime: minTimeDuration.PrometheusTimestamp(),
+		MaxTime: maxTimeDuration.PrometheusTimestamp(),
+	}
+
+	s.cache.SwapWith(noopCache{})
+	srv := newStoreSeriesServer(ctx)
+	err := s.store.Series(req, srv)
+
+	testutil.NotOk(t, err)
+	testutil.Assert(t, strings.Contains(err.Error(), "exceeded bytes limit"))
+	testutil.Assert(t, strings.Contains(err.Error(), "error reserving data type: PostingsFetched"))
+	status, ok := status.FromError(err)
+	testutil.Equals(t, true, ok)
+	testutil.Equals(t, codes.ResourceExhausted, status.Code())
 }
 
 func TestBucketStore_LabelNames_e2e(t *testing.T) {
@@ -782,6 +826,8 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]struct {
 		maxSeriesLimit uint64
 		expectedErr    string
@@ -799,8 +845,7 @@ func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			bkt := objstore.NewInMemBucket()
 			dir := t.TempDir()
@@ -940,6 +985,8 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]struct {
 		maxSeriesLimit uint64
 		expectedErr    string
@@ -957,8 +1004,7 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()

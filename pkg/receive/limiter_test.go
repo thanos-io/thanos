@@ -4,7 +4,6 @@
 package receive
 
 import (
-	"context"
 	"os"
 	"path"
 	"testing"
@@ -17,6 +16,8 @@ import (
 )
 
 func TestLimiter_StartConfigReloader(t *testing.T) {
+	t.Parallel()
+
 	origLimitsFile, err := os.ReadFile(path.Join("testdata", "limits_config", "good_limits.yaml"))
 	testutil.Ok(t, err)
 	copyLimitsFile := path.Join(t.TempDir(), "limits.yaml")
@@ -35,8 +36,7 @@ func TestLimiter_StartConfigReloader(t *testing.T) {
 	limiter, err := NewLimiter(goodLimits, nil, RouterIngestor, log.NewLogfmtLogger(os.Stdout), 1*time.Second)
 	testutil.Ok(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	err = limiter.StartConfigReloader(ctx)
 	testutil.Ok(t, err)
 
@@ -55,6 +55,8 @@ func (e emptyPathFile) Path() string {
 }
 
 func TestLimiter_CanReload(t *testing.T) {
+	t.Parallel()
+
 	validLimitsPath, err := extkingpin.NewStaticPathContent(
 		path.Join("testdata", "limits_config", "good_limits.yaml"),
 	)

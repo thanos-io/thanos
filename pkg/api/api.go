@@ -20,19 +20,22 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/klauspost/compress/gzhttp"
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/tsdb"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/thanos-io/thanos/pkg/extannotations"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -61,10 +64,15 @@ const (
 
 var corsHeaders = map[string]string{
 	"Access-Control-Allow-Headers":  "Accept, Accept-Encoding, Authorization, Content-Type, Origin",
-	"Access-Control-Allow-Methods":  "GET, OPTIONS",
+	"Access-Control-Allow-Methods":  "GET, POST, OPTIONS",
 	"Access-Control-Allow-Origin":   "*",
 	"Access-Control-Expose-Headers": "Date",
 }
+
+var (
+	// Let suse the same json codec used by upstream prometheus.
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+)
 
 // ThanosVersion contains build information about Thanos.
 type ThanosVersion struct {
@@ -102,17 +110,29 @@ type RuntimeInfo struct {
 	GOMAXPROCS     int       `json:"GOMAXPROCS"`
 	GOGC           string    `json:"GOGC"`
 	GODEBUG        string    `json:"GODEBUG"`
+	GOMEMLIMIT     int64     `json:"GOMEMLIMIT"`
 }
 
 // RuntimeInfoFn returns updated runtime information about Thanos.
 type RuntimeInfoFn func() RuntimeInfo
 
 type response struct {
-	Status    status      `json:"status"`
-	Data      interface{} `json:"data,omitempty"`
-	ErrorType ErrorType   `json:"errorType,omitempty"`
-	Error     string      `json:"error,omitempty"`
-	Warnings  []string    `json:"warnings,omitempty"`
+	Status    status    `json:"status"`
+	Data      any       `json:"data,omitempty"`
+	ErrorType ErrorType `json:"errorType,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Warnings  []string  `json:"warnings,omitempty"`
+}
+
+type TenantStats struct {
+	Tenant string
+	Stats  *tsdb.Stats
+}
+
+// TSDBStatus has information of cardinality statistics from postings.
+type TSDBStatus struct {
+	Tenant        string `json:"tenant"`
+	v1.TSDBStatus `json:","`
 }
 
 // SetCORS enables cross-site script calls.
@@ -122,7 +142,7 @@ func SetCORS(w http.ResponseWriter) {
 	}
 }
 
-type ApiFunc func(r *http.Request) (interface{}, []error, *ApiError, func())
+type ApiFunc func(r *http.Request) (any, []error, *ApiError, func())
 
 type BaseAPI struct {
 	logger      log.Logger
@@ -157,19 +177,19 @@ func (api *BaseAPI) Register(r *route.Router, tracer opentracing.Tracer, logger 
 	r.Get("/status/buildinfo", instr("status_build", api.serveBuildInfo))
 }
 
-func (api *BaseAPI) options(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) options(r *http.Request) (any, []error, *ApiError, func()) {
 	return nil, nil, nil, func() {}
 }
 
-func (api *BaseAPI) flags(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) flags(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.flagsMap, nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) serveRuntimeInfo(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.runtimeInfo(), nil, nil, func() {}
 }
 
-func (api *BaseAPI) serveBuildInfo(r *http.Request) (interface{}, []error, *ApiError, func()) {
+func (api *BaseAPI) serveBuildInfo(r *http.Request) (any, []error, *ApiError, func()) {
 	return api.buildInfo, nil, nil, func() {}
 }
 
@@ -190,6 +210,7 @@ func GetRuntimeInfoFunc(logger log.Logger) RuntimeInfoFn {
 			GOMAXPROCS:     runtime.GOMAXPROCS(0),
 			GOGC:           os.Getenv("GOGC"),
 			GODEBUG:        os.Getenv("GODEBUG"),
+			GOMEMLIMIT:     debug.SetMemoryLimit(-1),
 		}
 	}
 }
@@ -210,10 +231,10 @@ func GetInstr(
 				SetCORS(w)
 			}
 			if data, warnings, err, releaseResources := f(r); err != nil {
-				RespondError(w, err, data)
+				RespondError(w, err, data, logger)
 				releaseResources()
 			} else if data != nil {
-				Respond(w, data, warnings)
+				Respond(w, data, warnings, logger)
 				releaseResources()
 			} else {
 				w.WriteHeader(http.StatusNoContent)
@@ -244,7 +265,7 @@ func shouldNotCacheBecauseOfWarnings(warnings []error) bool {
 	return false
 }
 
-func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
+func Respond(w http.ResponseWriter, data any, warnings []error, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	if shouldNotCacheBecauseOfWarnings(warnings) {
 		w.Header().Set("Cache-Control", "no-store")
@@ -258,10 +279,21 @@ func Respond(w http.ResponseWriter, data interface{}, warnings []error) {
 	for _, warn := range warnings {
 		resp.Warnings = append(resp.Warnings, warn.Error())
 	}
-	_ = json.NewEncoder(w).Encode(resp)
+
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	b, err := json.Marshal(resp)
+	if err != nil {
+		level.Error(logger).Log("msg", "error marshaling response", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, err := w.Write(b); err != nil {
+		level.Error(logger).Log("msg", "error writing response", "bytesWritten", n, "err", err)
+	}
 }
 
-func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
+func RespondError(w http.ResponseWriter, apiErr *ApiError, data any, logger log.Logger) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 
@@ -280,10 +312,20 @@ func RespondError(w http.ResponseWriter, apiErr *ApiError, data interface{}) {
 	}
 	w.WriteHeader(code)
 
-	_ = json.NewEncoder(w).Encode(&response{
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	b, err := json.Marshal(&response{
 		Status:    StatusError,
 		ErrorType: apiErr.Typ,
 		Error:     apiErr.Err.Error(),
 		Data:      data,
 	})
+	if err != nil {
+		level.Error(logger).Log("msg", "error marshaling response", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if n, err := w.Write(b); err != nil {
+		level.Error(logger).Log("msg", "error writing response", "bytesWritten", n, "err", err)
+	}
 }

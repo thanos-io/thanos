@@ -3,12 +3,6 @@
 
 package component
 
-import (
-	"strings"
-
-	"github.com/thanos-io/thanos/pkg/store/storepb"
-)
-
 // Component is a generic component interface.
 type Component interface {
 	String() string
@@ -18,7 +12,6 @@ type Component interface {
 type StoreAPI interface {
 	implementsStoreAPI()
 	String() string
-	ToProto() storepb.StoreType
 }
 
 // Source is a Thanos component that produce blocks of metrics.
@@ -33,7 +26,6 @@ type SourceStoreAPI interface {
 	implementsStoreAPI()
 	producesBlocks()
 	String() string
-	ToProto() storepb.StoreType
 }
 
 type component struct {
@@ -48,14 +40,6 @@ type storeAPI struct {
 
 func (storeAPI) implementsStoreAPI() {}
 
-func (s sourceStoreAPI) ToProto() storepb.StoreType {
-	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
-}
-
-func (s storeAPI) ToProto() storepb.StoreType {
-	return storepb.StoreType(storepb.StoreType_value[strings.ToUpper(s.String())])
-}
-
 type source struct {
 	component
 }
@@ -66,26 +50,6 @@ type sourceStoreAPI struct {
 	component
 	source
 	storeAPI
-}
-
-// FromProto converts from a gRPC StoreType to StoreAPI.
-func FromProto(storeType storepb.StoreType) StoreAPI {
-	switch storeType {
-	case storepb.StoreType_QUERY:
-		return Query
-	case storepb.StoreType_RULE:
-		return Rule
-	case storepb.StoreType_SIDECAR:
-		return Sidecar
-	case storepb.StoreType_STORE:
-		return Store
-	case storepb.StoreType_RECEIVE:
-		return Receive
-	case storepb.StoreType_DEBUG:
-		return Debug
-	default:
-		return UnknownStoreAPI
-	}
 }
 
 func FromString(storeType string) StoreAPI {
@@ -125,4 +89,24 @@ var (
 	Store           = storeAPI{component: component{name: "store"}}
 	UnknownStoreAPI = storeAPI{component: component{name: "unknown-store-api"}}
 	Query           = storeAPI{component: component{name: "query"}}
+
+	All = []Component{
+		Bucket,
+		Cleanup,
+		Mark,
+		Upload,
+		Rewrite,
+		Retention,
+		Compact,
+		Downsample,
+		Replicate,
+		QueryFrontend,
+		Debug,
+		Receive,
+		Rule,
+		Sidecar,
+		Store,
+		UnknownStoreAPI,
+		Query,
+	}
 )

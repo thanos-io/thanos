@@ -15,13 +15,13 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	"github.com/thanos-io/thanos/pkg/compact"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -29,10 +29,12 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/logutil"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -84,7 +86,7 @@ func RunDownsample(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, component.Downsample.String())
+	bkt, err := client.NewBucket(logger, confContentYaml, component.Downsample.String(), nil)
 	if err != nil {
 		return err
 	}
@@ -251,10 +253,8 @@ func downsampleBucket(
 	defer workerCancel()
 
 	level.Debug(logger).Log("msg", "downsampling bucket", "concurrency", downsampleConcurrency)
-	for i := 0; i < downsampleConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range downsampleConcurrency {
+		wg.Go(func() {
 			for m := range metaCh {
 				resolution := downsample.ResLevel1
 				errMsg := "downsampling to 5 min"
@@ -269,7 +269,7 @@ func downsampleBucket(
 				}
 				metrics.downsamples.WithLabelValues(m.Thanos.ResolutionString()).Inc()
 			}
-		}()
+		})
 	}
 
 	// Workers scheduled, distribute blocks.
@@ -376,7 +376,7 @@ func processDownsampling(
 		pool = downsample.NewPool()
 	}
 
-	b, err := tsdb.OpenBlock(logger, bdir, pool)
+	b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), bdir, pool, nil)
 	if err != nil {
 		return errors.Wrapf(err, "open block %s", m.ULID)
 	}

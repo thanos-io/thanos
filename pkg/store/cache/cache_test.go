@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/prometheus/model/labels"
 	"golang.org/x/crypto/blake2b"
 
@@ -68,7 +69,7 @@ func TestCacheKey_string(t *testing.T) {
 		"should stringify expanded postings cache key when multiple matchers": {
 			key: CacheKey{ulidString, CacheKeyExpandedPostings(LabelMatchersToString([]*labels.Matcher{matcher, matcher2})), ""},
 			expected: func() string {
-				hash := blake2b.Sum256([]byte(fmt.Sprintf("%s;%s", matcher.String(), matcher2.String())))
+				hash := blake2b.Sum256(fmt.Appendf(nil, "%s;%s", matcher.String(), matcher2.String()))
 				encodedHash := base64.RawURLEncoding.EncodeToString(hash[0:])
 
 				return fmt.Sprintf("EP:%s:%s", uid.String(), encodedHash)
@@ -119,11 +120,11 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 		"should guarantee reasonably short key length for expanded postings": {
 			expectedLen: 73,
 			keys: []CacheKey{
-				{ulidString, func() interface{} {
+				{ulidString, func() any {
 					matchers := make([]*labels.Matcher, 0, 100)
 					name := strings.Repeat("a", 100)
 					value := strings.Repeat("a", 1000)
-					for i := 0; i < 100; i++ {
+					for i := range 100 {
 						t := labels.MatchType(i % 4)
 						matchers = append(matchers, labels.MustNewMatcher(t, name, value))
 					}
@@ -146,8 +147,7 @@ func BenchmarkCacheKey_string_Postings(b *testing.B) {
 	uid := ulid.MustNew(1, nil)
 	key := CacheKey{uid.String(), CacheKeyPostings(labels.Label{Name: strings.Repeat("a", 100), Value: strings.Repeat("a", 1000)}), ""}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = key.String()
 	}
 }
@@ -156,8 +156,7 @@ func BenchmarkCacheKey_string_Series(b *testing.B) {
 	uid := ulid.MustNew(1, nil)
 	key := CacheKey{uid.String(), CacheKeySeries(math.MaxUint64), ""}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = key.String()
 	}
 }

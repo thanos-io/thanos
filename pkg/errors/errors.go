@@ -44,11 +44,11 @@ func (b *base) Unwrap() error {
 // Whenever error is printed with %+v format verb, stacktrace info gets dumped to the output.
 func (b *base) Format(s fmt.State, verb rune) {
 	if verb == 'v' && s.Flag('+') {
-		s.Write([]byte(formatErrorChain(b)))
+		_, _ = s.Write([]byte(formatErrorChain(b)))
 		return
 	}
 
-	s.Write([]byte(b.Error()))
+	_, _ = s.Write([]byte(b.Error()))
 }
 
 // Newf formats according to a format specifier and returns a new error with a stacktrace
@@ -57,7 +57,7 @@ func (b *base) Format(s fmt.State, verb rune) {
 //
 // If no args have been passed, it is same as `New` function without formatting. Character like
 // '%' still has to be escaped in that scenario.
-func Newf(format string, args ...interface{}) error {
+func Newf(format string, args ...any) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -70,7 +70,7 @@ func Newf(format string, args ...interface{}) error {
 //
 // If cause is nil, this is the same as fmt.Errorf. If no args have been passed, it is same as `Wrap`
 // function without formatting. Character like '%' still has to be escaped in that scenario.
-func Wrapf(cause error, format string, args ...interface{}) error {
+func Wrapf(cause error, format string, args ...any) error {
 	return &base{
 		info:  fmt.Sprintf(format, args...),
 		stack: newStackTrace(),
@@ -118,7 +118,7 @@ func formatErrorChain(err error) string {
 // The functions `Is`, `As` & `Unwrap` provides a thin wrapper around the builtin errors
 // package in go. Just for sake of completeness and correct autocompletion behaviors from
 // IDEs they have been wrapped using functions instead of using variable to reference them
-// as first class functions (eg: var Is = errros.Is ).
+// as first class functions (eg: var Is = errors.Is ).
 
 // Is is a wrapper of built-in errors.Is. It reports whether any error in err's
 // chain matches target. The chain consists of err itself followed by the sequence
@@ -130,7 +130,7 @@ func Is(err, target error) bool {
 // As is a wrapper of built-in errors.As. It finds the first error in err's
 // chain that matches target, and if one is found, sets target to that error
 // value and returns true. Otherwise, it returns false.
-func As(err error, target interface{}) bool {
+func As(err error, target any) bool {
 	return errors.As(err, target)
 }
 

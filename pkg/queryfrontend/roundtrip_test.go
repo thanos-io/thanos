@@ -6,6 +6,7 @@ package queryfrontend
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,17 +14,17 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/user"
+	"go.uber.org/atomic"
 
-	"github.com/efficientgo/core/testutil"
 	cortexcache "github.com/thanos-io/thanos/internal/cortex/chunk/cache"
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
+	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -186,6 +187,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						MaxRetries:             tc.maxRetries,
 						Limits:                 defaultLimits,
@@ -357,6 +359,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tpw, err := NewTripperware(
 				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
 					QueryRangeConfig: QueryRangeConfig{
 						Limits:                 defaultLimits,
 						SplitQueriesByInterval: tc.splitInterval,
@@ -461,6 +464,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			QueryRangeConfig: QueryRangeConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
@@ -529,6 +533,17 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 }
 
 func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
+	// Run the test a couple of times because the behavior of the
+	// PromQLShardingMiddleware middleware isn't 100% predictable.
+	// See testRoundTripQueryCacheWithShardingMiddleware for details.
+	for i := range 10 {
+		if !t.Run(fmt.Sprintf("run-%d", i), testRoundTripQueryCacheWithShardingMiddleware) {
+			return
+		}
+	}
+}
+
+func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 	testRequest := &ThanosQueryRangeRequest{
 		Path:    "/api/v1/query_range",
 		Start:   0,
@@ -558,6 +573,7 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -565,57 +581,69 @@ func TestRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 	rt, err := newFakeRoundTripper()
 	testutil.Ok(t, err)
 	defer rt.Close()
-	res, handler := promqlResultsWithFailures(3)
+	count, handler := promqlResultsWithFailures(3)
 	rt.setHandler(handler)
 
-	for _, tc := range []struct {
-		name     string
-		req      queryrange.Request
-		err      bool
-		expected int64
-	}{
-		{
-			name:     "query with vertical sharding",
-			req:      testRequest,
-			err:      true,
-			expected: 2,
-		},
-		{
-			name:     "same query as before, both requests are executed",
-			req:      testRequest,
-			err:      true,
-			expected: 4,
-		},
-		{
-			name:     "same query as before, one request is executed",
-			req:      testRequest,
-			err:      false,
-			expected: 5,
-		},
-		{
-			name:     "same query as before again, no requests are executed",
-			req:      testRequest,
-			err:      false,
-			expected: 5,
-		},
-	} {
-		if !t.Run(tc.name, func(t *testing.T) {
-			ctx := user.InjectOrgID(context.Background(), "1")
-			httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, tc.req)
-			testutil.Ok(t, err)
+	var (
+		rtErr    error
+		res      *http.Response
+		attempts int
+	)
+	// Depending on the timing of operations, the PromQLShardingMiddleware
+	// middleware needs between 3 and 4 calls before returning successfully.
+	//
+	// Knowing that the downstream server is configured to fail the first 3
+	// requests, the timeline can one of the 2 cases below.
+	//
+	// "Best" case scenarios (3 attempts):
+	// 1. the middleware issues 2 concurrent requests that both fail.
+	// 2. the middleware issues 2 concurrent requests. One fails, the other
+	// succeeds and is stored in the cache.
+	// 3. the middleware issues 1 request for the remaining shard that succeeds
+	// and is stored in the cache.
+	// Or
+	// 1. the middleware issues 1 request that fails before it could
+	// initiate the second request
+	// 2. the middleware issues 2 concurrent requests that both fail.
+	// 3. the middleware issues 2 concurrent requests that both succeed and are
+	// stored in the cache.
+	// Note that in the last case, 1. and 2. may happen in the reverse order.
+	//
+	// "Worst" case scenario (4 attempts):
+	// 1. the middleware issues 1 request that fails before it could
+	// initiate the second request
+	// 2. the middleware issues 1 request that fails before it could
+	// initiate the second request
+	// 3. the middleware issues 1 request that fails before it could
+	// initiate the second request
+	// 4. the middleware issues 2 concurrent requests that both succeed.
+	for range 4 {
+		attempts++
+		ctx := user.InjectOrgID(context.Background(), "1")
+		httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, testRequest)
+		testutil.Ok(t, err)
 
-			_, err = tpw(rt).RoundTrip(httpReq)
-			if tc.err {
-				testutil.NotOk(t, err)
-			} else {
-				testutil.Ok(t, err)
-			}
-
-			testutil.Equals(t, tc.expected, res.Load())
-		}) {
+		res, rtErr = tpw(rt).RoundTrip(httpReq)
+		if rtErr == nil {
 			break
 		}
 	}
+
+	testutil.Ok(t, rtErr)
+	testutil.Equals(t, http.StatusOK, res.StatusCode)
+	testutil.Assert(t, attempts == 3 || attempts == 4)
+
+	// Check that a subsequent request is served from the cache instead of
+	// hitting the server.
+	n := count.Load()
+	ctx := user.InjectOrgID(context.Background(), "1")
+	httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, testRequest)
+	testutil.Ok(t, err)
+
+	_, rtErr = tpw(rt).RoundTrip(httpReq)
+	testutil.Ok(t, rtErr)
+	testutil.Equals(t, http.StatusOK, res.StatusCode)
+	testutil.Equals(t, n, count.Load())
 }
 
 // TestRoundTripLabelsCacheMiddleware tests the cache middleware for labels requests.
@@ -682,6 +710,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
+			CortexHandlerConfig: &transport.HandlerConfig{},
 		}, nil, log.NewNopLogger(),
 	)
 	testutil.Ok(t, err)
@@ -790,6 +819,7 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 
 	tpw, err := NewTripperware(
 		Config{
+			CortexHandlerConfig: &transport.HandlerConfig{},
 			LabelsConfig: LabelsConfig{
 				Limits:                 defaultLimits,
 				ResultsCacheConfig:     cacheConf,
@@ -870,10 +900,9 @@ func promqlResults(fail bool) (*int, http.Handler) {
 }
 
 // promqlResultsWithFailures is a mock handler used to test split and cache middleware.
-// it will return a failed response numFailures times.
+// it will return a failed response for the first numFailures requests.
 func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
 	count := &atomic.Int64{}
-	var lock sync.Mutex
 	q := queryrange.PrometheusResponse{
 		Status: "success",
 		Data: queryrange.PrometheusData{
@@ -890,33 +919,16 @@ func promqlResultsWithFailures(numFailures int) (*atomic.Int64, http.Handler) {
 		},
 	}
 
-	cond := sync.NewCond(&sync.Mutex{})
-	cond.L.Lock()
 	return count, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lock.Lock()
-		defer lock.Unlock()
-
 		// Set fail in the response code to test retry.
-		if numFailures > 0 {
-			numFailures--
-
-			// Wait for a successful request.
-			// Release the lock to allow other requests to execute.
-			if numFailures == 0 {
-				lock.Unlock()
-				cond.Wait()
-				<-time.After(500 * time.Millisecond)
-				lock.Lock()
-			}
+		if count.Inc() <= int64(numFailures) {
 			w.WriteHeader(500)
+			return
 		}
+
 		if err := json.NewEncoder(w).Encode(q); err != nil {
 			panic(err)
 		}
-		if numFailures == 0 {
-			cond.Broadcast()
-		}
-		count.Add(1)
 	})
 }
 

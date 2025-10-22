@@ -4,12 +4,12 @@
 package store
 
 import (
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
-	"golang.org/x/exp/maps"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -88,8 +88,7 @@ func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 
 	matchers := make([]storepb.LabelMatcher, 0, len(labelNameValues))
 	for lblName, lblVals := range labelNameValues {
-		values := maps.Keys(lblVals)
-		sort.Strings(values)
+		values := slices.Sorted(maps.Keys(lblVals))
 		matcher := storepb.LabelMatcher{
 			Name:  lblName,
 			Value: strings.Join(values, "|"),

@@ -15,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,11 @@ func (s sample) FH() *histogram.FloatHistogram {
 
 func (s sample) Type() chunkenc.ValueType {
 	return chunkenc.ValFloat
+}
+
+func (s sample) Copy() chunks.Sample {
+	c := sample{t: s.t, f: s.f}
+	return c
 }
 
 type series struct {
@@ -538,7 +544,151 @@ func TestDedupSeriesSet(t *testing.T) {
 			if tcase.isCounter {
 				f = "rate"
 			}
-			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f)
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, f, AlgorithmPenalty)
+			var ats []storage.Series
+			for dedupSet.Next() {
+				ats = append(ats, dedupSet.At())
+			}
+			testutil.Ok(t, dedupSet.Err())
+			testutil.Equals(t, len(tcase.exp), len(ats))
+
+			for i, s := range ats {
+				testutil.Equals(t, tcase.exp[i].lset, s.Labels(), "labels mismatch for series %v", i)
+				res := expandSeries(t, s.Iterator(nil))
+				testutil.Equals(t, tcase.exp[i].samples, res, "values mismatch for series :%v", i)
+			}
+		})
+	}
+}
+
+func TestDedupSeriesSet_Chain(t *testing.T) {
+	for _, tcase := range []struct {
+		name  string
+		input []series
+		exp   []series
+	}{
+		{
+			name: "Single dedup label - exact match",
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+			},
+		},
+		{
+			name: "Single dedup label - gap in one series",
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+			},
+		},
+		{
+			name: "Single dedup label - gaps in two series",
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+			},
+		},
+		{
+			name: "Multi dedup label - exact match",
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+				},
+			},
+		},
+		{
+			name: "Multi dedup label - gaps in two series",
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {20000, 102}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {30000, 103}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1", "c", "3"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+				},
+				{
+					lset:    labels.FromStrings("a", "2", "c", "3"),
+					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+				},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: tcase.input}, "", AlgorithmChain)
 			var ats []storage.Series
 			for dedupSet.Next() {
 				ats = append(ats, dedupSet.At())
@@ -615,7 +765,6 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 	}
 
 	for i, c := range casesMixed {
-		c := c
 		t.Run(fmt.Sprintf("mixed-%d", i), func(t *testing.T) {
 			t.Parallel()
 			it := newDedupSeriesIterator(
@@ -653,10 +802,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("equal", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i * 10000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i * 10000), f: 2})
 		}
 		run(b, s1, s2)
@@ -664,10 +813,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("fixed-delta", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i * 10000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i*10000) + 10, f: 2})
 		}
 		run(b, s1, s2)
@@ -675,10 +824,10 @@ func BenchmarkDedupSeriesIterator(b *testing.B) {
 	b.Run("minor-rand-delta", func(b *testing.B) {
 		var s1, s2 []sample
 
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s1 = append(s1, sample{t: int64(i*10000) + rand.Int63n(5000), f: 1})
 		}
-		for i := 0; i < b.N; i++ {
+		for i := 0; b.Loop(); i++ {
 			s2 = append(s2, sample{t: int64(i*10000) + +rand.Int63n(5000), f: 2})
 		}
 		run(b, s1, s2)

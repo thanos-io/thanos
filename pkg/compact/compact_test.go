@@ -9,13 +9,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/run"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -32,6 +35,8 @@ import (
 )
 
 func TestHaltError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsHaltError(err), "halt error")
 
@@ -46,6 +51,8 @@ func TestHaltError(t *testing.T) {
 }
 
 func TestHaltMultiError(t *testing.T) {
+	t.Parallel()
+
 	haltErr := halt(errors.New("halt error"))
 	nonHaltErr := errors.New("not a halt error")
 
@@ -59,6 +66,8 @@ func TestHaltMultiError(t *testing.T) {
 }
 
 func TestRetryMultiError(t *testing.T) {
+	t.Parallel()
+
 	retryErr := retry(errors.New("retry error"))
 	nonRetryErr := errors.New("not a retry error")
 
@@ -75,6 +84,8 @@ func TestRetryMultiError(t *testing.T) {
 }
 
 func TestRetryError(t *testing.T) {
+	t.Parallel()
+
 	err := errors.New("test")
 	testutil.Assert(t, !IsRetryError(err), "retry error")
 
@@ -92,6 +103,8 @@ func TestRetryError(t *testing.T) {
 }
 
 func TestGroupKey(t *testing.T) {
+	t.Parallel()
+
 	for _, tcase := range []struct {
 		input    metadata.Thanos
 		expected string
@@ -131,6 +144,8 @@ func TestGroupKey(t *testing.T) {
 }
 
 func TestGroupMaxMinTime(t *testing.T) {
+	t.Parallel()
+
 	g := &Group{
 		metasByMinTime: []*metadata.Meta{
 			{BlockMeta: tsdb.BlockMeta{MinTime: 0, MaxTime: 10}},
@@ -207,6 +222,8 @@ func createBlockMeta(id uint64, minTime, maxTime int64, labels map[string]string
 }
 
 func TestRetentionProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewNopLogger()
 	reg := prometheus.NewRegistry()
 
@@ -328,6 +345,8 @@ func TestRetentionProgressCalculate(t *testing.T) {
 }
 
 func TestCompactProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	type planResult struct {
 		compactionBlocks, compactionRuns float64
 	}
@@ -433,6 +452,8 @@ func TestCompactProgressCalculate(t *testing.T) {
 }
 
 func TestDownsampleProgressCalculate(t *testing.T) {
+	t.Parallel()
+
 	reg := prometheus.NewRegistry()
 	logger := log.NewNopLogger()
 
@@ -532,6 +553,8 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 }
 
 func TestNoMarkFilterAtomic(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.TODO()
 	logger := log.NewLogfmtLogger(io.Discard)
 
@@ -546,7 +569,7 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		Name: "coolcounter",
 	})
 
-	for i := 0; i < blocksNum; i++ {
+	for i := range blocksNum {
 		var meta metadata.Meta
 		meta.Version = 1
 		meta.ULID = ulid.MustNew(uint64(i), nil)
@@ -605,4 +628,113 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 		cancel()
 	})
 	testutil.Ok(t, g.Run())
+}
+
+func TestGarbageCollect_FilterRace(t *testing.T) {
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(timeoutCancel)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	bkt := objstore.NewInMemBucket()
+
+	var metaParent metadata.Meta
+	metaParent.Version = 1
+	metaParent.ULID = ulid.MustNew(uint64(0), nil)
+
+	children := []ulid.ULID{
+		ulid.MustNew(uint64(1), nil), ulid.MustNew(uint64(2), nil), ulid.MustNew(uint64(3), nil),
+	}
+	metaParent.Compaction.Sources = children
+
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaParent))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(metaParent.ULID.String(), metadata.MetaFilename), &buf))
+
+	createBlocks := func() {
+		for _, ch := range children {
+			var metaChild metadata.Meta
+			metaChild.Version = 1
+			metaChild.ULID = ch
+
+			var buf bytes.Buffer
+			testutil.Ok(t, json.NewEncoder(&buf).Encode(&metaChild))
+			testutil.Ok(t, bkt.Upload(ctx, path.Join(metaChild.ULID.String(), metadata.MetaFilename), &buf))
+		}
+	}
+
+	reg := prometheus.NewRegistry()
+
+	baseFetcher, err := block.NewBaseFetcher(
+		log.NewNopLogger(),
+		10,
+		objstore.WithNoopInstr(bkt),
+		block.NewConcurrentLister(log.NewNopLogger(), objstore.WithNoopInstr(bkt)),
+		t.TempDir(),
+		reg,
+	)
+	testutil.Ok(t, err)
+
+	df := block.NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 0*time.Second, 1)
+
+	duplicateFilter := block.NewDeduplicateFilter(5)
+	mf := baseFetcher.NewMetaFetcher(reg, []block.MetadataFilter{df, duplicateFilter})
+
+	garbageCollection := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_gc_counter",
+	})
+
+	syncer, err := NewMetaSyncer(log.NewNopLogger(), reg, bkt, mf, duplicateFilter, df, promauto.With(prometheus.NewRegistry()).NewCounter(prometheus.CounterOpts{
+		Name: "test_meta_syncer_syncs",
+	}), garbageCollection, 5*time.Minute)
+	testutil.Ok(t, err)
+
+	blocksCleanedMetric := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaned",
+	})
+	blocksCleaner := NewBlocksCleaner(log.NewNopLogger(), objstore.WithNoopInstr(bkt), df, 0*time.Second, blocksCleanedMetric, promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "test_block_cleaner_errors",
+	}))
+
+	for timeoutCtx.Err() == nil {
+		t.Log("doing iteration")
+
+		testutil.Equals(t, float64(0.0), promtestutil.ToFloat64(garbageCollection))
+
+		createBlocks()
+		for _, ch := range children {
+			testutil.Ok(t, block.MarkForDeletion(context.Background(), log.NewNopLogger(), objstore.WithNoopInstr(bkt), ch, "foo", promauto.With(prometheus.NewRegistry()).NewCounter(
+				prometheus.CounterOpts{Name: "test_block_marked_for_deletion"},
+			)))
+		}
+		testutil.Ok(t, syncer.SyncMetas(context.Background()))
+
+		startWg := &sync.WaitGroup{}
+		startWg.Add(1)
+
+		wg := &sync.WaitGroup{}
+		wg.Add(2)
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			r := rand.Uint32N(20)
+			time.Sleep(time.Duration(r) * time.Millisecond)
+			deleted, err := blocksCleaner.DeleteMarkedBlocks(context.Background())
+			testutil.Ok(t, err)
+			testutil.Ok(t, syncer.GarbageCollect(context.Background(), deleted))
+		}()
+
+		go func() {
+			defer wg.Done()
+			startWg.Wait()
+			for range 100 {
+				testutil.Ok(t, syncer.SyncMetas(context.Background()))
+			}
+		}()
+
+		startWg.Done()
+		wg.Wait()
+	}
 }

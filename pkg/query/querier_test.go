@@ -18,7 +18,6 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
-	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -30,8 +29,11 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/gate"
+	"github.com/thanos-io/thanos/pkg/logutil"
 
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -44,8 +46,10 @@ type sample struct {
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
+	t.Parallel()
+
 	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second)
+	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second, dedup.AlgorithmPenalty)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(
@@ -72,6 +76,8 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 
 // Tests E2E how PromQL works with downsampled data.
 func TestQuerier_DownsampledData(t *testing.T) {
+	t.Parallel()
+
 	testProxy := &testStoreServer{
 		resps: []*storepb.SeriesResponse{
 			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
@@ -90,6 +96,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		newProxyStore(testProxy),
 		2,
 		timeout,
+		dedup.AlgorithmPenalty,
 	)(false,
 		nil,
 		nil,
@@ -335,6 +342,8 @@ func (s series) Iterator() chunkenc.Iterator {
 //
 // This is because when promql displays data for a given range it looks back 5min before the requested time window.
 func TestQuerier_Select_AfterPromQL(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	for _, tcase := range []struct {
@@ -352,7 +361,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 			// Regression test 1 against https://github.com/thanos-io/thanos/issues/2890.
 			name: "when switching replicas don't miss samples when set with a big enough lookback delta",
 			storeAPI: newProxyStore(func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2890-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()),
@@ -372,7 +381,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			timeout := 5 * time.Minute
 			e := promql.NewEngine(promql.EngineOpts{
-				Logger:        logger,
+				Logger:        logutil.GoKitLogToSlog(logger),
 				Timeout:       timeout,
 				MaxSamples:    math.MaxInt64,
 				LookbackDelta: tcase.lookbackDelta,
@@ -388,12 +397,12 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 				resolution := time.Duration(tcase.hints.Step) * time.Millisecond
 				t.Run(fmt.Sprintf("dedup=%v, resolution=%v", sc.dedup, resolution.String()), func(t *testing.T) {
 					var actual []series
-					// Boostrap a local store and pass the data through promql.
+					// Bootstrap a local store and pass the data through promql.
 					{
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(nil, mint, maxt, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+								return newQuerier(nil, mint, maxt, dedup.AlgorithmPenalty, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 							},
 						}
 						t.Cleanup(func() {
@@ -423,6 +432,8 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 }
 
 func TestQuerier_Select(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	for _, tcase := range []struct {
@@ -476,7 +487,7 @@ func TestQuerier_Select(t *testing.T) {
 				},
 			},
 			expectedAfterDedup: []series{{
-				lset: nil,
+				lset: labels.EmptyLabels(),
 				// We don't expect correctness here, it's just random non-replica data.
 				samples: []sample{{1, 1}, {2, 2}, {3, 3}, {5, 5}, {6, 6}, {7, 7}},
 			}},
@@ -485,7 +496,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -529,7 +540,7 @@ func TestQuerier_Select(t *testing.T) {
 		{
 			name: "realistic data with stale marker with 100000 step",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -580,7 +591,7 @@ func TestQuerier_Select(t *testing.T) {
 			// Thanks to @Superq and GitLab for real data reproducing this.
 			name: "realistic data with stale marker with hints rate function",
 			storeEndpoints: []storepb.StoreServer{func() storepb.StoreServer {
-				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+				s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 				testutil.Ok(t, err)
 				return s
 			}()},
@@ -757,7 +768,7 @@ func TestQuerier_Select(t *testing.T) {
 	} {
 		timeout := 5 * time.Second
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})
@@ -775,6 +786,7 @@ func TestQuerier_Select(t *testing.T) {
 					nil,
 					tcase.mint,
 					tcase.maxt,
+					dedup.AlgorithmPenalty,
 					tcase.replicaLabels,
 					nil,
 					newProxyStore(tcase.storeEndpoints...),
@@ -847,18 +859,11 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 		nil,
 		func() []store.Client { return cls },
 		component.Query,
-		nil,
+		labels.EmptyLabels(),
 		0,
 		store.EagerRetrieval,
 	)
 }
-
-var emptyLabelsSameAsNotAllocatedLabels = cmp.Transformer("", func(l labels.Labels) labels.Labels {
-	if len(l) == 0 {
-		return labels.Labels(nil)
-	}
-	return l
-})
 
 func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) {
 	var series []storage.Series
@@ -876,7 +881,7 @@ func testSelectResponse(t *testing.T, expected []series, res storage.SeriesSet) 
 	}())
 
 	for i, s := range series {
-		testutil.WithGoCmp(emptyLabelsSameAsNotAllocatedLabels).Equals(t, expected[i].lset, s.Labels())
+		testutil.Assert(t, labels.Equal(expected[i].Labels(), s.Labels()))
 		samples := expandSeries(t, s.Iterator(nil))
 		expectedCpy := make([]sample, 0, len(expected[i].samples))
 		for _, s := range expected[i].samples {
@@ -901,15 +906,10 @@ func jsonToSeries(t *testing.T, filename string) []series {
 
 	var ss []series
 	for _, ser := range data.Data.Results {
-		var lbls labels.Labels
+		builder := labels.NewBuilder(labels.EmptyLabels())
 		for n, v := range ser.Metric {
-			lbls = append(lbls, labels.Label{
-				Name:  string(n),
-				Value: string(v),
-			})
+			builder.Set(string(n), string(v))
 		}
-		// Label names need to be sorted.
-		sort.Sort(lbls)
 
 		var smpls []sample
 		for _, smp := range ser.Values {
@@ -920,7 +920,7 @@ func jsonToSeries(t *testing.T, filename string) []series {
 		}
 
 		ss = append(ss, series{
-			lset:    lbls,
+			lset:    builder.Labels(),
 			samples: smpls,
 		})
 	}
@@ -1056,9 +1056,11 @@ func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 func (s *mockedSeriesIterator) Err() error { return nil }
 
 func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
+	t.Parallel()
+
 	logger := log.NewLogfmtLogger(os.Stderr)
 
-	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, nil, "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
+	s, err := store.NewLocalStoreFromJSONMmappableFile(logger, component.Debug, labels.EmptyLabels(), "./testdata/issue2401-seriesresponses.json", store.ScanGRPCCurlProtoStreamMessages)
 	testutil.Ok(t, err)
 
 	t.Run("dedup=false", func(t *testing.T) {
@@ -1075,13 +1077,13 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})
@@ -1096,7 +1098,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset1, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.652631578947368}, {T: 1587690400000, F: 14.049122807017543}, {T: 1587690500000, F: 13.961403508771928}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.568421052631578}, {T: 1587690800000, F: 14.989473684210525},
 					{T: 1587690900000, F: 16.2}, {T: 1587691000000, F: 16.052631578947366}, {T: 1587691100000, F: 15.831578947368419}, {T: 1587691200000, F: 15.659649122807016}, {T: 1587691300000, F: 14.842105263157894}, {T: 1587691400000, F: 14.003508771929823},
 					{T: 1587691500000, F: 13.782456140350876}, {T: 1587691600000, F: 13.86315789473684}, {T: 1587691700000, F: 15.270282598474376}, {T: 1587691800000, F: 14.343859649122805}, {T: 1587691900000, F: 13.975438596491227}, {T: 1587692000000, F: 13.399999999999999},
@@ -1104,7 +1106,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 					{T: 1587692700000, F: 8.19298245614035}, {T: 1587692800000, F: 11.91870302641626}, {T: 1587692900000, F: 13.75813610765101}, {T: 1587693000000, F: 13.087719298245613}, {T: 1587693100000, F: 13.466666666666665}, {T: 1587693200000, F: 14.028070175438595},
 					{T: 1587693300000, F: 14.23859649122807}, {T: 1587693400000, F: 15.407017543859647}, {T: 1587693500000, F: 15.915789473684208}, {T: 1587693600000, F: 15.712280701754384},
 				}},
-				{Metric: expectedLset2, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset2, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121}, {T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823},
 					{T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543}, {T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
 					{T: 1587691500000, F: 13.828070175438596}, {T: 1587691600000, F: 13.971929824561402}, {T: 1587691700000, F: 15.31994329585807}, {T: 1587691800000, F: 14.30877192982456}, {T: 1587691900000, F: 13.915789473684208}, {T: 1587692000000, F: 13.312280701754384},
@@ -1125,10 +1127,10 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset1, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset1, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.457142857142856}, {T: 1587692300000, F: 14.761904761904761}, {T: 1587692800000, F: 13.127170868347338}, {T: 1587693300000, F: 12.93501400560224},
 				}},
-				{Metric: expectedLset2, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset2, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.464425770308122}, {T: 1587692300000, F: 14.763025210084033}, {T: 1587692800000, F: 13.148909112808576}, {T: 1587693300000, F: 12.92829131652661},
 				}},
 			}, vec)
@@ -1145,13 +1147,13 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
 
 		e := promql.NewEngine(promql.EngineOpts{
-			Logger:     logger,
+			Logger:     logutil.GoKitLogToSlog(logger),
 			Timeout:    timeout,
 			MaxSamples: math.MaxInt64,
 		})
@@ -1166,7 +1168,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset, Floats: []promql.FPoint{
 					{T: 1587690300000, F: 13.691228070175438}, {T: 1587690400000, F: 14.098245614035086}, {T: 1587690500000, F: 13.905263157894735}, {T: 1587690600000, F: 13.617543859649121},
 					{T: 1587690700000, F: 14.350877192982455}, {T: 1587690800000, F: 15.003508771929823}, {T: 1587690900000, F: 16.12280701754386}, {T: 1587691000000, F: 16.049122807017543},
 					{T: 1587691100000, F: 15.922807017543859}, {T: 1587691200000, F: 15.63157894736842}, {T: 1587691300000, F: 14.982456140350875}, {T: 1587691400000, F: 14.187259188557553},
@@ -1190,7 +1192,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			vec, err := r.Matrix()
 			testutil.Ok(t, err)
 			testutil.Equals(t, promql.Matrix{
-				{Metric: expectedLset, Floats: []promql.FPoint{
+				{DropName: true, Metric: expectedLset, Floats: []promql.FPoint{
 					{T: 1587691800000, F: 14.464425770308122},
 					{T: 1587692300000, F: 14.763025210084033},
 					{T: 1587692800000, F: 13.143575607888273},
@@ -1245,9 +1247,9 @@ func (s *testStoreServer) Series(r *storepb.SeriesRequest, srv storepb.Store_Ser
 func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sample) *storepb.SeriesResponse {
 	var s storepb.Series
 
-	for _, l := range lset {
+	lset.Range(func(l labels.Label) {
 		s.Labels = append(s.Labels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
-	}
+	})
 
 	for _, smpls := range smplChunks {
 		c := chunkenc.NewXORChunk()
@@ -1267,4 +1269,135 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		s.Chunks = append(s.Chunks, ch)
 	}
 	return storepb.NewSeriesResponse(&s)
+}
+
+func TestMaxResolutionFromSelectHints(t *testing.T) {
+	twoMinRange := int64(2 * 60 * 1000)
+	for _, tc := range []struct {
+		name                string
+		maxResolutionMillis int64
+		hints               storage.SelectHints
+		expected            int64
+	}{
+		{
+			name: "no range",
+			hints: storage.SelectHints{
+				Range: 0,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "no function",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "function doesn't impact resolution",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "max_over_time",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            downsample.ResLevel1,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "rate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "rate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "irate",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "irate",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "increase",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "increase",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "delta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "delta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "idelta",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "idelta",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "deriv",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "deriv",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "predict_linear",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "predict_linear",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "holt_winters",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "holt_winters",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+		{
+			name: "double_exponential_smoothing",
+			hints: storage.SelectHints{
+				Range: twoMinRange,
+				Func:  "double_exponential_smoothing",
+			},
+			maxResolutionMillis: downsample.ResLevel1,
+			expected:            twoMinRange / 2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints.Range, tc.hints.Func)
+			testutil.Equals(t, tc.expected, res)
+		})
+	}
 }

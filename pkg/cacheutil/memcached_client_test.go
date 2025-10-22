@@ -454,13 +454,9 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	config.Addresses = []string{"127.0.0.1:11211", "127.0.0.2:11211"}
 	backendMock := newMemcachedClientBackendMock()
 	selector := &mockServerSelector{
-		serversByKey: map[string]mockAddr{
-			"key1": "127.0.0.1:11211",
-			"key2": "127.0.0.2:11211",
-			"key3": "127.0.0.1:11211",
-			"key4": "127.0.0.2:11211",
-			"key5": "127.0.0.1:11211",
-			"key6": "127.0.0.2:11211",
+		resp: map[string][]string{
+			"127.0.0.1:11211": {"key1", "key2", "key4"},
+			"127.0.0.2:11211": {"key5", "key3", "key6"},
 		},
 	}
 
@@ -478,41 +474,44 @@ func TestMemcachedClient_sortKeysByServer(t *testing.T) {
 	}
 
 	sorted := client.sortKeysByServer(keys)
-	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key3", "key5"})
-	testutil.ContainsStringSlice(t, sorted, []string{"key2", "key4", "key6"})
-}
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key4"})
+	testutil.ContainsStringSlice(t, sorted, []string{"key5", "key3", "key6"})
 
-type mockAddr string
+	// 1 server no need to sort.
+	client.selector = &mockServerSelector{
+		resp: map[string][]string{
+			"127.0.0.1:11211": {},
+		},
+	}
+	sorted = client.sortKeysByServer(keys)
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key3", "key4", "key5", "key6"})
 
-func (m mockAddr) Network() string {
-	return "mock"
-}
-
-func (m mockAddr) String() string {
-	return string(m)
+	// 0 server no need to sort.
+	client.selector = &mockServerSelector{
+		resp: map[string][]string{},
+		err:  memcache.ErrCacheMiss,
+	}
+	sorted = client.sortKeysByServer(keys)
+	testutil.ContainsStringSlice(t, sorted, []string{"key1", "key2", "key3", "key4", "key5", "key6"})
 }
 
 type mockServerSelector struct {
-	serversByKey map[string]mockAddr
+	resp map[string][]string
+	err  error
 }
 
+// PickServer is not used here.
 func (m *mockServerSelector) PickServer(key string) (net.Addr, error) {
-	if srv, ok := m.serversByKey[key]; ok {
-		return srv, nil
-	}
-
 	panic(fmt.Sprintf("unmapped key: %s", key))
 }
 
+// Each is not used here.
 func (m *mockServerSelector) Each(f func(net.Addr) error) error {
-	for k := range m.serversByKey {
-		addr := m.serversByKey[k]
-		if err := f(addr); err != nil {
-			return err
-		}
-	}
+	panic("not implemented")
+}
 
-	return nil
+func (m *mockServerSelector) PickServerForKeys(keys []string) (map[string][]string, error) {
+	return m.resp, m.err
 }
 
 func (m *mockServerSelector) SetServers(...string) error {
@@ -649,8 +648,7 @@ func TestMemcachedClient_GetMulti_ContextCancelled(t *testing.T) {
 
 	// Create a new context that will be used for our "blocking" backend so that we can
 	// actually stop it at the end of the test and not leak goroutines.
-	backendCtx, backendCancel := context.WithCancel(context.Background())
-	defer backendCancel()
+	backendCtx := t.Context()
 
 	selector := &MemcachedJumpHashSelector{}
 	backendMock := newMemcachedClientBlockingMock(backendCtx)

@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/kingpin/v2"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
-	"gopkg.in/alecthomas/kingpin.v2"
 )
 
 func ModelDuration(flags *kingpin.FlagClause) *model.Duration {
@@ -47,10 +47,8 @@ func Addrs(flags *kingpin.FlagClause) (target *addressSlice) {
 	return
 }
 
-// validateAddrs checks an address slice for duplicates and empty or invalid elements.
+// validateAddrs checks an address slice for empty or invalid elements.
 func validateAddrs(addrs addressSlice) error {
-	set := map[string]struct{}{}
-
 	for _, addr := range addrs {
 		if addr == "" {
 			return errors.New("Address is empty.")
@@ -61,12 +59,6 @@ func validateAddrs(addrs addressSlice) error {
 		if len(qtypeAndName) != 2 && len(hostAndPort) != 2 {
 			return errors.Errorf("Address %s is not of <host>:<port> format or a valid DNS query.", addr)
 		}
-
-		if _, ok := set[addr]; ok {
-			return errors.Errorf("Address %s is duplicated.", addr)
-		}
-
-		set[addr] = struct{}{}
 	}
 
 	return nil

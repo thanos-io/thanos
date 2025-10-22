@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/oklog/ulid"
+	"github.com/oklog/ulid/v2"
+
 	"github.com/prometheus/prometheus/tsdb"
 )
 
@@ -32,7 +33,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 			"resolution": 0
 		},
 		"source": "",
-		"index_stats": {}
+		"index_stats": {},
+		"upload_time": "0001-01-01T00:00:00Z"
 	}
 }
 `, b.String())
@@ -130,7 +132,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"index_stats": {
 			"series_max_size": 2000,
 			"chunk_max_size": 1000
-		}
+		},
+		"upload_time": "0001-01-01T00:00:00Z"
 	}
 }
 `, b.String())
@@ -209,7 +212,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 				"size_bytes": 1313
 			}
 		],
-		"index_stats": {}
+		"index_stats": {},
+		"upload_time": "0001-01-01T00:00:00Z"
 	}
 }
 `, b.String())
@@ -273,7 +277,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 		"extensions": {
 			"field1": 1,
 			"field2": "test_string"
-		}
+		},
+		"upload_time": "0001-01-01T00:00:00Z"
 	}
 }
 `, b.String())
@@ -329,7 +334,8 @@ func TestMeta_ReadWrite(t *testing.T) {
 			"resolution": 123144
 		},
 		"source": "receive",
-		"index_stats": {}
+		"index_stats": {},
+		"upload_time": "0001-01-01T00:00:00Z"
 	}
 }
 `, b.String())

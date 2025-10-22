@@ -14,10 +14,10 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/thanos-io/promql-engine/logicalplan"
-	"github.com/thanos-io/promql-engine/query"
 	"google.golang.org/grpc"
 
+	"github.com/thanos-io/promql-engine/logicalplan"
+	"github.com/thanos-io/promql-engine/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -25,7 +25,9 @@ import (
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
-	client := NewClient(&warnClient{}, "", nil)
+	t.Parallel()
+
+	client := NewClient(&warnClient{}, "testclient", nil)
 	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
 		Timeout: 1 * time.Second,
 	})
@@ -37,10 +39,11 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 	qryExpr, err := extpromql.ParseExpr("up")
 	testutil.Ok(t, err)
 
-	plan := logicalplan.NewFromAST(qryExpr, &query.Options{
+	plan, err := logicalplan.NewFromAST(qryExpr, &query.Options{
 		Start: time.Now(),
 		End:   time.Now().Add(2 * time.Hour),
 	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
 
 	t.Run("instant_query", func(t *testing.T) {
 		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
@@ -57,15 +60,56 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 		testutil.Ok(t, res.Err)
 		testutil.Equals(t, 1, len(res.Warnings))
 	})
+}
 
+func TestRemoteEngine_PartialResponse(t *testing.T) {
+	t.Parallel()
+
+	client := NewClient(&errClient{}, "testclient", nil)
+	engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
+		Timeout:         1 * time.Second,
+		PartialResponse: true,
+	})
+	var (
+		start = time.Unix(0, 0)
+		end   = time.Unix(120, 0)
+		step  = 30 * time.Second
+	)
+	qryExpr, err := extpromql.ParseExpr("up")
+	testutil.Ok(t, err)
+
+	plan, err := logicalplan.NewFromAST(qryExpr, &query.Options{
+		Start: time.Now(),
+		End:   time.Now().Add(2 * time.Hour),
+	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
+
+	t.Run("instant_query", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
+
+	t.Run("range_query", func(t *testing.T) {
+		qry, err := engine.NewRangeQuery(context.Background(), nil, plan.Root(), start, end, step)
+		testutil.Ok(t, err)
+		res := qry.Exec(context.Background())
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, 1, len(res.Warnings))
+	})
 }
 
 func TestRemoteEngine_LabelSets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name          string
-		tsdbInfos     []infopb.TSDBInfo
-		replicaLabels []string
-		expected      []labels.Labels
+		name            string
+		tsdbInfos       []infopb.TSDBInfo
+		replicaLabels   []string
+		expected        []labels.Labels
+		partitionLabels []string
 	}{
 		{
 			name:      "empty label sets",
@@ -103,13 +147,24 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 			replicaLabels: []string{"a", "b"},
 			expected:      []labels.Labels{labels.FromStrings("c", "2")},
 		},
+		{
+			name: "non-empty label sets with partition labels",
+			tsdbInfos: []infopb.TSDBInfo{
+				{
+					Labels: zLabelSetFromStrings("a", "1", "c", "2"),
+				},
+			},
+			partitionLabels: []string{"a"},
+			expected:        []labels.Labels{labels.FromStrings("a", "1")},
+		},
 	}
 
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			client := NewClient(nil, "", testCase.tsdbInfos)
 			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
-				ReplicaLabels: testCase.replicaLabels,
+				ReplicaLabels:   testCase.replicaLabels,
+				PartitionLabels: testCase.partitionLabels,
 			})
 
 			testutil.Equals(t, testCase.expected, engine.LabelSets())
@@ -118,6 +173,8 @@ func TestRemoteEngine_LabelSets(t *testing.T) {
 }
 
 func TestRemoteEngine_MinT(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		tsdbInfos     []infopb.TSDBInfo
@@ -246,4 +303,42 @@ func (m *queryWarnClient) Recv() (*querypb.QueryResponse, error) {
 	}
 	m.warnSent = true
 	return querypb.NewQueryWarningsResponse(errors.New("warning")), nil
+}
+
+type errClient struct {
+	querypb.QueryClient
+}
+
+func (m errClient) Query(ctx context.Context, in *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
+	return &queryErrClient{}, nil
+}
+
+func (m errClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
+	return &queryRangeErrClient{}, nil
+}
+
+type queryRangeErrClient struct {
+	querypb.Query_QueryRangeClient
+	errSent bool
+}
+
+func (m *queryRangeErrClient) Recv() (*querypb.QueryRangeResponse, error) {
+	if m.errSent {
+		return nil, io.EOF
+	}
+	m.errSent = true
+	return nil, errors.New("error")
+}
+
+type queryErrClient struct {
+	querypb.Query_QueryClient
+	errSent bool
+}
+
+func (m *queryErrClient) Recv() (*querypb.QueryResponse, error) {
+	if m.errSent {
+		return nil, io.EOF
+	}
+	m.errSent = true
+	return nil, errors.New("error")
 }

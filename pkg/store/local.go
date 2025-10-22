@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"math"
 	"sort"
 
 	"github.com/go-kit/log"
@@ -22,6 +21,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -33,8 +33,7 @@ type LocalStore struct {
 	logger    log.Logger
 	extLabels labels.Labels
 
-	info *storepb.InfoResponse
-	c    io.Closer
+	c io.Closer
 
 	// TODO(bwplotka): This is very naive in-memory DB. We can support much larger files, by
 	// indexing labels, symbolizing strings and get chunk refs only without storing protobufs in memory.
@@ -67,14 +66,6 @@ func NewLocalStoreFromJSONMmappableFile(
 		logger:    logger,
 		extLabels: extLabels,
 		c:         f,
-		info: &storepb.InfoResponse{
-			LabelSets: []labelpb.ZLabelSet{
-				{Labels: labelpb.ZLabelsFromPromLabels(extLabels)},
-			},
-			StoreType: component.ToProto(),
-			MinTime:   math.MaxInt64,
-			MaxTime:   math.MinInt64,
-		},
 	}
 
 	// Do quick pass for in-mem index.
@@ -101,13 +92,7 @@ func NewLocalStoreFromJSONMmappableFile(
 		}
 		chks := make([]int, 0, len(series.Chunks))
 		// Sort chunks in separate slice by MinTime for easier lookup. Find global max and min.
-		for ci, c := range series.Chunks {
-			if s.info.MinTime > c.MinTime {
-				s.info.MinTime = c.MinTime
-			}
-			if s.info.MaxTime < c.MaxTime {
-				s.info.MaxTime = c.MaxTime
-			}
+		for ci := range series.Chunks {
 			chks = append(chks, ci)
 		}
 
@@ -121,7 +106,7 @@ func NewLocalStoreFromJSONMmappableFile(
 	if err := skanner.Err(); err != nil {
 		return nil, errors.Wrapf(err, "scanning file %s", path)
 	}
-	level.Info(logger).Log("msg", "loading JSON file succeeded", "file", path, "info", s.info.String(), "series", len(s.series))
+	level.Info(logger).Log("msg", "loading JSON file succeeded", "file", path, "series", len(s.series))
 	return s, nil
 }
 
@@ -143,15 +128,10 @@ func ScanGRPCCurlProtoStreamMessages(data []byte, atEOF bool) (advance int, toke
 	return len(delim), nil, nil
 }
 
-// Info returns store information about the Prometheus instance.
-func (s *LocalStore) Info(_ context.Context, _ *storepb.InfoRequest) (*storepb.InfoResponse, error) {
-	return s.info, nil
-}
-
 // Series returns all series for a requested time range and label matcher. The returned data may
 // exceed the requested time bounds.
 func (s *LocalStore) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
-	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels)
+	match, matchers, err := matchesExternalLabels(r.Matchers, s.extLabels, storecache.NoopMatchersCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}

@@ -40,6 +40,8 @@ groups:
 - name: example_abort
   interval: 1s
   # Abort should be a default: partial_response_strategy: "ABORT"
+  labels:
+    foo: bar
   rules:
   - alert: TestAlert_AbortOnPartialResponse
     # It must be based on actual metrics otherwise call to StoreAPI would be not involved.
@@ -159,6 +161,16 @@ groups:
   interval: 1s
   rules:
   - record: metric_keep_firing_for
+    expr: 1
+`
+
+	testRuleQueryOffset = `
+groups:
+- name: recording_query_offset
+  interval: 1s
+  query_offset: 1s
+  rules:
+  - record: metric_query_offset
     expr: 1
 `
 
@@ -491,6 +503,7 @@ func TestRule(t *testing.T) {
 				"__name__":   "ALERTS",
 				"severity":   "page",
 				"alertname":  "TestAlert_AbortOnPartialResponse",
+				"foo":        "bar",
 				"alertstate": "firing",
 				"replica":    "1",
 			},
@@ -513,17 +526,18 @@ func TestRule(t *testing.T) {
 		expAlertLabels := []model.LabelSet{
 			{
 				"severity":  "page",
-				"alertname": "TestAlert_AbortOnPartialResponse",
-				"replica":   "1",
-			},
-			{
-				"severity":  "page",
 				"alertname": "TestAlert_HasBeenLoadedViaWebHandler",
 				"replica":   "1",
 			},
 			{
 				"severity":  "page",
 				"alertname": "TestAlert_WarnOnPartialResponse",
+				"replica":   "1",
+			},
+			{
+				"severity":  "page",
+				"foo":       "bar",
+				"alertname": "TestAlert_AbortOnPartialResponse",
 				"replica":   "1",
 			},
 		}
@@ -609,6 +623,25 @@ func TestRule_KeepFiringFor(t *testing.T) {
 			&model.Sample{
 				Metric: model.Metric{
 					"__name__": "metric_keep_firing_for",
+					"replica":  "1",
+				},
+				Value: model.SampleValue(1),
+			},
+		})
+	})
+
+	t.Run("rule query_offset", func(t *testing.T) {
+		// Create a recording rule that will add the missing metric
+		createRuleFile(t, filepath.Join(rulesPath, "record_metric_query_offset.yaml"), testRuleQueryOffset)
+		reloadRulesHTTP(t, ctx, r.Endpoint("http"))
+
+		// Wait for metric to pop up
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "metric_query_offset" }, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, model.Vector{
+			&model.Sample{
+				Metric: model.Metric{
+					"__name__": "metric_query_offset",
 					"replica":  "1",
 				},
 				Value: model.SampleValue(1),
