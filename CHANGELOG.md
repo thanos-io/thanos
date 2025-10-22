@@ -10,6 +10,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 20 (in progress)
+
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
