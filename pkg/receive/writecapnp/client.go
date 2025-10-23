@@ -5,14 +5,17 @@ package writecapnp
 
 import (
 	"context"
+	"errors"
 	"net"
+	"strings"
 	"sync"
 
 	"capnproto.org/go/capnp/v3"
+	"capnproto.org/go/capnp/v3/exc"
 	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,7 +42,7 @@ func (t TCPDialer) Dial() (net.Conn, error) {
 	}
 	conn, err := net.DialTCP("tcp", nil, addr)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to dial peer %s", t.address)
+		return nil, pkgerrors.Wrapf(err, "failed to dial peer %s", t.address)
 	}
 	return conn, nil
 }
@@ -81,7 +84,7 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 
 	s, err := result.Struct()
 	if err != nil {
-		if numReconnects > 0 && capnp.IsDisconnected(err) {
+		if numReconnects > 0 && shouldReconnect(err) {
 			level.Warn(r.logger).Log("msg", "rpc failed, reconnecting")
 			if err := r.Close(); err != nil {
 				return nil, err
@@ -89,7 +92,7 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 			numReconnects--
 			return r.writeWithReconnect(ctx, numReconnects, in)
 		}
-		return nil, errors.Wrap(err, "failed writing to peer")
+		return nil, pkgerrors.Wrap(err, "failed writing to peer")
 	}
 	switch s.Error() {
 	case WriteError_unavailable:
@@ -114,7 +117,7 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 
 	conn, err := r.dialer.Dial()
 	if err != nil {
-		return errors.Wrap(err, "failed to dial peer")
+		return pkgerrors.Wrap(err, "failed to dial peer")
 	}
 	r.conn = rpc.NewConn(rpc.NewPackedStreamTransport(conn), nil)
 	r.writer = Writer(r.conn.Bootstrap(ctx))
@@ -130,4 +133,29 @@ func (r *RemoteWriteClient) Close() error {
 	}
 	r.mu.Unlock()
 	return nil
+}
+
+func shouldReconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	if capnp.IsDisconnected(err) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var excErr *exc.Exception
+	if errors.As(err, &excErr) {
+		if errors.Is(excErr, context.DeadlineExceeded) {
+			return true
+		}
+		if errors.Is(excErr.Unwrap(), context.DeadlineExceeded) {
+			return true
+		}
+		if strings.Contains(excErr.Error(), context.DeadlineExceeded.Error()) {
+			return true
+		}
+	}
+	return false
 }
