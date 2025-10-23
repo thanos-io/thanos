@@ -56,29 +56,29 @@ Flags:
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --[no-]enable-auto-gomemlimit
+      --[no-]enable-auto-gomemlimit  
                                  Enable go runtime to automatically limit memory
                                  consumption.
-      --auto-gomemlimit.ratio=0.9
+      --auto-gomemlimit.ratio=0.9  
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --grpc-address="0.0.0.0:10901"
+      --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -86,26 +86,26 @@ Flags:
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""
+      --grpc-server-tls-client-ca=""  
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version="1.3"  
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
-      --grpc-server-max-connection-age=60m
+      --grpc-server-max-connection-age=60m  
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --store.limits.request-series=0
+      --store.limits.request-series=0  
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --store.limits.request-samples=0
+      --store.limits.request-samples=0  
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
@@ -129,11 +129,11 @@ Flags:
       --index-cache-size=250MB   Maximum size of items held in the in-memory
                                  index cache. Ignored if --index-cache.config or
                                  --index-cache.config-file option is specified.
-      --index-cache.config-file=<file-path>
+      --index-cache.config-file=<file-path>  
                                  Path to YAML file that contains index
                                  cache configuration. See format details:
                                  https://thanos.io/tip/components/store.md/#index-cache
-      --index-cache.config=<content>
+      --index-cache.config=<content>  
                                  Alternative to 'index-cache.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains index cache
@@ -142,23 +142,23 @@ Flags:
       --chunk-pool-size=2GB      Maximum size of concurrently allocatable
                                  bytes reserved strictly to reuse for chunks in
                                  memory.
-      --store.grpc.touched-series-limit=0
+      --store.grpc.touched-series-limit=0  
                                  DEPRECATED: use store.limits.request-series.
-      --store.grpc.series-sample-limit=0
+      --store.grpc.series-sample-limit=0  
                                  DEPRECATED: use store.limits.request-samples.
-      --store.grpc.downloaded-bytes-limit=0
+      --store.grpc.downloaded-bytes-limit=0  
                                  Maximum amount of downloaded (either
                                  fetched or touched) bytes in a single
                                  Series/LabelNames/LabelValues call. The Series
                                  call fails if this limit is exceeded. 0 means
                                  no limit.
-      --store.grpc.series-max-concurrency=20
+      --store.grpc.series-max-concurrency=20  
                                  Maximum number of concurrent Series calls.
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains object store
@@ -166,7 +166,7 @@ Flags:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
-      --block-discovery-strategy="concurrent"
+      --block-discovery-strategy="concurrent"  
                                  One of concurrent, recursive. When set to
                                  concurrent, stores will concurrently issue
                                  one call per directory to discover active
@@ -175,35 +175,35 @@ Flags:
                                  recursively traversing into each directory.
                                  This avoids N+1 calls at the expense of having
                                  slower bucket iterations.
-      --block-sync-concurrency=20
+      --block-sync-concurrency=20  
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
                                  Must be equal or greater than 1.
-      --block-meta-fetch-concurrency=32
+      --block-meta-fetch-concurrency=32  
                                  Number of goroutines to use when fetching block
                                  metadata from object storage.
-      --min-time=0000-01-01T00:00:00Z
+      --min-time=0000-01-01T00:00:00Z  
                                  Start of time range limit to serve. Thanos
                                  Store will serve only metrics, which happened
                                  later than this value. Option can be a constant
                                  time in RFC3339 format or time duration
                                  relative to current time, such as -1d or 2h45m.
                                  Valid duration units are ms, s, m, h, d, w, y.
-      --max-time=9999-12-31T23:59:59Z
+      --max-time=9999-12-31T23:59:59Z  
                                  End of time range limit to serve. Thanos Store
                                  will serve only blocks, which happened earlier
                                  than this value. Option can be a constant time
                                  in RFC3339 format or time duration relative
                                  to current time, such as -1d or 2h45m. Valid
                                  duration units are ms, s, m, h, d, w, y.
-      --selector.relabel-config-file=<file-path>
+      --selector.relabel-config-file=<file-path>  
                                  Path to YAML file with relabeling
                                  configuration that allows selecting blocks
                                  to act on based on their external labels.
                                  It follows thanos sharding relabel-config
                                  syntax. For format details see:
                                  https://thanos.io/tip/thanos/sharding.md/#relabelling
-      --selector.relabel-config=<content>
+      --selector.relabel-config=<content>  
                                  Alternative to 'selector.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML
                                  file with relabeling configuration that allows
@@ -215,7 +215,7 @@ Flags:
                                  being read. Set it to safe value (e.g 30m) if
                                  your object storage is eventually consistent.
                                  GCS and S3 are (roughly) strongly consistent.
-      --ignore-deletion-marks-delay=24h
+      --ignore-deletion-marks-delay=24h  
                                  Duration after which the blocks marked for
                                  deletion will be filtered out while fetching
                                  blocks. The idea of ignore-deletion-marks-delay
@@ -236,16 +236,16 @@ Flags:
                                  blocks before being deleted from bucket.
                                  Default is 24h, half of the default value for
                                  --delete-delay on compactor.
-      --[no-]store.enable-index-header-lazy-reader
+      --[no-]store.enable-index-header-lazy-reader  
                                  If true, Store Gateway will lazy memory map
                                  index-header only once the block is required by
                                  a query.
-      --[no-]store.enable-lazy-expanded-postings
+      --[no-]store.enable-lazy-expanded-postings  
                                  If true, Store Gateway will estimate postings
                                  size and try to lazily expand postings if
                                  it downloads less data than expanding all
                                  postings.
-      --store.posting-group-max-key-series-ratio=100
+      --store.posting-group-max-key-series-ratio=100  
                                  Mark posting group as lazy if it fetches more
                                  keys than R * max series the query should
                                  fetch. With R set to 100, a posting group which
@@ -257,7 +257,7 @@ Flags:
                                  accordingly. This config is only valid if lazy
                                  expanded posting is enabled. 0 disables the
                                  limit.
-      --store.index-header-lazy-download-strategy=eager
+      --store.index-header-lazy-download-strategy=eager  
                                  Strategy of how to download index headers
                                  lazily. Supported values: eager, lazy.
                                  If eager, always download index header during
@@ -286,7 +286,7 @@ Flags:
       --[no-]web.disable-cors    Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
-      --bucket-web-label=BUCKET-WEB-LABEL
+      --bucket-web-label=BUCKET-WEB-LABEL  
                                  External block label to use as group title in
                                  the bucket web UI
       --matcher-cache-size=0     Max number of cached matchers items. Using 0
@@ -298,7 +298,7 @@ Flags:
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
                                  of YAML file with request logging
