@@ -10,6 +10,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Fixed
+
+- [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
+
 ## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 20 (in progress)
 
 ### Fixed
@@ -22,7 +26,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
-- [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
 
 ### Changed
 
@@ -30,14 +33,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-## [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
+### [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
 
 ### Fixed
 
 - [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
 - [#8375](https://github.com/thanos-io/thanos/pull/8375) Query: fix native histogram buckets in distributed queries
 
-## [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
 Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 
