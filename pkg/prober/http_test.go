@@ -81,8 +81,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 	go func() { _ = g.Run() }()
 
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		resp, err := doGet(ctx, path.Join(serverAddress, healthyEndpointPath))
 		testutil.Ok(t, err)
@@ -91,8 +90,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 		testutil.Equals(t, resp.StatusCode, http.StatusServiceUnavailable, "should not be healthy, response code: %d", resp.StatusCode)
 	}
 	{
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		resp, err := doGet(ctx, path.Join(serverAddress, readyEndpointPath))
 		testutil.Ok(t, err)
@@ -103,8 +101,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 	{
 		p.Healthy()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		resp, err := doGet(ctx, path.Join(serverAddress, healthyEndpointPath))
 		testutil.Ok(t, err)
@@ -115,8 +112,7 @@ func TestHTTPProberMuxRegistering(t *testing.T) {
 	{
 		p.Ready()
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		resp, err := doGet(ctx, path.Join(serverAddress, readyEndpointPath))
 		testutil.Ok(t, err)

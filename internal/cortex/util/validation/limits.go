@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"maps"
 	"math"
 	"strings"
 	"time"
@@ -208,7 +209,7 @@ func (l *Limits) Validate(shardByAllLabels bool) error {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (l *Limits) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (l *Limits) UnmarshalYAML(unmarshal func(any) error) error {
 	// We want to set l to the defaults and then overwrite it with the input.
 	// To make unmarshal fill the plain data struct rather than calling UnmarshalYAML
 	// again, we have to hide it using a type indirection.  See prometheus/config.
@@ -243,9 +244,7 @@ func (l *Limits) UnmarshalJSON(data []byte) error {
 
 func (l *Limits) copyNotificationIntegrationLimits(defaults NotificationRateLimitMap) {
 	l.NotificationRateLimitPerIntegration = make(map[string]float64, len(defaults))
-	for k, v := range defaults {
-		l.NotificationRateLimitPerIntegration[k] = v
-	}
+	maps.Copy(l.NotificationRateLimitPerIntegration, defaults)
 }
 
 // When we load YAML from disk, we want the various per-customer limits

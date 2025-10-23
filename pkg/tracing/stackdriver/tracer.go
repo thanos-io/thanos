@@ -56,11 +56,11 @@ func (t *tracer) StartSpan(operationName string, opts ...opentracing.StartSpanOp
 	return span
 }
 
-func (t *tracer) Extract(format, carrier interface{}) (opentracing.SpanContext, error) {
+func (t *tracer) Extract(format, carrier any) (opentracing.SpanContext, error) {
 	return t.wrapped.Extract(format, carrier)
 }
 
-func (t *tracer) Inject(sm opentracing.SpanContext, format, carrier interface{}) error {
+func (t *tracer) Inject(sm opentracing.SpanContext, format, carrier any) error {
 	return t.wrapped.Inject(sm, format, carrier)
 }
 
@@ -83,11 +83,11 @@ type gcloudRecorderLogger struct {
 	logger log.Logger
 }
 
-func (l *gcloudRecorderLogger) Infof(format string, args ...interface{}) {
+func (l *gcloudRecorderLogger) Infof(format string, args ...any) {
 	level.Info(l.logger).Log("msg", fmt.Sprintf(format, args...))
 }
 
-func (l *gcloudRecorderLogger) Errorf(format string, args ...interface{}) {
+func (l *gcloudRecorderLogger) Errorf(format string, args ...any) {
 	level.Error(l.logger).Log("msg", fmt.Sprintf(format, args...))
 }
 

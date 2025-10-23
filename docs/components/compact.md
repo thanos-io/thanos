@@ -57,7 +57,7 @@ This rule also means that there could be a problem when both compacted and non-c
 
 > **NOTE:** In future versions of Thanos it's possible that both restrictions will be removed once [vertical compaction](#vertical-compactions) reaches production status.
 
-You can though run multiple Compactors against a single Bucket as long as each instance compacts a separate stream of blocks. You can do this in order to [scale the compaction process](#scalability).
+It is possible to run multiple Compactors against a single Bucket, provided each instance handles a separate stream of blocks. This allows you to [scale the compaction process](#scalability).
 
 ### Vertical Compactions
 

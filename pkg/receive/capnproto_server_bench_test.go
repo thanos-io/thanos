@@ -63,11 +63,11 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 
 	const numIterations = 10000
 	var totalWrites float64
-	b.ResetTimer()
+
 	b.ReportAllocs()
 	client := writecapnp.NewRemoteWriteClient(listener, log.NewLogfmtLogger(os.Stdout))
-	for i := 0; i < b.N; i++ {
-		for j := 0; j < numIterations; j++ {
+	for b.Loop() {
+		for range numIterations {
 			_, err := client.RemoteWrite(context.Background(), &wreq)
 			require.NoError(b, err)
 		}

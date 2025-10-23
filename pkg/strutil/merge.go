@@ -38,10 +38,7 @@ func mergeTwoStringSlices(limit int, a, b []string) []string {
 	a = truncateToLimit(limit, a)
 	b = truncateToLimit(limit, b)
 
-	maxl := len(a)
-	if len(b) > len(a) {
-		maxl = len(b)
-	}
+	maxl := max(len(b), len(a))
 
 	res := make([]string, 0, maxl*10/9)
 

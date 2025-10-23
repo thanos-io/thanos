@@ -10,14 +10,19 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 20 (in progress)
+
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8486](https://github.com/thanos-io/thanos/pull/8486) Receive: fix exemplar label corruption from Cap'n Proto memory references
+- [#8499](https://github.com/thanos-io/thanos/pull/8499) Query: support UTF-8 label names for the `/api/v1/label/:name/values` API.
 
 ### Added
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
+- [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
 
 ### Changed
 
@@ -25,14 +30,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-### [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
+## [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
 
 ### Fixed
 
 - [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
 - [#8375](https://github.com/thanos-io/thanos/pull/8375) Query: fix native histogram buckets in distributed queries
 
-### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+## [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
 Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 
@@ -627,7 +632,7 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5785](https://github.com/thanos-io/thanos/pull/5785) Query: `thanos_store_nodes_grpc_connections` now trimms `external_labels` label name longer than 1000 character. It also allows customizations in what labels to preserve using `query.conn-metric.label` flag.
 - [#5542](https://github.com/thanos-io/thanos/pull/5542) Mixin: Added query concurrency panel to Querier dashboard.
 - [#5846](https://github.com/thanos-io/thanos/pull/5846) Query Frontend: vertical query sharding supports subqueries.
-- [#5593](https://github.com/thanos-io/thanos/pull/5593) Cache: switch Redis client to [Rueidis](https://github.com/rueian/rueidis). Rueidis is [faster](https://github.com/rueian/rueidis#benchmark-comparison-with-go-redis-v9) and provides [client-side caching](https://redis.io/docs/manual/client-side-caching/). It is highly recommended to use it so that repeated requests for the same key would not be needed.
+- [#5593](https://github.com/thanos-io/thanos/pull/5593) Cache: switch Redis client to [Rueidis](https://github.com/rueian/rueidis). Rueidis is [faster](https://github.com/rueian/rueidis#benchmark-comparison-with-go-redis-v9) and provides [client-side caching](https://redis.io/docs/develop/use/client-side-caching/). It is highly recommended to use it so that repeated requests for the same key would not be needed.
 - [#5896](https://github.com/thanos-io/thanos/pull/5896) *: Upgrade Prometheus to v0.40.7 without implementing native histogram support. *Querying native histograms will fail with `Error executing query: invalid chunk encoding "<unknown>"` and native histograms in write requests are ignored.*
 - [#5909](https://github.com/thanos-io/thanos/pull/5909) Receive: Compact tenant head after no appends have happened for 1.5 `tsdb.max-block-size`.
 - [#5838](https://github.com/thanos-io/thanos/pull/5838) Mixin: Added data touched type to Store dashboard.

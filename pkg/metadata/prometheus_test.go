@@ -31,8 +31,7 @@ func TestPrometheus_Metadata_e2e(t *testing.T) {
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer upcancel()
