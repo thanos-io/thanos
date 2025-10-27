@@ -99,6 +99,7 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 			result.SetError(writecapnp.WriteError_invalidArgument)
 		default:
 			result.SetError(writecapnp.WriteError_internal)
+			result.SetExtraErrorContext(err.Error())
 		}
 	}
 
