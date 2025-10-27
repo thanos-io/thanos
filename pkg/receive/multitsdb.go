@@ -270,6 +270,7 @@ type tenant struct {
 	storeTSDB     *store.TSDBStore
 	exemplarsTSDB *exemplars.TSDB
 	ship          *shipper.Shipper
+	reg           *UnRegisterer
 
 	mtx  *sync.RWMutex
 	tsdb *tsdb.DB
@@ -336,18 +337,22 @@ func (t *tenant) shipper() *shipper.Shipper {
 	return t.ship
 }
 
-func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB) {
+func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, reg *UnRegisterer) {
 	t.readyS.Set(tenantTSDB)
 	t.mtx.Lock()
-	t.setComponents(storeTSDB, ship, exemplarsTSDB, tenantTSDB)
+	t.setComponents(storeTSDB, ship, exemplarsTSDB, tenantTSDB, reg)
 	t.mtx.Unlock()
 }
 
-func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB) {
+func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB, reg *UnRegisterer) {
 	if storeTSDB == nil && t.storeTSDB != nil {
 		t.storeTSDB.Close()
 	}
+	if reg == nil && t.reg != nil {
+		t.reg.UnregisterAll()
+	}
 	t.storeTSDB = storeTSDB
+	t.reg = reg
 	t.ship = ship
 	t.exemplarsTSDB = exemplarsTSDB
 	t.tsdb = tenantTSDB
@@ -574,7 +579,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 
 	tenantInstance.mtx.Lock()
 	tenantInstance.readyS.set(nil)
-	tenantInstance.setComponents(nil, nil, nil, nil)
+	tenantInstance.setComponents(nil, nil, nil, nil, nil)
 	tenantInstance.mtx.Unlock()
 
 	return true, nil
@@ -771,7 +776,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if t.matcherCache != nil {
 		options = append(options, store.WithMatcherCacheInstance(t.matcherCache))
 	}
-	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
+	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset), reg.(*UnRegisterer))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
@@ -973,10 +978,19 @@ func (a adapter) Close() error {
 // that this type intends to use.
 type UnRegisterer struct {
 	innerReg prometheus.Registerer
+
+	collectors []prometheus.Collector
 }
 
 func NewUnRegisterer(inner prometheus.Registerer) *UnRegisterer {
 	return &UnRegisterer{innerReg: inner}
+}
+
+// UnregisterAll unregisters all collectors in a best-effort manner.
+func (u *UnRegisterer) UnregisterAll() {
+	for _, c := range u.collectors {
+		u.innerReg.Unregister(c)
+	}
 }
 
 // Register registers the given collector. If it's already registered, it will
@@ -988,10 +1002,14 @@ func (u *UnRegisterer) Register(c prometheus.Collector) error {
 				panic("unable to unregister existing collector")
 			}
 			u.innerReg.MustRegister(c)
+
+			u.collectors = append(u.collectors, c)
 			return nil
 		}
 		return err
 	}
+
+	u.collectors = append(u.collectors, c)
 	return nil
 }
 
@@ -1009,6 +1027,7 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
+	u.collectors = append(u.collectors, cs...)
 }
 
 // extractTenantsLabels extracts tenant's external labels from hashring configs.
