@@ -99,6 +99,9 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 			result.SetError(writecapnp.WriteError_invalidArgument)
 		default:
 			result.SetError(writecapnp.WriteError_internal)
+			if cerr := result.SetExtraErrorContext(err.Error()); cerr != nil {
+				level.Error(c.logger).Log("msg", "failed to set extra error context", "err", cerr)
+			}
 		}
 	}
 
