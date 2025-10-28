@@ -32,7 +32,13 @@ type nonPoolingCodec struct {
 }
 
 func init() {
-	encoding.RegisterCodecV2(&nonPoolingCodec{CodecV2: encoding.GetCodecV2("proto")})
+	encoding.RegisterCodecV2(&nonPoolingCodec{
+		CodecV2: encoding.GetCodecV2("proto"),
+	})
+}
+
+func (n *nonPoolingCodec) Name() string {
+	return "proto"
 }
 
 func messageV2Of(v any) protobufproto.Message {
@@ -57,8 +63,29 @@ func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
 	return nil
 }
 
-func (n *nonPoolingCodec) Marshal(v any) (out mem.BufferSlice, err error) {
-	return n.CodecV2.Marshal(v)
+type gogoMsg interface {
+	Size() int
+	MarshalToSizedBuffer([]byte) (int, error)
+}
+
+func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
+	gmsg, ok := v.(gogoMsg)
+	if !ok {
+		return c.CodecV2.Marshal(v)
+	}
+	size := gmsg.Size()
+	pool := mem.DefaultBufferPool()
+	buf := pool.Get(size)
+
+	n, err := gmsg.MarshalToSizedBuffer((*buf)[:size])
+	if err != nil {
+		pool.Put(buf)
+		return mem.BufferSlice{}, err
+	}
+
+	bufExact := (*buf)[:n]
+
+	return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
 }
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
