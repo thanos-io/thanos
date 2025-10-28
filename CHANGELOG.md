@@ -14,6 +14,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8492](https://github.com/thanos-io/thanos/pull/8492) Add `thanos_query_endpoints` metric to track healthy/unhealthy endpoints.
 
 ### Changed
 
