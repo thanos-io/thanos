@@ -85,6 +85,7 @@ type Shipper struct {
 	allowOutOfOrderUploads bool
 	skipCorruptedBlocks    bool
 	hashFunc               metadata.HashFunc
+	withExtensions         any
 
 	labels func() labels.Labels
 	mtx    sync.RWMutex
@@ -104,6 +105,7 @@ type shipperOptions struct {
 	uploadCompacted        bool
 	allowOutOfOrderUploads bool
 	skipCorruptedBlocks    bool
+	withExtensions         any
 }
 
 type Option func(*shipperOptions)
@@ -171,6 +173,13 @@ func WithSkipCorruptedBlocks(skip bool) Option {
 	}
 }
 
+// WithExtensions adds the given extensions to the uploaded blocks.
+func WithExtensions(extensions any) Option {
+	return func(o *shipperOptions) {
+		o.withExtensions = extensions
+	}
+}
+
 func applyOptions(opts []Option) *shipperOptions {
 	so := new(shipperOptions)
 	for _, o := range opts {
@@ -208,6 +217,7 @@ func New(bucket objstore.Bucket, dir string, opts ...Option) *Shipper {
 		allowOutOfOrderUploads: options.allowOutOfOrderUploads,
 		skipCorruptedBlocks:    options.skipCorruptedBlocks,
 		uploadCompacted:        options.uploadCompacted,
+		withExtensions:         options.withExtensions,
 		hashFunc:               options.hashFunc,
 		metadataFilePath:       filepath.Join(dir, filepath.Clean(options.metaFileName)),
 	}
@@ -460,6 +470,7 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	}
 	meta.Thanos.Source = s.source
 	meta.Thanos.SegmentFiles = block.GetSegmentFiles(updir)
+	meta.Thanos.Extensions = s.withExtensions
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}

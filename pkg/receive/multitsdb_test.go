@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -958,4 +959,70 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 			mockBlockIDs[0]: {},
 		}, tenant.blocksToDelete(nil))
 	})
+}
+
+func TestDumpsIfUnequalLabels(t *testing.T) {
+	var dumped = false
+
+	dumpHead := func() error { //nolint:unparam
+		dumped = true
+		return nil
+	}
+
+	td := t.TempDir()
+
+	ul := ulid.MustNewDefault(time.Now())
+	require.NoError(t, os.MkdirAll(
+		path.Join(td, ul.String()), os.ModePerm,
+	))
+
+	m := metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    ul,
+			Version: 1,
+		},
+		Thanos: metadata.Thanos{
+			Version: 1,
+			Labels: map[string]string{
+				"foo": "bar",
+			},
+		},
+	}
+
+	mm, err := json.Marshal(m)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(path.Join(td, ul.String(), metadata.MetaFilename), mm, os.ModePerm))
+
+	t.Run("unequal labels", func(t *testing.T) {
+		m := &MultiTSDB{
+			extLabelsInTSDB: true,
+			logger:          log.NewNopLogger(),
+		}
+
+		require.NoError(t, m.maybePruneHead(td, "foo", path.Join(td, ul.String()), labels.FromStrings("aa", "bb"), dumpHead))
+		require.True(t, dumped)
+
+		m.extLabelsInTSDB = false
+		dumped = false
+
+		require.NoError(t, m.maybePruneHead(td, "foo", path.Join(td, ul.String()), labels.FromStrings("aa", "bb"), dumpHead))
+		require.False(t, dumped)
+	})
+
+	t.Run("equal labels", func(t *testing.T) {
+		m := &MultiTSDB{
+			extLabelsInTSDB: true,
+			logger:          log.NewNopLogger(),
+		}
+
+		dumped = false
+		require.NoError(t, m.maybePruneHead(td, "foo", path.Join(td, ul.String()), labels.FromStrings("foo", "bar"), dumpHead))
+		require.False(t, dumped)
+
+		m.extLabelsInTSDB = false
+		require.NoError(t, m.maybePruneHead(td, "foo", path.Join(td, ul.String()), labels.FromStrings("foo", "bar"), dumpHead))
+		require.False(t, dumped)
+	})
+
 }

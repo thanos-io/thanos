@@ -1211,7 +1211,7 @@ func TestReceiveCpnp(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).Init()
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).WithExtLabelsInTSDB().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 	h := receive.HashringConfig{
@@ -1282,5 +1282,4 @@ func TestReceiveCpnp(t *testing.T) {
 			return nil
 		},
 	)
-
 }

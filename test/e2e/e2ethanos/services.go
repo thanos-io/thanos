@@ -578,6 +578,8 @@ type ReceiveBuilder struct {
 	nativeHistograms      bool
 	labels                []string
 	tenantSplitLabel      string
+
+	extLabelsInTSDB bool
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -654,6 +656,11 @@ func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
 	return r
 }
 
+func (r *ReceiveBuilder) WithExtLabelsInTSDB() *ReceiveBuilder {
+	r.extLabelsInTSDB = true
+	return r
+}
+
 // Init creates a Thanos Receive instance.
 // If ingestion is enabled it will be configured for ingesting samples.
 // If routing is configured (i.e. hashring configuration is provided) it routes samples to other receivers.
@@ -674,6 +681,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 		"--log.level":                          infoLogLevel,
 		"--tsdb.max-exemplars":                 fmt.Sprintf("%v", r.maxExemplars),
 		"--tsdb.too-far-in-future.time-window": "5m",
+	}
+
+	if r.extLabelsInTSDB {
+		args["--enable-feature"] = "ext-labels-in-tsdb"
 	}
 
 	if r.tenantSplitLabel != "" {

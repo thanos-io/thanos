@@ -72,6 +72,7 @@ type MultiTSDB struct {
 	exemplarClients map[string]*exemplars.TSDB
 
 	metricNameFilterEnabled bool
+	extLabelsInTSDB         bool
 
 	headExpandedPostingsCacheSize  uint64
 	blockExpandedPostingsCacheSize uint64
@@ -79,6 +80,14 @@ type MultiTSDB struct {
 
 // MultiTSDBOption is a functional option for MultiTSDB.
 type MultiTSDBOption func(mt *MultiTSDB)
+
+// WithExternalLabelsInTSDB enables putting external labels in the TSDB.
+// This permits streaming from the TSDB to the querier.
+func WithExternalLabelsInTSDB() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.extLabelsInTSDB = true
+	}
+}
 
 // WithMetricNameFilterEnabled enables metric name filtering on TSDB clients.
 func WithMetricNameFilterEnabled() MultiTSDBOption {
@@ -302,10 +311,13 @@ func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 	return deletable
 }
 
-func newTenant() *tenant {
+func newTenant(extLabels labels.Labels, addExtLabels bool) *tenant {
 	return &tenant{
-		readyS: &ReadyStorage{},
-		mtx:    &sync.RWMutex{},
+		readyS: &ReadyStorage{
+			extLabels:    extLabels,
+			addExtLabels: addExtLabels,
+		},
+		mtx: &sync.RWMutex{},
 	}
 }
 
@@ -705,6 +717,71 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 	return result
 }
 
+func (t *MultiTSDB) getLastBlockPath(dataDir string, s *tsdb.DB) string {
+	bls := s.Blocks()
+	if len(bls) == 0 {
+		return ""
+	}
+
+	sort.Slice(bls, func(i, j int) bool {
+		return bls[i].MinTime() > bls[j].MinTime()
+	})
+
+	lastBlock := bls[0]
+
+	return path.Join(dataDir, lastBlock.Meta().ULID.String())
+
+}
+
+func (t *MultiTSDB) maybePruneHead(dataDir, tenantID, lastMetaPath string, curLset labels.Labels, pruneHead func() error) error {
+	if !t.extLabelsInTSDB {
+		return nil
+	}
+
+	if lastMetaPath == "" {
+		return nil
+	}
+
+	m, err := metadata.ReadFromDir(lastMetaPath)
+	if err != nil {
+		return fmt.Errorf("reading meta %s: %w", lastMetaPath, err)
+	}
+
+	oldLset := labels.FromMap(m.Thanos.Labels)
+	if labels.Equal(oldLset, curLset) {
+		return nil
+	}
+
+	level.Info(t.logger).Log("msg", "changed external labelset detected, dumping the head block", "newLset", curLset.String(), "oldLset", oldLset.String())
+
+	if err := pruneHead(); err != nil {
+		return fmt.Errorf("flushing head: %w", err)
+	}
+
+	if t.bucket != nil {
+		logger := log.With(t.logger, "tenant", tenantID, "oldLset", oldLset.String())
+		reg := NewUnRegisterer(prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg))
+
+		ship := shipper.New(
+			t.bucket,
+			dataDir,
+			shipper.WithLogger(logger),
+			shipper.WithRegisterer(reg),
+			shipper.WithSource(metadata.ReceiveSource),
+			shipper.WithHashFunc(t.hashFunc),
+			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
+			shipper.WithLabels(func() labels.Labels { return oldLset }),
+			shipper.WithAllowOutOfOrderUploads(t.allowOutOfOrderUpload),
+			shipper.WithSkipCorruptedBlocks(t.skipCorruptedBlocks),
+		)
+		if _, err := ship.Sync(context.Background()); err != nil {
+			return fmt.Errorf("syncing head for old label set: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
 	reg = NewUnRegisterer(reg)
@@ -754,19 +831,35 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		t.removeTenantLocked(tenantID)
 		return err
 	}
+
+	if err := t.maybePruneHead(dataDir, tenantID, t.getLastBlockPath(dataDir, s), lset, func() error { return t.flushHead(s) }); err != nil {
+		return err
+	}
+
 	var ship *shipper.Shipper
 	if t.bucket != nil {
-		ship = shipper.New(
-			t.bucket,
-			dataDir,
-			shipper.WithLogger(logger),
+		shipperOpts := []shipper.Option{}
+
+		shipperOpts = append(shipperOpts, shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.ReceiveSource),
 			shipper.WithHashFunc(t.hashFunc),
 			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
 			shipper.WithLabels(func() labels.Labels { return lset }),
 			shipper.WithAllowOutOfOrderUploads(t.allowOutOfOrderUpload),
-			shipper.WithSkipCorruptedBlocks(t.skipCorruptedBlocks),
+			shipper.WithSkipCorruptedBlocks(t.skipCorruptedBlocks))
+
+		if t.extLabelsInTSDB {
+			shipperOpts = append(shipperOpts, shipper.WithExtensions(
+				map[string]any{
+					metadata.ExtLabelsInTSDBKey: "",
+				},
+			))
+		}
+		ship = shipper.New(
+			t.bucket,
+			dataDir,
+			shipperOpts...,
 		)
 	}
 	var options []store.TSDBStoreOption
@@ -776,7 +869,10 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if t.matcherCache != nil {
 		options = append(options, store.WithMatcherCacheInstance(t.matcherCache))
 	}
+	options = append(options, store.WithExtLabelsInTSDB(t.extLabelsInTSDB))
+
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset), reg.(*UnRegisterer))
+
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
@@ -805,7 +901,7 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 		return tenant, nil
 	}
 
-	tenant = newTenant()
+	tenant = newTenant(t.labels, t.extLabelsInTSDB)
 	t.addTenantUnlocked(tenantID, tenant)
 	t.mtx.Unlock()
 
@@ -866,10 +962,12 @@ var ErrNotReady = errors.New("TSDB not ready")
 
 // ReadyStorage implements the Storage interface while allowing to set the actual
 // storage at a later point in time.
-// TODO: Replace this with upstream Prometheus implementation when it is exposed.
 type ReadyStorage struct {
 	mtx sync.RWMutex
 	a   *adapter
+
+	extLabels    labels.Labels
+	addExtLabels bool
 }
 
 // Set the storage.
@@ -920,9 +1018,39 @@ func (s *ReadyStorage) ExemplarQuerier(ctx context.Context) (storage.ExemplarQue
 	return nil, ErrNotReady
 }
 
+type wrappingAppender struct {
+	addLabels labels.Labels
+	storage.Appender
+	gr storage.GetRef
+}
+
+var _ storage.Appender = (*wrappingAppender)(nil)
+var _ storage.GetRef = (*wrappingAppender)(nil)
+
+func (w *wrappingAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	return w.gr.GetRef(labelpb.ExtendSortedLabels(lset, w.addLabels), hash)
+}
+
+func (w *wrappingAppender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+	l = labelpb.ExtendSortedLabels(l, w.addLabels)
+	return w.Appender.Append(ref, l, t, v)
+}
+
 // Appender implements the Storage interface.
 func (s *ReadyStorage) Appender(ctx context.Context) (storage.Appender, error) {
 	if x := s.get(); x != nil {
+		if s.addExtLabels {
+			app, err := x.Appender(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			return &wrappingAppender{
+				Appender:  app,
+				gr:        app.(storage.GetRef),
+				addLabels: s.extLabels,
+			}, nil
+		}
 		return x.Appender(ctx)
 	}
 	return nil, ErrNotReady
