@@ -5,6 +5,7 @@ package writecapnp
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
@@ -99,7 +100,26 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 	case WriteError_invalidArgument:
 		return nil, status.Error(codes.InvalidArgument, "rpc failed")
 	case WriteError_internal:
-		return nil, status.Error(codes.Internal, "rpc failed")
+		extraContext, err := s.ExtraErrorContext()
+		if err != nil {
+			if numReconnects > 0 && capnp.IsDisconnected(err) {
+				level.Warn(r.logger).Log("msg", "rpc failed, reconnecting")
+				if err := r.Close(); err != nil {
+					return nil, err
+				}
+				numReconnects--
+				return r.writeWithReconnect(ctx, numReconnects, in)
+			}
+			return nil, errors.Wrap(err, "failed writing to peer")
+		}
+
+		if extraContext == "" {
+			extraContext = " (no additional context provided)"
+		} else {
+			extraContext = ": " + extraContext
+		}
+
+		return nil, status.Error(codes.Internal, fmt.Sprintf("rpc failed%s", extraContext))
 	default:
 		return &storepb.WriteResponse{}, nil
 	}

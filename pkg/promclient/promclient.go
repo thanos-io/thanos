@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -953,4 +954,20 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 		Data *targetspb.TargetDiscovery `json:"data"`
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
+}
+
+func (c *Client) TSDBStatusInGRPC(ctx context.Context, base *url.URL, limit int) (*statuspb.TSDBStatisticsEntry, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/tsdb")
+
+	if limit > 0 {
+		q := u.Query()
+		q.Add("limit", strconv.Itoa(limit))
+		u.RawQuery = q.Encode()
+	}
+
+	var v struct {
+		Data *statuspb.TSDBStatisticsEntry `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_status_tsdb HTTP[client]", &u, &v)
 }
