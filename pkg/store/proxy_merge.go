@@ -809,6 +809,7 @@ func (l *eagerRespSet) Close() {
 	if l.closeSeries != nil {
 		l.closeSeries()
 	}
+	l.wg.Wait()
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
 }
