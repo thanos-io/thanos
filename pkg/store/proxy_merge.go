@@ -375,7 +375,7 @@ func (l *lazyRespSet) Close() {
 	l.dataOrFinishEvent.Signal()
 	l.bufferedResponsesMtx.Unlock()
 
-	<-l.donec // Wait for the internal goroutine to complete its work.
+	<-l.donec
 
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
