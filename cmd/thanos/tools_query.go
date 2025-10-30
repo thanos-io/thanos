@@ -80,7 +80,7 @@ func (tqc *toolsQueryConfig) registerToolsQueryFlag(cmd extkingpin.FlagClause) {
 		EnumVar(&tqc.defaultPromqlEngine, string(apiv1.PromqlEnginePrometheus), string(apiv1.PromqlEngineThanos))
 	cmd.Flag("query.lookback-delta", "The maximum lookback duration for retrieving metrics during expression evaluations. PromQL always evaluates the query for the certain timestamp (query range timestamps are deduced by step). Since scrape intervals might be different, PromQL looks back for given amount of time to get latest sample. If it exceeds the maximum lookback delta it assumes series is stale and returns none (a gap). This is why lookback delta should be set to at least 2 times of the slowest scrape interval. If unset it will use the promql default of 5m.").DurationVar(&tqc.maxLookbackDelta)
 
-	cmd.Flag("format", "Output format: promql (text format), json, jsonstream, raw (go structs). Note that json output is all buffered in memory, consider using jsonstream. Json output format will change to be promtool compatible in future.").
+	cmd.Flag("format", "Output format: promql (text format), json, jsonstream, raw (go structs). Note that json output is all buffered in memory, consider using jsonstream. The .metrics key of the json output has a format compatible with promtool's json output.").
 		Default("promql").EnumVar(&tqc.outFormat, "promql", "json", "jsonstream", "raw")
 }
 
@@ -429,7 +429,7 @@ func (p *rawPrinter) printSeries(v prompb.TimeSeries) {
 }
 
 func (p *rawPrinter) printStats(v *querypb.QueryStats) {
-	fmt.Fprintf(p.out, "%+v\n", v)
+	fmt.Fprintf(p.out, "stats: %+v\n", v)
 }
 
 func (p *rawPrinter) printWarnings(v string) {
@@ -463,14 +463,34 @@ func (p *jsonPrinter) printWarnings(v string) {
 }
 
 func (p *jsonPrinter) finish() {
-	// TODO create promtool-compatible JSON output
+	// For instant query results, promtool emits
+	// an array of {"metric":{"labelname":"labelvalue",...},"value":[<unix_time>, "<sample_value>"]}
+	// objects, one per line. For range query results, promtool emits
+	// an array of {"metric":{"labelname":"labelvalue",...},"values":[[<unix_time>, "<sample_value>"],...]}
+	// instead.
+	// An instant-query that emits a range-vector result is handled by promtool as a range result, whereas
+	// Thanos appears to silently return nothing in this case.
+
+	type jsonMetric struct {
+		Metric map[string]string `json:"metric"`
+		// Value is for instant queries.
+		Value [2]interface{} `json:"value,omitempty"`
+		// Values is for range queries.
+		Values [][2]interface{} `json:"values,omitempty"`
+	}
+
 	type jsonOutput struct {
-		Series   []prompb.TimeSeries   `json:"series,omitempty"`
-		Stats    []*querypb.QueryStats `json:"stats,omitempty"`
-		Warnings []string              `json:"warnings,omitempty"`
+		// Metrics is the promtool-compatible output. Promtool outputs this as a top-level array in its
+		// json, but we need to have a way to report stats, warnings etc too, so we wrap it in an object.
+		Metrics []prompb.TimeSeries `json:"metrics,omitempty"`
+		// Stats is an array to accommodate multiple stats messages that may be returned by Thanos.
+		Stats []*querypb.QueryStats `json:"stats,omitempty"`
+		// Any warnings emitted by Thanos. Promtool either ignores these or writes them to stderr
+		// for json output.
+		Warnings []string `json:"warnings,omitempty"`
 	}
 	out := jsonOutput{
-		Series:   p.series,
+		Metrics:  p.series,
 		Stats:    p.stats,
 		Warnings: p.warnings,
 	}
@@ -497,6 +517,7 @@ type jsonMessage struct {
 	Data interface{} `json:"data"`
 }
 
+// todo: add omitempty on the type fields
 func (p *jsonStreamPrinter) printSeries(v prompb.TimeSeries) {
 	b, err := json.Marshal(v)
 	if err != nil {
