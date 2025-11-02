@@ -286,11 +286,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		End:             r.MaxTime,
 		Limit:           int(r.Limit),
 		DisableTrimming: true,
+		ShardCount:      uint64(r.ShardInfo.TotalShards),
+		ShardIndex:      uint64(r.ShardInfo.ShardIndex),
 	}
 	set := q.Select(srv.Context(), true, hints, matchers...)
 
-	shardMatcher := r.ShardInfo.Matcher(&s.buffers)
-	defer shardMatcher.Close()
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
@@ -305,9 +305,6 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
-		if !shardMatcher.MatchesLabels(completeLabelset) {
-			continue
-		}
 
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {

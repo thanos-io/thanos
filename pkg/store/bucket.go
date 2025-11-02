@@ -1653,6 +1653,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 				resHints.AddQueriedBlock(blk.meta.ULID)
 			}
 
+			// TODO(GiedriusS): just select NOT all postings.
 			shardMatcher := req.ShardInfo.Matcher(&s.buffers)
 
 			blockClient := newBlockSeriesClient(
