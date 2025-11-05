@@ -7,5 +7,3 @@ toolchain go1.24.0
 replace github.com/fatih/faillint => github.com/thanos-community/faillint v0.0.0-20250217160734-830c2205d383
 
 require github.com/fatih/faillint v1.15.0
-
-require golang.org/x/sync v0.16.0 // indirect
