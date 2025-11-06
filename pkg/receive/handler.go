@@ -966,8 +966,6 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	localWrites := make(map[endpointReplica]map[string]trackedSeries)
 	for tsIndex, ts := range timeseries {
 		var tenant = tenantHTTP
-		var pantheonMetricScope *pantheon.MetricScope
-		var pantheonMetricName string
 
 		// Priority 1: Pantheon-based tenant override (if config is set and scope is provided).
 		if pc := h.pantheonCluster.Load(); pc != nil {
@@ -989,8 +987,6 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			pantheonTenant := pantheon.GetTenantFromScope(metricName, metricScope)
 			level.Debug(h.logger).Log("msg", "tenant overridden by pantheon scope", "original_tenant", tenantHTTP, "scope", scopeHTTP, "metric", metricName, "new_tenant", pantheonTenant)
 			tenant = pantheonTenant
-			pantheonMetricScope = metricScope
-			pantheonMetricName = metricName
 		} else if h.splitTenantLabelName != "" {
 			// Priority 2: Split-tenant-label override (if no pantheon override happened).
 			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
@@ -1011,22 +1007,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 		for _, rn := range replicas {
 			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
 			if err != nil {
-				// If pantheon tenant doesn't match any hashring and we have pantheon context,
-				// fallback to hashmod-based tenant attribution.
-				if pantheonMetricScope != nil && errors.Is(err, ErrNoMatchingHashring) {
-					fallbackTenant := pantheon.GetHashmodTenant(pantheonMetricName, pantheonMetricScope)
-
-					level.Debug(h.logger).Log("msg", "falling back to hashmod tenant", "original_tenant", tenant, "fallback_tenant", fallbackTenant, "scope", pantheonMetricScope.ScopeName, "metric", pantheonMetricName)
-					tenant = fallbackTenant
-
-					// Retry with fallback tenant
-					endpoint, err = h.hashring.GetN(tenant, &ts, rn)
-					if err != nil {
-						return nil, nil, err
-					}
-				} else {
-					return nil, nil, err
-				}
+				return nil, nil, err
 			}
 			endpointReplica := endpointReplica{endpoint: endpoint, replica: rn}
 			var writeDestination = remoteWrites
