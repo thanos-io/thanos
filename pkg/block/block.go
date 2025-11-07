@@ -149,7 +149,7 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 			// Upload failed after we started - clean up partial block from object storage.
 			level.Warn(logger).Log("msg", "upload failed, cleaning up partial block from object storage", "block", id, "err", err)
 
-			// Use a new context since the original might be cancelled/timed out.
+			// Use a new context since the original might be canceled/timed out.
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 
