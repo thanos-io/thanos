@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -466,7 +465,7 @@ func TestHashDownload(t *testing.T) {
 		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
 		testutil.Ok(t, err)
 		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
-		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
         # TYPE thanos_objstore_bucket_operations_total counter
         thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
         thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
@@ -475,7 +474,7 @@ func TestHashDownload(t *testing.T) {
         thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
         thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 2
         thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 3
-		`), `thanos_objstore_bucket_operations_total`))
+        `), `thanos_objstore_bucket_operations_total`))
 	}
 
 	// Ensures that we always download MetaFile.
@@ -484,7 +483,7 @@ func TestHashDownload(t *testing.T) {
 		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
 		testutil.Ok(t, err)
 		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
-		# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+        # HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
         # TYPE thanos_objstore_bucket_operations_total counter
         thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
         thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
@@ -493,7 +492,7 @@ func TestHashDownload(t *testing.T) {
         thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
         thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 4
         thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 3
-		`), `thanos_objstore_bucket_operations_total`))
+        `), `thanos_objstore_bucket_operations_total`))
 	}
 
 	// Remove chunks => gets redownloaded.
@@ -504,16 +503,16 @@ func TestHashDownload(t *testing.T) {
 		err = Download(ctx, log.NewNopLogger(), instrumentedBkt, m.ULID, path.Join(tmpDir, b1.String()))
 		testutil.Ok(t, err)
 		testutil.Ok(t, promtest.GatherAndCompare(r, strings.NewReader(`
-			# HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
-			# TYPE thanos_objstore_bucket_operations_total counter
-			thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
-			thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
-			thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
-			thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 7
-			thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
-			thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 6
-			thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 3
-			`), `thanos_objstore_bucket_operations_total`))
+            # HELP thanos_objstore_bucket_operations_total Total number of all attempted operations against a bucket.
+            # TYPE thanos_objstore_bucket_operations_total counter
+            thanos_objstore_bucket_operations_total{bucket="test",operation="attributes"} 0
+            thanos_objstore_bucket_operations_total{bucket="test",operation="delete"} 0
+            thanos_objstore_bucket_operations_total{bucket="test",operation="exists"} 0
+            thanos_objstore_bucket_operations_total{bucket="test",operation="get"} 7
+            thanos_objstore_bucket_operations_total{bucket="test",operation="get_range"} 0
+            thanos_objstore_bucket_operations_total{bucket="test",operation="iter"} 6
+            thanos_objstore_bucket_operations_total{bucket="test",operation="upload"} 3
+            `), `thanos_objstore_bucket_operations_total`))
 	}
 }
 
@@ -540,10 +539,9 @@ func TestUploadCleanup(t *testing.T) {
 		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
-		// If upload of index fails, the objects remain because the deletion of partial blocks
-		// is taken care of by the Compactor.
-		testutil.Equals(t, 2, len(bkt.Objects()))
-		testutil.Assert(t, len(bkt.Objects()[path.Join(DebugMetas, fmt.Sprintf("%s.json", b1.String()))]) == 0)
+		// If upload of index fails, the partial upload is cleaned up from object storage.
+		// This ensures no partial blocks are left behind.
+		testutil.Equals(t, 0, len(bkt.Objects()))
 	}
 
 	{
@@ -552,12 +550,9 @@ func TestUploadCleanup(t *testing.T) {
 		uploadErr := Upload(ctx, log.NewNopLogger(), errBkt, path.Join(tmpDir, b1.String()), metadata.NoneFunc)
 		testutil.Assert(t, errors.Is(uploadErr, errUploadFailed))
 
-		// If upload of meta.json fails, nothing is cleaned up.
-		testutil.Equals(t, 3, len(bkt.Objects()))
-		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]) > 0)
-		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]) > 0)
-		testutil.Assert(t, len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]) > 0)
-		testutil.Assert(t, len(bkt.Objects()[path.Join(DebugMetas, fmt.Sprintf("%s.json", b1.String()))]) == 0)
+		// If upload of meta.json fails, all uploaded chunks and index are cleaned up.
+		// This prevents partial blocks from being discovered and eventually deleted by BestEffortCleanAbortedPartialUploads.
+		testutil.Equals(t, 0, len(bkt.Objects()))
 	}
 }
 

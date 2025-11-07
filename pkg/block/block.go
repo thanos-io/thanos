@@ -108,7 +108,7 @@ func UploadPromBlock(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 // It makes sure cleanup is done on error to avoid partial block uploads.
 // TODO(bplotka): Ensure bucket operations have reasonable backoff retries.
 // NOTE: Upload updates `meta.Thanos.File` section.
-func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool, options ...objstore.UploadOption) error {
+func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir string, hf metadata.HashFunc, checkExternalLabels bool, options ...objstore.UploadOption) (err error) {
 	df, err := os.Stat(bdir)
 	if err != nil {
 		return err
@@ -140,6 +140,26 @@ func upload(ctx context.Context, logger log.Logger, bkt objstore.Bucket, bdir st
 	if err != nil {
 		return errors.Wrap(err, "gather meta file stats")
 	}
+
+	// Track if we started uploading so we can clean up on failure.
+	// We only clean up if upload started but failed, to avoid partial blocks in object storage.
+	uploadStarted := false
+	defer func() {
+		if err != nil && uploadStarted {
+			// Upload failed after we started - clean up partial block from object storage.
+			level.Warn(logger).Log("msg", "upload failed, cleaning up partial block from object storage", "block", id, "err", err)
+
+			// Use a new context since the original might be cancelled/timed out.
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+
+			if deleteErr := Delete(cleanupCtx, logger, bkt, id); deleteErr != nil {
+				level.Error(logger).Log("msg", "failed to clean up partial block after upload failure", "block", id, "err", deleteErr)
+			}
+		}
+	}()
+
+	uploadStarted = true
 
 	if err := objstore.UploadDir(ctx, logger, bkt, filepath.Join(bdir, ChunksDirname), path.Join(id.String(), ChunksDirname), options...); err != nil {
 		return errors.Wrap(err, "upload chunks")
