@@ -66,7 +66,8 @@ func main() {
 	cmd, setup := app.Parse()
 	logger := logging.NewLogger(*logLevel, *logFormat, *debugName)
 
-	if err := configureGoAutoMemLimit(goMemLimitConf); err != nil {
+	limits, err := configureGoAutoMemLimit(goMemLimitConf)
+	if err != nil {
 		level.Error(logger).Log("msg", "failed to configure Go runtime memory limits", "err", err)
 		os.Exit(1)
 	}
@@ -77,6 +78,11 @@ func main() {
 		level.Debug(logger).Log("msg", fmt.Sprintf(template, args...))
 	}))
 	defer undo()
+
+	if goMemLimitConf.enableAutoGoMemlimit {
+		level.Debug(logger).Log("msg", fmt.Sprintf("GOMEMLIMIT set to %d bytes configured with ratio equals to %.0f%% of detected memory", limits, goMemLimitConf.memlimitRatio*100))
+	}
+
 	if err != nil {
 		level.Warn(logger).Log("warn", errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
 	}
