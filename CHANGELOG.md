@@ -36,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
 - [#8454](https://github.com/thanos-io/thanos/pull/8454) Compact: ensure we don't mark blocks for deletion again after just deleting them
 - [#8410](https://github.com/thanos-io/thanos/pull/8410) Compact: ignore blocks with deletion mark in partial deletes
+- [#8556](https://github.com/thanos-io/thanos/pull/8556) All Components: add debug logs when enabling GOMEMLIMIT and log the effective memory limit on startup 
 
 ### Changed
 
