@@ -388,6 +388,18 @@ func (h *Handler) writeQuorum() int {
 
 So, if the replication factor is 2 then at least one write must succeed. With RF=3, two writes must succeed, and so on.
 
+## Feature Flags
+
+### metric-names-filter
+
+If enabled then every 15 seconds Receiver will query all available metric names in each tenant and build a bloom filter from them.
+
+This allows filtering out certain tenants from queriers and thus it will not require spawning a Go routine for them.
+
+### ext-labels-in-tsdb
+
+If enabled then it will put the current external labels as "normal" labels inside of the TSDB. This also adds a special marker to the meta files in blocks so that it would be known whether external labels are part of the series inside of the TSDB.
+
 ## Flags
 
 ```$ mdox-exec="thanos receive --help"
@@ -664,7 +676,7 @@ Flags:
                                  OTLP metrics ingested by Receive.
       --enable-feature= ...      Comma separated experimental feature names
                                  to enable. The current list of features is
-                                 metric-names-filter.
+                                 metric-names-filter,ext-labels-in-tsdb.
       --receive.lazy-retrieval-max-buffered-responses=20
                                  The lazy retrieval strategy can buffer up to
                                  this number of responses. This is to limit the
