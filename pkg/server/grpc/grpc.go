@@ -159,6 +159,13 @@ func (s *Server) ListenAndServe() error {
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
+func (s *Server) Address() string {
+	if s.listener != nil {
+		return s.listener.Addr().String()
+	}
+	return ""
+}
+
 // Shutdown gracefully shuts down the server by waiting,
 // for specified amount of time (by gracePeriod) for connections to return to idle and then shut down.
 func (s *Server) Shutdown(err error) {

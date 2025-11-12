@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/encoding"
 )
 
-func BenchmarkVanillaProtoMarshal(b *testing.B) {
+func BenchmarkVanillaProtoMarshalUnmarshal(b *testing.B) {
 	ls := []labels.Labels{}
 
 	for i := range 1000 {
@@ -61,6 +61,28 @@ func BenchmarkVanillaProtoMarshal(b *testing.B) {
 	b.Run("non pooling codec marshal", func(b *testing.B) {
 		for b.Loop() {
 			_, err := c.Marshal(i)
+			require.NoError(b, err)
+		}
+	})
+
+	marshaled, err := ogCodec.Marshal(i)
+	require.NoError(b, err)
+
+	b.Run("vanilla proto unmarshal", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for b.Loop() {
+			var ir infopb.InfoResponse
+			err := ogCodec.Unmarshal(marshaled, &ir)
+			require.NoError(b, err)
+		}
+	})
+
+	b.Run("non pooling codec unmarshal", func(b *testing.B) {
+		for b.Loop() {
+			var ir infopb.InfoResponse
+			err := c.Unmarshal(marshaled, &ir)
 			require.NoError(b, err)
 		}
 	})
