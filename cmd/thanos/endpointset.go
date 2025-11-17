@@ -198,6 +198,7 @@ func setupEndpointSet(
 	unhealthyTimeout time.Duration,
 	endpointTimeout time.Duration,
 	dialOpts []grpc.DialOption,
+	injectTestAddresses []string,
 	queryConnMetricLabels ...string,
 ) (*query.EndpointSet, error) {
 	configProvider, err := newEndpointConfigProvider(
@@ -221,6 +222,7 @@ func setupEndpointSet(
 			dns.ResolverType(dnsSDResolver),
 		),
 		dnsSDInterval,
+		injectTestAddresses,
 	)
 	dnsEndpointProvider := dns.NewProvider(
 		logger,

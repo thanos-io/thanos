@@ -165,13 +165,14 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 
 	args := map[string]string{
-		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
-		"--grpc-address":      ":9091",
-		"--grpc-grace-period": "0s",
-		"--http-address":      ":8080",
-		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
-		"--tsdb.path":         prom.InternalDir(),
-		"--log.level":         "debug",
+		"--debug.name":                     fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":                   ":9091",
+		"--grpc-grace-period":              "0s",
+		"--http-address":                   ":8080",
+		"--prometheus.url":                 "http://" + prom.InternalEndpoint("http"),
+		"--tsdb.path":                      prom.InternalDir(),
+		"--log.level":                      "debug",
+		"--prometheus.get_config_interval": "1s",
 	}
 	if len(webConfig) > 0 {
 		args["--prometheus.http-client"] = defaultPromHttpConfig()
@@ -268,14 +269,16 @@ type QuerierBuilder struct {
 	externalPrefix string
 	image          string
 
-	storeAddresses          []string
-	proxyStrategy           string
-	disablePartialResponses bool
-	fileSDStoreAddresses    []string
-	envVars                 map[string]string
-	enableFeatures          []string
-	endpoints               []string
-	strictEndpoints         []string
+	storeAddresses           []string
+	proxyStrategy            string
+	disablePartialResponses  bool
+	fileSDStoreAddresses     []string
+	envVars                  map[string]string
+	enableFeatures           []string
+	endpoints                []string
+	strictEndpoints          []string
+	endpointGroups           []string
+	injectEndpointGroupAddrs []string
 
 	engine                                  apiv1.PromqlEngineType
 	queryMode                               string
@@ -393,6 +396,16 @@ func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithEndpointGroups(endpointGroups ...string) *QuerierBuilder {
+	q.endpointGroups = endpointGroups
+	return q
+}
+
+func (q *QuerierBuilder) WithInjectEndpointGroupAddrs(fakeAddrs ...string) *QuerierBuilder {
+	q.injectEndpointGroupAddrs = fakeAddrs
+	return q
+}
+
 func (q *QuerierBuilder) WithEnableXFunctions() *QuerierBuilder {
 	q.enableXFunctions = true
 	return q
@@ -473,6 +486,14 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	for _, addr := range q.strictEndpoints {
 		args = append(args, "--endpoint-strict="+addr)
 	}
+	for _, addr := range q.endpointGroups {
+		args = append(args, "--endpoint-group="+addr)
+	}
+
+	for _, addr := range q.injectEndpointGroupAddrs {
+		args = append(args, "--inject-test-addresses="+addr)
+	}
+
 	if len(q.fileSDStoreAddresses) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
