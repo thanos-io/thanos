@@ -480,30 +480,37 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.disablePartialResponses {
 		args = append(args, "--no-query.partial-response")
 	}
-	for _, addr := range q.endpoints {
-		args = append(args, "--endpoint="+addr)
-	}
-	for _, addr := range q.strictEndpoints {
-		args = append(args, "--endpoint-strict="+addr)
-	}
-	for _, addr := range q.endpointGroups {
-		args = append(args, "--endpoint-group="+addr)
-	}
 
 	for _, addr := range q.injectEndpointGroupAddrs {
 		args = append(args, "--inject-test-addresses="+addr)
 	}
 
-	if len(q.fileSDStoreAddresses) > 0 {
+	if len(q.fileSDStoreAddresses) > 0 || len(q.endpoints) > 0 || len(q.strictEndpoints) > 0 || len(q.endpointGroups) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
-		type EndpointSpec struct{ Address string }
+		type EndpointSpec struct {
+			Address string
+			Strict  bool
+			Group   bool
+		}
 
 		endpoints := make([]EndpointSpec, 0)
 		for _, a := range q.fileSDStoreAddresses {
 			endpoints = append(endpoints, EndpointSpec{Address: a})
+		}
+
+		for _, a := range q.endpoints {
+			endpoints = append(endpoints, EndpointSpec{Address: a})
+		}
+
+		for _, a := range q.strictEndpoints {
+			endpoints = append(endpoints, EndpointSpec{Address: a, Strict: true})
+		}
+
+		for _, a := range q.endpointGroups {
+			endpoints = append(endpoints, EndpointSpec{Address: a, Group: true})
 		}
 
 		endpointSDConfig := struct {

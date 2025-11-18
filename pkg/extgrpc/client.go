@@ -102,9 +102,6 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
     "retryableStatusCodes": [
   	  "UNAVAILABLE"
     ]
-  },
-  "healthCheckConfig": {
-    "serviceName": ""
   }
 }`
 	}
