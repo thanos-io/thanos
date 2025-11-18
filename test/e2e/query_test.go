@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -194,6 +195,58 @@ config:
 		testutil.Assert(t, strings.Contains(resp, `"serviceName":"thanos-query"`))
 		return nil
 	}))
+}
+
+func TestQueryHandlesNotAvailableGrpc(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("q-na")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+	testutil.Ok(t, prom1.Stop())
+
+	t.Log("waiting for sidecar1 to notice that Prometheus is down")
+
+outer:
+	for {
+		select {
+		case <-t.Context().Done():
+			t.Fatal("sidecar1 did not notice that Prometheus is down in time")
+		case <-time.After(1 * time.Second):
+
+			if err := sidecar1.WaitSumMetrics(e2emon.Equals(0), "thanos_sidecar_prometheus_up"); err != nil {
+				t.Logf("sidecar1 metrics still show that Prometheus is up: %v", err)
+			} else {
+				break outer
+			}
+		}
+	}
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").WithEndpointGroups("1.2.3.4:1111").WithInjectEndpointGroupAddrs(sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	for range 20 {
+		_, _, err := simpleInstantQuery(t, context.Background(), q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate:             false,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		}, 1)
+		if err != nil {
+			if strings.Contains(err.Error(), "no such host") {
+				t.Fatalf("found error even though expected not to: %s", err.Error())
+			}
+		}
+		select {
+		case <-time.After(500 * time.Millisecond):
+		case <-t.Context().Done():
+		}
+	}
 }
 
 func TestSidecarNotReady(t *testing.T) {
@@ -1387,7 +1440,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) { //nolint:unparam
 	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
 		return nil, nil, err

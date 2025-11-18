@@ -451,6 +451,7 @@ func runRule(
 			5*time.Minute,
 			5*time.Second,
 			dialOpts,
+			[]string{},
 		)
 		if err != nil {
 			return err

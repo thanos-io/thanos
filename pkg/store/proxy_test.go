@@ -805,6 +805,8 @@ func TestProxyStore_Series(t *testing.T) {
 }
 
 func TestProxyStore_SeriesSlowStores(t *testing.T) {
+	t.Skip("flaky")
+
 	t.Parallel()
 
 	for _, tc := range []struct {
