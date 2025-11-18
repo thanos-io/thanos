@@ -985,7 +985,6 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			}
 
 			pantheonTenant := pantheon.GetTenantFromScope(metricName, metricScope)
-			level.Debug(h.logger).Log("msg", "tenant overridden by pantheon scope", "original_tenant", tenantHTTP, "scope", scopeHTTP, "metric", metricName, "new_tenant", pantheonTenant)
 			tenant = pantheonTenant
 		} else if h.splitTenantLabelName != "" {
 			// Priority 2: Split-tenant-label override (if no pantheon override happened).
