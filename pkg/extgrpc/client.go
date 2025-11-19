@@ -4,7 +4,6 @@
 package extgrpc
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -19,12 +18,10 @@ import (
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
-	"google.golang.org/protobuf/protoadapt"
 
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
-	protobufproto "google.golang.org/protobuf/proto"
 )
 
 type nonPoolingCodec struct {
@@ -41,31 +38,24 @@ func (n *nonPoolingCodec) Name() string {
 	return "proto"
 }
 
-func messageV2Of(v any) protobufproto.Message {
-	switch v := v.(type) {
-	case protoadapt.MessageV1:
-		return protoadapt.MessageV2Of(v)
-	case protoadapt.MessageV2:
-		return v
-	default:
-		panic(fmt.Errorf("unrecognized message type %T", v))
-	}
-}
+var nopPool = mem.NopBufferPool{}
 
 func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
-	vv := messageV2Of(v)
-	buf := data.MaterializeToBuffer(mem.DefaultBufferPool())
-
-	if err := protobufproto.Unmarshal(buf.ReadOnlyData(), vv); err != nil {
-		return err
+	gmsg, ok := v.(gogoMsg)
+	if !ok {
+		return n.CodecV2.Unmarshal(data, v)
 	}
 
-	return nil
+	// TODO(GiedriusS): we use unsafe code around labels so we cannot use pooling here.
+	buf := data.MaterializeToBuffer(nopPool)
+
+	return gmsg.Unmarshal(buf.ReadOnlyData())
 }
 
 type gogoMsg interface {
 	Size() int
 	MarshalToSizedBuffer([]byte) (int, error)
+	Unmarshal([]byte) error
 }
 
 func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
