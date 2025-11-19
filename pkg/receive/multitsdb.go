@@ -26,6 +26,7 @@ import (
 	"github.com/thanos-io/objstore"
 	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api"
@@ -75,6 +76,8 @@ type MultiTSDB struct {
 
 	headExpandedPostingsCacheSize  uint64
 	blockExpandedPostingsCacheSize uint64
+
+	initSingleFlight singleflight.Group
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -279,6 +282,19 @@ type tenant struct {
 	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
 }
 
+func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
+	_, err, _ := m.initSingleFlight.Do(tenantID, func() (interface{}, error) {
+		if t.readyS.Get() != nil {
+			return nil, nil
+		}
+		logger := log.With(m.logger, "tenant", tenantID)
+
+		return nil, m.startTSDB(logger, tenantID, t)
+	})
+
+	return err
+}
+
 func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 	t.mtx.RLock()
 	defer t.mtx.RUnlock()
@@ -375,7 +391,7 @@ func (t *MultiTSDB) Open() error {
 		}
 
 		g.Go(func() error {
-			_, err := t.getOrLoadTenant(f.Name(), true)
+			_, err := t.getOrLoadTenant(f.Name())
 			return err
 		})
 	}
@@ -786,13 +802,13 @@ func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
 	return path.Join(t.dataDir, tenantID)
 }
 
-func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenant, error) {
+func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
 	// Fast path, as creating tenants is a very rare operation.
 	t.mtx.RLock()
 	tenant, exist := t.tenants[tenantID]
 	t.mtx.RUnlock()
 	if exist {
-		return tenant, nil
+		return tenant, t.initTSDBIfNeeded(tenantID, tenant)
 	}
 
 	// Slow path needs to lock fully and attempt to read again to prevent race
@@ -802,27 +818,18 @@ func (t *MultiTSDB) getOrLoadTenant(tenantID string, blockingStart bool) (*tenan
 	tenant, exist = t.tenants[tenantID]
 	if exist {
 		t.mtx.Unlock()
-		return tenant, nil
+		return tenant, t.initTSDBIfNeeded(tenantID, tenant)
 	}
 
 	tenant = newTenant()
 	t.addTenantUnlocked(tenantID, tenant)
 	t.mtx.Unlock()
 
-	logger := log.With(t.logger, "tenant", tenantID)
-	if !blockingStart {
-		go func() {
-			if err := t.startTSDB(logger, tenantID, tenant); err != nil {
-				level.Error(logger).Log("msg", "failed to start tsdb asynchronously", "err", err)
-			}
-		}()
-		return tenant, nil
-	}
-	return tenant, t.startTSDB(logger, tenantID, tenant)
+	return tenant, t.initTSDBIfNeeded(tenantID, tenant)
 }
 
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
-	tenant, err := t.getOrLoadTenant(tenantID, false)
+	tenant, err := t.getOrLoadTenant(tenantID)
 	if err != nil {
 		return nil, err
 	}
