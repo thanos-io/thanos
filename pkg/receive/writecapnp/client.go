@@ -68,7 +68,7 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 
 func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnects int, in *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	if err := r.connect(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 
 	result, release := r.writer.Write(ctx, func(params Writer_write_Params) error {
