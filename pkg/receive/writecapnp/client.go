@@ -68,7 +68,7 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 
 func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnects int, in *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	if err := r.connect(ctx); err != nil {
-		return nil, err
+		return nil, status.Error(codes.Unavailable, err.Error())
 	}
 
 	result, release := r.writer.Write(ctx, func(params Writer_write_Params) error {
@@ -137,17 +137,28 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 		return errors.Wrap(err, "failed to dial peer")
 	}
 	r.conn = rpc.NewConn(rpc.NewPackedStreamTransport(conn), nil)
-	r.writer = Writer(r.conn.Bootstrap(ctx))
+	writer := Writer(r.conn.Bootstrap(ctx))
+	if err := writer.Resolve(ctx); err != nil {
+		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err)
+		r.closeUnlocked()
+		return errors.Wrap(err, "failed to bootstrap capnp writer")
+	}
+
+	r.writer = writer
 	return nil
 }
 
 func (r *RemoteWriteClient) Close() error {
 	r.mu.Lock()
+	r.closeUnlocked()
+	r.mu.Unlock()
+	return nil
+}
+
+func (r *RemoteWriteClient) closeUnlocked() {
 	if r.conn != nil {
 		conn := r.conn
 		r.conn = nil
 		go conn.Close()
 	}
-	r.mu.Unlock()
-	return nil
 }
