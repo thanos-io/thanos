@@ -59,6 +59,11 @@ const (
 	// that the block has been migrated to parquet format and can be safely ignored
 	// by store gateways.
 	ParquetMigratedExtensionKey = "parquet_migrated"
+
+	// ExtLabelsInTSDBKey is the key used in block extensions to indicate that
+	// external labels have been put in the TSDB and the Series() API can
+	// stream.
+	ExtLabelsInTSDBKey = "ext_labels_in_tsdb"
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and

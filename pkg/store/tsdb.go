@@ -20,10 +20,13 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/filter"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -42,6 +45,7 @@ const (
 type TSDBReader interface {
 	storage.ChunkQueryable
 	StartTime() (int64, error)
+	Blocks() []*tsdb.Block
 }
 
 // TSDBStoreOption is a functional option for TSDBStore.
@@ -61,6 +65,12 @@ func WithMatcherCacheInstance(cache storecache.MatchersCache) TSDBStoreOption {
 	}
 }
 
+func WithExtLabelsInTSDB(val bool) TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.addExtLabelsToTSDB = val
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -77,6 +87,10 @@ type TSDBStore struct {
 	storeFilter            filter.StoreFilter
 	mtx                    sync.RWMutex
 	close                  func()
+
+	addExtLabelsToTSDB bool
+
+	shouldNotBuffer atomic.Bool
 	storepb.UnimplementedStoreServer
 }
 
@@ -128,9 +142,12 @@ func NewTSDBStore(
 		option(st)
 	}
 
-	if st.startStoreFilterUpdate {
-		ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	st.close = cancel
 
+	t := time.NewTicker(storeFilterUpdateInterval)
+
+	if st.startStoreFilterUpdate {
 		updateFilter := func(ctx context.Context) {
 			vals, err := st.LabelValues(ctx, &storepb.LabelValuesRequest{
 				Label: model.MetricNameLabel,
@@ -143,16 +160,61 @@ func NewTSDBStore(
 
 			st.storeFilter.ResetAndSet(vals.Values...)
 		}
-		st.close = cancel
 		updateFilter(ctx)
-
-		t := time.NewTicker(storeFilterUpdateInterval)
 
 		go func() {
 			for {
 				select {
 				case <-t.C:
 					updateFilter(ctx)
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+	}
+
+	if st.addExtLabelsToTSDB {
+		allBlocksHaveExtension := func() {
+			var allBlocksHaveExtension = true
+			for _, b := range st.db.Blocks() {
+				m, err := metadata.ReadFromDir(b.Dir())
+				if err != nil {
+					level.Error(logger).Log("msg", "failed to read meta", "err", err, "block", b.Dir())
+					return
+				}
+
+				exts := m.Thanos.Extensions
+				if exts == nil {
+					allBlocksHaveExtension = false
+					break
+				}
+
+				mapExts, ok := exts.(map[string]any)
+				if !ok {
+					allBlocksHaveExtension = false
+					break
+				}
+
+				if _, ok := mapExts[metadata.ExtLabelsInTSDBKey]; !ok {
+					allBlocksHaveExtension = false
+					break
+				}
+			}
+
+			if !allBlocksHaveExtension {
+				level.Warn(logger).Log("msg", "not all blocks have the external labels in TSDB extension so buffering is still enabled; will take at least the retention period to add the extensions everywhere")
+			} else {
+				st.shouldNotBuffer.Store(true)
+
+			}
+		}
+
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					allBlocksHaveExtension()
 				case <-ctx.Done():
 					return
 				}
@@ -252,7 +314,12 @@ func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) (
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
 	var srv flushableServer
 	if fs, ok := seriesSrv.(flushableServer); !ok {
-		srv = newFlushableServer(seriesSrv, sortingStrategyStore)
+		var sortingStrategy = sortingStrategyStore
+		if s.shouldNotBuffer.Load() {
+			sortingStrategy = sortingStrategyNone
+		}
+
+		srv = newFlushableServer(seriesSrv, sortingStrategy)
 	} else {
 		srv = fs
 	}
@@ -304,7 +371,13 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	for set.Next() {
 		series := set.At()
 
-		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
+		var completeLabelset labels.Labels
+		if s.shouldNotBuffer.Load() {
+			completeLabelset = series.Labels()
+		} else {
+			completeLabelset = labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
+		}
+
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}

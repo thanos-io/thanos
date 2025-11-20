@@ -53,6 +53,10 @@ type mockedStartTimeDB struct {
 	startTime int64
 }
 
+func (db *mockedStartTimeDB) Blocks() []*tsdb.Block {
+	return []*tsdb.Block{}
+}
+
 func (db *mockedStartTimeDB) StartTime() (int64, error) { return db.startTime, nil }
 
 func TestProxyStore_TSDBInfos(t *testing.T) {

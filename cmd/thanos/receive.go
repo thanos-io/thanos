@@ -60,6 +60,7 @@ import (
 const (
 	compressionNone   = "none"
 	metricNamesFilter = "metric-names-filter"
+	extLabelsInTSDB   = "ext-labels-in-tsdb"
 )
 
 func registerReceive(app *extkingpin.App) {
@@ -151,6 +152,11 @@ func runReceive(
 		if feature == metricNamesFilter {
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
 			level.Info(logger).Log("msg", "metric name filter feature enabled")
+		}
+
+		if feature == extLabelsInTSDB {
+			multiTSDBOptions = append(multiTSDBOptions, receive.WithExternalLabelsInTSDB())
+			level.Info(logger).Log("msg", "external labels in TSDB feature enabled. This will make Receive dump the head block if external labels are changed.")
 		}
 	}
 
@@ -1100,7 +1106,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.otlp-enable-target-info", "Enables target information in OTLP metrics ingested by Receive. If enabled, it converts the resource to the target info metric").Default("true").BoolVar(&rc.otlpEnableTargetInfo)
 	cmd.Flag("receive.otlp-promote-resource-attributes", "(Repeatable) Resource attributes to include in OTLP metrics ingested by Receive.").Default("").StringsVar(&rc.otlpResourceAttributes)
 
-	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+".").Default("").Strings()
+	rc.featureList = cmd.Flag("enable-feature", "Comma separated experimental feature names to enable. The current list of features is "+metricNamesFilter+","+extLabelsInTSDB+".").Default("").Strings()
 
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
