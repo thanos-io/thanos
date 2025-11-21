@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -201,10 +202,10 @@ type localClient struct {
 	client storepb.StoreClient
 }
 
-func newLocalClient(store *store.TSDBStore) *localClient {
+func newLocalClient(store *store.TSDBStore, readOnly atomic.Bool) *localClient {
 	return &localClient{
 		store:  store,
-		client: storepb.ServerAsClient(store),
+		client: storepb.ServerAsClient(store, readOnly),
 	}
 }
 
@@ -268,12 +269,18 @@ func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
+func (t *tenant) setReadOnly(ro bool) {
+	t.readOnly.Store(ro)
+}
+
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
 	exemplarsTSDB *exemplars.TSDB
 	ship          *shipper.Shipper
 	reg           *UnRegisterer
+
+	readOnly atomic.Bool
 
 	mtx  *sync.RWMutex
 	tsdb *tsdb.DB
@@ -338,7 +345,7 @@ func (t *tenant) client() store.Client {
 		return nil
 	}
 
-	return newLocalClient(tsdbStore)
+	return newLocalClient(tsdbStore, t.readOnly)
 }
 
 func (t *tenant) exemplars() *exemplars.TSDB {
@@ -472,14 +479,21 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 
 		prunedTenants []string
 		pmtx          sync.Mutex
+
+		tenants = make(map[string]*tenant)
 	)
+
 	t.mtx.RLock()
-	for tenantID, tenantInstance := range t.tenants {
+	maps.Copy(tenants, t.tenants)
+	t.mtx.RUnlock()
+
+	begin := time.Now()
+	for tenantID, tenantInstance := range tenants {
 		wg.Add(1)
 		go func(tenantID string, tenantInstance *tenant) {
 			defer wg.Done()
-			tlog := log.With(t.logger, "tenant", tenantID)
-			pruned, err := t.pruneTSDB(ctx, tlog, tenantInstance)
+
+			pruned, err := t.pruneTSDB(ctx, log.With(t.logger, "tenant", tenantID), tenantInstance, tenantID)
 			if err != nil {
 				merr.Add(err)
 				return
@@ -493,50 +507,35 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		}(tenantID, tenantInstance)
 	}
 	wg.Wait()
-	t.mtx.RUnlock()
 
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	for _, tenantID := range prunedTenants {
-		// Check that the tenant hasn't been reinitialized in-between locks.
-		if t.tenants[tenantID].readyStorage().get() != nil {
-			continue
-		}
-
-		level.Info(t.logger).Log("msg", "Pruned tenant", "tenant", tenantID)
-		t.removeTenantUnlocked(tenantID)
-	}
+	level.Info(t.logger).Log("msg", "Pruning job completed", "pruned_tenants_count", len(prunedTenants), "pruned_tenants", prunedTenants, "took_seconds", time.Since(begin).Seconds())
 
 	return merr.Err()
 }
 
 // pruneTSDB removes a TSDB if its past the retention period.
 // It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
-func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant) (pruned bool, rerr error) {
+func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant, tenantID string) (pruned bool, rerr error) {
 	tenantTSDB := tenantInstance.readyStorage()
 	if tenantTSDB == nil {
 		return false, nil
 	}
-	tenantTSDB.mtx.RLock()
-	if tenantTSDB.a == nil || tenantTSDB.a.db == nil {
-		tenantTSDB.mtx.RUnlock()
+
+	tdb := tenantTSDB.Get()
+	if tdb == nil {
 		return false, nil
 	}
 
-	tdb := tenantTSDB.a.db
 	head := tdb.Head()
 	if head.MaxTime() < 0 {
-		tenantTSDB.mtx.RUnlock()
 		return false, nil
 	}
 
 	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	compactThreshold := int64(1.5 * float64(t.tsdbOpts.MaxBlockDuration))
 	if sinceLastAppendMillis <= compactThreshold {
-		tenantTSDB.mtx.RUnlock()
 		return false, nil
 	}
-	tenantTSDB.mtx.RUnlock()
 
 	// Acquire a write lock and check that no writes have occurred in-between locks.
 	tenantTSDB.mtx.Lock()
@@ -585,6 +584,15 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		}
 	}
 
+	tenantInstance.setReadOnly(true)
+	defer func() {
+		if pruned {
+			return
+		}
+
+		tenantInstance.setReadOnly(false)
+	}()
+
 	if err := tdb.Close(); err != nil {
 		return false, err
 	}
@@ -597,6 +605,10 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 	tenantInstance.readyS.set(nil)
 	tenantInstance.setComponents(nil, nil, nil, nil, nil)
 	tenantInstance.mtx.Unlock()
+
+	t.mtx.Lock()
+	t.removeTenantUnlocked(tenantID)
+	t.mtx.Unlock()
 
 	return true, nil
 }

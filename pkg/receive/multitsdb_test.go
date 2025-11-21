@@ -959,3 +959,60 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 		}, tenant.blocksToDelete(nil))
 	})
 }
+
+func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+		RetentionDuration: (6 * time.Hour).Milliseconds(),
+	}, labels.FromStrings("replica", "test"), "tenant_id", objstore.NewInMemBucket(), false, false, metadata.NoneFunc)
+	t.Cleanup(func() {
+		testutil.Ok(t, m.Close())
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	const iterations = 200
+
+	wg := sync.WaitGroup{}
+	wg.Go(func() {
+		for i := range iterations {
+			tenant := fmt.Sprintf("pruned-tenant-%d", i)
+
+			testutil.Ok(t, appendSample(m, tenant, time.UnixMilli(int64(10))))
+
+			testutil.Ok(t, m.Prune(ctx))
+		}
+	})
+
+	wg.Go(func() {
+		for range iterations {
+			clients := m.TSDBLocalClients()
+			req := &storepb.SeriesRequest{
+				MinTime:  0,
+				MaxTime:  10,
+				Matchers: []storepb.LabelMatcher{{Name: "foo", Value: ".*", Type: storepb.LabelMatcher_RE}},
+			}
+
+			for _, c := range clients {
+				sc, err := c.Series(ctx, req)
+				testutil.Ok(t, err)
+
+				for {
+					_, err := sc.Recv()
+					if err == io.EOF {
+						break
+					}
+					testutil.Ok(t, err)
+				}
+			}
+		}
+	})
+
+	wg.Wait()
+}

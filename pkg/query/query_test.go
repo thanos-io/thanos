@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/dedup"
@@ -86,7 +87,7 @@ func TestQuerier_Proxy(t *testing.T) {
 				// TODO(bwplotka): Parse external labels.
 				sc.append(&storetestutil.TestClient{
 					Name:        fmt.Sprintf("store number %v", i),
-					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, labels.EmptyLabels()), m, st.mint, st.maxt)),
+					StoreClient: storepb.ServerAsClient(selectedStore(store.NewTSDBStore(logger, st.storage.DB, component.Debug, labels.EmptyLabels()), m, st.mint, st.maxt), atomic.Bool{}),
 					MinTime:     st.mint,
 					MaxTime:     st.maxt,
 				})

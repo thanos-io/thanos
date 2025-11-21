@@ -32,6 +32,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -1494,7 +1495,9 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		if reflect.DeepEqual(expected, result) {
 			return nil
 		}
-		return errors.New("series are different")
+
+		return fmt.Errorf("series are different: %s",
+			cmp.Diff(expected, result))
 	}))
 
 	testutil.Equals(t, expected, result)

@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	prom_testutil "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -101,7 +102,7 @@ func TestRateLimitedServer(t *testing.T) {
 			defer cancel()
 
 			store := NewLimitedStoreServer(newStoreServerStub(test.series), prometheus.NewRegistry(), test.limits)
-			client := storepb.ServerAsClient(store)
+			client := storepb.ServerAsClient(store, atomic.Bool{})
 			seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
 			testutil.Ok(t, err)
 			for {

@@ -895,8 +895,7 @@ test_metric{a="2", b="2"} 1`)
 		// We run three avalanches, one tenant which exceeds the limit, one tenant which remains under it, and one for the unlimited tenant.
 
 		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
-		// One request always fails due to TSDB not being ready for new tenant.
-		// So without limiting we end up with 40 timeseries and 40 samples.
+		// So without limiting we end up with 50 timeseries and 50 samples.
 		avalanche1 := e2ethanos.NewAvalanche(e, "avalanche-1",
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
@@ -914,8 +913,7 @@ test_metric{a="2", b="2"} 1`)
 			})
 
 		// Avalanche in this configuration, would send 5 requests each with 5 of the same timeseries.
-		// One request always fails due to TSDB not being ready for new tenant.
-		// So we end up with 5 timeseries, 20 samples.
+		// So we end up with 5 timeseries, 25 samples.
 		avalanche2 := e2ethanos.NewAvalanche(e, "avalanche-2",
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "5",
@@ -933,8 +931,7 @@ test_metric{a="2", b="2"} 1`)
 			})
 
 		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
-		// One request always fails due to TSDB not being ready for new tenant.
-		// So without limiting we end up with 40 timeseries and 40 samples.
+		// So without limiting we end up with 50 timeseries and 50 samples.
 		avalanche3 := e2ethanos.NewAvalanche(e, "avalanche-3",
 			e2ethanos.AvalancheOptions{
 				MetricCount:    "10",
@@ -953,9 +950,9 @@ test_metric{a="2", b="2"} 1`)
 
 		testutil.Ok(t, e2e.StartAndWaitReady(avalanche1, avalanche2, avalanche3))
 
-		// Here, 3/5 requests are failed due to limiting, as one request fails due to TSDB readiness and we ingest one initial request.
-		// 3 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
+		// Here, 4/5 requests are failed due to limiting as we ingest one initial request.
+		// 4 limited requests belong to the exceed-tenant.
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
@@ -1028,7 +1025,7 @@ test_metric{a="2", b="2"} 1`)
 					"job":      "receive-i1",
 					"tenant":   "exceed-tenant",
 				},
-				Value: model.SampleValue(3),
+				Value: model.SampleValue(4),
 			},
 		})
 	})
