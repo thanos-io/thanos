@@ -11,7 +11,9 @@ import (
 	"runtime/debug"
 	"sync"
 
+	"go.uber.org/atomic"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type inProcessServer struct {
@@ -81,14 +83,15 @@ func (c *inProcessClient) CloseSend() error {
 	return nil
 }
 
-func ServerAsClient(srv StoreServer) StoreClient {
-	return &serverAsClient{srv: srv}
+func ServerAsClient(srv StoreServer, readOnly atomic.Bool) StoreClient {
+	return &serverAsClient{srv: srv, readOnly: readOnly}
 }
 
 // serverAsClient allows to use servers as clients.
 // NOTE: Passing CallOptions does not work - it would be needed to be implemented in grpc itself (before, after are private).
 type serverAsClient struct {
-	srv StoreServer
+	srv      StoreServer
+	readOnly atomic.Bool
 }
 
 func (s serverAsClient) LabelNames(ctx context.Context, in *LabelNamesRequest, _ ...grpc.CallOption) (*LabelNamesResponse, error) {
@@ -99,7 +102,44 @@ func (s serverAsClient) LabelValues(ctx context.Context, in *LabelValuesRequest,
 	return s.srv.LabelValues(ctx, in)
 }
 
+type readOnlySeriesClient struct {
+	ctx context.Context
+}
+
+var _ Store_SeriesClient = &readOnlySeriesClient{}
+
+func (r *readOnlySeriesClient) Recv() (*SeriesResponse, error) {
+	return nil, io.EOF
+}
+
+func (r *readOnlySeriesClient) Header() (metadata.MD, error) {
+	return nil, nil
+}
+
+func (r *readOnlySeriesClient) Trailer() metadata.MD {
+	return nil
+}
+
+func (r *readOnlySeriesClient) CloseSend() error {
+	return nil
+}
+
+func (r *readOnlySeriesClient) Context() context.Context {
+	return r.ctx
+}
+
+func (r *readOnlySeriesClient) SendMsg(m interface{}) error {
+	return nil
+}
+
+func (r *readOnlySeriesClient) RecvMsg(m interface{}) error {
+	return io.EOF
+}
+
 func (s serverAsClient) Series(ctx context.Context, in *SeriesRequest, _ ...grpc.CallOption) (Store_SeriesClient, error) {
+	if s.readOnly.Load() {
+		return &readOnlySeriesClient{ctx: ctx}, nil
+	}
 	var srvIter iter.Seq2[*SeriesResponse, error] = func(yield func(*SeriesResponse, error) bool) {
 		defer func() {
 			if r := recover(); r != nil {
