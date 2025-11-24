@@ -68,3 +68,5 @@ for dir in ${CORTEX_DIRS}; do
   popd
 done
 popd
+
+./scripts/remove_method.sh pkg/store/storepb/types.pb.go Chunk Unmarshal
