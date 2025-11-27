@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/efficientgo/core/testutil"
@@ -19,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
@@ -680,7 +682,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			}
 			return specs
 		},
-		time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1049,7 +1051,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 			}
 			return specs
 		},
-		time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Should not matter how many of these we run.
@@ -1160,7 +1162,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false, testGRPCOpts...),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true, testGRPCOpts...),
 		}
-	}, time.Minute, 1*time.Second)
+	}, time.Minute, 1*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1341,7 +1343,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 					return tc.states[currentState].endpointSpec()
 				},
-				time.Minute, 2*time.Second)
+				time.Minute, 2*time.Second, 10*time.Second)
 
 			defer endpointSet.Close()
 
@@ -1533,7 +1535,7 @@ func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, 
 			}
 			return specs
 		},
-		time.Minute, time.Second, metricLabels...)
+		time.Minute, time.Second, 10*time.Second, metricLabels...)
 	return endpointSet
 }
 
@@ -1827,5 +1829,37 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		// Verify only one endpoint set (no duplicates from multiple updates)
 		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
 		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
+}
+
+func TestEndpointCloseGCTime(t *testing.T) {
+	endpoints, err := startTestEndpoints([]testEndpointMeta{
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return labelpb.ZLabelSetsFromPromLabels(
+					labels.FromStrings("addr", addr),
+				)
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	defer endpoints.Close()
+
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	endpointSet.Update(context.Background())
+
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now()
+		er := endpointSet.endpoints[discoveredEndpointAddr[0]]
+
+		endpointSet.Close()
+		time.Sleep(endpointSet.gcTimeout)
+		synctest.Wait()
+		elapsed := time.Since(now)
+		testutil.Assert(t, elapsed == 1*time.Minute, "expected gcTimeout to be 1 minute, got %v", elapsed)
+		state := er.cc.GetState()
+		testutil.Assert(t, state == connectivity.Shutdown)
 	})
 }
