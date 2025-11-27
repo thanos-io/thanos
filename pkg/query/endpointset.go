@@ -9,10 +9,12 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -46,6 +48,7 @@ type queryConnMetricLabel string
 const (
 	ExternalLabels queryConnMetricLabel = "external_labels"
 	StoreType      queryConnMetricLabel = "store_type"
+	IPPort         queryConnMetricLabel = "ip_port"
 )
 
 type GRPCEndpointSpec struct {
@@ -117,28 +120,41 @@ type EndpointStatus struct {
 // A Collector is required as we want atomic updates for all 'thanos_store_nodes_grpc_connections' series.
 // TODO(hitanshu-mehta) Currently,only collecting metrics of storeEndpoints. Make this struct generic.
 type endpointSetNodeCollector struct {
-	mtx             sync.Mutex
-	storeNodes      map[string]map[string]int
-	storePerExtLset map[string]int
+	mtx        sync.Mutex
+	storeNodes endpointStats
 
 	logger          log.Logger
 	connectionsDesc *prometheus.Desc
 	labels          []string
+	labelsMap       map[string]struct{}
+
+	hasherPool sync.Pool
 }
 
 func newEndpointSetNodeCollector(logger log.Logger, labels ...string) *endpointSetNodeCollector {
 	if len(labels) == 0 {
 		labels = []string{string(ExternalLabels), string(StoreType)}
 	}
+
+	labelsMap := make(map[string]struct{})
+	for _, lbl := range labels {
+		labelsMap[lbl] = struct{}{}
+	}
 	return &endpointSetNodeCollector{
 		logger:     logger,
-		storeNodes: map[string]map[string]int{},
+		storeNodes: endpointStats{},
 		connectionsDesc: prometheus.NewDesc(
 			"thanos_store_nodes_grpc_connections",
 			"Number of gRPC connection to Store APIs. Opened connection means healthy store APIs available for Querier.",
 			labels, nil,
 		),
-		labels: labels,
+		labels:    labels,
+		labelsMap: labelsMap,
+		hasherPool: sync.Pool{
+			New: func() any {
+				return xxhash.New()
+			},
+		},
 	}
 }
 
@@ -155,51 +171,65 @@ func truncateExtLabels(s string, threshold int) string {
 	}
 	return s
 }
-func (c *endpointSetNodeCollector) Update(nodes map[string]map[string]int) {
-	storeNodes := make(map[string]map[string]int, len(nodes))
-	storePerExtLset := map[string]int{}
-
-	for storeType, occurrencesPerExtLset := range nodes {
-		storeNodes[storeType] = make(map[string]int, len(occurrencesPerExtLset))
-		for externalLabels, occurrences := range occurrencesPerExtLset {
-			externalLabels = truncateExtLabels(externalLabels, externalLabelLimit)
-			storePerExtLset[externalLabels] += occurrences
-			storeNodes[storeType][externalLabels] = occurrences
-		}
-	}
-
+func (c *endpointSetNodeCollector) Update(stats endpointStats) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	c.storeNodes = storeNodes
-	c.storePerExtLset = storePerExtLset
+	c.storeNodes = stats
 }
 
 func (c *endpointSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
 }
 
+func (c *endpointSetNodeCollector) hash(e endpointStat) uint64 {
+	h := c.hasherPool.Get().(*xxhash.Digest)
+	defer func() {
+		h.Reset()
+		c.hasherPool.Put(h)
+	}()
+
+	if _, ok := c.labelsMap[string(IPPort)]; ok {
+		_, _ = h.Write([]byte(e.ip))
+	}
+	if _, ok := c.labelsMap[string(ExternalLabels)]; ok {
+		_, _ = h.Write([]byte(e.extLset))
+	}
+	if _, ok := c.labelsMap[string(StoreType)]; ok {
+		_, _ = h.Write([]byte(e.component))
+	}
+
+	return h.Sum64()
+}
+
 func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
-	for k, occurrencesPerExtLset := range c.storeNodes {
-		for externalLabels, occurrences := range occurrencesPerExtLset {
-			// Select only required labels.
-			lbls := []string{}
-			for _, lbl := range c.labels {
-				switch lbl {
-				case string(ExternalLabels):
-					lbls = append(lbls, externalLabels)
-				case string(StoreType):
-					lbls = append(lbls, k)
-				}
+	var occurrences = make(map[uint64]int)
+	for _, e := range c.storeNodes {
+		h := c.hash(e)
+		occurrences[h]++
+	}
+
+	for _, n := range c.storeNodes {
+		h := c.hash(n)
+		lbls := make([]string, 0, len(c.labels))
+		for _, lbl := range c.labels {
+			switch lbl {
+			case string(ExternalLabels):
+				lbls = append(lbls, n.extLset)
+			case string(StoreType):
+				lbls = append(lbls, n.component)
+			case string(IPPort):
+				lbls = append(lbls, n.ip)
 			}
-			select {
-			case ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences), lbls...):
-			case <-time.After(1 * time.Second):
-				level.Warn(c.logger).Log("msg", "failed to collect endpointset metrics", "timeout", 1*time.Second)
-				return
-			}
+		}
+
+		select {
+		case ch <- prometheus.MustNewConstMetric(c.connectionsDesc, prometheus.GaugeValue, float64(occurrences[h]), lbls...):
+		case <-time.After(1 * time.Second):
+			level.Warn(c.logger).Log("msg", "failed to collect endpointset metrics", "timeout", 1*time.Second)
+			return
 		}
 	}
 }
@@ -374,9 +404,21 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 	level.Debug(e.logger).Log("msg", "updated endpoints", "activeEndpoints", len(e.endpoints))
 
+	nodes := make(map[string]map[string]int, len(component.All))
+	for _, comp := range component.All {
+		nodes[comp.String()] = map[string]int{}
+	}
+
 	// Update stats.
 	stats := newEndpointAPIStats()
-	for addr, er := range e.endpoints {
+
+	endpointIPs := make([]string, 0, len(e.endpoints))
+	for addr := range e.endpoints {
+		endpointIPs = append(endpointIPs, addr)
+	}
+	sort.Strings(endpointIPs)
+	for _, addr := range endpointIPs {
+		er := e.endpoints[addr]
 		if !er.isQueryable() {
 			continue
 		}
@@ -385,12 +427,14 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 		// All producers that expose StoreAPI should have unique external labels. Check all which connect to our Querier.
 		if er.HasStoreAPI() && (er.ComponentType() == component.Sidecar || er.ComponentType() == component.Rule) &&
-			stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset] > 0 {
+			nodes[component.Sidecar.String()][extLset]+nodes[component.Rule.String()][extLset] > 0 {
 
 			level.Warn(e.logger).Log("msg", "found duplicate storeEndpoints producer (sidecar or ruler). This is not advised as it will malform data in in the same bucket",
-				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", stats[component.Sidecar.String()][extLset]+stats[component.Rule.String()][extLset]+1))
+				"address", addr, "extLset", extLset, "duplicates", fmt.Sprintf("%v", nodes[component.Sidecar.String()][extLset]+nodes[component.Rule.String()][extLset]+1))
 		}
-		stats[er.ComponentType().String()][extLset]++
+		nodes[er.ComponentType().String()][extLset]++
+
+		stats = stats.append(er.addr, extLset, er.ComponentType().String())
 	}
 
 	e.endpointsMetric.Update(stats)
@@ -861,12 +905,44 @@ type endpointMetadata struct {
 	*infopb.InfoResponse
 }
 
-func newEndpointAPIStats() map[string]map[string]int {
-	nodes := make(map[string]map[string]int, len(component.All))
-	for _, comp := range component.All {
-		nodes[comp.String()] = map[string]int{}
-	}
-	return nodes
+type endpointStat struct {
+	ip        string
+	extLset   string
+	component string
+}
+
+func newEndpointAPIStats() endpointStats {
+	return []endpointStat{}
+}
+
+type endpointStats []endpointStat
+
+func (s *endpointStats) Sort() endpointStats {
+	sort.Slice(*s, func(i, j int) bool {
+		ipc := strings.Compare((*s)[i].ip, (*s)[j].ip)
+		if ipc != 0 {
+			return ipc < 0
+		}
+
+		extLsetc := strings.Compare((*s)[i].extLset, (*s)[j].extLset)
+		if extLsetc != 0 {
+			return extLsetc < 0
+		}
+
+		return strings.Compare((*s)[i].component, (*s)[j].component) < 0
+	})
+
+	return *s
+}
+
+func (es *endpointStats) append(ip, extLset, component string) endpointStats {
+	truncatedExtLabels := truncateExtLabels(extLset, externalLabelLimit)
+
+	return append(*es, endpointStat{
+		ip:        ip,
+		extLset:   truncatedExtLabels,
+		component: component,
+	})
 }
 
 func maxRangeStoreMetadata() *endpointMetadata {
