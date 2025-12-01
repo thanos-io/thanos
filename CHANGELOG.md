@@ -11,14 +11,19 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ## Unreleased
 - [#8280](https://github.com/thanos-io/thanos/pull/8280) docs: legacy --store flags + alerts examples legacy metrics
 
+## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 20 (in progress)
+
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8486](https://github.com/thanos-io/thanos/pull/8486) Receive: fix exemplar label corruption from Cap'n Proto memory references
+- [#8499](https://github.com/thanos-io/thanos/pull/8499) Query: support UTF-8 label names for the `/api/v1/label/:name/values` API.
 
 ### Added
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
+- [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
 
 ### Changed
 
@@ -26,14 +31,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Removed
 
-### [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
+## [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
 
 ### Fixed
 
 - [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
 - [#8375](https://github.com/thanos-io/thanos/pull/8375) Query: fix native histogram buckets in distributed queries
 
-### [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+## [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
 
 Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 

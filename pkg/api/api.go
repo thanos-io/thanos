@@ -34,15 +34,14 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/tsdb"
+	v1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/thanos-io/thanos/pkg/extannotations"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing"
-
-	// NOTE(GiedriusS): to register jsoniter marshalers.
-	_ "github.com/prometheus/prometheus/web/api/v1"
 )
 
 type status string
@@ -123,6 +122,17 @@ type response struct {
 	ErrorType ErrorType `json:"errorType,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Warnings  []string  `json:"warnings,omitempty"`
+}
+
+type TenantStats struct {
+	Tenant string
+	Stats  *tsdb.Stats
+}
+
+// TSDBStatus has information of cardinality statistics from postings.
+type TSDBStatus struct {
+	Tenant        string `json:"tenant"`
+	v1.TSDBStatus `json:","`
 }
 
 // SetCORS enables cross-site script calls.

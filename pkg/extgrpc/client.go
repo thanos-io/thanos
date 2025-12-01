@@ -4,6 +4,7 @@
 package extgrpc
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -15,12 +16,50 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/mem"
+	"google.golang.org/protobuf/protoadapt"
 
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
+	protobufproto "google.golang.org/protobuf/proto"
 )
+
+type nonPoolingCodec struct {
+	encoding.CodecV2
+}
+
+func init() {
+	encoding.RegisterCodecV2(&nonPoolingCodec{CodecV2: encoding.GetCodecV2("proto")})
+}
+
+func messageV2Of(v any) protobufproto.Message {
+	switch v := v.(type) {
+	case protoadapt.MessageV1:
+		return protoadapt.MessageV2Of(v)
+	case protoadapt.MessageV2:
+		return v
+	default:
+		panic(fmt.Errorf("unrecognized message type %T", v))
+	}
+}
+
+func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
+	vv := messageV2Of(v)
+	buf := data.MaterializeToBuffer(mem.DefaultBufferPool())
+
+	if err := protobufproto.Unmarshal(buf.ReadOnlyData(), vv); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *nonPoolingCodec) Marshal(v any) (out mem.BufferSlice, err error) {
+	return n.CodecV2.Marshal(v)
+}
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
