@@ -22,7 +22,7 @@ type CapNProtoServer struct {
 	logger   log.Logger
 }
 
-func NewCapNProtoServer(listener net.Listener, handler *CapNProtoHandler, logger log.Logger) *CapNProtoServer {
+func NewCapNProtoServer(listener net.Listener, handler writecapnp.Writer_Server, logger log.Logger) *CapNProtoServer {
 	return &CapNProtoServer{
 		listener: listener,
 		server:   writecapnp.Writer_ServerToClient(handler),
