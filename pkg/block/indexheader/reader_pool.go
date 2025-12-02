@@ -41,10 +41,11 @@ func NewReaderPoolMetrics(reg prometheus.Registerer) *ReaderPoolMetrics {
 // and automatically close them once the idle timeout is reached. A closed lazy reader
 // will be automatically re-opened upon next usage.
 type ReaderPool struct {
-	lazyReaderEnabled     bool
-	lazyReaderIdleTimeout time.Duration
-	logger                log.Logger
-	metrics               *ReaderPoolMetrics
+	lazyReaderEnabled           bool
+	lazyReaderIdleTimeout       time.Duration
+	lazyReaderIdleDeleteTimeout time.Duration
+	logger                      log.Logger
+	metrics                     *ReaderPoolMetrics
 
 	// Channel used to signal once the pool is closing.
 	close chan struct{}
@@ -93,15 +94,16 @@ func AlwaysLazyDownloadIndexHeader(meta *metadata.Meta) bool {
 }
 
 // NewReaderPool makes a new ReaderPool.
-func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout time.Duration, metrics *ReaderPoolMetrics, lazyDownloadFunc LazyDownloadIndexHeaderFunc) *ReaderPool {
+func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTimeout, lazyReaderIdleDeleteTimeout time.Duration, metrics *ReaderPoolMetrics, lazyDownloadFunc LazyDownloadIndexHeaderFunc) *ReaderPool {
 	p := &ReaderPool{
-		logger:                logger,
-		metrics:               metrics,
-		lazyReaderEnabled:     lazyReaderEnabled,
-		lazyReaderIdleTimeout: lazyReaderIdleTimeout,
-		lazyReaders:           make(map[*LazyBinaryReader]struct{}),
-		close:                 make(chan struct{}),
-		lazyDownloadFunc:      lazyDownloadFunc,
+		logger:                      logger,
+		metrics:                     metrics,
+		lazyReaderEnabled:           lazyReaderEnabled,
+		lazyReaderIdleTimeout:       lazyReaderIdleTimeout,
+		lazyReaderIdleDeleteTimeout: lazyReaderIdleDeleteTimeout,
+		lazyReaders:                 make(map[*LazyBinaryReader]struct{}),
+		close:                       make(chan struct{}),
+		lazyDownloadFunc:            lazyDownloadFunc,
 	}
 
 	// Start a goroutine to close idle readers (only if required).
@@ -118,6 +120,21 @@ func NewReaderPool(logger log.Logger, lazyReaderEnabled bool, lazyReaderIdleTime
 				}
 			}
 		}()
+
+		if p.lazyReaderIdleDeleteTimeout > 0 {
+			deleteCheckFreq := p.lazyReaderIdleDeleteTimeout / 10
+
+			go func() {
+				for {
+					select {
+					case <-p.close:
+						return
+					case <-time.After(deleteCheckFreq):
+						p.deleteIdleReaders()
+					}
+				}
+			}()
+		}
 	}
 
 	return p
@@ -194,4 +211,28 @@ func (p *ReaderPool) onLazyReaderClosed(r *LazyBinaryReader) {
 	// but because the consumer closed it. By contract, a reader closed by the consumer can't
 	// be used anymore, so we can automatically remove it from the pool.
 	delete(p.lazyReaders, r)
+}
+
+func (p *ReaderPool) deleteIdleReaders() {
+	idleTimeoutAgo := time.Now().Add(-p.lazyReaderIdleDeleteTimeout).UnixNano()
+
+	for _, r := range p.getIdleReadersForDeleteSince(idleTimeoutAgo) {
+		if err := r.deleteIfIdleSince(idleTimeoutAgo); err != nil && !errors.Is(err, errNotIdleForDelete) {
+			level.Warn(p.logger).Log("msg", "failed to delete index-header file", "err", err)
+		}
+	}
+}
+
+func (p *ReaderPool) getIdleReadersForDeleteSince(ts int64) []*LazyBinaryReader {
+	p.lazyReadersMx.Lock()
+	defer p.lazyReadersMx.Unlock()
+
+	var idle []*LazyBinaryReader
+	for r := range p.lazyReaders {
+		if r.isIdleForDeleteSince(ts) {
+			idle = append(idle, r)
+		}
+	}
+
+	return idle
 }

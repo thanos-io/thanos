@@ -27,6 +27,8 @@ import (
 var (
 	errNotIdle              = errors.New("the reader is not idle")
 	errUnloadedWhileLoading = errors.New("the index-header has been concurrently unloaded")
+	errNotIdleForDelete     = errors.New("the reader is not idle for delete")
+	errLoadedForDelete      = errors.New("the reader is loaded for delete")
 )
 
 // LazyBinaryReaderMetrics holds metrics tracked by LazyBinaryReader.
@@ -35,6 +37,8 @@ type LazyBinaryReaderMetrics struct {
 	loadFailedCount   prometheus.Counter
 	unloadCount       prometheus.Counter
 	unloadFailedCount prometheus.Counter
+	deleteCount       prometheus.Counter
+	deleteFailedCount prometheus.Counter
 	loadDuration      prometheus.Histogram
 }
 
@@ -56,6 +60,14 @@ func NewLazyBinaryReaderMetrics(reg prometheus.Registerer) *LazyBinaryReaderMetr
 		unloadFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "indexheader_lazy_unload_failed_total",
 			Help: "Total number of failed index-header lazy unload operations.",
+		}),
+		deleteCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "indexheader_lazy_delete_total",
+			Help: "Total number of index-header lazy delete operations.",
+		}),
+		deleteFailedCount: promauto.With(reg).NewCounter(prometheus.CounterOpts{
+			Name: "indexheader_lazy_delete_failed_total",
+			Help: "Total number of failed index-header lazy delete operations.",
 		}),
 		loadDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "indexheader_lazy_load_duration_seconds",
@@ -318,4 +330,66 @@ func (r *LazyBinaryReader) isIdleSince(ts int64) bool {
 	r.readerMx.RUnlock()
 
 	return loaded
+}
+
+// deleteIfIdleSince deletes index header file if the reader is idle since given time (as unix nano). if idleSince is 0,
+// the check on the last usage is skipped. Removal of index header file occurs only if reader is unloaded.
+// Calling this function on an already deleted index header file is a no-op.
+func (r *LazyBinaryReader) deleteIfIdleSince(ts int64) error {
+	// Nothing to do if reader is loaded.
+	r.readerMx.RLock()
+	loaded := r.reader != nil
+	r.readerMx.RUnlock()
+
+	if loaded {
+		return errLoadedForDelete
+	}
+
+	if ts > 0 && r.usedAt.Load() > ts {
+		return errNotIdleForDelete
+	}
+
+	indexHeaderFile := filepath.Join(r.dir, r.id.String(), block.IndexHeaderFilename)
+
+	// Nothing to do if already deleted.
+	if _, err := os.Stat(indexHeaderFile); os.IsNotExist(err) {
+		return errors.Wrap(err, "read index header")
+	}
+
+	r.metrics.deleteCount.Inc()
+	if err := os.Remove(indexHeaderFile); err != nil {
+		r.metrics.deleteFailedCount.Inc()
+		return errors.Wrap(err, "remove index header")
+	}
+
+	return nil
+}
+
+// isIdleForDeleteSince returns true if the reader is idle since given time (as unix nano), unloaded
+// and index header file is present.
+func (r *LazyBinaryReader) isIdleForDeleteSince(ts int64) bool {
+	if !r.lazyDownload {
+		return false
+	}
+
+	if r.usedAt.Load() > ts {
+		return false
+	}
+
+	// A reader can be considered idle for delete only if it's unloaded.
+	r.readerMx.RLock()
+	loaded := r.reader != nil
+	r.readerMx.RUnlock()
+
+	if loaded {
+		return false
+	}
+
+	// A reader can be considered idle for delete only if it's present.
+	indexHeaderFile := filepath.Join(r.dir, r.id.String(), block.IndexHeaderFilename)
+	if _, err := os.Stat(indexHeaderFile); os.IsNotExist(err) {
+		return false
+	}
+
+	return true
 }

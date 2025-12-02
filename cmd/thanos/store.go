@@ -67,41 +67,42 @@ const (
 )
 
 type storeConfig struct {
-	indexCacheConfigs             extflag.PathOrContent
-	objStoreConfig                extflag.PathOrContent
-	dataDir                       string
-	cacheIndexHeader              bool
-	grpcConfig                    grpcConfig
-	httpConfig                    httpConfig
-	indexCacheSizeBytes           units.Base2Bytes
-	chunkPoolSize                 units.Base2Bytes
-	estimatedMaxSeriesSize        uint64
-	estimatedMaxChunkSize         uint64
-	seriesBatchSize               int
-	storeRateLimits               store.SeriesSelectLimits
-	maxDownloadedBytes            units.Base2Bytes
-	maxConcurrency                int
-	component                     component.StoreAPI
-	debugLogging                  bool
-	syncInterval                  time.Duration
-	blockListStrategy             string
-	blockSyncConcurrency          int
-	blockMetaFetchConcurrency     int
-	filterConf                    *store.FilterConfig
-	selectorRelabelConf           extflag.PathOrContent
-	advertiseCompatibilityLabel   bool
-	consistencyDelay              commonmodel.Duration
-	ignoreDeletionMarksDelay      commonmodel.Duration
-	disableWeb                    bool
-	webConfig                     webConfig
-	label                         string
-	postingOffsetsInMemSampling   int
-	cachingBucketConfig           extflag.PathOrContent
-	reqLogConfig                  *extflag.PathOrContent
-	lazyIndexReaderEnabled        bool
-	lazyIndexReaderIdleTimeout    time.Duration
-	lazyExpandedPostingsEnabled   bool
-	postingGroupMaxKeySeriesRatio float64
+	indexCacheConfigs                extflag.PathOrContent
+	objStoreConfig                   extflag.PathOrContent
+	dataDir                          string
+	cacheIndexHeader                 bool
+	grpcConfig                       grpcConfig
+	httpConfig                       httpConfig
+	indexCacheSizeBytes              units.Base2Bytes
+	chunkPoolSize                    units.Base2Bytes
+	estimatedMaxSeriesSize           uint64
+	estimatedMaxChunkSize            uint64
+	seriesBatchSize                  int
+	storeRateLimits                  store.SeriesSelectLimits
+	maxDownloadedBytes               units.Base2Bytes
+	maxConcurrency                   int
+	component                        component.StoreAPI
+	debugLogging                     bool
+	syncInterval                     time.Duration
+	blockListStrategy                string
+	blockSyncConcurrency             int
+	blockMetaFetchConcurrency        int
+	filterConf                       *store.FilterConfig
+	selectorRelabelConf              extflag.PathOrContent
+	advertiseCompatibilityLabel      bool
+	consistencyDelay                 commonmodel.Duration
+	ignoreDeletionMarksDelay         commonmodel.Duration
+	disableWeb                       bool
+	webConfig                        webConfig
+	label                            string
+	postingOffsetsInMemSampling      int
+	cachingBucketConfig              extflag.PathOrContent
+	reqLogConfig                     *extflag.PathOrContent
+	lazyIndexReaderEnabled           bool
+	lazyIndexReaderIdleTimeout       time.Duration
+	lazyIndexReaderIdleDeleteTimeout time.Duration
+	lazyExpandedPostingsEnabled      bool
+	postingGroupMaxKeySeriesRatio    float64
 
 	indexHeaderLazyDownloadStrategy string
 
@@ -204,6 +205,9 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("store.index-header-lazy-reader-idle-timeout", "If index-header lazy reader is enabled and this idle timeout setting is > 0, memory map-ed index-headers will be automatically released after 'idle timeout' inactivity.").
 		Hidden().Default("5m").DurationVar(&sc.lazyIndexReaderIdleTimeout)
+
+	cmd.Flag("store.index-header-lazy-reader-idle-delete-timeout", "If index-header lazy reader is enabled, index-header-lazy-reader-idle-timeout is > 0 and this idle timeout is > 0, index header files will be automatically deleted after 'idle timeout' inactivity").
+		Hidden().Default("24h").DurationVar(&sc.lazyIndexReaderIdleDeleteTimeout)
 
 	cmd.Flag("store.enable-lazy-expanded-postings", "If true, Store Gateway will estimate postings size and try to lazily expand postings if it downloads less data than expanding all postings.").
 		Default("false").BoolVar(&sc.lazyExpandedPostingsEnabled)
@@ -476,6 +480,7 @@ func runStore(
 		false,
 		conf.lazyIndexReaderEnabled,
 		conf.lazyIndexReaderIdleTimeout,
+		conf.lazyIndexReaderIdleDeleteTimeout,
 		options...,
 	)
 	if err != nil {

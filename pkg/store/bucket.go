@@ -659,6 +659,7 @@ func NewBucketStore(
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
 	lazyIndexReaderIdleTimeout time.Duration,
+	lazyIndexReaderIdleDeleteTimeout time.Duration,
 	options ...BucketStoreOption,
 ) (*BucketStore, error) {
 	s := &BucketStore{
@@ -700,7 +701,7 @@ func NewBucketStore(
 
 	// Depend on the options
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
-	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.indexHeaderLazyDownloadStrategy)
+	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, lazyIndexReaderIdleDeleteTimeout, indexReaderPoolMetrics, s.indexHeaderLazyDownloadStrategy)
 	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
 
 	if err := s.validate(); err != nil {
