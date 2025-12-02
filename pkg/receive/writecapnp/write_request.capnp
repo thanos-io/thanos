@@ -87,6 +87,6 @@ enum WriteError {
 }
 
 interface Writer {
-	write @0 (wr :WriteRequest) -> (error :WriteError);
+	write @0 (wr :WriteRequest) -> (error :WriteError, extraErrorContext :Text);
 }
 

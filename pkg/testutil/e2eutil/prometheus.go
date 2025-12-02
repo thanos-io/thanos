@@ -143,7 +143,7 @@ func ForeachPrometheus(t *testing.T, testFn func(t testing.TB, p *Prometheus)) {
 		paths = PrometheusBinary()
 	}
 
-	for _, path := range strings.Split(paths, " ") {
+	for path := range strings.SplitSeq(paths, " ") {
 		if ok := t.Run(path, func(t *testing.T) {
 			p, err := newPrometheus(path, "")
 			testutil.Ok(t, err)
@@ -521,6 +521,9 @@ func createBlockWithDelay(ctx context.Context, dir string, series []labels.Label
 	logger := log.NewNopLogger()
 	m.ULID = id
 	m.Compaction.Sources = []ulid.ULID{id}
+	if blockDelay > 0 {
+		m.Thanos.UploadTime = timestamp.Time(int64(blockID.Time())).Add(-blockDelay)
+	}
 	if err := m.WriteToDir(logger, path.Join(dir, blockID.String())); err != nil {
 		return ulid.ULID{}, errors.Wrap(err, "write meta.json file")
 	}
@@ -576,7 +579,7 @@ func createBlock(
 		g.Go(func() error {
 			t := mint
 
-			for i := 0; i < numSamples; i++ {
+			for range numSamples {
 				app := h.Appender(ctx)
 
 				for _, lset := range batch {
@@ -584,15 +587,17 @@ func createBlock(
 
 					var sampleType = sampleTypes[si.Add(1)%int64(len(sampleTypes))]
 
-					if sampleType == chunkenc.ValFloat {
+					switch sampleType {
+					case chunkenc.ValFloat:
 						randMutex.Lock()
 						_, err = app.Append(0, lset, t, r.Float64())
 						randMutex.Unlock()
-					} else if sampleType == chunkenc.ValHistogram {
+					case chunkenc.ValHistogram:
 						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
-					} else if sampleType == chunkenc.ValFloatHistogram {
+					case chunkenc.ValFloatHistogram:
 						_, err = app.AppendHistogram(0, lset, t, nil, &floatHistogramSample)
 					}
+
 					if err != nil {
 						if rerr := app.Rollback(); rerr != nil {
 							err = errors.Wrapf(err, "rollback failed: %v", rerr)
@@ -750,11 +755,11 @@ func CreateBlockWithChurn(
 	}()
 
 	app := h.Appender(ctx)
-	for i := 0; i < len(series); i++ {
+	for i := range series {
 
 		var ref storage.SeriesRef
 		start := RandRange(rnd, mint, maxt)
-		for j := 0; j < numSamples; j++ {
+		for j := range numSamples {
 			if ref == 0 {
 				ref, err = app.Append(0, series[i], start, float64(i+j))
 			} else {

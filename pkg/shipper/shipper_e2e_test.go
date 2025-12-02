@@ -35,6 +35,22 @@ import (
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
+func compareMetaIgnoreTimestamps(t testing.TB, expected, actual string) {
+	var (
+		expMeta metadata.Meta
+		actMeta metadata.Meta
+	)
+
+	testutil.Ok(t, json.Unmarshal([]byte(expected), &expMeta))
+	testutil.Ok(t, json.Unmarshal([]byte(actual), &actMeta))
+
+	// Ignore timestamps.
+	expMeta.Thanos.UploadTime = time.Time{}
+	actMeta.Thanos.UploadTime = time.Time{}
+
+	testutil.Equals(t, expMeta.String(), actMeta.String())
+}
+
 func TestShipper_SyncBlocks_e2e(t *testing.T) {
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		// TODO(GiedriusS): consider switching to WrapWithMetrics() everywhere?
@@ -64,7 +80,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			now       = time.Now()
 			ids       = []ulid.ULID{}
 		)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			id := ulid.MustNew(uint64(i), randr)
 
 			bdir := filepath.Join(dir, id.String())
@@ -184,7 +200,12 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 			act, err := io.ReadAll(rc)
 			testutil.Ok(t, err)
 			testutil.Ok(t, rc.Close())
-			testutil.Equals(t, string(exp), string(act))
+
+			if strings.Contains(fn, block.MetaFilename) {
+				compareMetaIgnoreTimestamps(t, string(exp), string(act))
+			} else {
+				testutil.Equals(t, string(exp), string(act))
+			}
 		}
 		// Verify the fifth block is still deleted by the end.
 		ok, err := bkt.Exists(ctx, ids[4].String()+"/meta.json")
@@ -228,7 +249,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			now       = time.Now()
 			ids       = []ulid.ULID{}
 		)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			id := ulid.MustNew(uint64(i), randr)
 
 			bdir := filepath.Join(dir, id.String())
@@ -331,7 +352,11 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 			act, err := io.ReadAll(rc)
 			testutil.Ok(t, err)
 			testutil.Ok(t, rc.Close())
-			testutil.Equals(t, string(exp), string(act))
+			if strings.Contains(fn, block.MetaFilename) {
+				compareMetaIgnoreTimestamps(t, string(exp), string(act))
+			} else {
+				testutil.Equals(t, string(exp), string(act))
+			}
 		}
 		// Verify the fifth block is still deleted by the end.
 		ok, err := bkt.Exists(ctx, ids[4].String()+"/meta.json")
@@ -348,8 +373,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 
 	bkt := objstore.NewInMemBucket()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	extLset := labels.FromStrings("prometheus", "prom-1")
 
@@ -382,7 +406,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	tmp := make([]string, 2)
 	m := make([]metadata.Meta, 2)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		id[i] = ulid.MustNew(uint64(i), randr)
 
 		bdir := filepath.Join(dir, id[i].String())
@@ -407,14 +431,14 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		}
 	}
 
-	m[0].BlockMeta.MinTime = 10
-	m[0].BlockMeta.MaxTime = 20
+	m[0].MinTime = 10
+	m[0].MaxTime = 20
 
-	m[1].BlockMeta.MinTime = 15
-	m[1].BlockMeta.MaxTime = 17
+	m[1].MinTime = 15
+	m[1].MaxTime = 17
 
-	for i := 0; i < 2; i++ {
-		bdir := filepath.Join(dir, m[i].BlockMeta.ULID.String())
+	for i := range 2 {
+		bdir := filepath.Join(dir, m[i].ULID.String())
 		tmp[i] = bdir + ".tmp"
 
 		metab, err := json.Marshal(&m[i])
@@ -483,6 +507,10 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 		act, err := io.ReadAll(rc)
 		testutil.Ok(t, err)
 		testutil.Ok(t, rc.Close())
-		testutil.Equals(t, string(exp), string(act))
+		if strings.Contains(fn, block.MetaFilename) {
+			compareMetaIgnoreTimestamps(t, string(exp), string(act))
+		} else {
+			testutil.Equals(t, string(exp), string(act))
+		}
 	}
 }

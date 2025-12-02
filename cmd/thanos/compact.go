@@ -403,6 +403,7 @@ func runCompact(
 		insBkt,
 		conf.compactionConcurrency,
 		conf.skipBlockWithOutOfOrderChunks,
+		blocksCleaner,
 	)
 	if err != nil {
 		return errors.Wrap(err, "create bucket compactor")
@@ -438,14 +439,7 @@ func runCompact(
 		cleanMtx.Lock()
 		defer cleanMtx.Unlock()
 
-		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "syncing metas")
-		}
-
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
-			return errors.Wrap(err, "cleaning marked blocks")
-		}
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, compactMetrics.partialUploadDeleteAttempts, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures, ignoreDeletionMarkFilter.DeletionMarkBlocks())
 		compactMetrics.cleanups.Inc()
 
 		return nil

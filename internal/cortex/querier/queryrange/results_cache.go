@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -276,11 +277,9 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 // shouldCacheResponse says whether the response should be cached or not.
 func (s resultsCache) shouldCacheResponse(ctx context.Context, req Request, r Response, maxCacheTime int64) bool {
 	headerValues := getHeaderValuesWithName(r, cacheControlHeader)
-	for _, v := range headerValues {
-		if v == noStoreValue {
-			level.Debug(s.logger).Log("msg", fmt.Sprintf("%s header in response is equal to %s, not caching the response", cacheControlHeader, noStoreValue))
-			return false
-		}
+	if slices.Contains(headerValues, noStoreValue) {
+		level.Debug(s.logger).Log("msg", fmt.Sprintf("%s header in response is equal to %s, not caching the response", cacheControlHeader, noStoreValue))
+		return false
 	}
 
 	if !s.isAtModifierCachable(req, maxCacheTime) {
@@ -334,7 +333,12 @@ func (s resultsCache) isAtModifierCachable(r Request, maxCacheTime int64) bool {
 	}
 
 	// This resolves the start() and end() used with the @ modifier.
-	expr = promql.PreprocessExpr(expr, timestamp.Time(r.GetStart()), timestamp.Time(r.GetEnd()))
+	expr, err = promql.PreprocessExpr(expr, timestamp.Time(r.GetStart()), timestamp.Time(r.GetEnd()), time.Duration(r.GetStep())*time.Millisecond)
+	if err != nil {
+		// We are being pessimistic in such cases.
+		level.Warn(s.logger).Log("msg", "failed to preprocess expr", "query", query, "err", err)
+		return false
+	}
 
 	end := r.GetEnd()
 	atModCachable := true

@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+
 	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 
 	"github.com/thanos-io/thanos/pkg/losertree"
@@ -169,7 +170,7 @@ func (d *responseDeduplicator) At() *storepb.SeriesResponse {
 // NewProxyResponseLoserTree returns heap that k-way merge series together.
 // It's agnostic to duplicates and overlaps, it forwards all duplicated series in random order.
 func NewProxyResponseLoserTree(seriesSets ...respSet) *losertree.Tree[*storepb.SeriesResponse, respSet] {
-	var maxVal *storepb.SeriesResponse = storepb.NewSeriesResponse(nil)
+	var maxVal = storepb.NewSeriesResponse(nil)
 
 	less := func(a, b *storepb.SeriesResponse) bool {
 		if a == maxVal && b != maxVal {
@@ -302,6 +303,8 @@ type lazyRespSet struct {
 	lastResp             *storepb.SeriesResponse
 
 	shardMatcher *storepb.ShardMatcher
+
+	donec chan struct{}
 }
 
 func (l *lazyRespSet) Empty() bool {
@@ -366,12 +369,13 @@ func (l *lazyRespSet) At() *storepb.SeriesResponse {
 
 func (l *lazyRespSet) Close() {
 	l.bufferedResponsesMtx.Lock()
-	defer l.bufferedResponsesMtx.Unlock()
-
 	l.closeSeries()
 	l.rb.close()
 	l.noMoreData = true
 	l.dataOrFinishEvent.Signal()
+	l.bufferedResponsesMtx.Unlock()
+
+	<-l.donec
 
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
@@ -404,6 +408,8 @@ func newLazyRespSet(
 		initialized:          false,
 		noMoreData:           false,
 		shardMatcher:         shardMatcher,
+
+		donec: make(chan struct{}),
 	}
 	respSet.storeLabels = make(map[string]struct{})
 	for _, ls := range storeLabelSets {
@@ -422,6 +428,8 @@ func newLazyRespSet(
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
 			l.span.Finish()
+
+			close(l.donec)
 		}()
 
 		numResponses := 0
@@ -744,10 +752,7 @@ func newEagerRespSet(
 			defer t.Stop()
 		}
 
-		for {
-			if !handleRecvResponse(t) {
-				break
-			}
+		for handleRecvResponse(t) {
 		}
 
 		// This should be used only for stores that does not support doing this on server side.
@@ -802,6 +807,7 @@ func (l *eagerRespSet) Close() {
 	if l.closeSeries != nil {
 		l.closeSeries()
 	}
+	l.wg.Wait()
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
 }

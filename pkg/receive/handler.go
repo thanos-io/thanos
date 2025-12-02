@@ -410,7 +410,7 @@ func getStatsLimitParameter(r *http.Request) (int, error) {
 	return int(statsLimit), nil
 }
 
-func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusapi.TenantStats, *api.ApiError) {
+func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError) {
 	if !h.isReady() {
 		return nil, &api.ApiError{Typ: api.ErrorInternal, Err: fmt.Errorf("service unavailable")}
 	}
@@ -724,7 +724,7 @@ type remoteWriteParams struct {
 }
 
 func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
-	var stats tenantRequestStats = make(tenantRequestStats)
+	var stats = make(tenantRequestStats)
 
 	for _, write := range writes {
 		for er := range write {
@@ -764,7 +764,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	ctx, cancel := context.WithTimeout(tracing.CopyTraceContext(context.Background(), ctx), h.options.ForwardTimeout)
 
 	var writeErrors writeErrors
-	var stats tenantRequestStats = make(tenantRequestStats)
+	var stats = make(tenantRequestStats)
 
 	defer func() {
 		if writeErrors.ErrOrNil() != nil {
@@ -775,7 +775,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}
 	}()
 
-	logTags := []interface{}{"tenant", params.tenant}
+	logTags := []any{"tenant", params.tenant}
 	if id, ok := middleware.RequestIDFromContext(ctx); ok {
 		logTags = append(logTags, "request-id", id)
 	}
@@ -1027,9 +1027,12 @@ func (h *Handler) sendRemoteWrite(
 			}
 			h.peers.markPeerAvailable(endpoint)
 		} else {
-			h.forwardRequests.WithLabelValues(labelError).Inc()
-			if !alreadyReplicated {
-				h.replications.WithLabelValues(labelError).Inc()
+			// Only increment error metrics if the error is not AlreadyExists.
+			if st, ok := status.FromError(err); !ok || st.Code() != codes.AlreadyExists {
+				h.forwardRequests.WithLabelValues(labelError).Inc()
+				if !alreadyReplicated {
+					h.replications.WithLabelValues(labelError).Inc()
+				}
 			}
 
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.

@@ -176,7 +176,7 @@ func TestReaderPool_MultipleReaders(t *testing.T) {
 
 	const readersCount = 10
 	waitWg.Add(readersCount)
-	for i := 0; i < readersCount; i++ {
+	for range readersCount {
 		go func() {
 			defer waitWg.Done()
 			t.Logf("waiting")

@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
@@ -53,6 +54,11 @@ const (
 	TSDBVersion1 = 1
 	// ThanosVersion1 is a enumeration of Thanos section of TSDB meta supported by Thanos.
 	ThanosVersion1 = 1
+
+	// ParquetMigratedExtensionKey is the key used in block extensions to indicate
+	// that the block has been migrated to parquet format and can be safely ignored
+	// by store gateways.
+	ParquetMigratedExtensionKey = "parquet_migrated"
 )
 
 // Meta describes the a block's meta. It wraps the known TSDB meta structure and
@@ -98,6 +104,10 @@ type Thanos struct {
 
 	// Extensions are used for plugin any arbitrary additional information for block. Optional.
 	Extensions any `json:"extensions,omitempty"`
+
+	// UploadTime is used to track when the meta.json file was uploaded to the object storage
+	// without an extra Attributes call. Used for consistency filter.
+	UploadTime time.Time `json:"upload_time,omitempty"`
 }
 
 type IndexStats struct {

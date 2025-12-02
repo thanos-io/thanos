@@ -166,8 +166,9 @@ type bucketMarkBlockConfig struct {
 }
 
 type bucketUploadBlocksConfig struct {
-	path   string
-	labels []string
+	path            string
+	labels          []string
+	uploadCompacted bool
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -300,6 +301,7 @@ func (tbc *bucketRetentionConfig) registerBucketRetentionFlag(cmd extkingpin.Fla
 func (tbc *bucketUploadBlocksConfig) registerBucketUploadBlocksFlag(cmd extkingpin.FlagClause) *bucketUploadBlocksConfig {
 	cmd.Flag("path", "Path to the directory containing blocks to upload.").Default("./data").StringVar(&tbc.path)
 	cmd.Flag("label", "External labels to add to the uploaded blocks (repeated).").PlaceHolder("key=\"value\"").StringsVar(&tbc.labels)
+	cmd.Flag("shipper.upload-compacted", "If true shipper will try to upload compacted blocks as well.").Default("false").BoolVar(&tbc.uploadCompacted)
 
 	return tbc
 }
@@ -915,8 +917,8 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		level.Info(logger).Log("msg", "synced blocks done")
 
-		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter)
-		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
+		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter, ignoreDeletionMarkFilter.DeletionMarkBlocks())
+		if _, err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
 			return errors.Wrap(err, "error cleaning blocks")
 		}
 
@@ -1509,6 +1511,7 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 			shipper.WithSource(metadata.BucketUploadSource),
 			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
 			shipper.WithLabels(func() labels.Labels { return lset }),
+			shipper.WithUploadCompacted(tbc.uploadCompacted),
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())

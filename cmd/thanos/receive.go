@@ -26,7 +26,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/compression"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
@@ -35,6 +35,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/compressutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
@@ -48,6 +49,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -93,7 +95,7 @@ func registerReceive(app *extkingpin.App) {
 			MaxBytes:                       int64(conf.tsdbMaxBytes),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
-			WALCompression:                 wlog.ParseCompressionType(conf.walCompression, string(wlog.CompressionSnappy)),
+			WALCompression:                 compressutil.ParseCompressionType(conf.walCompression, compression.Snappy),
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
@@ -397,12 +399,37 @@ func runReceive(
 				return nil, errors.New("Not ready")
 			}),
 			info.WithExemplarsInfoFunc(),
+			info.WithStatusInfoFunc(),
+		)
+
+		statusSrv := status.NewServer(
+			component.Receive.String(),
+			status.WithTSDBStatisticsGetter(
+				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+					if !httpProbe.IsReady() {
+						return nil, errors.New("not ready")
+					}
+
+					var tenantIDs []string
+					if tenantID != "" {
+						tenantIDs = append(tenantIDs, tenantID)
+					}
+
+					stats := map[string]tsdb.Stats{}
+					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+						stats[ts.Tenant] = *ts.Stats
+					}
+
+					return stats, nil
+				}),
+			),
 		)
 
 		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
+			grpcserver.WithServer(status.RegisterStatusServer(statusSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),

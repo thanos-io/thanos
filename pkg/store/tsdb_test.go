@@ -33,8 +33,7 @@ const skipMessage = "Chunk behavior changed due to https://github.com/prometheus
 func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
@@ -73,8 +72,7 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 func TestTSDBStore_Series(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	db, err := e2eutil.NewTSDB()
 	defer func() { testutil.Ok(t, db.Close()) }()
@@ -520,14 +518,14 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 		logger = log.NewNopLogger()
 	)
 
-	for j := 0; j < 3; j++ {
+	for j := range 3 {
 		head, created := storetestutil.CreateHeadWithSeries(t, j, storetestutil.HeadGenOptions{
 			TSDBDir:          tmpDir,
 			SamplesPerSeries: samplesPerSeriesPerBlock,
 			Series:           seriesPerBlock,
 			Random:           random,
 		})
-		for i := 0; i < len(created); i++ {
+		for i := range created {
 			resps[j] = append(resps[j], storepb.NewSeriesResponse(created[i]))
 		}
 
@@ -544,7 +542,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 	})
 	testutil.Ok(t, head2.Close())
 
-	for i := 0; i < len(created); i++ {
+	for i := range created {
 		resps[3] = append(resps[3], storepb.NewSeriesResponse(created[i]))
 	}
 

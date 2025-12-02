@@ -53,7 +53,7 @@ func (s *TestPingService) PingList(ping *testpb.PingRequest, stream testpb.TestS
 		return status.Errorf(codes.Code(ping.ErrorCodeReturned), "foobar")
 	}
 	// Send user trailers and headers.
-	for i := 0; i < ListResponseCount; i++ {
+	for i := range ListResponseCount {
 		if err := stream.Send(&testpb.PingResponse{Value: ping.Value, Counter: int32(i)}); err != nil {
 			return err
 		}

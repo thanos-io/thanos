@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	grpcresolver "google.golang.org/grpc/resolver"
 )
 
@@ -18,16 +19,18 @@ var (
 )
 
 type builder struct {
-	resolveInterval time.Duration
-	provider        *Provider
-	logger          log.Logger
+	resolveInterval     time.Duration
+	provider            *Provider
+	logger              log.Logger
+	injectTestAddresses []string
 }
 
-func RegisterGRPCResolver(logger log.Logger, provider *Provider, interval time.Duration) {
+func RegisterGRPCResolver(logger log.Logger, provider *Provider, interval time.Duration, injectTestAddresses []string) {
 	grpcresolver.Register(&builder{
-		resolveInterval: interval,
-		provider:        provider,
-		logger:          logger,
+		resolveInterval:     interval,
+		provider:            provider,
+		logger:              logger,
+		injectTestAddresses: injectTestAddresses,
 	})
 }
 
@@ -36,14 +39,22 @@ func (b *builder) Scheme() string { return "thanos" }
 func (b *builder) Build(t grpcresolver.Target, cc grpcresolver.ClientConn, _ grpcresolver.BuildOptions) (grpcresolver.Resolver, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &resolver{
-		provider: b.provider,
-		target:   t.Endpoint(),
-		ctx:      ctx,
-		cancel:   cancel,
-		cc:       cc,
-		interval: b.resolveInterval,
-		logger:   b.logger,
+		provider:            b.provider,
+		target:              t.Endpoint(),
+		ctx:                 ctx,
+		cancel:              cancel,
+		cc:                  cc,
+		interval:            b.resolveInterval,
+		logger:              b.logger,
+		injectTestAddresses: b.injectTestAddresses,
 	}
+
+	// perform initial, synchronous resolution to populate the state.
+	level.Info(r.logger).Log("msg", "performing initial gRPC endpoint resolution", "target", r.target)
+	if err := r.updateResolver(); err != nil {
+		level.Error(r.logger).Log("msg", "initial gRPC endpoint resolution failed", "target", r.target, "err", err)
+	}
+
 	r.wg.Add(1)
 	go r.run()
 
@@ -59,8 +70,9 @@ type resolver struct {
 	cc       grpcresolver.ClientConn
 	interval time.Duration
 
-	wg     sync.WaitGroup
-	logger log.Logger
+	wg                  sync.WaitGroup
+	logger              log.Logger
+	injectTestAddresses []string
 }
 
 func (r *resolver) Close() {
@@ -77,35 +89,42 @@ func (r *resolver) resolve() error {
 }
 
 func (r *resolver) addresses() []string {
+	if len(r.injectTestAddresses) > 0 {
+		return r.injectTestAddresses
+	}
 	return r.provider.AddressesForHost(r.target)
+}
+
+func (r *resolver) updateResolver() error {
+	if err := r.resolve(); err != nil {
+		r.cc.ReportError(err)
+		return err
+	}
+	state := grpcresolver.State{}
+	addrs := r.addresses()
+	if len(addrs) == 0 {
+		level.Info(r.logger).Log("msg", "no addresses resolved", "target", r.target)
+		return nil
+	}
+	for _, addr := range addrs {
+		state.Addresses = append(state.Addresses, grpcresolver.Address{Addr: addr})
+	}
+	if err := r.cc.UpdateState(state); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *resolver) run() {
 	defer r.wg.Done()
 	for {
-		func() {
-			if err := r.resolve(); err != nil {
-				r.cc.ReportError(err)
-				r.logger.Log("msg", "failed to resolve", "err", err)
-				return
-			}
-			state := grpcresolver.State{}
-			addrs := r.addresses()
-			if len(addrs) == 0 {
-				r.logger.Log("msg", "no addresses resolved", "target", r.target)
-				return
-			}
-			for _, addr := range addrs {
-				state.Addresses = append(state.Addresses, grpcresolver.Address{Addr: addr})
-			}
-			if err := r.cc.UpdateState(state); err != nil {
-				r.logger.Log("msg", "failed to update state", "err", err)
-			}
-		}()
 		select {
 		case <-r.ctx.Done():
 			return
 		case <-time.After(r.interval):
+			if err := r.updateResolver(); err != nil {
+				level.Error(r.logger).Log("msg", "failed to update state for gRPC resolver", "err", err)
+			}
 		}
 	}
 }

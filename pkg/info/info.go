@@ -27,6 +27,7 @@ type InfoServer struct {
 	getTargetsInfo        func() *infopb.TargetsInfo
 	getMetricMetadataInfo func() *infopb.MetricMetadataInfo
 	getQueryAPIInfo       func() *infopb.QueryAPIInfo
+	getStatusInfo         func() *infopb.StatusInfo
 }
 
 // NewInfoServer creates a new server instance for given component
@@ -45,6 +46,7 @@ func NewInfoServer(
 		getTargetsInfo:        func() *infopb.TargetsInfo { return nil },
 		getMetricMetadataInfo: func() *infopb.MetricMetadataInfo { return nil },
 		getQueryAPIInfo:       func() *infopb.QueryAPIInfo { return nil },
+		getStatusInfo:         func() *infopb.StatusInfo { return nil },
 	}
 
 	for _, o := range options {
@@ -132,9 +134,9 @@ func WithTargetsInfoFunc(getTargetsInfo ...func() *infopb.TargetsInfo) ServerOpt
 	}
 }
 
-// WithTargetsInfoFunc determines the function that should be executed to obtain
-// the targets information. If no function is provided, the default empty
-// targets info is returned. Only the first function from the list is considered.
+// WithMetricMetadataInfoFunc determines the function that should be executed to obtain
+// the metric metadata information. If no function is provided, the default empty
+// metric metadata info is returned. Only the first function from the list is considered.
 func WithMetricMetadataInfoFunc(getMetricMetadataInfo ...func() *infopb.MetricMetadataInfo) ServerOptionFunc {
 	if len(getMetricMetadataInfo) == 0 {
 		return func(s *InfoServer) {
@@ -162,6 +164,21 @@ func WithQueryAPIInfoFunc(queryInfo ...func() *infopb.QueryAPIInfo) ServerOption
 	}
 }
 
+// WithStatusInfoFunc determines the function that should be executed to obtain
+// the status information. If no function is provided, the default empty
+// status info is returned. Only the first function from the list is considered.
+func WithStatusInfoFunc(statusInfo ...func() *infopb.StatusInfo) ServerOptionFunc {
+	if len(statusInfo) == 0 {
+		return func(s *InfoServer) {
+			s.getStatusInfo = func() *infopb.StatusInfo { return &infopb.StatusInfo{} }
+		}
+	}
+
+	return func(s *InfoServer) {
+		s.getStatusInfo = statusInfo[0]
+	}
+}
+
 // RegisterInfoServer registers the info server.
 func RegisterInfoServer(infoSrv infopb.InfoServer) func(*grpc.Server) {
 	return func(s *grpc.Server) {
@@ -184,5 +201,6 @@ func (srv *InfoServer) Info(ctx context.Context, req *infopb.InfoRequest) (*info
 		Targets:        srv.getTargetsInfo(),
 		MetricMetadata: srv.getMetricMetadataInfo(),
 		Query:          srv.getQueryAPIInfo(),
+		Status:         srv.getStatusInfo(),
 	}, nil
 }

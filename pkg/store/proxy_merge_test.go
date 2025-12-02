@@ -348,10 +348,10 @@ func BenchmarkSortWithoutLabels(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		b.StopTimer()
-		for i := 0; i < 1e4; i++ {
+		for i := range int(1e4) {
 			resps[i] = storeSeriesResponse(b, labels.FromStrings("a", "1", "b", "replica-1", "c", "replica-1", "d", "1"))
 		}
 		b.StartTimer()
@@ -360,9 +360,9 @@ func BenchmarkSortWithoutLabels(b *testing.B) {
 }
 
 func BenchmarkKWayMerge(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		respSets := []respSet{}
-		for j := 0; j < 1000; j++ {
+		for j := range 1000 {
 			respSets = append(respSets, &eagerRespSet{
 				closeSeries: func() {},
 				cl:          nopClientSendCloser{},

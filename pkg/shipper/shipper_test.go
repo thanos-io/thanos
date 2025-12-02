@@ -74,7 +74,7 @@ func TestIterBlockMetas(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, 0, len(failedBlocks))
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
-		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+		return metas[i].MinTime < metas[j].MinTime
 	}), true)
 }
 
@@ -119,7 +119,7 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 	testutil.Equals(t, id2.String(), failedBlocks[0])
 	testutil.Equals(t, 2, len(metas))
 	testutil.Equals(t, sort.SliceIsSorted(metas, func(i, j int) bool {
-		return metas[i].BlockMeta.MinTime < metas[j].BlockMeta.MinTime
+		return metas[i].MinTime < metas[j].MinTime
 	}), true)
 }
 
@@ -127,7 +127,7 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 	var metas []*metadata.Meta
 	dir := b.TempDir()
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		id := ulid.MustNew(uint64(i), nil)
 		testutil.Ok(b, os.Mkdir(path.Join(dir, id.String()), os.ModePerm))
 		testutil.Ok(b,

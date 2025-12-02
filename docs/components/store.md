@@ -18,13 +18,13 @@ config:
   use_grpc: false
   grpc_conn_pool_size: 0
   http_config:
-    idle_conn_timeout: 0s
-    response_header_timeout: 0s
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
     insecure_skip_verify: false
-    tls_handshake_timeout: 0s
-    expect_continue_timeout: 0s
-    max_idle_conns: 0
-    max_idle_conns_per_host: 0
+    tls_handshake_timeout: 10s
+    expect_continue_timeout: 1s
+    max_idle_conns: 100
+    max_idle_conns_per_host: 100
     max_conns_per_host: 0
     tls_config:
       ca_file: ""
@@ -478,7 +478,7 @@ While the remaining settings are **optional**:
 - `dial_timeout`: the redis dial timeout.
 - `read_timeout`: the redis read timeout.
 - `write_timeout`: the redis write timeout.
-- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/manual/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
+- `cache_size` size of the in-memory cache used for client-side caching. Client-side caching is enabled when this value is not zero. See [official documentation](https://redis.io/docs/latest/develop/reference/client-side-caching/) for more. It is highly recommended to enable this so that Thanos Store would not need to continuously retrieve data from Redis for repeated requests of the same key(-s).
 - `enabled_items`: selectively choose what types of items to cache. Supported values are `Postings`, `Series` and `ExpandedPostings`. By default, all items are cached.
 - `ttl`: ttl to store index cache items in redis.
 

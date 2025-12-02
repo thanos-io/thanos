@@ -48,7 +48,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
@@ -82,7 +82,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
@@ -123,7 +123,7 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.InternalDir()),
 	}
 
@@ -204,7 +204,7 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	}
 	// Start thanos tool bucket web.
 	svcConfig := client.BucketConfig{
-		Type:   client.S3,
+		Type:   objstore.S3,
 		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 	}
 	b := e2ethanos.NewToolsBucketWeb(

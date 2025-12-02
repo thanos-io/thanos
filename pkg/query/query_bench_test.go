@@ -6,6 +6,7 @@ package query
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"path/filepath"
@@ -13,8 +14,21 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
+	grpc_logging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/prober"
+	"github.com/thanos-io/thanos/pkg/store"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -23,7 +37,111 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
+
+	_ "github.com/thanos-io/thanos/pkg/extgrpc"
 )
+
+func BenchmarkGRPCServer(b *testing.B) {
+	tmpDir := b.TempDir()
+
+	const totalSamples = 1e3
+	const totalSeries = 1e2
+
+	const numOfReplicas = 1
+
+	samplesPerSeriesPerReplica := int(totalSamples / numOfReplicas)
+	if samplesPerSeriesPerReplica == 0 {
+		samplesPerSeriesPerReplica = 1
+	}
+	seriesPerReplica := int(totalSeries / numOfReplicas)
+	if seriesPerReplica == 0 {
+		seriesPerReplica = 1
+	}
+
+	random := rand.New(rand.NewSource(120))
+	var resps []*storepb.SeriesResponse
+	for j := range numOfReplicas {
+		// Note 0 argument - this is because we want to have two replicas for the same time duration.
+		head, created := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
+			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
+			SamplesPerSeries: samplesPerSeriesPerReplica,
+			Series:           seriesPerReplica,
+			Random:           random,
+			PrependLabels:    labels.FromStrings("a_replica", fmt.Sprintf("%d", j)), // a_ prefix so we keep sorted order.
+		})
+		testutil.Ok(b, head.Close())
+		for i := range created {
+			resps = append(resps, storepb.NewSeriesResponse(created[i]))
+		}
+	}
+
+	b.Log(len(resps))
+
+	ss := &mockedStoreServer{responses: resps}
+
+	g := grpcserver.New(
+		log.NewNopLogger(), prometheus.NewRegistry(), opentracing.NoopTracer{}, []grpc_logging.Option{}, []string{}, component.Compact, prober.NewGRPC(),
+		grpcserver.WithServer(store.RegisterStoreServer(ss, log.NewNopLogger())),
+		grpcserver.WithListen("localhost:0"),
+	)
+
+	go func() {
+		err := g.ListenAndServe()
+		if errors.Is(err, grpc.ErrServerStopped) {
+			return
+		}
+		testutil.Ok(b, err)
+	}()
+
+	for g.Address() == "" {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	b.Cleanup(func() {
+		g.Shutdown(nil)
+	})
+
+	gc, err := grpc.NewClient(g.Address(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultCallOptions(grpc.UseCompressor("snappy")))
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, gc.Close())
+	})
+	sc := storepb.NewStoreClient(gc)
+
+	b.Log("initializing the loop")
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		retS, err := sc.Series(context.Background(), &storepb.SeriesRequest{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+			Matchers: []storepb.LabelMatcher{
+				{
+					Type:  storepb.LabelMatcher_RE,
+					Name:  model.MetricNameLabel,
+					Value: "a_.*",
+				},
+			},
+		}, grpc.UseCompressor("snappy"))
+
+		testutil.Ok(b, err)
+
+		var got int
+
+		for {
+			_, err := retS.Recv()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				testutil.Ok(b, err)
+			}
+			got++
+		}
+
+		require.Equal(b, len(resps), got)
+	}
+}
 
 // TestQuerySelect benchmarks querier Select method. Note that this is what PromQL is using, but PromQL might invoke
 // this many times and within different interval e.g
@@ -61,7 +179,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 	random := rand.New(rand.NewSource(120))
 	var resps []*storepb.SeriesResponse
 	var expectedSeries []labels.Labels
-	for j := 0; j < numOfReplicas; j++ {
+	for j := range numOfReplicas {
 		// Note 0 argument - this is because we want to have two replicas for the same time duration.
 		head, created := storetestutil.CreateHeadWithSeries(t, 0, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", j)),
@@ -71,11 +189,11 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 			PrependLabels:    labels.FromStrings("a_replica", fmt.Sprintf("%d", j)), // a_ prefix so we keep sorted order.
 		})
 		testutil.Ok(t, head.Close())
-		for i := 0; i < len(created); i++ {
+		for i := range created {
 			if !dedup || j == 0 {
 				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
-					lset = lset[1:]
+					lset = lset.MatchLabels(false, "a_replica")
 				}
 				expectedSeries = append(expectedSeries, lset)
 			}

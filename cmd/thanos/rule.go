@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"maps"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -41,7 +42,7 @@ import (
 	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
-	"github.com/prometheus/prometheus/tsdb/wlog"
+	"github.com/prometheus/prometheus/util/compression"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
@@ -54,6 +55,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/compressutil"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extannotations"
@@ -198,12 +200,12 @@ func registerRule(app *extkingpin.App) {
 			MaxBlockDuration:       int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			RetentionDuration:      int64(time.Duration(*tsdbRetention) / time.Millisecond),
 			NoLockfile:             *noLockFile,
-			WALCompression:         wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
+			WALCompression:         compressutil.ParseCompressionType(*walCompression, compression.Snappy),
 			EnableNativeHistograms: conf.tsdbEnableNativeHistograms,
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: wlog.ParseCompressionType(*walCompression, string(wlog.CompressionSnappy)),
+			WALCompression: compressutil.ParseCompressionType(*walCompression, compression.Snappy),
 			NoLockfile:     *noLockFile,
 		}
 
@@ -449,6 +451,7 @@ func runRule(
 			5*time.Minute,
 			5*time.Second,
 			dialOpts,
+			[]string{},
 		)
 		if err != nil {
 			return err
@@ -586,9 +589,7 @@ func runRule(
 	)
 	{
 		if conf.extendedFunctionsEnabled {
-			for k, fn := range parse.XFunctions {
-				parser.Functions[k] = fn
-			}
+			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
 		if len(conf.EnableFeatures) > 0 {

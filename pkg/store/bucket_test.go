@@ -664,8 +664,7 @@ func TestBucketStoreConfig_validate(t *testing.T) {
 func TestBucketStore_TSDBInfo(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	logger := log.NewNopLogger()
 	dir := t.TempDir()
@@ -1214,7 +1213,7 @@ func appendTestData(t testing.TB, app storage.Appender, series int) {
 
 	series = series / 5
 	uniq := 0
-	for n := 0; n < 10; n++ {
+	for n := range 10 {
 		for i := 0; i < series/10; i++ {
 			addSeries(labels.FromStrings("i", strconv.Itoa(i)+storetestutil.LabelLongSuffix, "n", strconv.Itoa(n)+storetestutil.LabelLongSuffix, "j", "foo", "uniq", fmt.Sprintf("%08d", uniq)))
 			// Have some series that won't be matched, to properly test inverted matches.
@@ -1248,10 +1247,7 @@ func benchmarkExpandedPostings(
 	iNot2 := labels.MustNewMatcher(labels.MatchNotEqual, "i", "2"+storetestutil.LabelLongSuffix)
 	iNot2Star := labels.MustNewMatcher(labels.MatchNotRegexp, "i", "^2.*$")
 	iRegexSet := labels.MustNewMatcher(labels.MatchRegexp, "i", "0"+storetestutil.LabelLongSuffix+"|1"+storetestutil.LabelLongSuffix+"|2"+storetestutil.LabelLongSuffix)
-	bigValueSetSize := series / 10
-	if bigValueSetSize > 50000 {
-		bigValueSetSize = 50000
-	}
+	bigValueSetSize := min(series/10, 50000)
 	bigValueSet := make([]string, 0, bigValueSetSize)
 	for i := 0; i < series; i += series / bigValueSetSize {
 		bigValueSet = append(bigValueSet, fmt.Sprintf("%08d", i))
@@ -1486,7 +1482,7 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 	// Create 4 blocks. Each will have seriesPerBlock number of series that have samplesPerSeriesPerBlock samples.
 	// Timestamp will be counted for each new series and new sample, so each each series will have unique timestamp.
 	// This allows to pick time range that will correspond to number of series picked 1:1.
-	for bi := 0; bi < numOfBlocks; bi++ {
+	for bi := range numOfBlocks {
 		head, _ := storetestutil.CreateHeadWithSeries(t, bi, storetestutil.HeadGenOptions{
 			TSDBDir:          filepath.Join(tmpDir, fmt.Sprintf("%d", bi)),
 			SamplesPerSeries: samplesPerSeriesPerBlock,
@@ -1569,9 +1565,10 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 			expectedSamples = 1
 		}
 		seriesCut := int(p * float64(numOfBlocks*seriesPerBlock))
-		if seriesCut == 0 {
+		switch seriesCut {
+		case 0:
 			seriesCut = 1
-		} else if seriesCut == 1 {
+		case 1:
 			seriesCut = expectedSamples / samplesPerSeriesPerBlock
 		}
 
@@ -1708,7 +1705,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		app := h.Appender(context.Background())
 
-		for i := 0; i < numSeries; i++ {
+		for i := range numSeries {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "1", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
@@ -1748,7 +1745,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		app := h.Appender(context.Background())
 
-		for i := 0; i < numSeries; i++ {
+		for i := range numSeries {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "2", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
@@ -2052,7 +2049,7 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	defer func() { testutil.Ok(t, h.Close()) }()
 
 	series := labels.FromStrings("__name__", "test")
-	for ts := int64(0); ts < 10000; ts++ {
+	for ts := range int64(10000) {
 		// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
 		// (except the last one, which could be smaller).
 		app := h.Appender(context.Background())
@@ -2310,7 +2307,7 @@ func uploadSeriesToBucket(t *testing.T, bkt *filesystem.Bucket, replica string, 
 	testutil.Ok(t, err)
 
 	for _, s := range series {
-		for ts := int64(0); ts < 100; ts++ {
+		for ts := range int64(100) {
 			// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
 			// (except the last one, which could be smaller).
 			app := h.Appender(context.Background())
@@ -2351,7 +2348,7 @@ func TestBigEndianPostingsCount(t *testing.T) {
 	const count = 1000
 	raw := make([]byte, count*4)
 
-	for ix := 0; ix < count; ix++ {
+	for ix := range count {
 		binary.BigEndian.PutUint32(raw[4*ix:], rand.Uint32())
 	}
 
@@ -2633,7 +2630,7 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 
 	series := labels.FromStrings("__name__", "test")
 	app := h.Appender(context.Background())
-	for ts := int64(0); ts < 10_000; ts++ {
+	for ts := range int64(10_000) {
 		_, err := app.Append(0, series, ts, float64(ts))
 		testutil.Ok(t, err)
 	}
@@ -2791,9 +2788,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
-	b.ResetTimer()
-
-	for n := 0; n < b.N; n++ {
+	for n := 0; b.Loop(); n++ {
 		offset := int64(0)
 		length := readLengths[n%len(readLengths)]
 
@@ -2898,11 +2893,11 @@ func benchmarkBlockSeriesWithConcurrency(b *testing.B, concurrency int, blockMet
 	reg := prometheus.NewRegistry()
 	dummyCounter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test"})
 	dummyCounterVec := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
-	for w := 0; w < concurrency; w++ {
+	for range concurrency {
 		go func() {
 			defer wg.Done()
 
-			for n := 0; n < queriesPerWorker; n++ {
+			for n := range queriesPerWorker {
 				// Each query touches a subset of series. To make it reproducible and make sure
 				// we just don't query consecutive series (as is in the real world), we do create
 				// a label matcher which looks for a short integer within the label value.
@@ -2988,7 +2983,7 @@ func TestExpandPostingsWithContextCancel(t *testing.T) {
 	testutil.Ok(t, err)
 
 	refs := make([]storage.SeriesRef, 0)
-	for i := 0; i < 128; i++ {
+	for i := range 128 {
 		refs = append(refs, storage.SeriesRef(i))
 	}
 	p = index.NewListPostings(refs)
@@ -3589,7 +3584,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 
 	bucketBlocks := make([]*bucketBlock, 0, blockCount)
 
-	for i := 0; i < blockCount; i++ {
+	for i := range blockCount {
 		ul := ulid.MustNew(uint64(i), rand.New(rand.NewSource(444)))
 
 		// Upload the block to the bucket.
@@ -3602,7 +3597,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 		testutil.Ok(t, err)
 
 		m.Thanos = thanosMeta
-		m.BlockMeta.ULID = ul
+		m.ULID = ul
 
 		e2eutil.Copy(t, filepath.Join(tmpDir, blockID.String()), filepath.Join(tmpDir, ul.String()))
 		testutil.Ok(t, m.WriteToDir(log.NewLogfmtLogger(os.Stderr), filepath.Join(tmpDir, ul.String())))
@@ -3639,11 +3634,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 	dummyCounter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test"})
 	dummyCounterVec := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{Name: "test_counter_vec"}, []string{"reason"})
 
-	for {
-		if tm.Err() != nil {
-			break
-		}
-
+	for tm.Err() == nil {
 		m := []*labels.Matcher{
 			labels.MustNewMatcher(labels.MatchEqual, "foo", "bar"),
 			labels.MustNewMatcher(labels.MatchRegexp, "j", ".+"),
@@ -3707,7 +3698,7 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		headOpts := tsdb.DefaultHeadOptions()
 		headOpts.ChunkDirRoot = tmpDir
 		headOpts.ChunkRange = 1000

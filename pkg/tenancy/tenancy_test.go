@@ -10,6 +10,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -106,8 +107,7 @@ func TestTenantProxyPassing(t *testing.T) {
 	// outgoing grpc metadata
 	t.Run("tenant-via-context", func(t *testing.T) {
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 		ctx = context.WithValue(ctx, tenancy.TenantKey, testTenant)
 
 		mockedStore := &mockedStoreAPI{
@@ -129,7 +129,7 @@ func TestTenantProxyPassing(t *testing.T) {
 			nil,
 			func() []store.Client { return cls },
 			component.Query,
-			nil, 0*time.Second, store.EagerRetrieval,
+			labels.EmptyLabels(), 0*time.Second, store.EagerRetrieval,
 		)
 		// We assert directly in the mocked store apis LabelValues/LabelNames/Series funcs
 		_, _ = q.LabelValues(ctx, &storepb.LabelValuesRequest{})
@@ -149,8 +149,7 @@ func TestTenantProxyPassing(t *testing.T) {
 	// grpc metadata to be sent to its stores.
 	t.Run("tenant-via-grpc", func(t *testing.T) {
 
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		md := metadata.New(map[string]string{tenancy.DefaultTenantHeader: testTenant})
 		ctx = metadata.NewIncomingContext(ctx, md)
@@ -174,7 +173,7 @@ func TestTenantProxyPassing(t *testing.T) {
 			nil,
 			func() []store.Client { return cls },
 			component.Query,
-			nil, 0*time.Second, store.EagerRetrieval,
+			labels.EmptyLabels(), 0*time.Second, store.EagerRetrieval,
 		)
 
 		// We assert directly in the mocked store apis LabelValues/LabelNames/Series funcs

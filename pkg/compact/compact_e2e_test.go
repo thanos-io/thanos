@@ -48,7 +48,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			var m metadata.Meta
 
 			m.Version = 1
@@ -113,7 +113,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		var rem []ulid.ULID
 		err = bkt.Iter(ctx, "", func(n string) error {
@@ -140,7 +140,7 @@ func TestSyncer_GarbageCollect_e2e(t *testing.T) {
 
 		// After another sync the changes should also be reflected in the local groups.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		// Only the level 3 block, the last source block in both resolutions should be left.
 		grouper := NewDefaultGrouper(nil, bkt, false, false, nil, blocksMarkedForDeletion, garbageCollectedBlocks, blockMarkedForNoCompact, metadata.NoneFunc, 10, 10)
@@ -219,7 +219,7 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 
 		planner := NewPlanner(logger, []int64{1000, 3000}, noCompactMarkerFilter)
 		grouper := NewDefaultGrouper(logger, bkt, false, false, reg, blocksMarkedForDeletion, garbageCollectedBlocks, blocksMaredForNoCompact, metadata.NoneFunc, 10, 10)
-		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true)
+		bComp, err := NewBucketCompactor(logger, sy, grouper, planner, comp, dir, bkt, 2, true, nil)
 		testutil.Ok(t, err)
 
 		// Compaction on empty should not fail.
@@ -237,25 +237,25 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 		testutil.Assert(t, os.IsNotExist(err), "dir %s should be remove after compaction.", dir)
 
 		// Test label name with slash, regression: https://github.com/thanos-io/thanos/issues/1661.
-		extLabels := labels.Labels{{Name: "e1", Value: "1/weird"}}
-		extLabels2 := labels.Labels{{Name: "e1", Value: "1"}}
+		extLabels := labels.FromStrings("e1", "1/weird")
+		extLabels2 := labels.FromStrings("e1", "1")
 		metas := createAndUpload(t, bkt, []blockgenSpec{
 			{
 				numSamples: 100, mint: 500, maxt: 1000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
+					labels.FromStrings("a", "1"),
+					labels.FromStrings("a", "2", "b", "2"),
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
 				},
 			},
 			{
 				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
-					{{Name: "a", Value: "5"}},
-					{{Name: "a", Value: "6"}},
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
+					labels.FromStrings("a", "5"),
+					labels.FromStrings("a", "6"),
 				},
 			},
 			// Mix order to make sure compactor is able to deduct min time / max time.
@@ -268,48 +268,40 @@ func testGroupCompactE2e(t *testing.T, mergeFunc storage.VerticalChunkSeriesMerg
 			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
 			{
 				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Extra block for "distraction" for different resolution and one for different labels.
 			{
-				numSamples: 100, mint: 5000, maxt: 6000, extLset: labels.Labels{{Name: "e1", Value: "2"}}, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				numSamples: 100, mint: 5000, maxt: 6000, extLset: labels.FromStrings("e1", "2"), res: 124,
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Extra block for "distraction" for different resolution and one for different labels.
 			{
 				numSamples: 100, mint: 4000, maxt: 5000, extLset: extLabels, res: 0,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 			// Second group (extLabels2).
 			{
 				numSamples: 100, mint: 2000, maxt: 3000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
-					{{Name: "a", Value: "6"}},
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
+					labels.FromStrings("a", "6"),
 				},
 			},
 			{
 				numSamples: 100, mint: 0, maxt: 1000, extLset: extLabels2, res: 124,
 				series: []labels.Labels{
-					{{Name: "a", Value: "1"}},
-					{{Name: "a", Value: "2"}, {Name: "b", Value: "2"}},
-					{{Name: "a", Value: "3"}},
-					{{Name: "a", Value: "4"}},
+					labels.FromStrings("a", "1"),
+					labels.FromStrings("a", "2", "b", "2"),
+					labels.FromStrings("a", "3"),
+					labels.FromStrings("a", "4"),
 				},
 			},
 			// Due to TSDB compaction delay (not compacting fresh block), we need one more block to be pushed to trigger compaction.
 			{
 				numSamples: 100, mint: 3000, maxt: 4000, extLset: extLabels2, res: 124,
-				series: []labels.Labels{
-					{{Name: "a", Value: "7"}},
-				},
+				series: []labels.Labels{labels.FromStrings("a", "7")},
 			},
 		})
 
@@ -455,7 +447,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 		var metas []*metadata.Meta
 		var ids []ulid.ULID
 
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			var m metadata.Meta
 
 			m.Version = 1
@@ -500,7 +492,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// Do one initial synchronization with the bucket.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 		testutil.Equals(t, 2.0, promtest.ToFloat64(garbageCollectedBlocks))
 
 		rem, err := listBlocksMarkedForDeletion(ctx, bkt)
@@ -519,7 +511,7 @@ func TestGarbageCollectDoesntCreateEmptyBlocksWithDeletionMarksOnly(t *testing.T
 
 		// After another garbage-collect, we should not find new blocks that are deleted with new deletion mark files.
 		testutil.Ok(t, sy.SyncMetas(ctx))
-		testutil.Ok(t, sy.GarbageCollect(ctx))
+		testutil.Ok(t, sy.GarbageCollect(ctx, nil))
 
 		rem, err = listBlocksMarkedForDeletion(ctx, bkt)
 		testutil.Ok(t, err)

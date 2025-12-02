@@ -97,7 +97,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		mint := timestamp.FromTime(now)
 		now = now.Add(2 * time.Hour)
 		maxt := timestamp.FromTime(now)
@@ -526,7 +526,7 @@ func TestBucketStore_e2e(t *testing.T) {
 type naivePartitioner struct{}
 
 func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
-	for i := 0; i < length; i++ {
+	for i := range length {
 		s, e := rng(i)
 		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
@@ -559,8 +559,7 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bkt := objstore.NewInMemBucket()
 
 	dir := t.TempDir()
@@ -649,8 +648,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()
@@ -686,8 +684,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bkt := objstore.NewInMemBucket()
 
 	dir := t.TempDir()
@@ -849,8 +846,7 @@ func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			bkt := objstore.NewInMemBucket()
 			dir := t.TempDir()
@@ -1009,8 +1005,7 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()

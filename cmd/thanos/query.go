@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -44,6 +45,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -101,7 +103,7 @@ func registerQuery(app *extkingpin.App) {
 
 	queryConnMetricLabels := cmd.Flag("query.conn-metric.label", "Optional selection of query connection metric labels to be collected from endpoint set").
 		Default(string(query.ExternalLabels), string(query.StoreType)).
-		Enums(string(query.ExternalLabels), string(query.StoreType))
+		Enums(string(query.ExternalLabels), string(query.StoreType), string(query.IPPort))
 
 	deduplicationFunc := cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping series. "+
 		"Possible values are: \"penalty\", \"chain\". If no value is specified, penalty based deduplication algorithm will be used. "+
@@ -142,6 +144,9 @@ func registerQuery(app *extkingpin.App) {
 	featureList := cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions in query)").Default("").Strings()
 
 	enableExemplarPartialResponse := cmd.Flag("exemplar.partial-response", "Enable partial response for exemplar endpoint. --no-exemplar.partial-response for disabling.").
+		Hidden().Default("true").Bool()
+
+	enableStatusPartialResponse := cmd.Flag("status.partial-response", "Enable partial response for status endpoint. --no-status.partial-response for disabling.").
 		Hidden().Default("true").Bool()
 
 	defaultEvaluationInterval := extkingpin.ModelDuration(cmd.Flag("query.default-evaluation-interval", "Set default evaluation interval for sub queries.").Default("1m"))
@@ -201,6 +206,8 @@ func registerQuery(app *extkingpin.App) {
 		PlaceHolder("<endpoint-strict>"))
 
 	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "(Deprecated, Experimental): DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").PlaceHolder("<endpoint-group-strict>"))
+
+	injectTestAddresses := extkingpin.Addrs(cmd.Flag("inject-test-addresses", "Inject test addresses for DNS resolver (repeatable).").PlaceHolder("<inject-test-address>").Hidden())
 
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").Hidden().Int()
@@ -285,6 +292,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*endpointInfoTimeout),
 			dialOpts,
+			*injectTestAddresses,
 			*queryConnMetricLabels...,
 		)
 		if err != nil {
@@ -327,6 +335,7 @@ func registerQuery(app *extkingpin.App) {
 			*enableTargetPartialResponse,
 			*enableMetricMetadataPartialResponse,
 			*enableExemplarPartialResponse,
+			*enableStatusPartialResponse,
 			*activeQueryDir,
 			time.Duration(*instantDefaultMaxSourceResolution),
 			*defaultMetadataTimeRange,
@@ -391,6 +400,7 @@ func runQuery(
 	enableTargetPartialResponse bool,
 	enableMetricMetadataPartialResponse bool,
 	enableExemplarPartialResponse bool,
+	enableStatusPartialResponse bool,
 	activeQueryDir string,
 	instantDefaultMaxSourceResolution time.Duration,
 	defaultMetadataTimeRange time.Duration,
@@ -439,6 +449,7 @@ func runQuery(
 		targetsProxy     = targets.NewProxy(logger, endpointSet.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpointSet.GetMetricMetadataClients)
 		exemplarsProxy   = exemplars.NewProxy(logger, endpointSet.GetExemplarsStores, selectorLset)
+		statusProxy      = status.NewProxy(logger, endpointSet.GetStatusClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
 			extprom.WrapRegistererWithPrefix("thanos_query_", reg),
@@ -524,12 +535,14 @@ func runQuery(
 			targets.NewGRPCClientWithDedup(targetsProxy, queryReplicaLabels),
 			metadata.NewGRPCClient(metadataProxy),
 			exemplars.NewGRPCClientWithDedup(exemplarsProxy, queryReplicaLabels),
+			status.NewGRPCClient(statusProxy),
 			enableAutodownsampling,
 			enableQueryPartialResponse,
 			enableRulePartialResponse,
 			enableTargetPartialResponse,
 			enableMetricMetadataPartialResponse,
 			enableExemplarPartialResponse,
+			enableStatusPartialResponse,
 			queryReplicaLabels,
 			flagsMap,
 			defaultRangeQueryStep,
@@ -553,6 +566,7 @@ func runQuery(
 			tenantCertField,
 			enforceTenancy,
 			tenantLabel,
+			tsdbSelector,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
@@ -603,6 +617,7 @@ func runQuery(
 			info.WithMetricMetadataInfoFunc(),
 			info.WithTargetsInfoFunc(),
 			info.WithQueryAPIInfoFunc(),
+			info.WithStatusInfoFunc(),
 		)
 
 		defaultEngineType := querypb.EngineType(querypb.EngineType_value[string(defaultEngine)])
@@ -615,6 +630,7 @@ func runQuery(
 			grpcserver.WithServer(metadata.RegisterMetadataServer(metadataProxy)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarsProxy)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			grpcserver.WithServer(status.RegisterStatusServer(statusProxy)),
 			grpcserver.WithListen(grpcServerConfig.bindAddress),
 			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
@@ -622,9 +638,25 @@ func runQuery(
 		)
 
 		g.Add(func() error {
+			// Wait for initial endpoint update before marking as ready
+			// Use store response timeout as timeout, if not set, use 30 seconds as default
+			timeout := storeResponseTimeout
+			if timeout == 0 {
+				timeout = 30 * time.Second
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+
+			level.Info(logger).Log("msg", "waiting for initial endpoint discovery before marking gRPC as ready", "timeout", timeout)
+			if err := endpointSet.WaitForFirstUpdate(ctx); err != nil {
+				level.Warn(logger).Log("msg", "timeout waiting for first endpoint update before marking gRPC as ready", "err", err, "timeout", timeout)
+			} else {
+				level.Info(logger).Log("msg", "initial endpoint discovery completed, marking gRPC as ready")
+			}
+
 			statusProber.Ready()
 			return s.ListenAndServe()
-		}, func(error) {
+		}, func(err error) {
 			statusProber.NotReady(err)
 			s.Shutdown(err)
 			endpointSet.Close()
@@ -660,10 +692,7 @@ func LookbackDeltaFactory(
 	}
 	return func(maxSourceResolutionMillis int64) time.Duration {
 		for i := len(resolutions) - 1; i >= 1; i-- {
-			left := resolutions[i-1]
-			if resolutions[i-1] < ld {
-				left = ld
-			}
+			left := max(resolutions[i-1], ld)
 			if left < maxSourceResolutionMillis {
 				return lds[i]
 			}

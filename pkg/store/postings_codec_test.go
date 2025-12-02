@@ -11,7 +11,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -30,7 +30,7 @@ func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
 
 	t.Run("compressed", func(t *testing.T) {
 		b := make([]byte, 100)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			b[i] = 0x42
 		}
 
@@ -180,7 +180,7 @@ func allPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader) index.P
 }
 
 func matchPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader, m *labels.Matcher) index.Postings {
-	vals, err := ix.LabelValues(ctx, m.Name)
+	vals, err := ix.LabelValues(ctx, m.Name, nil)
 	testutil.Ok(t, err)
 
 	matching := []string(nil)
@@ -283,7 +283,7 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 			for codecName, codecFns := range codecs {
 				b.Run(codecName, func(b *testing.B) {
 					b.Run("encode", func(b *testing.B) {
-						for i := 0; i < b.N; i++ {
+						for b.Loop() {
 							ps := &uint64Postings{vals: p[:count]}
 
 							_, err := codecFns.codingFunction(ps, ps.len())
@@ -301,7 +301,7 @@ func BenchmarkPostingsEncodingDecoding(b *testing.B) {
 						}
 						b.ResetTimer()
 
-						for i := 0; i < b.N; i++ {
+						for b.Loop() {
 							decoded, err := codecFns.decodingFunction(encoded, true)
 							if err != nil {
 								b.Fatal(err)
@@ -335,9 +335,7 @@ func FuzzSnappyStreamEncoding(f *testing.F) {
 			p[ix] = p[ix-1] + storage.SeriesRef(d)
 		}
 
-		sort.Slice(p, func(i, j int) bool {
-			return p[i] < p[j]
-		})
+		slices.Sort(p)
 
 		ps := &uint64Postings{vals: p}
 

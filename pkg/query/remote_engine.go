@@ -183,6 +183,13 @@ func (r *remoteEngine) MaxT() int64 {
 	return r.maxt
 }
 
+func (r *remoteEngine) PartitionLabelSets() []labels.Labels {
+	r.labelSetsOnce.Do(func() {
+		r.labelSets = r.adjustedInfos().LabelSets()
+	})
+	return r.labelSets
+}
+
 func (r *remoteEngine) LabelSets() []labels.Labels {
 	r.labelSetsOnce.Do(func() {
 		r.labelSets = r.adjustedInfos().LabelSets()
@@ -324,7 +331,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	r.samplesStats = stats.NewQuerySamples(false)
 
 	// Instant query.
-	if r.start == r.end {
+	if r.start.Equal(r.end) {
 		request := &querypb.QueryRequest{
 			Query:                 r.plan.String(),
 			QueryPlan:             plan,

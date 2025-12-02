@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -75,13 +77,13 @@ type endpointTestCase struct {
 	params   map[string]string
 	query    url.Values
 	method   string
-	response interface{}
+	response any
 	errType  baseAPI.ErrorType
 }
-type responeCompareFunction func(interface{}, interface{}) bool
+type responeCompareFunction func(any, any) bool
 
 // Checks if both responses have Stats present or not.
-func lookupStats(a, b interface{}) bool {
+func lookupStats(a, b any) bool {
 	ra := a.(*queryData)
 	rb := b.(*queryData)
 	return (ra.Stats == nil && rb.Stats == nil) || (ra.Stats != nil && rb.Stats != nil)
@@ -124,9 +126,11 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 		params := test.query.Encode()
 
 		var body io.Reader
-		if test.method == http.MethodPost {
+
+		switch test.method {
+		case http.MethodPost:
 			body = strings.NewReader(params)
-		} else if test.method == "" {
+		case "":
 			test.method = "ANY"
 			reqURL += "?" + params
 		}
@@ -163,38 +167,13 @@ func testEndpoint(t *testing.T, test endpointTestCase, name string, responseComp
 
 func TestQueryEndpoints(t *testing.T) {
 	lbls := []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "bar"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric2"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "bar"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "b"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica1", Value: "a"},
-		},
+		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+		labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
 	}
 
 	db, err := e2eutil.NewTSDB()
@@ -203,7 +182,7 @@ func TestQueryEndpoints(t *testing.T) {
 
 	app := db.Appender(context.Background())
 	for _, lbl := range lbls {
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			_, err := app.Append(0, lbl, i*60000, float64(i))
 			testutil.Ok(t, err)
 		}
@@ -286,76 +265,24 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-							{
-								Name:  "replica",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica",
-								Value: "b",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica1",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -373,50 +300,19 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-							{
-								Name:  "replica1",
-								Value: "a",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica1", "a"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -433,32 +329,14 @@ func TestQueryEndpoints(t *testing.T) {
 				ResultType: parser.ValueTypeVector,
 				Result: promql.Vector{
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "bar",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar"),
+						T:      123000,
+						F:      2,
 					},
 					{
-						Metric: labels.Labels{
-							{
-								Name:  "__name__",
-								Value: "test_metric_replica1",
-							},
-							{
-								Name:  "foo",
-								Value: "boo",
-							},
-						},
-						T: 123000,
-						F: 2,
+						Metric: labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo"),
+						T:      123000,
+						F:      2,
 					},
 				},
 			},
@@ -504,7 +382,6 @@ func TestQueryEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: nil,
 					},
 				},
 			},
@@ -526,7 +403,6 @@ func TestQueryEndpoints(t *testing.T) {
 							{F: 1, T: timestamp.FromTime(start.Add(1 * time.Second))},
 							{F: 2, T: timestamp.FromTime(start.Add(2 * time.Second))},
 						},
-						Metric: nil,
 					},
 				},
 			},
@@ -779,7 +655,6 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 							}
 							return res
 						}(500, 1),
-						Metric: nil,
 					},
 				},
 				QueryAnalysis: queryTelemetry{},
@@ -796,7 +671,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, nil)),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels()), atomic.Bool{}),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -805,7 +680,7 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 		nil,
 		func() []store.Client { return []store.Client{c} },
 		component.Query,
-		nil,
+		labels.EmptyLabels(),
 		0,
 		store.EagerRetrieval,
 	)
@@ -813,41 +688,16 @@ func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 
 func TestMetadataEndpoints(t *testing.T) {
 	var old = []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "bar"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric1"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric2"},
-			labels.Label{Name: "foo", Value: "boo"},
-		},
+		labels.FromStrings("__name__", "test_metric1", "foo", "bar"),
+		labels.FromStrings("__name__", "test_metric1", "foo", "boo"),
+		labels.FromStrings("__name__", "test_metric2", "foo", "boo"),
 	}
 
 	var recent = []labels.Labels{
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "bar"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "a"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica1"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica", Value: "b"},
-		},
-		{
-			labels.Label{Name: "__name__", Value: "test_metric_replica2"},
-			labels.Label{Name: "foo", Value: "boo"},
-			labels.Label{Name: "replica1", Value: "a"},
-		},
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "bar", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "a"),
+		labels.FromStrings("__name__", "test_metric_replica1", "foo", "boo", "replica", "b"),
+		labels.FromStrings("__name__", "test_metric_replica2", "foo", "boo", "replica1", "a"),
 	}
 
 	dir := t.TempDir()
@@ -858,7 +708,7 @@ func TestMetadataEndpoints(t *testing.T) {
 	for _, lbl := range old {
 		var samples []chunks.Sample
 
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			samples = append(samples, sample{
 				t: i * 60_000,
 				f: float64(i),
@@ -883,7 +733,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		app              = db.Appender(context.Background())
 	)
 	for _, lbl := range recent {
-		for i := int64(0); i < 10; i++ {
+		for i := range int64(10) {
 			_, err := app.Append(0, lbl, start+(i*60_000), float64(i)) // ms
 			testutil.Ok(t, err)
 		}
@@ -1107,13 +957,13 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			response: []string{"a"},
 		},
-		// Bad name parameter.
+		// UTF-8 label name.
 		{
 			endpoint: api.labelValues,
 			params: map[string]string{
-				"name": "not!!!allowed",
+				"name": "http.request.method",
 			},
-			errType: baseAPI.ErrorBadData,
+			response: []string{},
 		},
 		{
 			endpoint: api.series,
@@ -1937,7 +1787,7 @@ func TestRulesHandler(t *testing.T) {
 	type test struct {
 		params   map[string]string
 		query    url.Values
-		response interface{}
+		response any
 	}
 	expectedAll := []testpromcompatibility.Rule{
 		testpromcompatibility.RecordingRule{
@@ -2003,7 +1853,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationTime: all[3].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[3].GetAlert().DurationSeconds,
 			KeepFiringFor:  all[3].GetAlert().KeepFiringForSeconds,
-			Annotations:    nil,
+			Annotations:    labels.EmptyLabels(),
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
@@ -2018,7 +1868,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationTime: all[4].GetAlert().EvaluationDurationSeconds,
 			Duration:       all[4].GetAlert().DurationSeconds,
 			KeepFiringFor:  all[4].GetAlert().KeepFiringForSeconds,
-			Annotations:    nil,
+			Annotations:    labels.EmptyLabels(),
 			Alerts:         []*testpromcompatibility.Alert{},
 			Type:           "alerting",
 		},
@@ -2113,7 +1963,7 @@ func TestRulesHandler(t *testing.T) {
 
 func BenchmarkQueryResultEncoding(b *testing.B) {
 	var mat promql.Matrix
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		lset := labels.FromStrings(
 			"__name__", "my_test_metric_name",
 			"instance", fmt.Sprintf("abcdefghijklmnopqrstuvxyz-%d", i),

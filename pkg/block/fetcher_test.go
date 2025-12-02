@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
@@ -72,30 +73,38 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 		dir := t.TempDir()
 
 		var ulidToDelete ulid.ULID
-		r := prometheus.NewRegistry()
 		noopLogger := log.NewNopLogger()
 		insBkt := objstore.WithNoopInstr(bkt)
-		baseBlockIDsFetcher := NewConcurrentLister(noopLogger, insBkt)
-		baseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, baseBlockIDsFetcher, dir, r)
+
+		r := prometheus.NewRegistry()
+
+		recursiveLister := NewRecursiveLister(noopLogger, insBkt)
+		recursiveBaseFetcher, err := NewBaseFetcher(noopLogger, 20, insBkt, recursiveLister, dir, r)
 		testutil.Ok(t, err)
 
-		fetcher := baseFetcher.NewMetaFetcher(r, []MetadataFilter{
+		recursiveFetcher := recursiveBaseFetcher.NewMetaFetcher(r, []MetadataFilter{
 			&ulidFilter{ulidToDelete: &ulidToDelete},
 		}, nil)
 
-		for i, tcase := range []struct {
+		for _, tcase := range []struct {
 			name                  string
-			do                    func()
+			do                    func(cleanCache func())
 			filterULID            ulid.ULID
 			expectedMetas         []ulid.ULID
 			expectedCorruptedMeta []ulid.ULID
 			expectedNoMeta        []ulid.ULID
 			expectedFiltered      int
 			expectedMetaErr       error
+			expectedCacheBusts    int
+			expectedSyncs         int
+
+			// If this is set then use it.
+			fetcher     *MetaFetcher
+			baseFetcher *BaseFetcher
 		}{
 			{
 				name: "empty bucket",
-				do:   func() {},
+				do:   func(_ func()) {},
 
 				expectedMetas:         ULIDs(),
 				expectedCorruptedMeta: ULIDs(),
@@ -103,7 +112,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "3 metas in bucket",
-				do: func() {
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 1
 					meta.ULID = ULID(1)
@@ -126,28 +135,8 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedNoMeta:        ULIDs(),
 			},
 			{
-				name: "nothing changed",
-				do:   func() {},
-
-				expectedMetas:         ULIDs(1, 2, 3),
-				expectedCorruptedMeta: ULIDs(),
-				expectedNoMeta:        ULIDs(),
-			},
-			{
-				name: "fresh cache",
-				do: func() {
-					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
-				},
-
-				expectedMetas:         ULIDs(1, 2, 3),
-				expectedCorruptedMeta: ULIDs(),
-				expectedNoMeta:        ULIDs(),
-			},
-			{
-				name: "fresh cache: meta 2 and 3 have corrupted data on disk ",
-				do: func() {
-					baseFetcher.cached = map[ulid.ULID]*metadata.Meta{}
-
+				name: "meta 2 and 3 have corrupted data on disk ",
+				do: func(cleanCache func()) {
 					testutil.Ok(t, os.Remove(filepath.Join(dir, "meta-syncer", ULID(2).String(), MetaFilename)))
 
 					f, err := os.OpenFile(filepath.Join(dir, "meta-syncer", ULID(3).String(), MetaFilename), os.O_WRONLY, os.ModePerm)
@@ -164,7 +153,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "block without meta",
-				do: func() {
+				do: func(_ func()) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(4).String(), "some-file"), bytes.NewBuffer([]byte("something"))))
 				},
 
@@ -174,7 +163,7 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			},
 			{
 				name: "corrupted meta.json",
-				do: func() {
+				do: func(_ func()) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(5).String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
 				},
 
@@ -182,46 +171,71 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 			},
-			{
-				name: "some added some deleted",
-				do: func() {
-					testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, ULID(2)))
 
+			{
+				name:       "filter not existing ulid",
+				do:         func(_ func()) {},
+				filterULID: ULID(10),
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+			},
+			{
+				name: "filter ulid 1",
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 1
-					meta.ULID = ULID(6)
+					meta.ULID = ULID(1)
 
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
-
-				expectedMetas:         ULIDs(1, 3, 6),
-				expectedCorruptedMeta: ULIDs(5),
-				expectedNoMeta:        ULIDs(4),
-			},
-			{
-				name:       "filter not existing ulid",
-				do:         func() {},
-				filterULID: ULID(10),
-
-				expectedMetas:         ULIDs(1, 3, 6),
-				expectedCorruptedMeta: ULIDs(5),
-				expectedNoMeta:        ULIDs(4),
-			},
-			{
-				name:       "filter ulid 1",
-				do:         func() {},
 				filterULID: ULID(1),
 
-				expectedMetas:         ULIDs(3, 6),
+				expectedMetas:         ULIDs(2, 3),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 				expectedFiltered:      1,
 			},
 			{
+				name: "use recursive lister",
+				do: func(cleanCache func()) {
+					cleanCache()
+				},
+				fetcher:     recursiveFetcher,
+				baseFetcher: recursiveBaseFetcher,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+			},
+			{
+				name: "update timestamp, expect a cache bust",
+				do: func(_ func()) {
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.MaxTime = 123456
+					meta.ULID = ULID(1)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+				},
+				fetcher:     recursiveFetcher,
+				baseFetcher: recursiveBaseFetcher,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4),
+				expectedFiltered:      0,
+				expectedCacheBusts:    1,
+				expectedSyncs:         2,
+			},
+			{
 				name: "error: not supported meta version",
-				do: func() {
+				do: func(_ func()) {
 					var meta metadata.Meta
 					meta.Version = 20
 					meta.ULID = ULID(7)
@@ -231,14 +245,40 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
 				},
 
-				expectedMetas:         ULIDs(1, 3, 6),
+				expectedMetas:         ULIDs(1, 2, 3),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {
 			if ok := t.Run(tcase.name, func(t *testing.T) {
-				tcase.do()
+				r := prometheus.NewRegistry()
+
+				var fetcher *MetaFetcher
+				var baseFetcher *BaseFetcher
+
+				if tcase.baseFetcher != nil {
+					baseFetcher = tcase.baseFetcher
+				} else {
+					lister := NewConcurrentLister(noopLogger, insBkt)
+					bf, err := NewBaseFetcher(noopLogger, 20, insBkt, lister, dir, r)
+					testutil.Ok(t, err)
+
+					baseFetcher = bf
+				}
+
+				if tcase.fetcher != nil {
+					fetcher = tcase.fetcher
+				} else {
+					fetcher = baseFetcher.NewMetaFetcher(r, []MetadataFilter{
+						&ulidFilter{ulidToDelete: &ulidToDelete},
+					}, nil)
+				}
+
+				tcase.do(func() {
+					baseFetcher.cached.Clear()
+					testutil.Ok(t, os.RemoveAll(filepath.Join(dir, "meta-syncer")))
+				})
 
 				ulidToDelete = tcase.filterULID
 				metas, partial, err := fetcher.Fetch(ctx)
@@ -282,8 +322,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 				if tcase.expectedMetaErr != nil {
 					expectedFailures = 1
 				}
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(baseFetcher.syncs))
-				testutil.Equals(t, float64(i+1), promtest.ToFloat64(fetcher.metrics.Syncs))
+
+				testutil.Equals(t, float64(max(1, tcase.expectedSyncs)), promtest.ToFloat64(baseFetcher.syncs))
+				testutil.Equals(t, float64(tcase.expectedCacheBusts), promtest.ToFloat64(baseFetcher.cacheBusts))
+				testutil.Equals(t, float64(max(1, tcase.expectedSyncs)), promtest.ToFloat64(fetcher.metrics.Syncs))
 				testutil.Equals(t, float64(len(tcase.expectedMetas)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(LoadedMeta)))
 				testutil.Equals(t, float64(len(tcase.expectedNoMeta)), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues(NoMeta)))
 				testutil.Equals(t, float64(tcase.expectedFiltered), promtest.ToFloat64(fetcher.metrics.Synced.WithLabelValues("filtered")))
@@ -376,9 +418,9 @@ func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
       source_labels: ["shard"]
       regex: %d
 `
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
-			relabelConfig, err := ParseRelabelConfig([]byte(fmt.Sprintf(relabelContentYamlFmt, BlockIDLabel, i)), SelectorSupportedRelabelActions)
+			relabelConfig, err := ParseRelabelConfig(fmt.Appendf(nil, relabelContentYamlFmt, BlockIDLabel, i), SelectorSupportedRelabelActions)
 			testutil.Ok(t, err)
 
 			f := NewLabelShardedMetaFilter(relabelConfig)
@@ -947,10 +989,7 @@ func TestReplicaLabelRemover_Modify(t *testing.T) {
 
 func compareSliceWithMapKeys(tb testing.TB, m map[ulid.ULID]*metadata.Meta, s []ulid.ULID) {
 	_, file, line, _ := runtime.Caller(1)
-	matching := true
-	if len(m) != len(s) {
-		matching = false
-	}
+	matching := len(m) == len(s)
 
 	for _, val := range s {
 		if m[val] == nil {
@@ -1027,6 +1066,7 @@ func TestConsistencyDelayMetaFilter_Filter_0(t *testing.T) {
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.SidecarSource}},
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.ReceiveSource}},
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.RulerSource}},
+		u.ULID(now):                      {Thanos: metadata.Thanos{UploadTime: time.Now().Add(-20 * time.Hour), Source: metadata.RulerSource}},
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.BucketRepairSource}},
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.CompactorSource}},
 		u.ULID(now.Add(-20 * time.Hour)): {Thanos: metadata.Thanos{Source: metadata.CompactorRepairSource}},
@@ -1151,7 +1191,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 				},
 			}
 
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				cases[0][id].Compaction.Sources = append(cases[0][id].Compaction.Sources, ulid.MustNew(count, nil))
 				count++
 			}
@@ -1174,7 +1214,7 @@ func BenchmarkDeduplicateFilter_Filter(b *testing.B) {
 						Downsample: metadata.ThanosDownsample{Resolution: res},
 					},
 				}
-				for j := 0; j < 100; j++ {
+				for range 100 {
 					cases[1][id].Compaction.Sources = append(cases[1][id].Compaction.Sources, ulid.MustNew(count, nil))
 					count++
 				}
@@ -1211,4 +1251,228 @@ func Test_ParseRelabelConfig(t *testing.T) {
     `), SelectorSupportedRelabelActions)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
+}
+
+func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
+	logger := log.NewNopLogger()
+	filter := NewParquetMigratedMetaFilter(logger)
+
+	// Simulate what might happen when extensions are loaded from JSON
+	extensions := struct {
+		ParquetMigrated bool `json:"parquet_migrated"`
+	}{
+		ParquetMigrated: true,
+	}
+
+	for _, c := range []struct {
+		name  string
+		metas map[ulid.ULID]*metadata.Meta
+		check func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error)
+	}{
+		{
+			name: "block with other extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(2, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{
+							"other_key": "other_value",
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Ok(t, err)
+				testutil.Equals(t, 1, len(metas))
+			},
+		},
+		{
+			name: "no extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(1, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: nil,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 1, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "block with parquet_migrated=false",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(3, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{
+							metadata.ParquetMigratedExtensionKey: false,
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 1, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "block with parquet_migrated=true",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(4, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{
+							metadata.ParquetMigratedExtensionKey: true,
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 0, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+		{
+			name: "mixed blocks with parquet_migrated",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(5, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{
+							metadata.ParquetMigratedExtensionKey: true,
+						},
+					},
+				},
+				ulid.MustNew(6, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{
+							metadata.ParquetMigratedExtensionKey: false,
+						},
+					},
+				},
+				ulid.MustNew(7, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: nil,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 2, len(metas))
+				testutil.Ok(t, err)
+				testutil.Assert(t, metas[ulid.MustNew(6, nil)] != nil, "Expected block with parquet_migrated=false to remain")
+				testutil.Assert(t, metas[ulid.MustNew(7, nil)] != nil, "Expected block without extensions to remain")
+			},
+		},
+		{
+			name: "block with serialized extensions",
+			metas: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(8, nil): {
+					Thanos: metadata.Thanos{
+						Extensions: extensions,
+					},
+				},
+			},
+			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
+				testutil.Equals(t, 0, len(metas))
+				testutil.Ok(t, err)
+			},
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := prometheus.NewRegistry()
+
+			synced := promauto.With(r).NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "test_synced",
+					Help: "Test synced metric",
+				},
+				[]string{"state"},
+			)
+			modified := promauto.With(r).NewGaugeVec(
+				prometheus.GaugeOpts{
+					Name: "test_modified",
+					Help: "Test modified metric",
+				},
+				[]string{"state"},
+			)
+			ctx := context.Background()
+
+			m, err := json.Marshal(c.metas)
+			testutil.Ok(t, err)
+
+			var outmetas map[ulid.ULID]*metadata.Meta
+			testutil.Ok(t, json.Unmarshal(m, &outmetas))
+
+			err = filter.Filter(ctx, outmetas, synced, modified)
+			c.check(t, outmetas, err)
+		})
+	}
+}
+
+func TestDeletionMarkFilter_HoldsOntoMarks(t *testing.T) {
+	ctx := context.Background()
+	bkt := objstore.NewInMemBucket()
+
+	now := time.Now()
+	f := NewIgnoreDeletionMarkFilter(log.NewNopLogger(), objstore.WithNoopInstr(bkt), 48*time.Hour, 32)
+
+	shouldFetch := &metadata.DeletionMark{
+		ID:           ULID(1),
+		DeletionTime: now.Add(-15 * time.Hour).Unix(),
+		Version:      1,
+	}
+
+	shouldIgnore := &metadata.DeletionMark{
+		ID:           ULID(2),
+		DeletionTime: now.Add(-60 * time.Hour).Unix(),
+		Version:      1,
+	}
+
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldFetch))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldFetch.ID.String(), metadata.DeletionMarkFilename), &buf))
+
+	buf.Truncate(0)
+
+	md := &metadata.Meta{
+		Thanos: metadata.Thanos{
+			Version: 1,
+		},
+	}
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(md))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldFetch.ID.String(), "meta.json"), &buf))
+
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&shouldIgnore))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(shouldIgnore.ID.String(), metadata.DeletionMarkFilename), &buf))
+
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(3).String(), metadata.DeletionMarkFilename), bytes.NewBufferString("not a valid deletion-mark.json")))
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(2): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+
+	expected := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
+	testutil.Equals(t, 1.0, promtest.ToFloat64(m.Synced.WithLabelValues(MarkedForDeletionMeta)))
+	testutil.Equals(t, expected, input)
+
+	testutil.Equals(t, 2, len(f.DeletionMarkBlocks()))
+
+	testutil.Ok(t, bkt.Delete(ctx, path.Join(shouldFetch.ID.String(), metadata.DeletionMarkFilename)))
+	input = map[ulid.ULID]*metadata.Meta{
+		ULID(1): {},
+		ULID(2): {},
+		ULID(3): {},
+		ULID(4): {},
+	}
+	testutil.Ok(t, f.Filter(ctx, input, m.Synced, nil))
+
+	testutil.Equals(t, 2, len(f.DeletionMarkBlocks()))
 }

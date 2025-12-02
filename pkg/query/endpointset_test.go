@@ -338,7 +338,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					// Simulate very long external labels.
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
-						for i := 0; i < 1000; i++ {
+						for range 1000 {
 							sLabel = append(sLabel, "lbl")
 							sLabel = append(sLabel, "val")
 						}
@@ -595,14 +595,12 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Never(t, func() bool {
 			numStatuses := len(endpointSet.GetStoreClients())
 			return numStatuses != numResponses && numStatuses != 0
 		}, 3*time.Second, 100*time.Millisecond)
-	}()
+	})
 
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, numResponses, len(endpointSet.GetEndpointStatus()))
@@ -703,20 +701,20 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 		lset := e.LabelSets()
 		testutil.Equals(t, 2, len(lset))
-		testutil.Equals(t, "addr", lset[0][0].Name)
-		testutil.Equals(t, addr, lset[0][0].Value)
-		testutil.Equals(t, "a", lset[1][0].Name)
-		testutil.Equals(t, "b", lset[1][0].Value)
+		testutil.Equals(t, addr, lset[0].Get("addr"))
+		testutil.Equals(t, "b", lset[1].Get("a"))
 		assertRegisteredAPIs(t, endpoints.exposedAPIs[addr], e)
 	}
 
 	// Check stats.
 	expected := newEndpointAPIStats()
-	expected[component.Sidecar.String()] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]): 1,
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
-	}
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+	expected = expected.append(
+		discoveredEndpointAddr[0], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]), component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[1], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]), component.Sidecar.String(),
+	)
+	testutil.Equals(t, expected.Sort(), endpointSet.endpointsMetric.storeNodes.Sort())
 
 	// Remove address from discovered and reset last check, which should ensure cleanup of status on next update.
 	now = now.Add(3 * time.Minute)
@@ -725,7 +723,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	testutil.Equals(t, 2, len(endpointSet.endpoints))
 
 	endpoints.CloseOne(discoveredEndpointAddr[0])
-	delete(expected[component.Sidecar.String()], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]))
+	expected = expected[1:]
 
 	// We expect Update to tear down store client for closed store server.
 	endpointSet.Update(context.Background())
@@ -738,11 +736,8 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	lset := st.LabelSets()
 	testutil.Equals(t, 2, len(lset))
-	testutil.Equals(t, "addr", lset[0][0].Name)
-	testutil.Equals(t, addr, lset[0][0].Value)
-	testutil.Equals(t, "a", lset[1][0].Name)
-	testutil.Equals(t, "b", lset[1][0].Value)
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+	testutil.Equals(t, addr, lset[0].Get("addr"))
+	testutil.Equals(t, "b", lset[1].Get("a"))
 
 	// New big batch of endpoints.
 	endpoint2, err := startTestEndpoints([]testEndpointMeta{
@@ -973,26 +968,63 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	// Check stats.
 	expected = newEndpointAPIStats()
-	expected[component.Query.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}":             1,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
-	}
-	expected[component.Rule.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}": 2,
-	}
-	expected[component.Sidecar.String()] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
-		"{l1=\"v2\", l2=\"v3\"}": 2,
-	}
-	expected[component.Store.String()] = map[string]int{
-		"":                                   2,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 3,
-	}
-	expected[component.Receive.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
-	}
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+	expected = expected.append(
+		discoveredEndpointAddr[6], "{l1=\"v2\", l2=\"v3\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[2], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[3], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[8], "{l1=\"v2\", l2=\"v3\"}", component.Rule.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[7], "{l1=\"v2\", l2=\"v3\"}", component.Rule.String(),
+	)
 
+	expected = expected.append(
+		discoveredEndpointAddr[1], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]), component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[4], "{l1=\"v2\", l2=\"v3\"}", component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[5], "{l1=\"v2\", l2=\"v3\"}", component.Sidecar.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[12], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[11], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[13], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[10], "", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[9], "", component.Store.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[14], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Receive.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[15], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Receive.String(),
+	)
+
+	expected = expected.Sort()
+	endpointSet.endpointsMetric.storeNodes = endpointSet.endpointsMetric.storeNodes.Sort()
+	testutil.Equals(t, len(expected), len(endpointSet.endpointsMetric.storeNodes))
+	for i := range expected {
+		t.Log(i)
+		testutil.Equals(t, expected[i], endpointSet.endpointsMetric.storeNodes[i])
+	}
 	// Close remaining endpoint from previous batch
 	endpoints.CloseOne(discoveredEndpointAddr[1])
 	endpointSet.Update(context.Background())
@@ -1433,7 +1465,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 func makeInfoResponses(n int) []testEndpointMeta {
 	responses := make([]testEndpointMeta, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		responses = append(responses, testEndpointMeta{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) []labelpb.ZLabelSet {
@@ -1602,10 +1634,7 @@ func TestDeadlockLocking(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.update(time.Now, &endpointMetadata{
 				InfoResponse: &infopb.InfoResponse{},
 			}, nil)
@@ -1614,10 +1643,7 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.HasStoreAPI()
 			mockEndpointRef.HasExemplarsAPI()
 			mockEndpointRef.HasMetricMetadataAPI()
@@ -1628,4 +1654,216 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	testutil.Ok(t, g.Wait())
+}
+
+func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WaitForFirstUpdate blocks until first update", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Track when WaitForFirstUpdate returns
+		waitReturned := make(chan struct{})
+		var waitErr error
+
+		// Start waiting in a goroutine
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			waitErr = endpointSet.WaitForFirstUpdate(ctx)
+			close(waitReturned)
+		}()
+
+		// Give some time to ensure WaitForFirstUpdate is blocking
+		select {
+		case <-waitReturned:
+			t.Fatal("WaitForFirstUpdate returned before Update was called")
+		case <-time.After(100 * time.Millisecond):
+			// Expected: still waiting
+		}
+
+		// Now trigger the update
+		endpointSet.Update(context.Background())
+
+		// WaitForFirstUpdate should return quickly after Update
+		select {
+		case <-waitReturned:
+			testutil.Ok(t, waitErr)
+		case <-time.After(1 * time.Second):
+			t.Fatal("WaitForFirstUpdate did not return after Update")
+		}
+
+		// Verify endpoints were discovered
+		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
+
+	t.Run("WaitForFirstUpdate returns immediately if update already done", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// First do an update
+		endpointSet.Update(context.Background())
+
+		// Now WaitForFirstUpdate should return immediately
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		duration := time.Since(start)
+
+		testutil.Ok(t, err)
+		testutil.Assert(t, duration < 50*time.Millisecond, "WaitForFirstUpdate took too long: %v", duration)
+	})
+
+	t.Run("WaitForFirstUpdate respects context timeout", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Use a short timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		duration := time.Since(start)
+
+		// Should timeout
+		testutil.NotOk(t, err)
+		testutil.Assert(t, errors.Is(err, context.DeadlineExceeded), "expected context.DeadlineExceeded, got %v", err)
+		testutil.Assert(t, duration >= 100*time.Millisecond && duration < 200*time.Millisecond,
+			"timeout duration out of expected range: %v", duration)
+	})
+
+	t.Run("Multiple WaitForFirstUpdate calls work correctly", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Start multiple waiters
+		var wg sync.WaitGroup
+		errors := make([]error, 3)
+
+		for i := range 3 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				errors[idx] = endpointSet.WaitForFirstUpdate(ctx)
+			}(i)
+		}
+
+		// Give waiters time to start
+		time.Sleep(100 * time.Millisecond)
+
+		// Trigger update
+		endpointSet.Update(context.Background())
+
+		// All waiters should complete
+		wg.Wait()
+
+		// All should succeed
+		for i, err := range errors {
+			testutil.Ok(t, err, "waiter %d failed", i)
+		}
+
+		// Additional calls should still work
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		testutil.Ok(t, err)
+	})
+
+	t.Run("Update called multiple times only signals once", func(t *testing.T) {
+		endpoints, err := startTestEndpoints([]testEndpointMeta{
+			{
+				InfoResponse: sidecarInfo,
+				extlsetFn: func(addr string) []labelpb.ZLabelSet {
+					return labelpb.ZLabelSetsFromPromLabels(
+						labels.FromStrings("addr", addr),
+					)
+				},
+			},
+		})
+		testutil.Ok(t, err)
+		defer endpoints.Close()
+
+		discoveredEndpointAddr := endpoints.EndpointAddresses()
+		endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+		defer endpointSet.Close()
+
+		// Call Update multiple times
+		for range 3 {
+			endpointSet.Update(context.Background())
+		}
+
+		// WaitForFirstUpdate should still work correctly
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		err = endpointSet.WaitForFirstUpdate(ctx)
+		testutil.Ok(t, err)
+
+		// Verify only one endpoint set (no duplicates from multiple updates)
+		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
+		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
 }

@@ -26,7 +26,7 @@ PATH=${PATH}:/tmp/protobin
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb"
+DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb status/statuspb"
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
@@ -50,7 +50,7 @@ done
 popd
 
 # Generate vendored Cortex protobufs.
-CORTEX_DIRS="cortex/querier/queryrange/ cortex/querier/stats"
+CORTEX_DIRS="cortex/querier/queryrange/ cortex/querier/stats cortex/cortexpb/"
 pushd "internal"
 for dir in ${CORTEX_DIRS}; do
   ${PROTOC_BIN} --gogofast_out=Mgoogle/protobuf/any.proto=github.com/gogo/protobuf/types,plugins=grpc:. \
@@ -68,3 +68,5 @@ for dir in ${CORTEX_DIRS}; do
   popd
 done
 popd
+
+./scripts/remove_method.sh pkg/store/storepb/types.pb.go Chunk Unmarshal

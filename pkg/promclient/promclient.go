@@ -39,6 +39,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -736,7 +737,7 @@ func formatTime(t time.Time) string {
 	return strconv.FormatFloat(float64(t.Unix())+float64(t.Nanosecond())/1e9, 'f', -1, 64)
 }
 
-func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data interface{}) error {
+func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string, u *url.URL, data any) error {
 	span, ctx := tracing.StartSpan(ctx, spanName)
 	defer span.Finish()
 
@@ -753,9 +754,9 @@ func (c *Client) get2xxResultWithGRPCErrors(ctx context.Context, spanName string
 	}
 
 	var m struct {
-		Data   interface{} `json:"data"`
-		Status string      `json:"status"`
-		Error  string      `json:"error"`
+		Data   any    `json:"data"`
+		Status string `json:"status"`
+		Error  string `json:"error"`
 	}
 
 	if err = json.Unmarshal(body, &m); err != nil {
@@ -953,4 +954,20 @@ func (c *Client) TargetsInGRPC(ctx context.Context, base *url.URL, stateTargets 
 		Data *targetspb.TargetDiscovery `json:"data"`
 	}
 	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_targets HTTP[client]", &u, &v)
+}
+
+func (c *Client) TSDBStatusInGRPC(ctx context.Context, base *url.URL, limit int) (*statuspb.TSDBStatisticsEntry, error) {
+	u := *base
+	u.Path = path.Join(u.Path, "/api/v1/status/tsdb")
+
+	if limit > 0 {
+		q := u.Query()
+		q.Add("limit", strconv.Itoa(limit))
+		u.RawQuery = q.Encode()
+	}
+
+	var v struct {
+		Data *statuspb.TSDBStatisticsEntry `json:"data"`
+	}
+	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_status_tsdb HTTP[client]", &u, &v)
 }

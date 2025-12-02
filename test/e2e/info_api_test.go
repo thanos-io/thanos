@@ -16,6 +16,7 @@ import (
 	"github.com/efficientgo/e2e"
 	"github.com/prometheus/prometheus/model/labels"
 
+	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 
 	"github.com/efficientgo/core/testutil"
@@ -44,7 +45,7 @@ func TestInfo(t *testing.T) {
 		e,
 		"1",
 		client.BucketConfig{
-			Type:   client.S3,
+			Type:   objstore.S3,
 			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
 		},
 		"",
@@ -70,43 +71,16 @@ func TestInfo(t *testing.T) {
 	expected := map[string][]query.EndpointStatus{
 		"sidecar": {
 			{
-				Name: "e2e-test-info-sidecar-alone1:9091",
-				LabelSets: []labels.Labels{{
-					{
-						Name:  "prometheus",
-						Value: "prom-alone1",
-					},
-					{
-						Name:  "replica",
-						Value: "0",
-					},
-				}},
+				Name:      "e2e-test-info-sidecar-alone1:9091",
+				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone1", "replica", "0")},
 			},
 			{
-				Name: "e2e-test-info-sidecar-alone2:9091",
-				LabelSets: []labels.Labels{{
-					{
-						Name:  "prometheus",
-						Value: "prom-alone2",
-					},
-					{
-						Name:  "replica",
-						Value: "0",
-					},
-				}},
+				Name:      "e2e-test-info-sidecar-alone2:9091",
+				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone2", "replica", "0")},
 			},
 			{
-				Name: "e2e-test-info-sidecar-alone3:9091",
-				LabelSets: []labels.Labels{{
-					{
-						Name:  "prometheus",
-						Value: "prom-alone3",
-					},
-					{
-						Name:  "replica",
-						Value: "0",
-					},
-				}},
+				Name:      "e2e-test-info-sidecar-alone3:9091",
+				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone3", "replica", "0")},
 			},
 		},
 		"store": {

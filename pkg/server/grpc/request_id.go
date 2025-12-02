@@ -15,7 +15,7 @@ import (
 const requestIDKey = "request-id"
 
 func NewUnaryClientRequestIDInterceptor() grpc.UnaryClientInterceptor {
-	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	return func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
 		reqID, ok := middleware.RequestIDFromContext(ctx)
 		if ok {
 			ctx = metadata.AppendToOutgoingContext(ctx, requestIDKey, reqID)
@@ -25,7 +25,7 @@ func NewUnaryClientRequestIDInterceptor() grpc.UnaryClientInterceptor {
 }
 
 func NewUnaryServerRequestIDInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
 		if vals := metadata.ValueFromIncomingContext(ctx, requestIDKey); len(vals) == 1 {
 			ctx = middleware.NewContextWithRequestID(ctx, vals[0])
 		}
@@ -44,7 +44,7 @@ func NewStreamClientRequestIDInterceptor() grpc.StreamClientInterceptor {
 }
 
 func NewStreamServerRequestIDInterceptor() grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		if vals := metadata.ValueFromIncomingContext(ss.Context(), requestIDKey); len(vals) == 1 {
 			ctx := middleware.NewContextWithRequestID(ss.Context(), vals[0])
 			return handler(srv, newStreamWithContext(ctx, ss))

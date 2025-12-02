@@ -24,7 +24,7 @@ Thanos aims for a simple deployment and maintenance model. The only dependencies
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
-Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
+Main should be stable and usable. Every commit to main builds docker image named `main-<date>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
 
@@ -147,7 +147,7 @@ See up to date [jsonnet mixins](https://github.com/thanos-io/thanos/tree/main/mi
 * 2022:
   * [Thanos at Medallia: A Hybrid Architecture Scaled to Support 1 Billion+ Series Across 40+ Data Centers](https://thanos.io/blog/2022-09-08-thanos-at-medallia/)
   * [Deploy Thanos Receive with native OCI Object Storage on Oracle Kubernetes Engine](https://medium.com/@lmukadam/deploy-thanos-receive-with-native-oci-object-storage-on-kubernetes-829326ea0bc6)
-  * [Leveraging Consul for Thanos Query Discovery](https://nicolastakashi.medium.com/leveraging-consul-for-thanos-query-discovery-34212d496c88)
+  * [Leveraging Consul for Thanos Query Discovery](https://itnext.io/leveraging-consul-for-thanos-query-discovery-34212d496c88)
 
 * 2021:
   * [Adopting Thanos at LastPass](https://krisztianfekete.org/adopting-thanos-at-lastpass/)

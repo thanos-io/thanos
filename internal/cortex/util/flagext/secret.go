@@ -19,7 +19,7 @@ func (v *Secret) Set(s string) error {
 }
 
 // UnmarshalYAML implements yaml.Unmarshaler.
-func (v *Secret) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (v *Secret) UnmarshalYAML(unmarshal func(any) error) error {
 	var s string
 	if err := unmarshal(&s); err != nil {
 		return err
@@ -29,7 +29,7 @@ func (v *Secret) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 // MarshalYAML implements yaml.Marshaler.
-func (v Secret) MarshalYAML() (interface{}, error) {
+func (v Secret) MarshalYAML() (any, error) {
 	if len(v.Value) == 0 {
 		return "", nil
 	}

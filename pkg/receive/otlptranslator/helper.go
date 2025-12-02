@@ -145,12 +145,13 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 	})
 	sort.Stable(ByLabelName(labels))
 
+	labelNamer := prometheustranslator.LabelNamer{}
 	// map ensures no duplicate label names.
 	l := make(map[string]string, maxLabelCount)
 	for _, label := range labels {
 		finalKey := label.Name
 		if !settings.AllowUTF8 {
-			finalKey = prometheustranslator.NormalizeLabel(finalKey)
+			finalKey = labelNamer.Build(finalKey)
 		}
 		if existingValue, alreadyExists := l[finalKey]; alreadyExists {
 			l[finalKey] = existingValue + ";" + label.Value
@@ -162,7 +163,7 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 	for _, lbl := range promotedAttrs {
 		normalized := lbl.Name
 		if !settings.AllowUTF8 {
-			normalized = prometheustranslator.NormalizeLabel(normalized)
+			normalized = labelNamer.Build(normalized)
 		}
 		if _, exists := l[normalized]; !exists {
 			l[normalized] = lbl.Value
@@ -201,8 +202,8 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 			log.Println("label " + name + " is overwritten. Check if Prometheus reserved labels are used.")
 		}
 		// internal labels should be maintained
-		if !settings.AllowUTF8 && !(len(name) > 4 && name[:2] == "__" && name[len(name)-2:] == "__") {
-			name = prometheustranslator.NormalizeLabel(name)
+		if !settings.AllowUTF8 && len(name) <= 4 && name[:2] != "__" && name[len(name)-2:] != "__" {
+			name = labelNamer.Build(name)
 		}
 		l[name] = extras[i+1]
 	}
