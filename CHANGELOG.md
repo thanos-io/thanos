@@ -17,7 +17,6 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-
 ### Changed
 
 - [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
