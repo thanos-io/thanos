@@ -1856,7 +1856,6 @@ func TestEndpointCloseGCTime(t *testing.T) {
 
 		endpointSet.Close()
 		time.Sleep(endpointSet.gcTimeout)
-		synctest.Wait()
 		elapsed := time.Since(now)
 		testutil.Assert(t, elapsed == 1*time.Minute, "expected gcTimeout to be 1 minute, got %v", elapsed)
 		state := er.cc.GetState()
