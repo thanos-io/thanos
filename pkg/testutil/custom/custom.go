@@ -20,6 +20,9 @@ func TolerantVerifyLeakMain(m *testing.M) {
 		goleak.IgnoreTopFunction("k8s.io/klog.(*loggingT).flushDaemon"),
 		// https://github.com/baidubce/bce-sdk-go/blob/9a8c1139e6a3ad23080b9b8c51dec88df8ce3cda/util/log/logger.go#L359
 		goleak.IgnoreTopFunction("github.com/baidubce/bce-sdk-go/util/log.NewLogger.func1"),
+		// gRPC conns are not immediately reaped so we need to ignore these.
+		goleak.IgnoreTopFunction(`google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run`),
+		goleak.IgnoreTopFunction(`google.golang.org/grpc.(*addrConn).resetTransport`),
 	)
 }
 
