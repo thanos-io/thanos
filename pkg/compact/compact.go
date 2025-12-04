@@ -1484,8 +1484,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		// They will compact available groups until they encounter an error, after which they will stop.
 		for i := 0; i < c.concurrency; i++ {
 			wg.Go(func() {
-				groupCtx, groupCtxCancel := context.WithCancel(ctx)
 				for g := range groupChan {
+					groupCtx, groupCtxCancel := context.WithCancel(ctx)
+					defer groupCtxCancel()
 					shouldRerunGroup, _, err := g.Compact(groupCtx, groupCtxCancel, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
 					if err == nil {
 						if shouldRerunGroup {
