@@ -624,7 +624,7 @@ func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, g
 			if len(g.IDs()) == 1 {
 				continue
 			}
-			plan, err := ps.planner.Plan(ctx, g.metasByMinTime, nil, g.extensions)
+			plan, err := ps.planner.Plan(ctx, func() {}, g.metasByMinTime, nil, g.extensions)
 			if err != nil {
 				return errors.Wrapf(err, "could not plan")
 			}
@@ -816,7 +816,7 @@ func (rs *RetentionProgressCalculator) ProgressCalculate(ctx context.Context, gr
 type Planner interface {
 	// Plan returns a list of blocks that should be compacted into single one.
 	// The blocks can be overlapping. The provided metadata has to be ordered by minTime.
-	Plan(ctx context.Context, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
+	Plan(ctx context.Context, cancel context.CancelFunc, metasByMinTime []*metadata.Meta, errChan chan error, extensions any) ([]*metadata.Meta, error)
 }
 
 type BlockDeletableChecker interface {
@@ -885,7 +885,7 @@ type Compactor interface {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -922,7 +922,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compIDs, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
+		shouldRerun, compIDs, err = cg.compact(ctx, cancel, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	errChan <- err
@@ -1138,7 +1138,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
+func (cg *Group) compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -1156,7 +1156,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.extensions)
+		toCompact, e = planner.Plan(ctx, cancel, cg.metasByMinTime, errChan, cg.extensions)
 		return e
 	}); err != nil {
 		return false, nil, errors.Wrap(err, "plan compaction")
@@ -1485,7 +1485,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		for i := 0; i < c.concurrency; i++ {
 			wg.Go(func() {
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					groupCtx, groupCtxCancel := context.WithCancel(ctx)
+					defer groupCtxCancel()
+					shouldRerunGroup, _, err := g.Compact(groupCtx, groupCtxCancel, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()

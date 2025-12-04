@@ -50,7 +50,7 @@ func NewPlanner(logger log.Logger, ranges []int64, noCompBlocks *GatherNoCompact
 }
 
 // TODO(bwplotka): Consider smarter algorithm, this prefers smaller iterative compactions vs big single one: https://github.com/thanos-io/thanos/issues/3405
-func (p *tsdbBasedPlanner) Plan(_ context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+func (p *tsdbBasedPlanner) Plan(_ context.Context, _ context.CancelFunc, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
 	return p.plan(p.noCompBlocksFunc(), metasByMinTime)
 }
 
@@ -252,7 +252,7 @@ func WithVerticalCompactionDownsampleFilter(with *largeTotalIndexSizeFilter, bkt
 	}
 }
 
-func (v *verticalCompactionDownsampleFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+func (v *verticalCompactionDownsampleFilter) Plan(ctx context.Context, _ context.CancelFunc, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
 	noCompactMarked := make(map[ulid.ULID]*metadata.NoCompactMark, 0)
 PlanLoop:
 	for {
@@ -365,6 +365,6 @@ PlanLoop:
 	}
 }
 
-func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
+func (t *largeTotalIndexSizeFilter) Plan(ctx context.Context, _ context.CancelFunc, metasByMinTime []*metadata.Meta, _ chan error, _ any) ([]*metadata.Meta, error) {
 	return t.plan(ctx, nil, metasByMinTime)
 }
