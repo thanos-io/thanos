@@ -111,12 +111,11 @@ func TestCapNProtoServer_MultipleSerialClientsWithReconnect(t *testing.T) {
 		wg.Wait()
 	}
 	require.NoError(t, client.Close())
-	require.NoError(t, errors.Join(listener.Close()))
+	require.NoError(t, listener.Close())
 }
 
 type faultyHandler struct {
 	mu          sync.Mutex
-	numReqs     int
 	numFailures int
 }
 
