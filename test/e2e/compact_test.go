@@ -748,7 +748,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		defer queryCancel2()
 
 		// Ensure querier is still healthy before querying.
-		waitQuerierHealthy(t, ctx, q)
+		waitQuerierHealthy(t, queryCtx2, q)
 
 		// Check if query detects new blocks.
 		queryAndAssert(t, queryCtx2, q.Endpoint("http"),
