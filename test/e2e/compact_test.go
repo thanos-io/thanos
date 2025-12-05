@@ -457,8 +457,21 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	q := e2ethanos.NewQuerierBuilder(e, "1", str.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
+	// Use fresh context for initial query assertion.
 	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-	t.Cleanup(cancel)
+	defer cancel()
+
+	// Wait a bit for the querier HTTP server to fully come up and be ready for connections
+	testutil.Ok(t, runutil.RetryWithLog(
+		log.NewLogfmtLogger(os.Stdout), 100*time.Millisecond, ctx.Done(),
+		func() error {
+			res, err := http.Get("http://" + q.Endpoint("http") + "/-/healthy")
+			if err != nil {
+				return fmt.Errorf("querier not ready: %w", err)
+			}
+			res.Body.Close()
+			return nil
+		}))
 
 	// Check if query detects current series, even if overlapped.
 	queryAndAssert(t, ctx, q.Endpoint("http"),
@@ -657,16 +670,19 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	// touch files it does not need to.
 	// Dedup enabled; compactor should work as expected.
 	{
+		// Create fresh context for this compactor block to avoid timeout issues.
+		blockCtx, blockCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer blockCancel()
 
 		cFuture := e2ethanos.NewCompactorBuilder(e, "working")
 
 		// Predownload block dirs with hashes. We should not try downloading them again.
 		for _, id := range blocksWithHashes {
-			m, err := block.DownloadMeta(ctx, logger, bkt, id)
+			m, err := block.DownloadMeta(blockCtx, logger, bkt, id)
 			testutil.Ok(t, err)
 
 			delete(m.Thanos.Labels, "replica")
-			testutil.Ok(t, block.Download(ctx, logger, bkt, id, filepath.Join(cFuture.Dir(), "compact", m.Thanos.GroupKey(), id.String())))
+			testutil.Ok(t, block.Download(blockCtx, logger, bkt, id, filepath.Join(cFuture.Dir(), "compact", m.Thanos.GroupKey(), id.String())))
 		}
 
 		extArgs := []string{"--deduplication.replica-label=replica", "--deduplication.replica-label=rule_replica"}
@@ -720,11 +736,24 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, c.Stop())
 
-		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		t.Cleanup(cancel)
+		// Create fresh context for query operations after first compaction.
+		queryCtx2, queryCancel2 := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer queryCancel2()
+
+		// Ensure querier is still healthy before querying.
+		testutil.Ok(t, runutil.RetryWithLog(
+			log.NewLogfmtLogger(os.Stdout), 100*time.Millisecond, queryCtx2.Done(),
+			func() error {
+				res, err := http.Get("http://" + q.Endpoint("http") + "/-/healthy")
+				if err != nil {
+					return fmt.Errorf("querier not healthy after compaction: %w", err)
+				}
+				res.Body.Close()
+				return nil
+			}))
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		queryAndAssert(t, queryCtx2, q.Endpoint("http"),
 			func() string {
 				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
 			},
@@ -776,11 +805,12 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		// Make sure compactor does not modify anything else over time.
 		testutil.Ok(t, c.Stop())
 
-		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
-		t.Cleanup(cancel)
+		// Create fresh context for query operations after compaction.
+		queryCtx, queryCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		defer queryCancel()
 
 		// Check if query detects new blocks.
-		queryAndAssert(t, ctx, q.Endpoint("http"),
+		queryAndAssert(t, queryCtx, q.Endpoint("http"),
 			func() string {
 				return fmt.Sprintf(`count_over_time({a="1"}[13h] offset %ds)`, int64(time.Since(now.Add(12*time.Hour)).Seconds()))
 			},
@@ -806,6 +836,18 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	{
 		ctx, cancel = context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
+
+		// Ensure querier is still healthy before querying downsampled data.
+		testutil.Ok(t, runutil.RetryWithLog(
+			log.NewLogfmtLogger(os.Stdout), 100*time.Millisecond, ctx.Done(),
+			func() error {
+				res, err := http.Get("http://" + q.Endpoint("http") + "/-/healthy")
+				if err != nil {
+					return fmt.Errorf("querier not healthy for downsampling query: %w", err)
+				}
+				res.Body.Close()
+				return nil
+			}))
 
 		// Just to have a consistent result.
 		checkQuery := func() string {
