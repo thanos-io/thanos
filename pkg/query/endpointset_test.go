@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -1528,7 +1530,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 }
 
 func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, nil, nil,
+	endpointSet := NewEndpointSet(now, log.NewLogfmtLogger(os.Stderr), nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict, testGRPCOpts...))
@@ -1844,7 +1846,7 @@ func TestEndpointCloseGCTime(t *testing.T) {
 		},
 	})
 	testutil.Ok(t, err)
-	defer endpoints.Close()
+	t.Cleanup(endpoints.Close)
 
 	discoveredEndpointAddr := endpoints.EndpointAddresses()
 	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
@@ -1858,7 +1860,9 @@ func TestEndpointCloseGCTime(t *testing.T) {
 		time.Sleep(endpointSet.gcTimeout)
 		elapsed := time.Since(now)
 		testutil.Assert(t, elapsed == 1*time.Minute, "expected gcTimeout to be 1 minute, got %v", elapsed)
+
+		synctest.Wait()
 		state := er.cc.GetState()
-		testutil.Assert(t, state == connectivity.Shutdown)
+		testutil.Assert(t, state == connectivity.Shutdown, "expected connection state to be Shutdown, got %v", state)
 	})
 }

@@ -23,6 +23,7 @@ func TolerantVerifyLeakMain(m *testing.M) {
 		// gRPC conns are not immediately reaped so we need to ignore these.
 		goleak.IgnoreTopFunction(`google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run`),
 		goleak.IgnoreTopFunction(`google.golang.org/grpc.(*addrConn).resetTransport`),
+		goleak.IgnoreTopFunction(`google.golang.org/grpc.(*addrConn).resetTransportAndUnlock`),
 	)
 }
 
