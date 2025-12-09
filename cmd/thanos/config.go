@@ -86,7 +86,7 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 }
 
 func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer)
 	if err != nil {
 		return nil, errors.Wrapf(err, "building gRPC client")
 	}

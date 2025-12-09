@@ -104,7 +104,7 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 }
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
+func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
 	grpcMets := grpc_prometheus.NewClientMetrics(
 		grpc_prometheus.WithClientHandlingTimeHistogram(grpc_prometheus.WithHistogramOpts(
 			&prometheus.HistogramOpts{
@@ -136,8 +136,13 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 		reg.MustRegister(grpcMets)
 	}
 
+	return dialOpts, nil
+
+}
+
+func StoreClientTLSCredentials(logger log.Logger, secure, skipVerify bool, cert, key, caCert, serverName string) (grpc.DialOption, error) {
 	if !secure {
-		return append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials())), nil
+		return grpc.WithTransportCredentials(insecure.NewCredentials()), nil
 	}
 
 	level.Info(logger).Log("msg", "enabling client to server TLS")
@@ -146,5 +151,5 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 	if err != nil {
 		return nil, err
 	}
-	return append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg))), nil
+	return grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)), nil
 }

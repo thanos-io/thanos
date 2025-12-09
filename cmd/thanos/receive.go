@@ -163,16 +163,17 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.rwClientSecure,
-		conf.rwClientSkipVerify,
-		conf.rwClientCert,
-		conf.rwClientKey,
-		conf.rwClientServerCA,
-		conf.rwClientServerName,
 	)
 	if err != nil {
 		return err
 	}
+
+	tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, conf.rwClientSecure, conf.rwClientSkipVerify, conf.rwClientCert, conf.rwClientKey, conf.rwClientServerCA, conf.rwClientServerName)
+	if err != nil {
+		return err
+	}
+	dialOpts = append(dialOpts, tlsDialOpts)
+
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
