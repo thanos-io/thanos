@@ -166,7 +166,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // query-related endpoints.
 // Example: /api/v1/query, /api/v1/query_range, /api/v1/series, /api/v1/label, /api/v1/labels
 func isQueryEndpoint(path string) bool {
-	return strings.HasPrefix(path, "/api/v1")
+	return strings.Contains(path, "/api/v1")
 }
 
 // reportSlowQuery reports slow queries.

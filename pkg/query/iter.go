@@ -218,14 +218,15 @@ type chunkSeriesIterator struct {
 	chunks  []chunkenc.Iterator
 	i       int
 	lastVal chunkenc.ValueType
+
+	cur chunkenc.Iterator
 }
 
 func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
-		// This should not happen. StoreAPI implementations should not send empty results.
-		return errSeriesIterator{err: errors.Errorf("store returned an empty result")}
+		return errSeriesIterator{err: errors.New("got empty chunks")}
 	}
-	return &chunkSeriesIterator{chunks: cs}
+	return &chunkSeriesIterator{chunks: cs, cur: cs[0]}
 }
 
 func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
@@ -245,19 +246,19 @@ func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 }
 
 func (it *chunkSeriesIterator) At() (t int64, v float64) {
-	return it.chunks[it.i].At()
+	return it.cur.At()
 }
 
 func (it *chunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
-	return it.chunks[it.i].AtHistogram(h)
+	return it.cur.AtHistogram(h)
 }
 
 func (it *chunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	return it.chunks[it.i].AtFloatHistogram(fh)
+	return it.cur.AtFloatHistogram(fh)
 }
 
 func (it *chunkSeriesIterator) AtT() int64 {
-	return it.chunks[it.i].AtT()
+	return it.cur.AtT()
 }
 
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
@@ -276,11 +277,12 @@ func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
 	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
 	// We must ensure to skip any overlapping range between adjacent chunks.
 	it.i++
+	it.cur = it.chunks[it.i]
 	return it.Seek(lastT + 1)
 }
 
 func (it *chunkSeriesIterator) Err() error {
-	return it.chunks[it.i].Err()
+	return it.cur.Err()
 }
 
 type lazySeriesSet struct {

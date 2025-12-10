@@ -12,19 +12,45 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
+- [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
+- [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
+
+### Added
+
+- [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+
+### Changed
+
+- [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
+
+## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 27
+
+### Fixed
+
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
 - [#8486](https://github.com/thanos-io/thanos/pull/8486) Receive: fix exemplar label corruption from Cap'n Proto memory references
 - [#8499](https://github.com/thanos-io/thanos/pull/8499) Query: support UTF-8 label names for the `/api/v1/label/:name/values` API.
+- [#8374](https://github.com/thanos-io/thanos/pull/8374) query: fix panic when accessing annotations concurrently
+- [#8336](https://github.com/thanos-io/thanos/pull/8336) store: fix race between lazy index header creation
 
 ### Added
 
 - [#8366](https://github.com/thanos-io/thanos/pull/8366) Store: optionally ignore Parquet migrated blocks
 - [#8359](https://github.com/thanos-io/thanos/pull/8359) Tools: add `--shipper.upload-compacted` flag for uploading compacted blocks to bucket upload-blocks
 - [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
+- [#8454](https://github.com/thanos-io/thanos/pull/8454) Compact: ensure we don't mark blocks for deletion again after just deleting them
+- [#8410](https://github.com/thanos-io/thanos/pull/8410) Compact: ignore blocks with deletion mark in partial deletes
 
 ### Changed
 
 - [#8370](https://github.com/thanos-io/thanos/pull/8370) Query: announced labelset now reflects relabel-config
+- [#8464](https://github.com/thanos-io/thanos/pull/8464) Query: assume that we do not unmark a block for deletion. This solves a race between Thanos Store and Compactor.
+- [#8402](https://github.com/thanos-io/thanos/pull/8402) Query/Receive: trim labelsets in String()
+- [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8401](https://github.com/thanos-io/thanos/pull/8401) block/compact: rework consistency check, make writers only write
+- [#8389](https://github.com/thanos-io/thanos/pull/8389) block: bust cache if modified timestamp differs
+- [#8366](https://github.com/thanos-io/thanos/pull/8366) store: ignore parquet migrated blocks
 
 ### Removed
 
