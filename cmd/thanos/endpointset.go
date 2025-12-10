@@ -41,11 +41,26 @@ type fileContent interface {
 	Path() string
 }
 
+type tlsConfig struct {
+	Enabled                  bool   `yaml:"enabled"`
+	InsecureSkipVerification bool   `yaml:"insecure_skip_verify"`
+	CertFile                 string `yaml:"cert_file"`
+	KeyFile                  string `yaml:"key_file"`
+	CAFile                   string `yaml:"ca_file"`
+}
+
+// TODO(Naman): Add in PER-ENDPOINT COMPRESSION
+type clientGRPCConfig struct {
+	TLSConfig  tlsConfig `yaml:"tls_config"`
+	ServerName string    `yaml:"server_name"`
+}
+
 type endpointSettings struct {
-	Strict        bool   `yaml:"strict"`
-	Group         bool   `yaml:"group"`
-	Address       string `yaml:"address"`
-	ServiceConfig string `yaml:"service_config"`
+	Strict        bool             `yaml:"strict"`
+	Group         bool             `yaml:"group"`
+	Address       string           `yaml:"address"`
+	ServiceConfig string           `yaml:"service_config"`
+	ClientConfig  clientGRPCConfig `yaml:"grpc_client_config"`
 }
 
 type EndpointConfig struct {
@@ -61,6 +76,14 @@ type endpointConfigProvider struct {
 	endpointGroups       []string
 	strictEndpoints      []string
 	strictEndpointGroups []string
+}
+
+func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
+	return !cfg.TLSConfig.Enabled &&
+		cfg.TLSConfig.CertFile == "" &&
+		cfg.TLSConfig.KeyFile == "" &&
+		cfg.TLSConfig.CAFile == "" &&
+		cfg.ServerName == ""
 }
 
 func (er *endpointConfigProvider) config() EndpointConfig {
@@ -199,6 +222,7 @@ func setupEndpointSet(
 	endpointTimeout time.Duration,
 	queryTimeout time.Duration,
 	dialOpts []grpc.DialOption,
+	globalTLSOpt grpc.DialOption,
 	injectTestAddresses []string,
 	queryConnMetricLabels ...string,
 ) (*query.EndpointSet, error) {
@@ -353,16 +377,33 @@ func setupEndpointSet(
 		specs := make([]*query.GRPCEndpointSpec, 0)
 		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {
-			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
+			strict, group, addr, tlsEnabled := ecfg.Strict, ecfg.Group, ecfg.Address, ecfg.ClientConfig.TLSConfig.Enabled
+			var tlsOpt grpc.DialOption
+			if ecfg.ClientConfig.UseGlobalTLSOpts() {
+				tlsOpt = globalTLSOpt
+			} else if tlsEnabled {
+				var err error
+				// We configure endpoint level TLS first and check if it fails we use fallback global TLS Opts
+				tlsOpt, err = extgrpc.StoreClientTLSCredentials(logger, ecfg.ClientConfig.TLSConfig.Enabled, ecfg.ClientConfig.TLSConfig.InsecureSkipVerification, ecfg.ClientConfig.TLSConfig.CertFile, ecfg.ClientConfig.TLSConfig.KeyFile, ecfg.ClientConfig.TLSConfig.CAFile, ecfg.ClientConfig.ServerName)
+				if err != nil {
+					level.Error(logger).Log("msg", "failed to create endpoint TLS, falling back to global", "addr", addr, "err", err)
+					tlsOpt = globalTLSOpt
+				}
+			} else {
+				// If tlsEnabled is disabled we will use cleartext
+				tlsOpt, _ = extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "")
+			}
+			endpointDialOpts := append(dialOpts, tlsOpt)
 			if group {
-				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
+				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(endpointDialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
 			} else if !dns.IsDynamicNode(addr) {
-				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, dialOpts...))
+				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, endpointDialOpts...))
 			}
 		}
 		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
-			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dialOpts...))
+			dynamicDialOpts := append(dialOpts, globalTLSOpt)
+			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dynamicDialOpts...))
 		}
 		return removeDuplicateEndpointSpecs(specs)
 	}, unhealthyTimeout, endpointTimeout, queryTimeout, queryConnMetricLabels...)
