@@ -373,11 +373,15 @@ func setupEndpointSet(
 			tlsOpt := globalTLSOpt
 			if tlsEnabled {
 				var err error
+				// We configure endpoint level TLS first and check if it fails we use fallback global TLS Opts
 				tlsOpt, err = extgrpc.StoreClientTLSCredentials(logger, ecfg.ClientConfig.TLSConfig.Enabled, ecfg.ClientConfig.TLSConfig.InsecureSkipVerification, ecfg.ClientConfig.TLSConfig.CertFile, ecfg.ClientConfig.TLSConfig.KeyFile, ecfg.ClientConfig.TLSConfig.CAFile, ecfg.ClientConfig.ServerName)
 				if err != nil {
-					level.Error(logger).Log("msg", "failed to attach endpoint level TLS config")
-					return nil
+					level.Warn(logger).Log("msg", err)
 				}
+			} else {
+				// If tlsEnabled is disabled we will use cleartext
+				// this is to ensure we dont enforce the global TLS Opts
+				tlsOpt = nil
 			}
 			endpointDialOpts := append(dialOpts, tlsOpt)
 			if group {
