@@ -49,10 +49,10 @@ type tlsConfig struct {
 	CAFile                   string `yaml:"ca_file"`
 }
 
+// TODO(Naman): Add in PER-ENDPOINT COMPRESSION
 type clientGRPCConfig struct {
-	TLSConfig   tlsConfig `yaml:"tls_config"`
-	ServerName  string    `yaml:"server_name"`
-	Compression string    `yaml:"compression"`
+	TLSConfig  tlsConfig `yaml:"tls_config"`
+	ServerName string    `yaml:"server_name"`
 }
 
 type endpointSettings struct {
@@ -76,6 +76,14 @@ type endpointConfigProvider struct {
 	endpointGroups       []string
 	strictEndpoints      []string
 	strictEndpointGroups []string
+}
+
+func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
+	return !cfg.TLSConfig.Enabled &&
+		cfg.TLSConfig.CertFile == "" &&
+		cfg.TLSConfig.KeyFile == "" &&
+		cfg.TLSConfig.CAFile == "" &&
+		cfg.ServerName == ""
 }
 
 func (er *endpointConfigProvider) config() EndpointConfig {
@@ -370,18 +378,20 @@ func setupEndpointSet(
 		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr, tlsEnabled := ecfg.Strict, ecfg.Group, ecfg.Address, ecfg.ClientConfig.TLSConfig.Enabled
-			tlsOpt := globalTLSOpt
-			if tlsEnabled {
+			var tlsOpt grpc.DialOption
+			if ecfg.ClientConfig.UseGlobalTLSOpts() {
+				tlsOpt = globalTLSOpt
+			} else if tlsEnabled {
 				var err error
 				// We configure endpoint level TLS first and check if it fails we use fallback global TLS Opts
 				tlsOpt, err = extgrpc.StoreClientTLSCredentials(logger, ecfg.ClientConfig.TLSConfig.Enabled, ecfg.ClientConfig.TLSConfig.InsecureSkipVerification, ecfg.ClientConfig.TLSConfig.CertFile, ecfg.ClientConfig.TLSConfig.KeyFile, ecfg.ClientConfig.TLSConfig.CAFile, ecfg.ClientConfig.ServerName)
 				if err != nil {
-					level.Warn(logger).Log("msg", err)
+					level.Error(logger).Log("msg", "failed to create endpoint TLS, falling back to global", "addr", addr, "err", err)
+					tlsOpt = globalTLSOpt
 				}
 			} else {
 				// If tlsEnabled is disabled we will use cleartext
-				// this is to ensure we dont enforce the global TLS Opts
-				tlsOpt = nil
+				tlsOpt, _ = extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "")
 			}
 			endpointDialOpts := append(dialOpts, tlsOpt)
 			if group {
