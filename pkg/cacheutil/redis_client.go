@@ -162,6 +162,11 @@ type RedisClient struct {
 	setAsyncCircuitBreaker CircuitBreaker
 }
 
+// GrabKeys implements ReadThroughRemoteCache.
+func (c *RedisClient) GrabKeys(ctx context.Context, keys []string) map[string][]byte {
+	panic("unimplemented")
+}
+
 // NewRedisClient makes a new RedisClient.
 func NewRedisClient(logger log.Logger, name string, conf []byte, reg prometheus.Registerer) (*RedisClient, error) {
 	config, err := parseRedisClientConfig(conf)
@@ -254,7 +259,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	return c, nil
 }
 
-// SetAsync implement RemoteCacheClient.
+// SetAsync implement ReadThroughRemoteCache.
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
 	return c.p.EnqueueAsync(func() {
 		start := time.Now()
@@ -289,7 +294,7 @@ func (c *RedisClient) SetMulti(data map[string][]byte, ttl time.Duration) {
 	c.durationSetMulti.Observe(time.Since(start).Seconds())
 }
 
-// GetMulti implement RemoteCacheClient.
+// GetMulti implement ReadThroughRemoteCache.
 func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]byte {
 	if len(keys) == 0 {
 		return nil
@@ -317,7 +322,7 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	return results
 }
 
-// Stop implement RemoteCacheClient.
+// Stop implement ReadThroughRemoteCache.
 func (c *RedisClient) Stop() {
 	c.p.Stop()
 	c.client.Close()
