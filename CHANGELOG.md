@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+- [#](): Tools: add --shipper.upload-compacted flag for controlling upload concurrency in bucket upload-blocks
 
 ### Changed
 
