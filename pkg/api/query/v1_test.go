@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -669,7 +671,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels())),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels()), atomic.Bool{}),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 

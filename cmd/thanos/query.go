@@ -103,7 +103,7 @@ func registerQuery(app *extkingpin.App) {
 
 	queryConnMetricLabels := cmd.Flag("query.conn-metric.label", "Optional selection of query connection metric labels to be collected from endpoint set").
 		Default(string(query.ExternalLabels), string(query.StoreType)).
-		Enums(string(query.ExternalLabels), string(query.StoreType))
+		Enums(string(query.ExternalLabels), string(query.StoreType), string(query.IPPort))
 
 	deduplicationFunc := cmd.Flag("deduplication.func", "Experimental. Deduplication algorithm for merging overlapping series. "+
 		"Possible values are: \"penalty\", \"chain\". If no value is specified, penalty based deduplication algorithm will be used. "+
@@ -207,6 +207,8 @@ func registerQuery(app *extkingpin.App) {
 
 	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "(Deprecated, Experimental): DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").PlaceHolder("<endpoint-group-strict>"))
 
+	injectTestAddresses := extkingpin.Addrs(cmd.Flag("inject-test-addresses", "Inject test addresses for DNS resolver (repeatable).").PlaceHolder("<inject-test-address>").Hidden())
+
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").Hidden().Int()
 
@@ -289,7 +291,9 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*dnsSDInterval),
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*endpointInfoTimeout),
+			time.Duration(*queryTimeout),
 			dialOpts,
+			*injectTestAddresses,
 			*queryConnMetricLabels...,
 		)
 		if err != nil {

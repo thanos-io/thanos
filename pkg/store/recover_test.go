@@ -9,6 +9,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -20,7 +21,7 @@ func TestRecoverableServer(t *testing.T) {
 	store := NewRecoverableStoreServer(logger, &panicStoreServer{})
 
 	ctx := t.Context()
-	client := storepb.ServerAsClient(store)
+	client := storepb.ServerAsClient(store, atomic.Bool{})
 	seriesClient, err := client.Series(ctx, &storepb.SeriesRequest{})
 	testutil.Ok(t, err)
 
