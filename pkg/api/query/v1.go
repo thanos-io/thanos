@@ -548,6 +548,8 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (any, []error, *api.ApiError
 		remoteEndpoints := qapi.remoteEndpointsCreate(
 			replicaLabels,
 			enablePartialResponse,
+			ts,
+			ts,
 		)
 		queryOpts := &engine.QueryOpts{
 			LookbackDeltaParam: lookbackDelta,
@@ -656,6 +658,8 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 		remoteEndpoints := qapi.remoteEndpointsCreate(
 			replicaLabels,
 			enablePartialResponse,
+			ts,
+			ts,
 		)
 		queryOpts := &engine.QueryOpts{
 			LookbackDeltaParam: lookbackDelta,
@@ -836,6 +840,8 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (any, []error, *api.Api
 		remoteEndpoints := qapi.remoteEndpointsCreate(
 			replicaLabels,
 			enablePartialResponse,
+			start,
+			end,
 		)
 		queryOpts := &engine.QueryOpts{
 			LookbackDeltaParam: lookbackDelta,
@@ -969,6 +975,8 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 		remoteEndpoints := qapi.remoteEndpointsCreate(
 			replicaLabels,
 			enablePartialResponse,
+			start,
+			end,
 		)
 		queryOpts := &engine.QueryOpts{
 			LookbackDeltaParam: lookbackDelta,
