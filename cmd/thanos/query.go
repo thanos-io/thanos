@@ -291,6 +291,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*dnsSDInterval),
 			time.Duration(*unhealthyStoreTimeout),
 			time.Duration(*endpointInfoTimeout),
+			time.Duration(*queryTimeout),
 			dialOpts,
 			*injectTestAddresses,
 			*queryConnMetricLabels...,

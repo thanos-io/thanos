@@ -771,6 +771,10 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	// into other ones. This presents a race between compaction and the shipper (if it is configured to upload compacted blocks).
 	// Hence, avoid this situation by disabling overlapping compaction. Vertical compaction must be enabled on the compactor.
 	opts.EnableOverlappingCompaction = false
+
+	// We don't do scrapes ourselves so this only gives us a performance penalty.
+	opts.IsolationDisabled = true
+
 	s, err := tsdb.Open(
 		dataDir,
 		logutil.GoKitLogToSlog(logger),

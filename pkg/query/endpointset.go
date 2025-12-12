@@ -245,6 +245,7 @@ type EndpointSet struct {
 	endpointSpecs            func() map[string]*GRPCEndpointSpec
 	endpointInfoTimeout      time.Duration
 	unhealthyEndpointTimeout time.Duration
+	gcTimeout                time.Duration
 
 	updateMtx sync.Mutex
 
@@ -271,6 +272,7 @@ func NewEndpointSet(
 	endpointSpecs func() []*GRPCEndpointSpec,
 	unhealthyEndpointTimeout time.Duration,
 	endpointInfoTimeout time.Duration,
+	queryTimeout time.Duration,
 	endpointMetricLabels ...string,
 ) *EndpointSet {
 	endpointsMetric := newEndpointSetNodeCollector(logger, endpointMetricLabels...)
@@ -291,6 +293,7 @@ func NewEndpointSet(
 		logger:                   log.With(logger, "component", "endpointset"),
 		endpointsMetric:          endpointsMetric,
 		endpointInfoTimeout:      endpointInfoTimeout,
+		gcTimeout:                max(queryTimeout, endpointInfoTimeout, unhealthyEndpointTimeout),
 		unhealthyEndpointTimeout: unhealthyEndpointTimeout,
 		endpointSpecs: func() map[string]*GRPCEndpointSpec {
 			res := make(map[string]*GRPCEndpointSpec)
@@ -367,7 +370,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 			e.updateEndpoint(ctx, spec, newRef)
 			if !newRef.isQueryable() {
-				newRef.Close()
+				newRef.Close(e.gcTimeout)
 				return
 			}
 
@@ -399,7 +402,7 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	}
 	for addr, er := range staleRefs {
 		level.Info(er.logger).Log("msg", unhealthyEndpointMessage, "address", er.addr, "extLset", labelpb.PromLabelSetsToString(er.LabelSets()))
-		er.Close()
+		er.Close(e.gcTimeout)
 		delete(e.endpoints, addr)
 	}
 	level.Debug(e.logger).Log("msg", "updated endpoints", "activeEndpoints", len(e.endpoints))
@@ -606,7 +609,7 @@ func (e *EndpointSet) Close() {
 	defer e.endpointsMtx.Unlock()
 
 	for _, ef := range e.endpoints {
-		ef.Close()
+		ef.Close(e.gcTimeout)
 	}
 	e.endpoints = map[string]*endpointRef{}
 }
@@ -863,8 +866,18 @@ func (er *endpointRef) Addr() (string, bool) {
 	return er.addr, false
 }
 
-func (er *endpointRef) Close() {
-	runutil.CloseWithLogOnErr(er.logger, er.cc, "endpoint %v connection closed", er.addr)
+func (er *endpointRef) Close(gcDelay time.Duration) {
+	// NOTE(GiedriusS): We cannot close the gRPC connection easily. Someone might still be using it even if we do locking.
+	// I think there are two possibilities:
+	// 1. Do garbage collection in the background. Question is WHEN to close it.
+	// 2. We need to ensure no more calls are made to this endpointRef before Close is called. Cannot do this because SendMsg() is async and we might still be
+	// using it even if Series() has returned (I think?). It would be a lot of work to refactor all clients to use reference counting.
+	// So, in reality, only one works for now.
+	// Hence, we need to let the last calls finish. Use the maximum timeout as the garbage collection delay.
+	level.Info(er.logger).Log("msg", "waiting for gRPC calls to finish before closing", "addr", er.addr, "gcDelay", gcDelay)
+	time.AfterFunc(gcDelay, func() {
+		runutil.CloseWithLogOnErr(er.logger, er.cc, "endpoint %v connection closed", er.addr)
+	})
 }
 
 func (er *endpointRef) apisPresent() []string {
