@@ -116,6 +116,21 @@ func (hc *httpConfig) registerFlag(cmd extkingpin.FlagClause) *httpConfig {
 	return hc
 }
 
+// capnpConfig holds configuration for the Cap'n Proto Store API server.
+type capnpConfig struct {
+	bindAddress string
+}
+
+// DefaultCapNProtoPort is the default port for Cap'n Proto Store API.
+const DefaultCapNProtoPort = "19090"
+
+func (cc *capnpConfig) registerFlag(cmd extkingpin.FlagClause) *capnpConfig {
+	cmd.Flag("capnp-address",
+		"Listen ip:port address for Cap'n Proto Store API. Set to empty string to disable.").
+		Default("0.0.0.0:" + DefaultCapNProtoPort).StringVar(&cc.bindAddress)
+	return cc
+}
+
 type prometheusConfig struct {
 	url               *url.URL
 	readyTimeout      time.Duration

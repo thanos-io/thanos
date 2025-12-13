@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storecapnp"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -450,6 +451,25 @@ func runReceive(
 				srv.Shutdown(err)
 			},
 		)
+
+		// Start Cap'n Proto Store API server (if configured).
+		if conf.capnpStoreAddress != "" {
+			listener, err := net.Listen("tcp", conf.capnpStoreAddress)
+			if err != nil {
+				return errors.Wrap(err, "listen capnproto store address")
+			}
+			handler := storecapnp.NewHandler(logger, mts, infoSrv)
+			capnpServer := storecapnp.NewServer(listener, handler, logger)
+			g.Add(func() error {
+				level.Info(logger).Log("msg", "starting Cap'n Proto Store API server", "address", conf.capnpStoreAddress)
+				return capnpServer.ListenAndServe()
+			}, func(err error) {
+				capnpServer.Shutdown()
+				if err := listener.Close(); err != nil {
+					level.Warn(logger).Log("msg", "Cap'n Proto Store server listener did not close gracefully", "err", err)
+				}
+			})
+		}
 	}
 
 	level.Debug(logger).Log("msg", "setting up receive HTTP handler")
@@ -934,6 +954,8 @@ type receiveConfig struct {
 	compactedBlocksExpandedPostingsCacheSize uint64
 	otlpEnableTargetInfo                     bool
 	otlpResourceAttributes                   []string
+
+	capnpStoreAddress string
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1010,7 +1032,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default(string(receive.ProtobufReplication)).
 		EnumVar(&rc.replicationProtocol, replicationProtocols...)
 
-	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
+	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto replication server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
+
+	cmd.Flag("receive.capnproto-store-address", "Address for the Cap'n Proto Store API server. Set to empty to disable.").Default("0.0.0.0:19090").StringVar(&rc.capnpStoreAddress)
 
 	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&rc.grpcServiceConfig)
 

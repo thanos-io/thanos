@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"sync"
@@ -49,6 +50,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storecapnp"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -376,6 +378,30 @@ func runSidecar(
 			statusProber.NotReady(err)
 			s.Shutdown(err)
 		})
+
+		// Start Cap'n Proto Store API server (if configured).
+		if conf.capnp.bindAddress != "" {
+			listener, err := net.Listen("tcp", conf.capnp.bindAddress)
+			if err != nil {
+				return errors.Wrap(err, "listen capnproto address")
+			}
+			handler := storecapnp.NewHandler(logger, storeServer, infoSrv)
+			capnpServer := storecapnp.NewServer(listener, handler, logger)
+			g.Add(func() error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-readyToStartGRPC:
+				}
+				level.Info(logger).Log("msg", "starting Cap'n Proto Store API server", "address", conf.capnp.bindAddress)
+				return capnpServer.ListenAndServe()
+			}, func(err error) {
+				capnpServer.Shutdown()
+				if err := listener.Close(); err != nil {
+					level.Warn(logger).Log("msg", "Cap'n Proto server listener did not close gracefully", "err", err)
+				}
+			})
+		}
 	}
 	if uploads {
 		// The background shipper continuously scans the data directory and uploads
@@ -566,6 +592,7 @@ func (s *promMetadata) Version() string {
 type sidecarConfig struct {
 	http            httpConfig
 	grpc            grpcConfig
+	capnp           capnpConfig
 	prometheus      prometheusConfig
 	tsdb            tsdbConfig
 	reloader        reloaderConfig
@@ -579,6 +606,7 @@ type sidecarConfig struct {
 func (sc *sidecarConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.http.registerFlag(cmd)
 	sc.grpc.registerFlag(cmd)
+	sc.capnp.registerFlag(cmd)
 	sc.prometheus.registerFlag(cmd)
 	sc.tsdb.registerFlag(cmd)
 	sc.reloader.registerFlag(cmd)

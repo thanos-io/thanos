@@ -48,6 +48,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storecapnp"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -207,6 +208,8 @@ func registerQuery(app *extkingpin.App) {
 
 	strictEndpointGroups := extkingpin.Addrs(cmd.Flag("endpoint-group-strict", "(Deprecated, Experimental): DNS name of statically configured Thanos API server groups (repeatable) that are always used, even if the health check fails.").PlaceHolder("<endpoint-group-strict>"))
 
+	capnpEndpoints := extkingpin.Addrs(cmd.Flag("store.capnp-address", "Addresses of Cap'n Proto Store API servers (repeatable). These endpoints use the Cap'n Proto protocol instead of gRPC for potentially better performance.").PlaceHolder("<capnp-address>"))
+
 	injectTestAddresses := extkingpin.Addrs(cmd.Flag("inject-test-addresses", "Inject test addresses for DNS resolver (repeatable).").PlaceHolder("<inject-test-address>").Hidden())
 
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
@@ -300,11 +303,40 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
+		// Setup Cap'n Proto store set if any addresses are configured
+		var getStoreClients func() []store.Client
+		if len(*capnpEndpoints) > 0 {
+			capnpStoreSet := storecapnp.NewStoreSet(logger, *capnpEndpoints)
+			// Initial update
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*endpointInfoTimeout))
+			capnpStoreSet.Update(ctx)
+			cancel()
+
+			// Start update loop
+			ctx, cancel = context.WithCancel(context.Background())
+			g.Add(func() error {
+				capnpStoreSet.RunUpdateLoop(ctx, time.Duration(*dnsSDInterval))
+				return nil
+			}, func(error) {
+				cancel()
+				capnpStoreSet.Close()
+			})
+
+			// Combine gRPC and Cap'n Proto store clients
+			getStoreClients = storecapnp.CombinedStoreClientFunc(
+				endpointSet.GetStoreClients,
+				capnpStoreSet.GetStoreClients,
+			)
+		} else {
+			getStoreClients = endpointSet.GetStoreClients
+		}
+
 		return runQuery(
 			g,
 			logger,
 			debugLogging,
 			endpointSet,
+			getStoreClients,
 			reg,
 			tracer,
 			httpLogOpts,
@@ -370,6 +402,7 @@ func runQuery(
 	logger log.Logger,
 	debugLogging bool,
 	endpointSet *query.EndpointSet,
+	getStoreClients func() []store.Client,
 	reg *prometheus.Registry,
 	tracer opentracing.Tracer,
 	httpLogOpts []logging.Option,
@@ -444,7 +477,7 @@ func runQuery(
 	queryReplicaLabels = strutil.ParseFlagLabels(queryReplicaLabels)
 
 	var (
-		proxyStore       = store.NewProxyStore(logger, reg, endpointSet.GetStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
+		proxyStore       = store.NewProxyStore(logger, reg, getStoreClients, component.Query, selectorLset, storeResponseTimeout, store.RetrievalStrategy(grpcProxyStrategy), options...)
 		seriesProxy      = store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, proxyStore), reg, storeRateLimits)
 		rulesProxy       = rules.NewProxy(logger, endpointSet.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpointSet.GetTargetsClients)

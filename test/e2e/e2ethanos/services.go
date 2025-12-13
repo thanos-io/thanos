@@ -270,6 +270,7 @@ type QuerierBuilder struct {
 	image          string
 
 	storeAddresses           []string
+	capnpStoreAddresses      []string
 	proxyStrategy            string
 	disablePartialResponses  bool
 	fileSDStoreAddresses     []string
@@ -332,6 +333,11 @@ func (q *QuerierBuilder) WithImage(image string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithStoreAddresses(storeAddresses ...string) *QuerierBuilder {
 	q.storeAddresses = storeAddresses
+	return q
+}
+
+func (q *QuerierBuilder) WithCapnpStoreAddresses(capnpStoreAddresses ...string) *QuerierBuilder {
+	q.capnpStoreAddresses = capnpStoreAddresses
 	return q
 }
 
@@ -470,6 +476,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	for _, addr := range q.storeAddresses {
 		args = append(args, "--endpoint="+addr)
+	}
+	for _, addr := range q.capnpStoreAddresses {
+		args = append(args, "--store.capnp-address="+addr)
 	}
 	for _, feature := range q.enableFeatures {
 		args = append(args, "--enable-feature="+feature)
@@ -610,7 +619,7 @@ type ReceiveBuilder struct {
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
 	f := e.Runnable(fmt.Sprintf("receive-%v", name)).
-		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081, "capnp": 19391}).
+		WithPorts(map[string]int{"http": 8080, "grpc": 9091, "remote-write": 8081, "capnp": 19090}).
 		Future()
 	return &ReceiveBuilder{
 		Linkable:    f,

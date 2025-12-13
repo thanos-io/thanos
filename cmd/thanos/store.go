@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storecapnp"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
@@ -73,6 +75,7 @@ type storeConfig struct {
 	cacheIndexHeader              bool
 	grpcConfig                    grpcConfig
 	httpConfig                    httpConfig
+	capnpConfig                   capnpConfig
 	indexCacheSizeBytes           units.Base2Bytes
 	chunkPoolSize                 units.Base2Bytes
 	estimatedMaxSeriesSize        uint64
@@ -112,6 +115,7 @@ type storeConfig struct {
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.httpConfig = *sc.httpConfig.registerFlag(cmd)
 	sc.grpcConfig = *sc.grpcConfig.registerFlag(cmd)
+	sc.capnpConfig = *sc.capnpConfig.registerFlag(cmd)
 	sc.storeRateLimits.RegisterFlags(cmd)
 
 	cmd.Flag("data-dir", "Local data directory used for caching purposes (index-header, in-mem cache items and meta.jsons). If removed, no data will be lost, just store will have to rebuild the cache. NOTE: Putting raw blocks here will not cause the store to read them. For such use cases use Prometheus + sidecar. Ignored if --no-cache-index-header option is specified.").
@@ -543,6 +547,8 @@ func runStore(
 		}),
 	)
 
+	storeServer := store.NewInstrumentedStoreServer(reg, bs)
+
 	// Start query (proxy) gRPC StoreAPI.
 	{
 		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
@@ -550,7 +556,6 @@ func runStore(
 			return errors.Wrap(err, "setup gRPC server")
 		}
 
-		storeServer := store.NewInstrumentedStoreServer(reg, bs)
 		s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, conf.component, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
@@ -567,6 +572,25 @@ func runStore(
 		}, func(err error) {
 			statusProber.NotReady(err)
 			s.Shutdown(err)
+		})
+	}
+
+	// Start Cap'n Proto Store API server (if configured).
+	if conf.capnpConfig.bindAddress != "" {
+		listener, err := net.Listen("tcp", conf.capnpConfig.bindAddress)
+		if err != nil {
+			return errors.Wrap(err, "listen capnproto address")
+		}
+		handler := storecapnp.NewHandler(logger, storeServer, infoSrv)
+		capnpServer := storecapnp.NewServer(listener, handler, logger)
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "starting Cap'n Proto Store API server", "address", conf.capnpConfig.bindAddress)
+			return capnpServer.ListenAndServe()
+		}, func(err error) {
+			capnpServer.Shutdown()
+			if err := listener.Close(); err != nil {
+				level.Warn(logger).Log("msg", "Cap'n Proto server listener did not close gracefully", "err", err)
+			}
 		})
 	}
 
