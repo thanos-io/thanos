@@ -24,7 +24,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-func TestRemoteEndpoints_Engines(t *testing.T) {
+func TestRemoteEndpoints_Engines_Cache(t *testing.T) {
 	t.Parallel()
 
 	getClients := func() []Client {
