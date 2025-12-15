@@ -601,6 +601,7 @@ type ReceiveBuilder struct {
 	metaMonitoringQuery   string
 	hashringConfigs       []receive.HashringConfig
 	relabelConfigs        []*relabel.Config
+	artificialDelay       time.Duration
 	replication           int
 	image                 string
 	nativeHistograms      bool
@@ -657,6 +658,11 @@ func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive
 	return r
 }
 
+func (r *ReceiveBuilder) WithArtificialDelay(delay time.Duration) *ReceiveBuilder {
+	r.artificialDelay = delay
+	return r
+}
+
 func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
 	r.tenantSplitLabel = splitLabel
 	return r
@@ -706,6 +712,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.tenantSplitLabel != "" {
 		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
+	}
+
+	if r.artificialDelay > 0 {
+		args["--receive.artificial-max-delay"] = r.artificialDelay.String()
 	}
 
 	if len(r.labels) > 0 {
