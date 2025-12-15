@@ -27,17 +27,20 @@ import (
 func TestRemoteEndpoints_Engines(t *testing.T) {
 	t.Parallel()
 
-	clients := []Client{
-		NewClient(nil, "testclient1", nil),
-		NewClient(nil, "testclient2", nil),
-		NewClient(nil, "testclient3", nil),
+	getClients := func() []Client {
+		return []Client{
+			NewClient(nil, "testclient1", nil),
+			NewClient(nil, "testclient2", nil),
+			NewClient(nil, "testclient3", nil),
+		}
 	}
+	wantEngines := len(getClients())
 	endpoints := NewRemoteEndpoints(log.NewNopLogger(), func() []Client {
-		return clients
+		return getClients()
 	}, Opts{})
 
 	engines1 := endpoints.Engines()
-	testutil.Equals(t, len(clients), len(engines1))
+	testutil.Equals(t, wantEngines, len(engines1))
 
 	// Compute lazy fields.
 	for _, e := range engines1 {
@@ -47,8 +50,14 @@ func TestRemoteEndpoints_Engines(t *testing.T) {
 		e.PartitionLabelSets()
 	}
 
+	// Changes in getClients() should not affect subsequent endpoints.Engines()
+	// calls.
+	getClients = func() []Client {
+		return []Client{}
+	}
+
 	engines2 := endpoints.Engines()
-	testutil.Equals(t, len(clients), len(engines2))
+	testutil.Equals(t, wantEngines, len(engines2))
 
 	// endpoints.Engines() should return exactly the same slice.
 	testutil.Equals(t, len(engines1), len(engines2))
