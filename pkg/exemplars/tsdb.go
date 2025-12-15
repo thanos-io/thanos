@@ -70,10 +70,8 @@ func (t *TSDB) Exemplars(matchers [][]*labels.Matcher, start, end int64, s exemp
 
 	for _, e := range exemplars {
 		exd := exemplarspb.ExemplarData{
-			SeriesLabels: labelpb.ZLabelSet{
-				Labels: labelpb.ZLabelsFromPromLabels(labelpb.ExtendSortedLabels(e.SeriesLabels, t.getExtLabels())),
-			},
-			Exemplars: exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
+			SeriesLabels: labelpb.PromLabelsToLabelSet(labelpb.ExtendSortedLabels(e.SeriesLabels, t.getExtLabels())),
+			Exemplars:    exemplarspb.ExemplarsFromPromExemplars(e.Exemplars),
 		}
 		if err := s.Send(exemplarspb.NewExemplarsResponse(&exd)); err != nil {
 			return status.Error(codes.Aborted, err.Error())

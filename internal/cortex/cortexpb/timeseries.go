@@ -12,6 +12,14 @@ import (
 	"unsafe"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/protobuf/proto"
+)
+
+// Error variables for protobuf parsing.
+var (
+	ErrInvalidLengthCortex        = fmt.Errorf("proto: negative length found during unmarshaling")
+	ErrIntOverflowCortex          = fmt.Errorf("proto: integer overflow")
+	ErrUnexpectedEndOfGroupCortex = fmt.Errorf("proto: unexpected end of group")
 )
 
 var (
@@ -34,9 +42,9 @@ var (
 	timeSeriesPool = sync.Pool{
 		New: func() any {
 			return &TimeSeries{
-				Labels:    make([]LabelAdapter, 0, expectedLabels),
-				Samples:   make([]Sample, 0, expectedSamplesPerSeries),
-				Exemplars: make([]Exemplar, 0, expectedExemplarsPerSeries),
+				Labels:    make([]*LabelPair, 0, expectedLabels),
+				Samples:   make([]*Sample, 0, expectedSamplesPerSeries),
+				Exemplars: make([]*Exemplar, 0, expectedExemplarsPerSeries),
 			}
 		},
 	}
@@ -60,8 +68,8 @@ type PreallocWriteRequest struct {
 
 // Unmarshal implements proto.Message.
 func (p *PreallocWriteRequest) Unmarshal(dAtA []byte) error {
-	p.Timeseries = PreallocTimeseriesSliceFromPool()
-	return p.WriteRequest.Unmarshal(dAtA)
+	// Use protobuf v2 unmarshal
+	return proto.Unmarshal(dAtA, &p.WriteRequest)
 }
 
 // PreallocTimeseries is a TimeSeries which preallocs slices on Unmarshal.
@@ -72,7 +80,7 @@ type PreallocTimeseries struct {
 // Unmarshal implements proto.Message.
 func (p *PreallocTimeseries) Unmarshal(dAtA []byte) error {
 	p.TimeSeries = TimeseriesFromPool()
-	return p.TimeSeries.Unmarshal(dAtA)
+	return proto.Unmarshal(dAtA, p.TimeSeries)
 }
 
 // LabelAdapter is a labels.Label that can be marshalled to/from protos.
@@ -280,4 +288,110 @@ func PreallocTimeseriesSliceFromPool() []PreallocTimeseries {
 // ReuseTimeseries should be called once done, unless ReuseSlice was called on the slice that contains this TimeSeries.
 func TimeseriesFromPool() *TimeSeries {
 	return timeSeriesPool.Get().(*TimeSeries)
+}
+
+// Helper functions for protobuf encoding/decoding.
+
+func encodeVarintCortex(data []byte, offset int, v uint64) int {
+	offset -= sovCortex(v)
+	base := offset
+	for v >= 1<<7 {
+		data[offset] = uint8(v&0x7f | 0x80)
+		v >>= 7
+		offset++
+	}
+	data[offset] = uint8(v)
+	return base
+}
+
+func sovCortex(x uint64) int {
+	return (sovCortexLen(x) + 6) / 7
+}
+
+func sovCortexLen(x uint64) int {
+	n := 0
+	for x >= 0x80 {
+		x >>= 7
+		n++
+	}
+	return n + 1
+}
+
+func skipCortex(data []byte) (n int, err error) {
+	l := len(data)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowCortex
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowCortex
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if data[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowCortex
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthCortex
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupCortex
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthCortex
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
 }

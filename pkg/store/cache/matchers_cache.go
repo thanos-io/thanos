@@ -192,6 +192,21 @@ func MatchersToPromMatchersCached(cache MatchersCache, ms ...storepb.LabelMatche
 	return res, nil
 }
 
+// MatcherPointersToPromMatchersCached returns Prometheus matchers from proto matcher pointers.
+// Works analogously to MatcherPointersToPromMatchers but uses cache to avoid unnecessary allocations and conversions.
+// NOTE: It allocates memory.
+func MatcherPointersToPromMatchersCached(cache MatchersCache, ms []*storepb.LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		pm, err := cache.GetOrSet(m, func() (*labels.Matcher, error) { return storepb.MatcherToPromMatcher(*m) })
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, pm)
+	}
+	return res, nil
+}
+
 func cacheKey(m ConversionLabelMatcher) (string, error) {
 	sb := strings.Builder{}
 	t, err := m.MatcherType()

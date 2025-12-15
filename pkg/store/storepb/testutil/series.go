@@ -17,8 +17,9 @@ import (
 
 	"github.com/cespare/xxhash/v2"
 	"github.com/efficientgo/core/testutil"
-	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid/v2"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -154,7 +155,7 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	for all.Next() {
 		testutil.Ok(t, ir.Series(all.At(), &builder, &chunkMetas))
 		lset := labelpb.ExtendSortedLabels(builder.Labels(), extLabels)
-		expected = append(expected, &storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(lset)})
+		expected = append(expected, &storepb.Series{Labels: labelpb.PromLabelsToLabels(lset)})
 
 		if skipChunks {
 			continue
@@ -170,13 +171,14 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 				c.MaxTime = c.MinTime + int64(chEnc.NumSamples()) - 1
 			}
 
-			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, storepb.AggrChunk{
+			hash := xxhash.Sum64(chEnc.Bytes())
+			expected[len(expected)-1].Chunks = append(expected[len(expected)-1].Chunks, &storepb.AggrChunk{
 				MinTime: c.MinTime,
 				MaxTime: c.MaxTime,
 				Raw: &storepb.Chunk{
 					Data: chEnc.Bytes(),
 					Type: storepb.Chunk_Encoding(chEnc.Encoding() - 1),
-					Hash: xxhash.Sum64(chEnc.Bytes()),
+					Hash: &hash,
 				},
 			})
 		}
@@ -271,7 +273,7 @@ type SeriesServer struct {
 
 	SeriesSet []*storepb.Series
 	Warnings  []string
-	HintsSet  []*types.Any
+	HintsSet  []*anypb.Any
 
 	Size int64
 }
@@ -281,7 +283,7 @@ func NewSeriesServer(ctx context.Context) *SeriesServer {
 }
 
 func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
-	s.Size += int64(r.Size())
+	s.Size += int64(proto.Size(r))
 
 	if r.GetWarning() != "" {
 		s.Warnings = append(s.Warnings, r.GetWarning())
@@ -389,7 +391,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					var actualHints []hintspb.SeriesResponseHints
 					for _, anyHints := range srv.HintsSet {
 						hints := hintspb.SeriesResponseHints{}
-						testutil.Ok(t, types.UnmarshalAny(anyHints, &hints))
+						testutil.Ok(t, anyHints.UnmarshalTo(&hints))
 						actualHints = append(actualHints, hints)
 					}
 					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))

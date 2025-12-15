@@ -8,12 +8,19 @@ import (
 	"strings"
 )
 
-func (m *QueryHints) toPromQL(labelMatchers []LabelMatcher) string {
+func (m *QueryHints) toPromQL(labelMatchers []*LabelMatcher) string {
 	grouping := m.Grouping.toPromQL()
-	matchers := MatchersToString(labelMatchers...)
+	// Convert []*LabelMatcher to []LabelMatcher for MatchersToString
+	matchers := make([]LabelMatcher, 0, len(labelMatchers))
+	for _, lm := range labelMatchers {
+		if lm != nil {
+			matchers = append(matchers, *lm)
+		}
+	}
+	matcherStr := MatchersToString(matchers...)
 	queryRange := m.Range.toPromQL()
 
-	query := fmt.Sprintf("%s %s (%s%s)", m.Func.Name, grouping, matchers, queryRange)
+	query := fmt.Sprintf("%s %s (%s%s)", m.Func.Name, grouping, matcherStr, queryRange)
 	// Remove double spaces if some expressions are missing.
 	return strings.Join(strings.Fields(query), " ")
 }

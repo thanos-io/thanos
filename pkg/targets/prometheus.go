@@ -16,6 +16,8 @@ import (
 
 // Prometheus implements targetspb.Targets gRPC that allows to fetch targets from Prometheus HTTP api/v1/targets endpoint.
 type Prometheus struct {
+	targetspb.UnimplementedTargetsServer
+
 	base   *url.URL
 	client *promclient.Client
 
@@ -54,14 +56,14 @@ func (p *Prometheus) Targets(r *targetspb.TargetsRequest, s targetspb.Targets_Ta
 
 func enrichTargetsWithExtLabels(targets *targetspb.TargetDiscovery, extLset labels.Labels) {
 	for i, target := range targets.ActiveTargets {
-		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(target.DiscoveredLabels.PromLabels(), extLset))
-		target.SetLabels(labelpb.ExtendSortedLabels(target.Labels.PromLabels(), extLset))
+		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(labelpb.LabelSetToPromLabels(target.DiscoveredLabels), extLset))
+		target.SetLabels(labelpb.ExtendSortedLabels(labelpb.LabelSetToPromLabels(target.Labels), extLset))
 
 		targets.ActiveTargets[i] = target
 	}
 
 	for i, target := range targets.DroppedTargets {
-		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(target.DiscoveredLabels.PromLabels(), extLset))
+		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(labelpb.LabelSetToPromLabels(target.DiscoveredLabels), extLset))
 
 		targets.DroppedTargets[i] = target
 	}

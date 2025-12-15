@@ -1613,7 +1613,7 @@ func NewMetricMetadataHandler(client metadata.UnaryClient, enablePartialResponse
 		defer span.Finish()
 
 		var (
-			t        map[string][]metadatapb.Meta
+			t        map[string][]*metadatapb.Meta
 			warnings annotations.Annotations
 			err      error
 		)
@@ -1724,7 +1724,7 @@ func convertToTSDBSTatus(tsdbStatsEntry *statuspb.TSDBStatisticsEntry, limit int
 	}
 }
 
-func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
+func convertToTSDBStat(stats []*statuspb.Statistic, limit int) []v1.TSDBStat {
 	if limit > 0 && limit < len(stats) {
 		stats = stats[:limit]
 	}

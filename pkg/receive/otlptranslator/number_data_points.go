@@ -88,11 +88,13 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 		}
 		ts := c.addSample(sample, lbls)
 		if ts != nil {
-			exemplars, err := getPromExemplars[pmetric.NumberDataPoint](ctx, &c.everyN, pt)
+			exemplarsSlice, err := getPromExemplars[pmetric.NumberDataPoint](ctx, &c.everyN, pt)
 			if err != nil {
 				return err
 			}
-			ts.Exemplars = append(ts.Exemplars, exemplars...)
+			for i := range exemplarsSlice {
+				ts.Exemplars = append(ts.Exemplars, &exemplarsSlice[i])
+			}
 		}
 
 		// add created time series if needed
@@ -102,10 +104,14 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 				return nil
 			}
 
-			createdLabels := make([]labelpb.ZLabel, len(lbls))
-			copy(createdLabels, lbls)
+			createdLabels := make([]*labelpb.Label, len(lbls))
+			for i, l := range lbls {
+				if l != nil {
+					createdLabels[i] = &labelpb.Label{Name: l.Name, Value: l.Value}
+				}
+			}
 			for i, l := range createdLabels {
-				if l.Name == model.MetricNameLabel {
+				if l != nil && l.Name == model.MetricNameLabel {
 					createdLabels[i].Value = name + createdSuffix
 					break
 				}

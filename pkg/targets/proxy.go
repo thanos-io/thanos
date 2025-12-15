@@ -21,6 +21,8 @@ import (
 
 // Proxy implements targetspb.Targets gRPC that fans out requests to given targetspb.Targets.
 type Proxy struct {
+	targetspb.UnimplementedTargetsServer
+
 	logger  log.Logger
 	targets func() []targetspb.TargetsClient
 }

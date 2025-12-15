@@ -177,11 +177,17 @@ func (c *PrometheusConverter) FromMetrics(ctx context.Context, md pmetric.Metric
 	return annots, errs
 }
 
-func isSameMetric(ts *prompb.TimeSeries, lbls []labelpb.ZLabel) bool {
+func isSameMetric(ts *prompb.TimeSeries, lbls []*labelpb.Label) bool {
 	if len(ts.Labels) != len(lbls) {
 		return false
 	}
-	for i, l := range ts.Labels {
+	for i, l := range lbls {
+		if ts.Labels[i] == nil || l == nil {
+			if ts.Labels[i] != nil || l != nil {
+				return false
+			}
+			continue
+		}
 		if l.Name != ts.Labels[i].Name || l.Value != ts.Labels[i].Value {
 			return false
 		}
@@ -205,13 +211,13 @@ func (c *PrometheusConverter) addExemplars(ctx context.Context, dataPoint pmetri
 	}
 
 	sort.Sort(byBucketBoundsData(bucketBounds))
-	for _, exemplar := range exemplars {
+	for i := range exemplars {
 		for _, bound := range bucketBounds {
 			if err := c.everyN.checkContext(ctx); err != nil {
 				return err
 			}
-			if len(bound.ts.Samples) > 0 && exemplar.Value <= bound.bound {
-				bound.ts.Exemplars = append(bound.ts.Exemplars, exemplar)
+			if len(bound.ts.Samples) > 0 && exemplars[i].Value <= bound.bound {
+				bound.ts.Exemplars = append(bound.ts.Exemplars, &exemplars[i])
 				break
 			}
 		}
@@ -224,13 +230,13 @@ func (c *PrometheusConverter) addExemplars(ctx context.Context, dataPoint pmetri
 // If there is no corresponding TimeSeries already, it's created.
 // The corresponding TimeSeries is returned.
 // If either lbls is nil/empty or sample is nil, nothing is done.
-func (c *PrometheusConverter) addSample(sample *prompb.Sample, lbls []labelpb.ZLabel) *prompb.TimeSeries {
+func (c *PrometheusConverter) addSample(sample *prompb.Sample, lbls []*labelpb.Label) *prompb.TimeSeries {
 	if sample == nil || len(lbls) == 0 {
 		// This shouldn't happen
 		return nil
 	}
 
 	ts, _ := c.getOrCreateTimeSeries(lbls)
-	ts.Samples = append(ts.Samples, *sample)
+	ts.Samples = append(ts.Samples, sample)
 	return ts
 }

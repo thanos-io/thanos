@@ -22,6 +22,8 @@ import (
 
 // Proxy implements rulespb.Rules gRPC that fanouts requests to given rulespb.Rules and deduplication on the way.
 type Proxy struct {
+	rulespb.UnimplementedRulesServer
+
 	logger log.Logger
 	rules  func() []rulespb.RulesClient
 }

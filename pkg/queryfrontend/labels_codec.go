@@ -17,6 +17,7 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
 	v1 "github.com/prometheus/prometheus/web/api/v1"
 	"github.com/weaveworks/common/httpgrpc"
@@ -77,12 +78,12 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 			Data:   lbls,
 		}, nil
 	case *ThanosSeriesResponse:
-		seriesData := make(labelpb.ZLabelSets, 0)
+		seriesData := make([]*labelpb.LabelSet, 0)
 
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
 			for _, series := range res.(*ThanosSeriesResponse).Data {
-				s := series.PromLabels().String()
+				s := labelpb.LabelSetToPromLabels(series).String()
 				if _, ok := uniqueSeries[s]; !ok {
 					seriesData = append(seriesData, series)
 					uniqueSeries[s] = struct{}{}
@@ -90,7 +91,12 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 			}
 		}
 
-		sort.Sort(seriesData)
+		// Sort the series data
+		sort.Slice(seriesData, func(i, j int) bool {
+			li := labelpb.LabelSetToPromLabels(seriesData[i])
+			lj := labelpb.LabelSetToPromLabels(seriesData[j])
+			return labels.Compare(li, lj) < 0
+		})
 		return &ThanosSeriesResponse{
 			Status: queryrange.StatusSuccess,
 			Data:   seriesData,

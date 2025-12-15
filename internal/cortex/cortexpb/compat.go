@@ -57,6 +57,57 @@ func FromMetricsToLabelAdapters(metric model.Metric) []LabelAdapter {
 	return result
 }
 
+// FromMetricsToLabelPairs converts model.Metric to []*LabelPair.
+// Don't do this on any performance sensitive paths.
+// The result is sorted.
+func FromMetricsToLabelPairs(metric model.Metric) []*LabelPair {
+	result := make([]*LabelPair, 0, len(metric))
+	for k, v := range metric {
+		result = append(result, &LabelPair{
+			Name:  []byte(k),
+			Value: []byte(v),
+		})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return strings.Compare(string(result[i].Name), string(result[j].Name)) < 0
+	})
+	return result
+}
+
+// FromLabelAdaptersToLabelPairs converts []LabelAdapter to []*LabelPair.
+func FromLabelAdaptersToLabelPairs(ls []LabelAdapter) []*LabelPair {
+	result := make([]*LabelPair, len(ls))
+	for i, l := range ls {
+		result[i] = &LabelPair{
+			Name:  []byte(l.Name),
+			Value: []byte(l.Value),
+		}
+	}
+	return result
+}
+
+// FromLabelPairsToLabelAdapters converts []*LabelPair to []LabelAdapter.
+func FromLabelPairsToLabelAdapters(ls []*LabelPair) []LabelAdapter {
+	result := make([]LabelAdapter, len(ls))
+	for i, l := range ls {
+		result[i] = LabelAdapter{
+			Name:  string(l.Name),
+			Value: string(l.Value),
+		}
+	}
+	return result
+}
+
+// FromLabelPairsToLabels converts []*LabelPair to labels.Labels.
+func FromLabelPairsToLabels(ls []*LabelPair) labels.Labels {
+	return FromLabelAdaptersToLabels(FromLabelPairsToLabelAdapters(ls))
+}
+
+// FromLabelPairsToMetric converts []*LabelPair to a model.Metric.
+func FromLabelPairsToMetric(ls []*LabelPair) model.Metric {
+	return util.LabelsToMetric(FromLabelPairsToLabels(ls))
+}
+
 type byLabel []LabelAdapter
 
 func (s byLabel) Len() int           { return len(s) }

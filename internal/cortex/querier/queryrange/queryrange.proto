@@ -5,67 +5,63 @@ syntax = "proto3";
 
 package queryrange;
 
-option go_package = "queryrange";
+option go_package = "github.com/thanos-io/thanos/internal/cortex/querier/queryrange";
 
-import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "cortex/cortexpb/cortex.proto";
 import "google/protobuf/any.proto";
 
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-
 message PrometheusRequestHeader {
-  string Name = 1 [(gogoproto.jsontag) = "-"];
-  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+  string Name = 1;
+  repeated string Values = 2;
 }
 message PrometheusRequest {
   string path = 1;
   int64 start = 2;
   int64 end = 3;
   int64 step = 4;
-  google.protobuf.Duration timeout = 5 [(gogoproto.stdduration) = true, (gogoproto.nullable) = false];
+  google.protobuf.Duration timeout = 5;
   string query = 6;
-  CachingOptions cachingOptions = 7 [(gogoproto.nullable) = false];
-  repeated PrometheusRequestHeader Headers = 8 [(gogoproto.jsontag) = "-"];
+  CachingOptions cachingOptions = 7;
+  repeated PrometheusRequestHeader Headers = 8;
   string stats = 9;
 }
 
 message PrometheusResponseHeader {
-  string Name = 1 [(gogoproto.jsontag) = "-"];
-  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+  string Name = 1;
+  repeated string Values = 2;
 }
 
 message PrometheusResponse {
-  string Status = 1 [(gogoproto.jsontag) = "status"];
-  PrometheusData Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data,omitempty"];
-  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
-  repeated PrometheusResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
-  repeated string Warnings = 6 [(gogoproto.jsontag) = "warnings,omitempty"];
+  string Status = 1;
+  PrometheusData Data = 2;
+  string ErrorType = 3;
+  string Error = 4;
+  repeated PrometheusResponseHeader Headers = 5;
+  repeated string Warnings = 6;
 }
 
 message PrometheusData {
-  string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
-  repeated SampleStream Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
-  PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
-  Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  string ResultType = 1;
+  repeated SampleStream Result = 2;
+  PrometheusResponseStats stats = 3;
+  Analysis analysis = 4;
 }
 
 message PrometheusInstantQueryResponse {
-  string Status = 1 [(gogoproto.jsontag) = "status"];
-  PrometheusInstantQueryData Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data,omitempty"];
-  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
-  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
-  repeated PrometheusResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
-  repeated string Warnings = 6 [(gogoproto.jsontag) = "warnings,omitempty"];
+  string Status = 1;
+  PrometheusInstantQueryData Data = 2;
+  string ErrorType = 3;
+  string Error = 4;
+  repeated PrometheusResponseHeader Headers = 5;
+  repeated string Warnings = 6;
 }
 
 message PrometheusInstantQueryData {
-  string ResultType = 1 [(gogoproto.jsontag) = "resultType"];
-  PrometheusInstantQueryResult Result = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "result"];
-  PrometheusResponseStats stats = 3 [(gogoproto.jsontag) = "stats,omitempty"];
-  Analysis analysis = 4 [(gogoproto.jsontag) = "analysis"];
+  string ResultType = 1;
+  PrometheusInstantQueryResult Result = 2;
+  PrometheusResponseStats stats = 3;
+  Analysis analysis = 4;
 }
 
 message PrometheusInstantQueryResult {
@@ -86,13 +82,13 @@ message Matrix {
 }
 
 message PrometheusResponseStats {
-  PrometheusResponseSamplesStats samples = 1 [(gogoproto.jsontag) = "samples"];
+  PrometheusResponseSamplesStats samples = 1;
 }
 
 message PrometheusResponseSamplesStats {
-  int64 totalQueryableSamples = 1 [(gogoproto.jsontag) = "totalQueryableSamples"];
-  repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2 [(gogoproto.jsontag) = "totalQueryableSamplesPerStep"];
-  int32 peakSamples = 3 [(gogoproto.jsontag) = "peakSamples"];
+  int64 totalQueryableSamples = 1;
+  repeated PrometheusResponseQueryableSamplesStatsPerStep totalQueryableSamplesPerStep = 2;
+  int32 peakSamples = 3;
 }
 
 message PrometheusResponseQueryableSamplesStatsPerStep {
@@ -101,16 +97,16 @@ message PrometheusResponseQueryableSamplesStatsPerStep {
 }
 
 message SampleStream {
-  repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
-  repeated cortexpb.Sample samples = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "values"];
-  repeated SampleHistogramPair histograms = 3 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "histogram"];
+  repeated cortexpb.LabelPair labels = 1;
+  repeated cortexpb.Sample samples = 2;
+  repeated SampleHistogramPair histograms = 3;
 }
 
 message Sample {
-  repeated cortexpb.LabelPair labels = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "metric", (gogoproto.customtype) = "github.com/thanos-io/thanos/internal/cortex/cortexpb.LabelAdapter"];
-  double sampleValue = 2 [(gogoproto.jsontag) = "value"];
+  repeated cortexpb.LabelPair labels = 1;
+  double sampleValue = 2;
   int64 timestamp = 3;
-  SampleHistogram histogram = 4 [(gogoproto.nullable) = true, (gogoproto.jsontag) = "histogram"];
+  SampleHistogram histogram = 4;
 }
 
 message StringSample {
@@ -120,7 +116,7 @@ message StringSample {
 
 message SampleHistogramPair {
   int64 timestamp = 1;
-  SampleHistogram histogram = 2 [(gogoproto.nullable) = false];
+  SampleHistogram histogram = 2;
 }
 
 message SampleHistogram {
@@ -137,19 +133,19 @@ message HistogramBucket {
 }
 
 message CachedResponse  {
-  string key = 1 [(gogoproto.jsontag) = "key"];
+  string key = 1;
 
   // List of cached responses; non-overlapping and in order.
-  repeated Extent extents = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "extents"];
+  repeated Extent extents = 2;
 }
 
 message Extent  {
-  int64 start = 1 [(gogoproto.jsontag) = "start"];
-  int64 end = 2 [(gogoproto.jsontag) = "end"];
+  int64 start = 1;
+  int64 end = 2;
   // reserved the previous key to ensure cache transition
   reserved 3;
-  string trace_id = 4 [(gogoproto.jsontag) = "-"];
-  google.protobuf.Any response = 5 [(gogoproto.jsontag) = "response"];
+  string trace_id = 4;
+  google.protobuf.Any response = 5;
 }
 
 message CachingOptions {
@@ -157,12 +153,12 @@ message CachingOptions {
 }
 
 message Explanation {
-  string name = 1 [(gogoproto.jsontag) = "name"];
-  repeated Explanation children = 2 [(gogoproto.jsontag) = "children"];
+  string name = 1;
+  repeated Explanation children = 2;
 }
 
 message Analysis {
-  string name = 1 [(gogoproto.jsontag) = "name"];
-  google.protobuf.Duration executionTime = 2 [(gogoproto.customtype) = "Duration", (gogoproto.nullable) = false, (gogoproto.jsontag) = "executionTime"];
-  repeated Analysis children = 3 [(gogoproto.jsontag) = "children"];
+  string name = 1;
+  google.protobuf.Duration executionTime = 2;
+  repeated Analysis children = 3;
 }

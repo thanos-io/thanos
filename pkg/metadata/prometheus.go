@@ -14,6 +14,8 @@ import (
 
 // Prometheus implements metadatapb.Metadata gRPC service that allows to fetch metric metadata from Prometheus HTTP /api/v1/metadata endpoint.
 type Prometheus struct {
+	metadatapb.UnimplementedMetadataServer
+
 	base   *url.URL
 	client *promclient.Client
 }

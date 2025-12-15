@@ -60,30 +60,29 @@ func maxValue(a, b uint64) uint64 {
 	return b
 }
 
-func mergeStatistics(a, b []Statistic, mergeFunc func(uint64, uint64) uint64) []Statistic {
-	merged := make(map[string]Statistic, len(a))
+func mergeStatistics(a, b []*Statistic, mergeFunc func(uint64, uint64) uint64) []*Statistic {
+	merged := make(map[string]*Statistic, len(a))
 	for _, stat := range a {
-		merged[stat.Name] = stat
+		merged[stat.Name] = &Statistic{Name: stat.Name, Value: stat.Value}
 	}
 
 	for _, stat := range b {
 		v, found := merged[stat.Name]
 		if !found {
-			merged[stat.Name] = stat
+			merged[stat.Name] = &Statistic{Name: stat.Name, Value: stat.Value}
 			continue
 		}
 		v.Value = mergeFunc(v.Value, stat.Value)
-		merged[stat.Name] = v
 	}
 
-	return slices.SortedStableFunc(maps.Values(merged), func(a, b Statistic) int {
+	return slices.SortedStableFunc(maps.Values(merged), func(a, b *Statistic) int {
 		// Descending sort.
 		return cmp.Compare(b.Value, a.Value)
 	})
 }
 
 // ConvertToPrometheusTSDBStat converts a protobuf Statistic slice to the equivalent Prometheus struct.
-func ConvertToPrometheusTSDBStat(stats []Statistic) []v1.TSDBStat {
+func ConvertToPrometheusTSDBStat(stats []*Statistic) []v1.TSDBStat {
 	ret := make([]v1.TSDBStat, len(stats))
 	for i := range stats {
 		ret[i] = v1.TSDBStat{

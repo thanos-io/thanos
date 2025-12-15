@@ -5,19 +5,26 @@ package stats
 
 import (
 	"context"
+	"sync"
 	"sync/atomic" //lint:ignore faillint we can't use go.uber.org/atomic with a protobuf struct without wrapping it.
 	"time"
 
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type contextKey int
 
 var ctxKey = contextKey(0)
 
+// wallTimeMu protects WallTime field access since it's now a pointer type
+var wallTimeMu sync.Mutex
+
 // ContextWithEmptyStats returns a context with empty stats.
 func ContextWithEmptyStats(ctx context.Context) (*Stats, context.Context) {
-	stats := &Stats{}
+	stats := &Stats{
+		WallTime: durationpb.New(0),
+	}
 	ctx = context.WithValue(ctx, ctxKey, stats)
 	return stats, ctx
 }
@@ -45,7 +52,14 @@ func (s *Stats) AddWallTime(t time.Duration) {
 		return
 	}
 
-	atomic.AddInt64((*int64)(&s.WallTime), int64(t))
+	wallTimeMu.Lock()
+	defer wallTimeMu.Unlock()
+	if s.WallTime == nil {
+		s.WallTime = durationpb.New(t)
+	} else {
+		current := s.WallTime.AsDuration()
+		s.WallTime = durationpb.New(current + t)
+	}
 }
 
 // LoadWallTime returns current wall time.
@@ -54,7 +68,12 @@ func (s *Stats) LoadWallTime() time.Duration {
 		return 0
 	}
 
-	return time.Duration(atomic.LoadInt64((*int64)(&s.WallTime)))
+	wallTimeMu.Lock()
+	defer wallTimeMu.Unlock()
+	if s.WallTime == nil {
+		return 0
+	}
+	return s.WallTime.AsDuration()
 }
 
 func (s *Stats) AddFetchedSeries(series uint64) {

@@ -22,6 +22,8 @@ import (
 
 // Proxy implements metadatapb.Metadata gRPC that fanouts requests to given metadatapb.Metadata and deduplication on the way.
 type Proxy struct {
+	metadatapb.UnimplementedMetadataServer
+
 	logger   log.Logger
 	metadata func() []metadatapb.MetadataClient
 }

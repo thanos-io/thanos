@@ -5,22 +5,8 @@ syntax = "proto3";
 package thanos;
 
 import "store/storepb/types.proto";
-//import "store/labelpb/types.proto";
-import "gogoproto/gogo.proto";
-//import "google/protobuf/timestamp.proto";
 
-option go_package = "statuspb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/status/statuspb";
 
 // Status represents the API responsible for gathering status information.
 service Status {
@@ -50,29 +36,29 @@ message TSDBStatistics {
 
 message TSDBStatisticsEntry {
   // Statistics from the TSDB head.
-  HeadStatistics head_statistics = 1 [(gogoproto.jsontag) = "headStats", (gogoproto.nullable) = false];
+  HeadStatistics head_statistics = 1;
 
-  repeated Statistic series_count_by_metric_name      = 2 [(gogoproto.jsontag) = "seriesCountByMetricName", (gogoproto.nullable) = false];
-  repeated Statistic label_value_count_by_label_name  = 3 [(gogoproto.jsontag) = "labelValueCountByLabelName", (gogoproto.nullable) = false];
-  repeated Statistic memory_in_bytes_by_label_name    = 4 [(gogoproto.jsontag) = "memoryInBytesByLabelName", (gogoproto.nullable) = false];
-  repeated Statistic series_count_by_label_value_pair = 5 [(gogoproto.jsontag) = "seriesCountByLabelValuePair", (gogoproto.nullable) = false];
+  repeated Statistic series_count_by_metric_name      = 2;
+  repeated Statistic label_value_count_by_label_name  = 3;
+  repeated Statistic memory_in_bytes_by_label_name    = 4;
+  repeated Statistic series_count_by_label_value_pair = 5;
 }
 
 message HeadStatistics {
   // Total number of series.
-  uint64 num_series = 1 [(gogoproto.jsontag) = "numSeries" ];
+  uint64 num_series = 1;
 
   // Total number of label pairs.
-  int64 num_label_pairs = 2 [(gogoproto.jsontag) = "numLabelPairs" ];
+  int64 num_label_pairs = 2;
 
   // Total number of chunks (not implemented yet).
-  int64 chunk_count = 3 [(gogoproto.jsontag) = "chunkCount" ];
+  int64 chunk_count = 3;
 
   // Minimum timestamp.
-  int64 min_time = 4 [(gogoproto.jsontag) = "minTime" ];
+  int64 min_time = 4;
 
   // Maximum timestamp.
-  int64 max_time = 5 [(gogoproto.jsontag) = "maxTime" ];
+  int64 max_time = 5;
 }
 
 message Statistic {

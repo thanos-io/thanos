@@ -78,8 +78,7 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
 		if err := validateLabels(series.Labels); err != nil {
-			lset := &labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(series.Labels)}
-			errorTracker.addLabelsError(err, lset, tLogger)
+			errorTracker.addLabelsError(err, series.Labels, tLogger)
 			continue
 		}
 
@@ -125,8 +124,7 @@ func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writ
 				// Validate exemplar labels after copying them out of Cap'n Proto memory
 				// If moved before copying the labels, Cap'n Proto memory may be freed before validation is complete
 				if err := validateLabels(copiedLabels); err != nil {
-					exlset := &labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(copiedLabels)}
-					errorTracker.addLabelsError(err, exlset, exLogger)
+					errorTracker.addLabelsError(err, copiedLabels, exLogger)
 					continue
 				}
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{

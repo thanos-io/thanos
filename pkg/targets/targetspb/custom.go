@@ -64,11 +64,11 @@ func (t1 *ActiveTarget) Compare(t2 *ActiveTarget) int {
 		return d
 	}
 
-	if d := labels.Compare(t1.DiscoveredLabels.PromLabels(), t2.DiscoveredLabels.PromLabels()); d != 0 {
+	if d := labels.Compare(labelpb.LabelSetToPromLabels(t1.DiscoveredLabels), labelpb.LabelSetToPromLabels(t2.DiscoveredLabels)); d != 0 {
 		return d
 	}
 
-	if d := labels.Compare(t1.Labels.PromLabels(), t2.Labels.PromLabels()); d != 0 {
+	if d := labels.Compare(labelpb.LabelSetToPromLabels(t1.Labels), labelpb.LabelSetToPromLabels(t2.Labels)); d != 0 {
 		return d
 	}
 
@@ -80,11 +80,14 @@ func (t1 *ActiveTarget) CompareState(t2 *ActiveTarget) int {
 		return d
 	}
 
-	if t1.LastScrape.Before(t2.LastScrape) {
+	t1Time := t1.LastScrape.AsTime()
+	t2Time := t2.LastScrape.AsTime()
+
+	if t1Time.Before(t2Time) {
 		return 1
 	}
 
-	if t1.LastScrape.After(t2.LastScrape) {
+	if t1Time.After(t2Time) {
 		return -1
 	}
 
@@ -92,7 +95,7 @@ func (t1 *ActiveTarget) CompareState(t2 *ActiveTarget) int {
 }
 
 func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
-	if d := labels.Compare(t1.DiscoveredLabels.PromLabels(), t2.DiscoveredLabels.PromLabels()); d != 0 {
+	if d := labels.Compare(labelpb.LabelSetToPromLabels(t1.DiscoveredLabels), labelpb.LabelSetToPromLabels(t2.DiscoveredLabels)); d != 0 {
 		return d
 	}
 
@@ -100,31 +103,13 @@ func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
 }
 
 func (t *ActiveTarget) SetLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.Labels = result
+	t.Labels = labelpb.PromLabelsToLabelSet(ls)
 }
 
 func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = labelpb.PromLabelsToLabelSet(ls)
 }
 
 func (t *DroppedTarget) SetDiscoveredLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = labelpb.PromLabelsToLabelSet(ls)
 }

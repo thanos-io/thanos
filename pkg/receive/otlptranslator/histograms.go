@@ -51,13 +51,15 @@ func (c *PrometheusConverter) addExponentialHistogramDataPoints(ctx context.Cont
 			promName,
 		)
 		ts, _ := c.getOrCreateTimeSeries(lbls)
-		ts.Histograms = append(ts.Histograms, histogram)
+		ts.Histograms = append(ts.Histograms, &histogram)
 
-		exemplars, err := getPromExemplars[pmetric.ExponentialHistogramDataPoint](ctx, &c.everyN, pt)
+		exemplarsSlice, err := getPromExemplars[pmetric.ExponentialHistogramDataPoint](ctx, &c.everyN, pt)
 		if err != nil {
 			return annots, err
 		}
-		ts.Exemplars = append(ts.Exemplars, exemplars...)
+		for i := range exemplarsSlice {
+			ts.Exemplars = append(ts.Exemplars, &exemplarsSlice[i])
+		}
 	}
 
 	return annots, nil
@@ -134,14 +136,14 @@ func exponentialToNativeHistogram(p pmetric.ExponentialHistogramDataPoint) (prom
 // to the range (base 1].
 //
 // scaleDown is the factor by which the buckets are scaled down. In other words 2^scaleDown buckets will be merged into one.
-func convertBucketsLayout(buckets pmetric.ExponentialHistogramDataPointBuckets, scaleDown int32) ([]prompb.BucketSpan, []int64) {
+func convertBucketsLayout(buckets pmetric.ExponentialHistogramDataPointBuckets, scaleDown int32) ([]*prompb.BucketSpan, []int64) {
 	bucketCounts := buckets.BucketCounts()
 	if bucketCounts.Len() == 0 {
 		return nil, nil
 	}
 
 	var (
-		spans     []prompb.BucketSpan
+		spans     []*prompb.BucketSpan
 		deltas    []int64
 		count     int64
 		prevCount int64
@@ -159,7 +161,7 @@ func convertBucketsLayout(buckets pmetric.ExponentialHistogramDataPointBuckets, 
 
 	// The offset is scaled and adjusted by 1 as described above.
 	bucketIdx := buckets.Offset()>>scaleDown + 1
-	spans = append(spans, prompb.BucketSpan{
+	spans = append(spans, &prompb.BucketSpan{
 		Offset: bucketIdx,
 		Length: 0,
 	})
@@ -181,7 +183,7 @@ func convertBucketsLayout(buckets pmetric.ExponentialHistogramDataPointBuckets, 
 			// We have to create a new span, because we have found a gap
 			// of more than two buckets. The constant 2 is copied from the logic in
 			// https://github.com/prometheus/client_golang/blob/27f0506d6ebbb117b6b697d0552ee5be2502c5f2/prometheus/histogram.go#L1296
-			spans = append(spans, prompb.BucketSpan{
+			spans = append(spans, &prompb.BucketSpan{
 				Offset: gap,
 				Length: 0,
 			})
@@ -202,7 +204,7 @@ func convertBucketsLayout(buckets pmetric.ExponentialHistogramDataPointBuckets, 
 		// We have to create a new span, because we have found a gap
 		// of more than two buckets. The constant 2 is copied from the logic in
 		// https://github.com/prometheus/client_golang/blob/27f0506d6ebbb117b6b697d0552ee5be2502c5f2/prometheus/histogram.go#L1296
-		spans = append(spans, prompb.BucketSpan{
+		spans = append(spans, &prompb.BucketSpan{
 			Offset: gap,
 			Length: 0,
 		})

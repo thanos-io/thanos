@@ -150,7 +150,7 @@ func (r *remoteEngine) MinT() int64 {
 			highestMintByLabelSet = make(map[uint64]int64)
 		)
 		for _, lset := range r.adjustedInfos() {
-			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+			key, _ := labelpb.LabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
 			lsetMinT, ok := highestMintByLabelSet[key]
 			if !ok {
 				highestMintByLabelSet[key] = lset.MinTime
@@ -383,7 +383,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			// timestamp as that is when we ran the evaluation.
 			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
 			if len(ts.Histograms) > 0 {
-				result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+				result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(*ts.Histograms[0]), T: r.start.UnixMilli()})
 			} else {
 				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
 			}
@@ -460,7 +460,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		for _, hp := range ts.Histograms {
 			series.Histograms = append(series.Histograms, promql.HPoint{
 				T: hp.Timestamp,
-				H: prompb.FloatHistogramProtoToFloatHistogram(hp),
+				H: prompb.FloatHistogramProtoToFloatHistogram(*hp),
 			})
 		}
 		result = append(result, series)

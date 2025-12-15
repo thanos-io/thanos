@@ -226,21 +226,21 @@ func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
+	return labelpb.LabelSetsToPromLabelSets(l.store.LabelSet())
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
 	return l.store.TimeRange()
 }
 
-func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
+func (l *localClient) TSDBInfos() []*infopb.TSDBInfo {
 	labelsets := l.store.LabelSet()
 	if len(labelsets) == 0 {
-		return []infopb.TSDBInfo{}
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := l.store.TimeRange()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
 			Labels:  labelsets[0],
 			MinTime: mint,

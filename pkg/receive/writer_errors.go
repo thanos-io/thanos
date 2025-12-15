@@ -28,7 +28,7 @@ type writeErrorTracker struct {
 	numExemplarsLabelLength int
 }
 
-func (a *writeErrorTracker) addLabelsError(err error, lset *labelpb.ZLabelSet, logger log.Logger) {
+func (a *writeErrorTracker) addLabelsError(err error, lset labels.Labels, logger log.Logger) {
 	if err == nil {
 		return
 	}

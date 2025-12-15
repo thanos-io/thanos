@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/util/annotations"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 )
 
@@ -169,8 +169,8 @@ func dedupActiveTargets(activeTargets []*targetspb.ActiveTarget, replicaLabels m
 	return activeTargets[:i+1]
 }
 
-func removeReplicaLabels(labels []storepb.Label, replicaLabels map[string]struct{}) []storepb.Label {
-	newLabels := make([]storepb.Label, 0, len(labels))
+func removeReplicaLabels(labels []*labelpb.Label, replicaLabels map[string]struct{}) []*labelpb.Label {
+	newLabels := make([]*labelpb.Label, 0, len(labels))
 	for _, l := range labels {
 		if _, ok := replicaLabels[l.Name]; !ok {
 			newLabels = append(newLabels, l)

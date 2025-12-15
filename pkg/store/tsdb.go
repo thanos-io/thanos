@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/filter"
@@ -177,28 +178,24 @@ func (s *TSDBStore) getExtLset() labels.Labels {
 	return s.extLset
 }
 
-func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
-	labels := labelpb.ZLabelSetsFromPromLabels(s.getExtLset())
-	labelSets := []labelpb.ZLabelSet{}
-	if len(labels) > 0 {
-		labelSets = append(labelSets, labels...)
+func (s *TSDBStore) LabelSet() []*labelpb.LabelSet {
+	extLset := s.getExtLset()
+	if extLset.IsEmpty() {
+		return []*labelpb.LabelSet{}
 	}
-
-	return labelSets
+	return []*labelpb.LabelSet{labelpb.PromLabelsToLabelSet(extLset)}
 }
 
-func (s *TSDBStore) TSDBInfos() []infopb.TSDBInfo {
-	labels := s.LabelSet()
-	if len(labels) == 0 {
-		return []infopb.TSDBInfo{}
+func (s *TSDBStore) TSDBInfos() []*infopb.TSDBInfo {
+	labelSets := s.LabelSet()
+	if len(labelSets) == 0 {
+		return []*infopb.TSDBInfo{}
 	}
 
 	mint, maxt := s.TimeRange()
-	return []infopb.TSDBInfo{
+	return []*infopb.TSDBInfo{
 		{
-			Labels: labelpb.ZLabelSet{
-				Labels: labels[0].Labels,
-			},
+			Labels:  labelSets[0],
 			MinTime: mint,
 			MaxTime: maxt,
 		},
@@ -309,7 +306,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			continue
 		}
 
-		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
+		storeSeries := storepb.Series{Labels: labelpb.PromLabelsToLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
 				return status.Error(codes.Aborted, err.Error())
@@ -319,11 +316,11 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 		bytesLeftForChunks := s.maxBytesPerFrame
 		for _, lbl := range storeSeries.Labels {
-			bytesLeftForChunks -= lbl.Size()
+			bytesLeftForChunks -= proto.Size(lbl)
 		}
 		frameBytesLeft := bytesLeftForChunks
 
-		seriesChunks := []storepb.AggrChunk{}
+		seriesChunks := []*storepb.AggrChunk{}
 		chIter := series.Iterator(nil)
 		isNext := chIter.Next()
 		for isNext {
@@ -334,7 +331,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 			chunkBytes := make([]byte, len(chk.Chunk.Bytes()))
 			copy(chunkBytes, chk.Chunk.Bytes())
-			c := storepb.AggrChunk{
+			c := &storepb.AggrChunk{
 				MinTime: chk.MinTime,
 				MaxTime: chk.MaxTime,
 				Raw: &storepb.Chunk{
@@ -343,7 +340,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 					Hash: hashChunk(hasher, chunkBytes, enableChunkHashCalculation),
 				},
 			}
-			frameBytesLeft -= c.Size()
+			frameBytesLeft -= proto.Size(c)
 			seriesChunks = append(seriesChunks, c)
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
@@ -357,7 +354,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 
 			if isNext {
 				frameBytesLeft = bytesLeftForChunks
-				seriesChunks = make([]storepb.AggrChunk, 0, len(seriesChunks))
+				seriesChunks = make([]*storepb.AggrChunk, 0, len(seriesChunks))
 			}
 		}
 		if err := chIter.Err(); err != nil {

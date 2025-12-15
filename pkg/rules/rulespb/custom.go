@@ -55,11 +55,14 @@ func NewRecordingRule(r *RecordingRule) *Rule {
 //
 // Note: This method assumes r1 and r2 are logically equal as per Rule#Compare.
 func (r1 *RecordingRule) Compare(r2 *RecordingRule) int {
-	if r1.LastEvaluation.Before(r2.LastEvaluation) {
+	r1Time := r1.GetLastEvaluation().AsTime()
+	r2Time := r2.GetLastEvaluation().AsTime()
+
+	if r1Time.Before(r2Time) {
 		return 1
 	}
 
-	if r1.LastEvaluation.After(r2.LastEvaluation) {
+	if r1Time.After(r2Time) {
 		return -1
 	}
 
@@ -72,33 +75,29 @@ func NewAlertingRule(a *Alert) *Rule {
 	}
 }
 
-func (r *Rule) GetLabels() labels.Labels {
+func (r *Rule) GetLabelsPromLabels() labels.Labels {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().Labels.PromLabels()
+		return labelpb.LabelSetToPromLabels(r.GetRecording().GetLabels())
 	case r.GetAlert() != nil:
-		return r.GetAlert().Labels.PromLabels()
+		return labelpb.LabelSetToPromLabels(r.GetAlert().GetLabels())
 	default:
 		return labels.EmptyLabels()
 	}
 }
 
 func (r *Rule) SetLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
+	labelSet := labelpb.PromLabelsToLabelSet(ls)
 
 	switch {
 	case r.GetRecording() != nil:
-		r.GetRecording().Labels = result
+		r.GetRecording().Labels = labelSet
 	case r.GetAlert() != nil:
-		r.GetAlert().Labels = result
+		r.GetAlert().Labels = labelSet
 	}
 }
 
-func (r *Rule) GetName() string {
+func (r *Rule) GetRuleName() string {
 	switch {
 	case r.GetRecording() != nil:
 		return r.GetRecording().Name
@@ -109,7 +108,7 @@ func (r *Rule) GetName() string {
 	}
 }
 
-func (r *Rule) GetQuery() string {
+func (r *Rule) GetRuleQuery() string {
 	switch {
 	case r.GetRecording() != nil:
 		return r.GetRecording().Query
@@ -120,12 +119,12 @@ func (r *Rule) GetQuery() string {
 	}
 }
 
-func (r *Rule) GetLastEvaluation() time.Time {
+func (r *Rule) GetRuleLastEvaluation() time.Time {
 	switch {
 	case r.GetRecording() != nil:
-		return r.GetRecording().LastEvaluation
+		return r.GetRecording().GetLastEvaluation().AsTime()
 	case r.GetAlert() != nil:
-		return r.GetAlert().LastEvaluation
+		return r.GetAlert().GetLastEvaluation().AsTime()
 	default:
 		return time.Time{}
 	}
@@ -156,15 +155,15 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 		return 1
 	}
 
-	if d := strings.Compare(r1.GetName(), r2.GetName()); d != 0 {
+	if d := strings.Compare(r1.GetRuleName(), r2.GetRuleName()); d != 0 {
 		return d
 	}
 
-	if d := labels.Compare(r1.GetLabels(), r2.GetLabels()); d != 0 {
+	if d := labels.Compare(r1.GetLabelsPromLabels(), r2.GetLabelsPromLabels()); d != 0 {
 		return d
 	}
 
-	if d := strings.Compare(r1.GetQuery(), r2.GetQuery()); d != 0 {
+	if d := strings.Compare(r1.GetRuleQuery(), r2.GetRuleQuery()); d != 0 {
 		return d
 	}
 
@@ -319,11 +318,14 @@ func (a1 *Alert) Compare(a2 *Alert) int {
 		return d
 	}
 
-	if a1.LastEvaluation.Before(a2.LastEvaluation) {
+	a1Time := a1.GetLastEvaluation().AsTime()
+	a2Time := a2.GetLastEvaluation().AsTime()
+
+	if a1Time.Before(a2Time) {
 		return 1
 	}
 
-	if a1.LastEvaluation.After(a2.LastEvaluation) {
+	if a1Time.After(a2Time) {
 		return -1
 	}
 

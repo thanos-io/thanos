@@ -19,7 +19,7 @@ var _ UnaryClient = &GRPCClient{}
 // UnaryClient is a gRPC metadatapb.Metadata client which expands streaming metadata API. Useful for consumers that does not
 // support streaming.
 type UnaryClient interface {
-	MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, annotations.Annotations, error)
+	MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]*metadatapb.Meta, annotations.Annotations, error)
 }
 
 // GRPCClient allows to retrieve metadata from local gRPC streaming server implementation.
@@ -34,7 +34,7 @@ func NewGRPCClient(ts metadatapb.MetadataServer) *GRPCClient {
 	}
 }
 
-func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]metadatapb.Meta, annotations.Annotations, error) {
+func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.MetricMetadataRequest) (map[string][]*metadatapb.Meta, annotations.Annotations, error) {
 	span, ctx := tracing.StartSpan(ctx, "metadata_grpc_request")
 	defer span.Finish()
 
@@ -42,14 +42,14 @@ func (rr *GRPCClient) MetricMetadata(ctx context.Context, req *metadatapb.Metric
 
 	if req.Limit >= 0 {
 		if req.Metric != "" {
-			srv.metadataMap = make(map[string][]metadatapb.Meta, 1)
+			srv.metadataMap = make(map[string][]*metadatapb.Meta, 1)
 		} else if req.Limit <= 100 {
-			srv.metadataMap = make(map[string][]metadatapb.Meta, req.Limit)
+			srv.metadataMap = make(map[string][]*metadatapb.Meta, req.Limit)
 		} else {
-			srv.metadataMap = make(map[string][]metadatapb.Meta)
+			srv.metadataMap = make(map[string][]*metadatapb.Meta)
 		}
 	} else {
-		srv.metadataMap = make(map[string][]metadatapb.Meta)
+		srv.metadataMap = make(map[string][]*metadatapb.Meta)
 	}
 
 	if err := rr.proxy.MetricMetadata(req, srv); err != nil {
@@ -68,7 +68,7 @@ type metadataServer struct {
 	limit  int
 
 	warnings    annotations.Annotations
-	metadataMap map[string][]metadatapb.Meta
+	metadataMap map[string][]*metadatapb.Meta
 	mu          sync.Mutex
 }
 
@@ -102,7 +102,8 @@ func (srv *metadataServer) Send(res *metadatapb.MetricMetadataResponse) error {
 		Outer:
 			for _, meta := range v.Metas {
 				for _, m := range metadata {
-					if meta == m {
+					// Compare by value since these are pointers
+					if meta.GetType() == m.GetType() && meta.GetHelp() == m.GetHelp() && meta.GetUnit() == m.GetUnit() {
 						continue Outer
 					}
 				}

@@ -20,13 +20,13 @@ type TestClient struct {
 	Shardable                   bool
 	WithoutReplicaLabelsEnabled bool
 	IsLocalStore                bool
-	StoreTSDBInfos              []infopb.TSDBInfo
+	StoreTSDBInfos              []*infopb.TSDBInfo
 	StoreFilterNotMatches       bool
 }
 
 func (c TestClient) LabelSets() []labels.Labels             { return c.ExtLset }
 func (c TestClient) TimeRange() (mint, maxt int64)          { return c.MinTime, c.MaxTime }
-func (c TestClient) TSDBInfos() []infopb.TSDBInfo           { return c.StoreTSDBInfos }
+func (c TestClient) TSDBInfos() []*infopb.TSDBInfo          { return c.StoreTSDBInfos }
 func (c TestClient) SupportsSharding() bool                 { return c.Shardable }
 func (c TestClient) SupportsWithoutReplicaLabels() bool     { return c.WithoutReplicaLabelsEnabled }
 func (c TestClient) String() string                         { return c.Name }

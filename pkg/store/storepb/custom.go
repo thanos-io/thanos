@@ -12,12 +12,19 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+)
+
+// Re-export error variables from labelpb for backward compatibility.
+var (
+	ErrInvalidLengthTypes        = labelpb.ErrInvalidLengthTypes
+	ErrIntOverflowTypes          = labelpb.ErrIntOverflowTypes
+	ErrUnexpectedEndOfGroupTypes = labelpb.ErrUnexpectedEndOfGroupTypes
 )
 
 var PartialResponseStrategyValues = func() []string {
@@ -45,7 +52,7 @@ func NewSeriesResponse(series *Series) *SeriesResponse {
 	}
 }
 
-func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
+func NewHintsSeriesResponse(hints *anypb.Any) *SeriesResponse {
 	return &SeriesResponse{
 		Result: &SeriesResponse_Hints{
 			Hints: hints,
@@ -65,9 +72,9 @@ func GRPCCodeFromWarn(warn string) codes.Code {
 
 type emptySeriesSet struct{}
 
-func (emptySeriesSet) Next() bool                       { return false }
-func (emptySeriesSet) At() (labels.Labels, []AggrChunk) { return labels.EmptyLabels(), nil }
-func (emptySeriesSet) Err() error                       { return nil }
+func (emptySeriesSet) Next() bool                        { return false }
+func (emptySeriesSet) At() (labels.Labels, []*AggrChunk) { return labels.EmptyLabels(), nil }
+func (emptySeriesSet) Err() error                        { return nil }
 
 // EmptySeriesSet returns a new series set that contains no series.
 func EmptySeriesSet() SeriesSet {
@@ -106,7 +113,7 @@ func MergeSeriesSets(all ...SeriesSet) SeriesSet {
 // The set is sorted by the label sets. Chunks may be overlapping or expected of order.
 type SeriesSet interface {
 	Next() bool
-	At() (labels.Labels, []AggrChunk)
+	At() (labels.Labels, []*AggrChunk)
 	Err() error
 }
 
@@ -115,7 +122,7 @@ type mergedSeriesSet struct {
 	a, b SeriesSet
 
 	lset         labels.Labels
-	chunks       []AggrChunk
+	chunks       []*AggrChunk
 	adone, bdone bool
 }
 
@@ -129,7 +136,7 @@ func newMergedSeriesSet(a, b SeriesSet) *mergedSeriesSet {
 	return s
 }
 
-func (s *mergedSeriesSet) At() (labels.Labels, []AggrChunk) {
+func (s *mergedSeriesSet) At() (labels.Labels, []*AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -178,7 +185,7 @@ func (s *mergedSeriesSet) Next() bool {
 
 	// Slice reuse is not generally safe with nested merge iterators.
 	// We err on the safe side an create a new slice.
-	s.chunks = make([]AggrChunk, 0, len(chksA)+len(chksB))
+	s.chunks = make([]*AggrChunk, 0, len(chksA)+len(chksB))
 
 	b := 0
 Outer:
@@ -190,7 +197,7 @@ Outer:
 				break Outer
 			}
 
-			cmp := chksA[a].Compare(chksB[b])
+			cmp := compareAggrChunk(chksA[a], chksB[b])
 			if cmp > 0 {
 				s.chunks = append(s.chunks, chksA[a])
 				break
@@ -223,14 +230,14 @@ type uniqueSeriesSet struct {
 	peek *Series
 
 	lset   labels.Labels
-	chunks []AggrChunk
+	chunks []*AggrChunk
 }
 
 func newUniqueSeriesSet(wrapped SeriesSet) *uniqueSeriesSet {
 	return &uniqueSeriesSet{SeriesSet: wrapped}
 }
 
-func (s *uniqueSeriesSet) At() (labels.Labels, []AggrChunk) {
+func (s *uniqueSeriesSet) At() (labels.Labels, []*AggrChunk) {
 	return s.lset, s.chunks
 }
 
@@ -245,13 +252,13 @@ func (s *uniqueSeriesSet) Next() bool {
 		}
 		lset, chks := s.SeriesSet.At()
 		if s.peek == nil {
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: PromLabelsToLabels(lset), Chunks: chks}
 			continue
 		}
 
 		if labels.Compare(lset, s.peek.PromLabels()) != 0 {
 			s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
-			s.peek = &Series{Labels: labelpb.ZLabelsFromPromLabels(lset), Chunks: chks}
+			s.peek = &Series{Labels: PromLabelsToLabels(lset), Chunks: chks}
 			return true
 		}
 
@@ -267,6 +274,20 @@ func (s *uniqueSeriesSet) Next() bool {
 	s.lset, s.chunks = s.peek.PromLabels(), s.peek.Chunks
 	s.peek = nil
 	return true
+}
+
+// compareAggrChunk compares two AggrChunk pointers.
+func compareAggrChunk(a, b *AggrChunk) int {
+	if a == nil && b == nil {
+		return 0
+	}
+	if a == nil {
+		return -1
+	}
+	if b == nil {
+		return 1
+	}
+	return a.Compare(*b)
 }
 
 // Compare returns positive 1 if chunk is smaller -1 if larger than b by min time, then max time.
@@ -360,8 +381,8 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 
 // PromMatchersToMatchers returns proto matchers from Prometheus matchers.
 // NOTE: It allocates memory.
-func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
-	res := make([]LabelMatcher, 0, len(ms))
+func PromMatchersToMatchers(ms ...*labels.Matcher) ([]*LabelMatcher, error) {
+	res := make([]*LabelMatcher, 0, len(ms))
 	for _, m := range ms {
 		var t LabelMatcher_Type
 
@@ -377,7 +398,7 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 		default:
 			return nil, errors.Errorf("unrecognized matcher type %d", m.Type)
 		}
-		res = append(res, LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
+		res = append(res, &LabelMatcher{Type: t, Name: m.Name, Value: m.Value})
 	}
 	return res, nil
 }
@@ -388,6 +409,23 @@ func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
 	for i := range ms {
 		pm, err := MatcherToPromMatcher(ms[i])
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, pm)
+	}
+	return res, nil
+}
+
+// MatcherPointersToPromMatchers returns Prometheus matchers from proto matcher pointers.
+// NOTE: It allocates memory.
+func MatcherPointersToPromMatchers(ms []*LabelMatcher) ([]*labels.Matcher, error) {
+	res := make([]*labels.Matcher, 0, len(ms))
+	for _, m := range ms {
+		if m == nil {
+			continue
+		}
+		pm, err := MatcherToPromMatcher(*m)
 		if err != nil {
 			return nil, err
 		}
@@ -445,13 +483,8 @@ func (m *LabelMatcher) PromString() string {
 	return fmt.Sprintf("%s%s%q", m.Name, m.Type.PromString(), m.Value)
 }
 
-func (m *LabelMatcher) GetName() string {
-	return m.Name
-}
-
-func (m *LabelMatcher) GetValue() string {
-	return m.Value
-}
+// GetName and GetValue are now auto-generated by protoc-gen-go.
+// Removed to avoid redeclaration.
 
 func (x LabelMatcher_Type) PromString() string {
 	typeToStr := map[LabelMatcher_Type]string{
@@ -466,9 +499,52 @@ func (x LabelMatcher_Type) PromString() string {
 	panic("unknown match type")
 }
 
-// PromLabels return Prometheus labels.Labels without extra allocation.
+// PromLabels return Prometheus labels.Labels.
 func (m *Series) PromLabels() labels.Labels {
-	return labelpb.ZLabelsToPromLabels(m.Labels)
+	return LabelsToPromLabels(m.Labels)
+}
+
+// LabelsToPromLabels converts []*labelpb.Label to labels.Labels.
+func LabelsToPromLabels(lbls []*labelpb.Label) labels.Labels {
+	b := labels.NewScratchBuilder(len(lbls))
+	for _, l := range lbls {
+		if l != nil {
+			b.Add(l.Name, l.Value)
+		}
+	}
+	return b.Labels()
+}
+
+// PromLabelsToLabels converts labels.Labels to []*labelpb.Label.
+func PromLabelsToLabels(lset labels.Labels) []*labelpb.Label {
+	result := make([]*labelpb.Label, 0, lset.Len())
+	lset.Range(func(l labels.Label) {
+		result = append(result, &labelpb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	})
+	return result
+}
+
+// AggrChunksToPointers converts []AggrChunk to []*AggrChunk.
+func AggrChunksToPointers(chks []AggrChunk) []*AggrChunk {
+	result := make([]*AggrChunk, len(chks))
+	for i := range chks {
+		result[i] = &chks[i]
+	}
+	return result
+}
+
+// AggrChunksFromPointers converts []*AggrChunk to []AggrChunk.
+func AggrChunksFromPointers(chks []*AggrChunk) []AggrChunk {
+	result := make([]AggrChunk, 0, len(chks))
+	for _, chk := range chks {
+		if chk != nil {
+			result = append(result, *chk)
+		}
+	}
+	return result
 }
 
 // Deprecated.
@@ -507,7 +583,8 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
+// CountSeriesFromZLabels counts series using ZLabel slice.
+func (c *SeriesStatsCounter) CountSeriesFromZLabels(seriesLabels []labelpb.ZLabel) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
@@ -515,9 +592,24 @@ func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 	}
 }
 
+// CountSeries counts series using proto Label slice.
+func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
+	// Convert to ZLabel for hashing
+	zlabels := make([]labelpb.ZLabel, 0, len(seriesLabels))
+	for _, l := range seriesLabels {
+		if l != nil {
+			zlabels = append(zlabels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+		}
+	}
+	c.CountSeriesFromZLabels(zlabels)
+}
+
 func (c *SeriesStatsCounter) Count(series *Series) {
 	c.CountSeries(series.Labels)
 	for _, chk := range series.Chunks {
+		if chk == nil {
+			continue
+		}
 		if chk.Raw != nil {
 			c.Chunks++
 			c.Samples += chk.Raw.XORNumSamples()
@@ -655,7 +747,7 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Hash", wireType)
 			}
-			m.Hash = 0
+			var hash uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTypes
@@ -665,11 +757,12 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Hash |= uint64(b&0x7F) << shift
+				hash |= uint64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Hash = &hash
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTypes(dAtA[iNdEx:])
@@ -690,4 +783,84 @@ func (m *Chunk) Unmarshal(dAtA []byte) error {
 		return io.ErrUnexpectedEOF
 	}
 	return nil
+}
+
+// skipTypes skips over unknown fields in the protobuf data.
+func skipTypes(data []byte) (n int, err error) {
+	l := len(data)
+	iNdEx := 0
+	depth := 0
+	for iNdEx < l {
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return 0, ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return 0, io.ErrUnexpectedEOF
+			}
+			b := data[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		wireType := int(wire & 0x7)
+		switch wireType {
+		case 0:
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				iNdEx++
+				if data[iNdEx-1] < 0x80 {
+					break
+				}
+			}
+		case 1:
+			iNdEx += 8
+		case 2:
+			var length int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return 0, ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return 0, io.ErrUnexpectedEOF
+				}
+				b := data[iNdEx]
+				iNdEx++
+				length |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if length < 0 {
+				return 0, ErrInvalidLengthTypes
+			}
+			iNdEx += length
+		case 3:
+			depth++
+		case 4:
+			if depth == 0 {
+				return 0, ErrUnexpectedEndOfGroupTypes
+			}
+			depth--
+		case 5:
+			iNdEx += 4
+		default:
+			return 0, fmt.Errorf("proto: illegal wireType %d", wireType)
+		}
+		if iNdEx < 0 {
+			return 0, ErrInvalidLengthTypes
+		}
+		if depth == 0 {
+			return iNdEx, nil
+		}
+	}
+	return 0, io.ErrUnexpectedEOF
 }

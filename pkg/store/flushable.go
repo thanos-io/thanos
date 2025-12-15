@@ -70,7 +70,7 @@ func (r *resortingServer) Send(response *storepb.SeriesResponse) error {
 	}
 
 	series := response.GetSeries()
-	labelpb.ReAllocZLabelsStrings(&series.Labels, false)
+	labelpb.ReAllocLabelStrings(&series.Labels)
 	r.series = append(r.series, series)
 	return nil
 }
@@ -78,8 +78,8 @@ func (r *resortingServer) Send(response *storepb.SeriesResponse) error {
 func (r *resortingServer) Flush() error {
 	slices.SortFunc(r.series, func(a, b *storepb.Series) int {
 		return labels.Compare(
-			labelpb.ZLabelsToPromLabels(a.Labels),
-			labelpb.ZLabelsToPromLabels(b.Labels),
+			labelpb.LabelsToPromLabels(a.Labels),
+			labelpb.LabelsToPromLabels(b.Labels),
 		)
 	})
 	if r.notSend {

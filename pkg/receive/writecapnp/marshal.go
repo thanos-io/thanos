@@ -12,7 +12,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func Marshal(tenant string, tsreq []prompb.TimeSeries) ([]byte, error) {
+func Marshal(tenant string, tsreq []*prompb.TimeSeries) ([]byte, error) {
 	wr, err := Build(tenant, tsreq)
 	if err != nil {
 		return nil, err
@@ -21,7 +21,7 @@ func Marshal(tenant string, tsreq []prompb.TimeSeries) ([]byte, error) {
 	return wr.Message().Marshal()
 }
 
-func MarshalPacked(tenant string, tsreq []prompb.TimeSeries) ([]byte, error) {
+func MarshalPacked(tenant string, tsreq []*prompb.TimeSeries) ([]byte, error) {
 	wr, err := Build(tenant, tsreq)
 	if err != nil {
 		return nil, err
@@ -30,7 +30,7 @@ func MarshalPacked(tenant string, tsreq []prompb.TimeSeries) ([]byte, error) {
 	return wr.Message().MarshalPacked()
 }
 
-func Build(tenant string, tsreq []prompb.TimeSeries) (WriteRequest, error) {
+func Build(tenant string, tsreq []*prompb.TimeSeries) (WriteRequest, error) {
 	arena := capnp.SingleSegment(nil)
 	_, seg, err := capnp.NewMessage(arena)
 	if err != nil {
@@ -46,7 +46,7 @@ func Build(tenant string, tsreq []prompb.TimeSeries) (WriteRequest, error) {
 	return wr, nil
 }
 
-func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error {
+func BuildInto(wr WriteRequest, tenant string, tsreq []*prompb.TimeSeries) error {
 	if err := wr.SetTenant(tenant); err != nil {
 		return errors.Wrap(err, "set tenant")
 	}
@@ -57,6 +57,9 @@ func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error 
 	}
 	builder := newSymbolsBuilder()
 	for i, ts := range tsreq {
+		if ts == nil {
+			continue
+		}
 		tsc := series.At(i)
 
 		lblsc, err := tsc.NewLabels(int32(len(ts.Labels)))
@@ -102,8 +105,11 @@ func marshalSymbols(builder *symbolsBuilder, symbols Symbols) error {
 	return symbols.SetData(data)
 }
 
-func marshalLabels(lbls Label_List, pbLbls []labelpb.ZLabel, symbols *symbolsBuilder) error {
+func marshalLabels(lbls Label_List, pbLbls []*labelpb.Label, symbols *symbolsBuilder) error {
 	for i, pbLbl := range pbLbls {
+		if pbLbl == nil {
+			continue
+		}
 		lbl := lbls.At(i)
 		lbl.SetName(symbols.addEntry(pbLbl.Name))
 		lbl.SetValue(symbols.addEntry(pbLbl.Value))
@@ -111,13 +117,16 @@ func marshalLabels(lbls Label_List, pbLbls []labelpb.ZLabel, symbols *symbolsBui
 	return nil
 }
 
-func marshalSamples(ts TimeSeries, pbSamples []prompb.Sample) error {
+func marshalSamples(ts TimeSeries, pbSamples []*prompb.Sample) error {
 	samples, err := ts.NewSamples(int32(len(pbSamples)))
 	if err != nil {
 		return err
 	}
 
 	for j, sample := range pbSamples {
+		if sample == nil {
+			continue
+		}
 		sc := samples.At(j)
 		sc.SetTimestamp(sample.Timestamp)
 		sc.SetValue(sample.Value)
@@ -125,7 +134,7 @@ func marshalSamples(ts TimeSeries, pbSamples []prompb.Sample) error {
 	return nil
 }
 
-func marshalHistograms(ts TimeSeries, pbHistograms []prompb.Histogram) error {
+func marshalHistograms(ts TimeSeries, pbHistograms []*prompb.Histogram) error {
 	if len(pbHistograms) == 0 {
 		return nil
 	}
@@ -134,7 +143,10 @@ func marshalHistograms(ts TimeSeries, pbHistograms []prompb.Histogram) error {
 		return err
 	}
 	for i, h := range pbHistograms {
-		if err := marshalHistogram(histograms.At(i), h); err != nil {
+		if h == nil {
+			continue
+		}
+		if err := marshalHistogram(histograms.At(i), *h); err != nil {
 			return err
 		}
 	}
@@ -205,8 +217,11 @@ func marshalHistogram(histogram Histogram, h prompb.Histogram) error {
 	return nil
 }
 
-func marshalSpans(spans BucketSpan_List, pbSpans []prompb.BucketSpan) error {
+func marshalSpans(spans BucketSpan_List, pbSpans []*prompb.BucketSpan) error {
 	for j, s := range pbSpans {
+		if s == nil {
+			continue
+		}
 		span := spans.At(j)
 		span.SetOffset(s.Offset)
 		span.SetLength(s.Length)
@@ -214,7 +229,7 @@ func marshalSpans(spans BucketSpan_List, pbSpans []prompb.BucketSpan) error {
 	return nil
 }
 
-func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *symbolsBuilder) error {
+func marshalExemplars(ts TimeSeries, pbExemplars []*prompb.Exemplar, symbols *symbolsBuilder) error {
 	if len(pbExemplars) == 0 {
 		return nil
 	}
@@ -224,6 +239,9 @@ func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *sym
 		return err
 	}
 	for i := range pbExemplars {
+		if pbExemplars[i] == nil {
+			continue
+		}
 		ex := exemplars.At(i)
 
 		lbls, err := ex.NewLabels(int32(len(pbExemplars[i].Labels)))

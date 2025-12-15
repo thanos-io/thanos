@@ -4,30 +4,16 @@
 syntax = "proto3";
 package thanos;
 
-option go_package = "labelpb";
+option go_package = "github.com/thanos-io/thanos/pkg/store/labelpb";
 
-import "gogoproto/gogo.proto";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
-
+// Label is a key-value pair identifying a series.
+// NOTE: ZLabel and ZLabelSet types are defined manually in Go code (label.go) for
+// zero-copy label handling. They have the same wire format as Label and LabelSet.
 message Label {
     string name  = 1;
     string value = 2;
 }
 
 message LabelSet {
-    repeated Label labels = 1 [(gogoproto.nullable) = false];
-}
-
-message ZLabelSet {
-    repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ZLabel"];
+    repeated Label labels = 1;
 }

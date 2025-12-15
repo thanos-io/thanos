@@ -28,6 +28,8 @@ import (
 // Proxy implements exemplarspb.Exemplars gRPC that fanouts requests to
 // given exemplarspb.Exemplars.
 type Proxy struct {
+	exemplarspb.UnimplementedExemplarsServer
+
 	logger         log.Logger
 	exemplars      func() []*exemplarspb.ExemplarStore
 	selectorLabels labels.Labels

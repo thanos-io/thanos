@@ -6,21 +6,9 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "store/labelpb/types.proto";
-import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
-option go_package = "rulespb";
-
-option (gogoproto.sizer_all) = true;
-option (gogoproto.marshaler_all) = true;
-option (gogoproto.unmarshaler_all) = true;
-option (gogoproto.goproto_getters_all) = false;
-
-// Do not generate XXX fields to reduce memory footprint and opening a door
-// for zero-copy casts to/from prometheus data types.
-option (gogoproto.goproto_unkeyed_all) = false;
-option (gogoproto.goproto_unrecognized_all) = false;
-option (gogoproto.goproto_sizecache_all) = false;
+option go_package = "github.com/thanos-io/thanos/pkg/rules/rulespb";
 
 /// Rules represents API that is responsible for gathering rules and their statuses.
 service Rules {
@@ -65,21 +53,21 @@ message RulesResponse {
 ///
 /// For rule parsing from YAML configuration other struct is used: https://github.com/prometheus/prometheus/blob/20b1f596f6fb16107ef0c244d240b0ad6da36829/pkg/rulefmt/rulefmt.go#L105
 message RuleGroups {
-    repeated RuleGroup groups = 1 [(gogoproto.jsontag) = "groups" ];
+    repeated RuleGroup groups = 1;
 }
 
 /// RuleGroup has info for rules which are part of a group.
 message RuleGroup {
-    string name                               = 1 [(gogoproto.jsontag) = "name" ];
-    string file                               = 2 [(gogoproto.jsontag) = "file" ];
-    repeated Rule rules                       = 3 [(gogoproto.jsontag) = "rules" ];
-    double interval                           = 4 [(gogoproto.jsontag) = "interval" ];
-    double evaluation_duration_seconds        = 5 [(gogoproto.jsontag) = "evaluationTime" ]; // TODO: Is it really second?
-    google.protobuf.Timestamp last_evaluation = 6 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
-    int64 limit                               = 9 [(gogoproto.jsontag) = "limit" ];
+    string name                               = 1;
+    string file                               = 2;
+    repeated Rule rules                       = 3;
+    double interval                           = 4;
+    double evaluation_duration_seconds        = 5;
+    google.protobuf.Timestamp last_evaluation = 6;
+    int64 limit                               = 9;
 
     // Thanos specific.
-    PartialResponseStrategy PartialResponseStrategy = 8 [(gogoproto.jsontag) = "partialResponseStrategy" ];
+    PartialResponseStrategy PartialResponseStrategy = 8;
 }
 
 message Rule {
@@ -106,38 +94,38 @@ enum AlertState {
 }
 
 message AlertInstance {
-    ZLabelSet labels                     = 1 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    ZLabelSet annotations                = 2 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
-    AlertState state                     = 3 [(gogoproto.jsontag) = "state" ];
-    google.protobuf.Timestamp active_at  = 4 [(gogoproto.jsontag) = "activeAt,omitempty", (gogoproto.stdtime) = true];
-    string value                         = 5 [(gogoproto.jsontag) = "value" ];
+    LabelSet labels                      = 1;
+    LabelSet annotations                 = 2;
+    AlertState state                     = 3;
+    google.protobuf.Timestamp active_at  = 4;
+    string value                         = 5;
 
     // Thanos specific. Used mainly for alert API purposes.
-    PartialResponseStrategy PartialResponseStrategy = 6 [(gogoproto.jsontag) = "partialResponseStrategy" ];
+    PartialResponseStrategy PartialResponseStrategy = 6;
 }
 
 message Alert {
     /// state returns the maximum state of alert instances for this rule.
-    AlertState state                          = 1 [(gogoproto.jsontag) = "state" ];
-    string name                               = 2 [(gogoproto.jsontag) = "name" ];
-    string query                              = 3 [(gogoproto.jsontag) = "query" ];
-    double duration_seconds                   = 4 [(gogoproto.jsontag) = "duration" ];
-    ZLabelSet labels                          = 5 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    ZLabelSet annotations                     = 6 [(gogoproto.jsontag) = "annotations", (gogoproto.nullable) = false ];
-    repeated AlertInstance alerts             = 7 [(gogoproto.jsontag) = "alerts" ];
-    string health                             = 8 [(gogoproto.jsontag) = "health" ];
-    string last_error                         = 9 [(gogoproto.jsontag) = "lastError,omitempty" ];
-    double evaluation_duration_seconds        = 10 [(gogoproto.jsontag) = "evaluationTime" ];
-    google.protobuf.Timestamp last_evaluation = 11 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
-    double keep_firing_for_seconds            = 12 [(gogoproto.jsontag) = "keepFiringFor" ];
+    AlertState state                          = 1;
+    string name                               = 2;
+    string query                              = 3;
+    double duration_seconds                   = 4;
+    LabelSet labels                           = 5;
+    LabelSet annotations                      = 6;
+    repeated AlertInstance alerts             = 7;
+    string health                             = 8;
+    string last_error                         = 9;
+    double evaluation_duration_seconds        = 10;
+    google.protobuf.Timestamp last_evaluation = 11;
+    double keep_firing_for_seconds            = 12;
 }
 
 message RecordingRule {
-    string name                               = 1 [(gogoproto.jsontag) = "name" ];
-    string query                              = 2 [(gogoproto.jsontag) = "query" ];
-    ZLabelSet labels                          = 3 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false ];
-    string health                             = 4 [(gogoproto.jsontag) = "health" ];
-    string last_error                         = 5 [(gogoproto.jsontag) = "lastError,omitempty" ];
-    double evaluation_duration_seconds        = 6 [(gogoproto.jsontag) = "evaluationTime" ];
-    google.protobuf.Timestamp last_evaluation = 7 [(gogoproto.jsontag) = "lastEvaluation", (gogoproto.stdtime) = true, (gogoproto.nullable) = false ];
+    string name                               = 1;
+    string query                              = 2;
+    LabelSet labels                           = 3;
+    string health                             = 4;
+    string last_error                         = 5;
+    double evaluation_duration_seconds        = 6;
+    google.protobuf.Timestamp last_evaluation = 7;
 }

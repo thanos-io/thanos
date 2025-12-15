@@ -8,17 +8,26 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-func NewTSDBInfo(mint, maxt int64, lbls []labelpb.ZLabel) TSDBInfo {
-	return TSDBInfo{
-		Labels: labelpb.ZLabelSet{
-			Labels: lbls,
+// NewTSDBInfo creates a new TSDBInfo from ZLabels.
+// It converts ZLabels to the proto LabelSet format.
+func NewTSDBInfo(mint, maxt int64, lbls []labelpb.ZLabel) *TSDBInfo {
+	protoLabels := make([]*labelpb.Label, 0, len(lbls))
+	for _, l := range lbls {
+		protoLabels = append(protoLabels, &labelpb.Label{
+			Name:  l.Name,
+			Value: l.Value,
+		})
+	}
+	return &TSDBInfo{
+		Labels: &labelpb.LabelSet{
+			Labels: protoLabels,
 		},
 		MinTime: mint,
 		MaxTime: maxt,
 	}
 }
 
-type TSDBInfos []TSDBInfo
+type TSDBInfos []*TSDBInfo
 
 func (infos TSDBInfos) MaxT() int64 {
 	var maxt int64 = math.MinInt64
@@ -33,8 +42,23 @@ func (infos TSDBInfos) MaxT() int64 {
 func (infos TSDBInfos) LabelSets() []labels.Labels {
 	lsets := make([]labels.Labels, 0, len(infos))
 	for _, info := range infos {
-		lsets = append(lsets, labelpb.ZLabelsToPromLabels(info.Labels.Labels))
-
+		if info != nil && info.Labels != nil {
+			lsets = append(lsets, LabelSetToPromLabels(info.Labels))
+		}
 	}
 	return lsets
+}
+
+// LabelSetToPromLabels converts a proto LabelSet to Prometheus labels.Labels.
+func LabelSetToPromLabels(ls *labelpb.LabelSet) labels.Labels {
+	if ls == nil {
+		return labels.EmptyLabels()
+	}
+	b := labels.NewScratchBuilder(len(ls.Labels))
+	for _, l := range ls.Labels {
+		if l != nil {
+			b.Add(l.Name, l.Value)
+		}
+	}
+	return b.Labels()
 }

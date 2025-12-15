@@ -117,7 +117,7 @@ func filterRulesByNamesAndFile(ruleGroups []*rulespb.RuleGroup, ruleName []strin
 		if len(rnSet) > 0 {
 			ruleCount := 0
 			for _, r := range grp.Rules {
-				if _, ok := rnSet[r.GetName()]; ok {
+				if _, ok := rnSet[r.GetRuleName()]; ok {
 					grp.Rules[ruleCount] = r
 					ruleCount++
 				}
@@ -142,7 +142,7 @@ func filterRulesByMatchers(ruleGroups []*rulespb.RuleGroup, matcherSets [][]*lab
 		ruleCount := 0
 		for _, r := range g.Rules {
 			// Filter rules based on matcher.
-			rl := r.GetLabels()
+			rl := r.GetLabelsPromLabels()
 			if matches(matcherSets, rl) {
 				g.Rules[ruleCount] = r
 				ruleCount++
@@ -236,7 +236,7 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
-	b := labels.NewBuilder(r.GetLabels())
+	b := labels.NewBuilder(r.GetLabelsPromLabels())
 	for k := range replicaLabels {
 		b.Del(k)
 	}

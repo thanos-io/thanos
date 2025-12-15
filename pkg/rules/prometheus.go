@@ -16,6 +16,8 @@ import (
 
 // Prometheus implements rulespb.Rules gRPC that allows to fetch rules from Prometheus HTTP api/v1/rules endpoint.
 type Prometheus struct {
+	rulespb.UnimplementedRulesServer
+
 	base   *url.URL
 	client *promclient.Client
 
@@ -57,7 +59,7 @@ func (p *Prometheus) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer)
 func enrichRulesWithExtLabels(groups []*rulespb.RuleGroup, extLset labels.Labels) {
 	for _, g := range groups {
 		for _, r := range g.Rules {
-			r.SetLabels(labelpb.ExtendSortedLabels(r.GetLabels(), extLset))
+			r.SetLabels(labelpb.ExtendSortedLabels(r.GetLabelsPromLabels(), extLset))
 		}
 	}
 }

@@ -113,11 +113,12 @@ func RegisterStatusServer(statusSrv statuspb.StatusServer) func(*grpc.Server) {
 // Server implements the corresponding protobuf interface to provide status
 // information about the given component.
 type Server struct {
+	statuspb.UnimplementedStatusServer
 	component            string
 	tsdbStatisticsGetter TSDBStatisticsGetter
 }
 
-var _ = statuspb.StatusServer(&Server{})
+var _ statuspb.StatusServer = (*Server)(nil)
 
 // TSDBStatisticsGetter is an interface to retrieve TSDB statistics.
 type TSDBStatisticsGetter interface {
@@ -206,10 +207,10 @@ func (srv *Server) TSDBStatistics(r *statuspb.TSDBStatisticsRequest, s statuspb.
 	return nil
 }
 
-func toStatistic(stats []index.Stat) []statuspb.Statistic {
-	ret := make([]statuspb.Statistic, len(stats))
+func toStatistic(stats []index.Stat) []*statuspb.Statistic {
+	ret := make([]*statuspb.Statistic, len(stats))
 	for i, v := range stats {
-		ret[i] = statuspb.Statistic{
+		ret[i] = &statuspb.Statistic{
 			Name:  v.Name,
 			Value: v.Count,
 		}

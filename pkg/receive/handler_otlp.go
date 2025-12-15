@@ -155,7 +155,7 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetric.Metrics) ([]tprompb.TimeSeries, []tprompb.MetricMetadata, error) {
+func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetric.Metrics) ([]*tprompb.TimeSeries, []*tprompb.MetricMetadata, error) {
 	converter := otlptranslator.NewPrometheusConverter()
 	settings := otlptranslator.Settings{
 		AddMetricSuffixes:         true,

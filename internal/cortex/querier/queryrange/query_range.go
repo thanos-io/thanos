@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/weaveworks/common/httpgrpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/thanos-io/thanos/internal/cortex/cortexpb"
 	"github.com/thanos-io/thanos/internal/cortex/util"
@@ -88,7 +89,7 @@ type Request interface {
 	// GetQuery returns the query of the request.
 	GetQuery() string
 	// GetCachingOptions returns the caching options.
-	GetCachingOptions() CachingOptions
+	GetCachingOptions() *CachingOptions
 	// WithStartEnd clone the current request with different start and end timestamp.
 	WithStartEnd(startTime int64, endTime int64) Request
 	// WithQuery clone the current request with a different query.
@@ -190,9 +191,9 @@ func (resp *PrometheusInstantQueryResponse) GetStats() *PrometheusResponseStats 
 func NewEmptyPrometheusResponse() *PrometheusResponse {
 	return &PrometheusResponse{
 		Status: StatusSuccess,
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: model.ValMatrix.String(),
-			Result:     []SampleStream{},
+			Result:     []*SampleStream{},
 		},
 	}
 }
@@ -201,9 +202,9 @@ func NewEmptyPrometheusResponse() *PrometheusResponse {
 func NewEmptyPrometheusInstantQueryResponse() *PrometheusInstantQueryResponse {
 	return &PrometheusInstantQueryResponse{
 		Status: StatusSuccess,
-		Data: PrometheusInstantQueryData{
+		Data: &PrometheusInstantQueryData{
 			ResultType: model.ValVector.String(),
-			Result: PrometheusInstantQueryResult{
+			Result: &PrometheusInstantQueryResult{
 				Result: &PrometheusInstantQueryResult_Vector{},
 			},
 		},
@@ -237,7 +238,9 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 		traverseAnalysis(a, &elements)
 
 		for i := 0; i < len(elements) && i < len(rootElements); i++ {
-			rootElements[i].ExecutionTime += analysis[i].ExecutionTime
+			if rootElements[i].ExecutionTime != nil && analysis[i].ExecutionTime != nil {
+				rootElements[i].ExecutionTime = durationpb.New(rootElements[i].ExecutionTime.AsDuration() + analysis[i].ExecutionTime.AsDuration())
+			}
 		}
 	}
 
@@ -276,7 +279,7 @@ func (prometheusCodec) MergeResponse(_ Request, responses ...Response) (Response
 
 	response := PrometheusResponse{
 		Status: StatusSuccess,
-		Data: PrometheusData{
+		Data: &PrometheusData{
 			ResultType: model.ValMatrix.String(),
 			Result:     matrixMerge(promResponses),
 			Stats:      StatsMerge(responses),
@@ -484,12 +487,12 @@ func (s *SampleStream) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	s.Labels = cortexpb.FromMetricsToLabelAdapters(sampleStream.Metric)
+	s.Labels = cortexpb.FromMetricsToLabelPairs(sampleStream.Metric)
 
 	if len(sampleStream.Values) > 0 {
-		s.Samples = make([]cortexpb.Sample, 0, len(sampleStream.Values))
+		s.Samples = make([]*cortexpb.Sample, 0, len(sampleStream.Values))
 		for _, sample := range sampleStream.Values {
-			s.Samples = append(s.Samples, cortexpb.Sample{
+			s.Samples = append(s.Samples, &cortexpb.Sample{
 				Value:       float64(sample.Value),
 				TimestampMs: int64(sample.Timestamp),
 			})
@@ -497,7 +500,7 @@ func (s *SampleStream) UnmarshalJSON(data []byte) error {
 	}
 
 	if len(sampleStream.Histograms) > 0 {
-		s.Histograms = make([]SampleHistogramPair, 0, len(sampleStream.Histograms))
+		s.Histograms = make([]*SampleHistogramPair, 0, len(sampleStream.Histograms))
 		for _, h := range sampleStream.Histograms {
 			s.Histograms = append(s.Histograms, fromModelSampleHistogramPair(h))
 		}
@@ -509,7 +512,7 @@ func (s *SampleStream) UnmarshalJSON(data []byte) error {
 // MarshalJSON implements json.Marshaler.
 func (s *SampleStream) MarshalJSON() ([]byte, error) {
 	var sampleStream model.SampleStream
-	sampleStream.Metric = cortexpb.FromLabelAdaptersToMetric(s.Labels)
+	sampleStream.Metric = cortexpb.FromLabelPairsToMetric(s.Labels)
 
 	sampleStream.Values = make([]model.SamplePair, 0, len(s.Samples))
 	for _, sample := range s.Samples {
@@ -534,13 +537,12 @@ func (s *Sample) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &sample); err != nil {
 		return err
 	}
-	s.Labels = cortexpb.FromMetricsToLabelAdapters(sample.Metric)
+	s.Labels = cortexpb.FromMetricsToLabelPairs(sample.Metric)
 	s.SampleValue = float64(sample.Value)
 	s.Timestamp = int64(sample.Timestamp)
 
 	if sample.Histogram != nil {
-		sh := fromModelSampleHistogram(sample.Histogram)
-		s.Histogram = &sh
+		s.Histogram = fromModelSampleHistogram(sample.Histogram)
 	} else {
 		s.Histogram = nil
 	}
@@ -551,11 +553,11 @@ func (s *Sample) UnmarshalJSON(data []byte) error {
 // MarshalJSON implements json.Marshaler.
 func (s *Sample) MarshalJSON() ([]byte, error) {
 	var sample model.Sample
-	sample.Metric = cortexpb.FromLabelAdaptersToMetric(s.Labels)
+	sample.Metric = cortexpb.FromLabelPairsToMetric(s.Labels)
 	sample.Value = model.SampleValue(s.SampleValue)
 	sample.Timestamp = model.Time(s.Timestamp)
 	if s.Histogram != nil {
-		sample.Histogram = toModelSampleHistogram(*s.Histogram)
+		sample.Histogram = toModelSampleHistogram(s.Histogram)
 	}
 	return json.Marshal(sample)
 }
@@ -608,7 +610,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &result); err != nil {
 			return err
 		}
-		s.Result = PrometheusInstantQueryResult{
+		s.Result = &PrometheusInstantQueryResult{
 			Result: &PrometheusInstantQueryResult_Vector{Vector: &Vector{
 				Samples: result.Samples,
 			}},
@@ -620,7 +622,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &result); err != nil {
 			return err
 		}
-		s.Result = PrometheusInstantQueryResult{
+		s.Result = &PrometheusInstantQueryResult{
 			Result: &PrometheusInstantQueryResult_Matrix{Matrix: &Matrix{
 				SampleStreams: result.SampleStreams,
 			}},
@@ -632,7 +634,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &result); err != nil {
 			return err
 		}
-		s.Result = PrometheusInstantQueryResult{
+		s.Result = &PrometheusInstantQueryResult{
 			Result: &PrometheusInstantQueryResult_Scalar{Scalar: &result.Scalar},
 		}
 	case model.ValString.String():
@@ -642,7 +644,7 @@ func (s *PrometheusInstantQueryData) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &result); err != nil {
 			return err
 		}
-		s.Result = PrometheusInstantQueryResult{
+		s.Result = &PrometheusInstantQueryResult{
 			Result: &PrometheusInstantQueryResult_StringSample{StringSample: &StringSample{
 				TimestampMs: int64(result.Sample.Timestamp),
 				Value:       result.Sample.Value,
@@ -764,11 +766,11 @@ func StatsMerge(resps []Response) *PrometheusResponseStats {
 	return result
 }
 
-func matrixMerge(resps []*PrometheusResponse) []SampleStream {
+func matrixMerge(resps []*PrometheusResponse) []*SampleStream {
 	output := map[string]*SampleStream{}
 	for _, resp := range resps {
 		for _, stream := range resp.Data.Result {
-			metric := cortexpb.FromLabelAdaptersToLabels(stream.Labels).String()
+			metric := cortexpb.FromLabelPairsToLabels(stream.Labels).String()
 			existing, ok := output[metric]
 			if !ok {
 				existing = &SampleStream{
@@ -812,9 +814,9 @@ func matrixMerge(resps []*PrometheusResponse) []SampleStream {
 	}
 	sort.Strings(keys)
 
-	result := make([]SampleStream, 0, len(output))
+	result := make([]*SampleStream, 0, len(output))
 	for _, key := range keys {
-		result = append(result, *output[key])
+		result = append(result, output[key])
 	}
 
 	return result
@@ -824,7 +826,7 @@ func matrixMerge(resps []*PrometheusResponse) []SampleStream {
 // return a sub slice whose first element's is the smallest timestamp that is strictly
 // bigger than the given minTs. Empty slice is returned if minTs is bigger than all the
 // timestamps in samples.
-func SliceSamples(samples []cortexpb.Sample, minTs int64) []cortexpb.Sample {
+func SliceSamples(samples []*cortexpb.Sample, minTs int64) []*cortexpb.Sample {
 	if len(samples) <= 0 || minTs < samples[0].TimestampMs {
 		return samples
 	}
@@ -844,7 +846,7 @@ func SliceSamples(samples []cortexpb.Sample, minTs int64) []cortexpb.Sample {
 // return a sub slice whose first element's is the smallest timestamp that is strictly
 // bigger than the given minTs. Empty slice is returned if minTs is bigger than all the
 // timestamps in histogram.
-func SliceHistogram(histograms []SampleHistogramPair, minTs int64) []SampleHistogramPair {
+func SliceHistogram(histograms []*SampleHistogramPair, minTs int64) []*SampleHistogramPair {
 	if len(histograms) <= 0 || minTs < histograms[0].GetTimestamp() {
 		return histograms
 	}

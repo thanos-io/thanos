@@ -72,7 +72,7 @@ func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions) 
 	}
 }
 
-func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeSeries) error {
+func (r *Writer) Write(ctx context.Context, tenantID string, wreq []*prompb.TimeSeries) error {
 	tLogger := log.With(r.logger, "tenant", tenantID)
 
 	s, err := r.multiTSDB.TenantAppendable(tenantID)
@@ -101,21 +101,21 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
-		if err := labelpb.ValidateLabels(t.Labels); err != nil {
-			lset := &labelpb.ZLabelSet{Labels: t.Labels}
+		if err := labelpb.ValidateLabelsFromProto(t.Labels); err != nil {
+			lset := labelpb.LabelsToPromLabels(t.Labels)
 			errorTracker.addLabelsError(err, lset, tLogger)
 			continue
 		}
 
-		lset := labelpb.ZLabelsToPromLabels(t.Labels)
+		lset := labelpb.LabelsToPromLabels(t.Labels)
 
 		// Check if the TSDB has cached reference for those labels.
 		ref, lset = getRef.GetRef(lset, lset.Hash())
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels, r.opts.Intern)
-			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+			labelpb.ReAllocLabelStrings(&t.Labels)
+			lset = labelpb.LabelsToPromLabels(t.Labels)
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.
@@ -134,9 +134,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 			)
 
 			if hp.IsFloatHistogram() {
-				fh = prompb.FloatHistogramProtoToFloatHistogram(hp)
+				fh = prompb.FloatHistogramProtoToFloatHistogram(*hp)
 			} else {
-				h = prompb.HistogramProtoToHistogram(hp)
+				h = prompb.HistogramProtoToHistogram(*hp)
 			}
 
 			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)
@@ -147,7 +147,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
-				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
+				exLset := labelpb.LabelsToPromLabels(ex.Labels)
 				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
 				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{

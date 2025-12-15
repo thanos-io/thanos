@@ -10,11 +10,11 @@ import (
 )
 
 // SamplesFromSamplePairs converts a slice of model.SamplePair
-// to a slice of Sample.
-func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
-	result := make([]Sample, 0, len(samples))
+// to a slice of Sample pointers.
+func SamplesFromSamplePairs(samples []model.SamplePair) []*Sample {
+	result := make([]*Sample, 0, len(samples))
 	for _, s := range samples {
-		result = append(result, Sample{
+		result = append(result, &Sample{
 			Value:     float64(s.Value),
 			Timestamp: int64(s.Timestamp),
 		})
@@ -24,36 +24,38 @@ func SamplesFromSamplePairs(samples []model.SamplePair) []Sample {
 }
 
 // SamplesFromPromqlSamples converts a slice of promql.Sample
-// to a slice of Sample.
-func SamplesFromPromqlSamples(samples ...promql.Sample) ([]Sample, []Histogram) {
-	floats := make([]Sample, 0, len(samples))
-	histograms := make([]Histogram, 0, len(samples))
+// to slices of Sample and Histogram pointers.
+func SamplesFromPromqlSamples(samples ...promql.Sample) ([]*Sample, []*Histogram) {
+	floats := make([]*Sample, 0, len(samples))
+	histograms := make([]*Histogram, 0, len(samples))
 	for _, s := range samples {
 		if s.H == nil {
-			floats = append(floats, Sample{
+			floats = append(floats, &Sample{
 				Value:     s.F,
 				Timestamp: s.T,
 			})
 		} else {
-			histograms = append(histograms, FloatHistogramToHistogramProto(s.T, s.H))
+			h := FloatHistogramToHistogramProto(s.T, s.H)
+			histograms = append(histograms, &h)
 		}
 	}
 
 	return floats, histograms
 }
 
-// SamplesFromPromqlSeries converts promql.Series to a slice of Sample and a slice of Histogram.
-func SamplesFromPromqlSeries(series promql.Series) ([]Sample, []Histogram) {
-	floats := make([]Sample, 0, len(series.Floats))
+// SamplesFromPromqlSeries converts promql.Series to slices of Sample and Histogram pointers.
+func SamplesFromPromqlSeries(series promql.Series) ([]*Sample, []*Histogram) {
+	floats := make([]*Sample, 0, len(series.Floats))
 	for _, f := range series.Floats {
-		floats = append(floats, Sample{
+		floats = append(floats, &Sample{
 			Value:     f.F,
 			Timestamp: f.T,
 		})
 	}
-	histograms := make([]Histogram, 0, len(series.Histograms))
+	histograms := make([]*Histogram, 0, len(series.Histograms))
 	for _, h := range series.Histograms {
-		histograms = append(histograms, FloatHistogramToHistogramProto(h.T, h.H))
+		hist := FloatHistogramToHistogramProto(h.T, h.H)
+		histograms = append(histograms, &hist)
 	}
 
 	return floats, histograms
@@ -126,10 +128,12 @@ func HistogramProtoToFloatHistogram(hp Histogram) *histogram.FloatHistogram {
 	}
 }
 
-func spansProtoToSpans(s []BucketSpan) []histogram.Span {
+func spansProtoToSpans(s []*BucketSpan) []histogram.Span {
 	spans := make([]histogram.Span, len(s))
 	for i := range s {
-		spans[i] = histogram.Span{Offset: s[i].Offset, Length: s[i].Length}
+		if s[i] != nil {
+			spans[i] = histogram.Span{Offset: s[i].Offset, Length: s[i].Length}
+		}
 	}
 
 	return spans
@@ -181,10 +185,10 @@ func FloatHistogramToHistogramProto(timestamp int64, fh *histogram.FloatHistogra
 	}
 }
 
-func spansToSpansProto(s []histogram.Span) []BucketSpan {
-	spans := make([]BucketSpan, len(s))
+func spansToSpansProto(s []histogram.Span) []*BucketSpan {
+	spans := make([]*BucketSpan, len(s))
 	for i := range s {
-		spans[i] = BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
+		spans[i] = &BucketSpan{Offset: s[i].Offset, Length: s[i].Length}
 	}
 
 	return spans

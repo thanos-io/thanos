@@ -21,6 +21,8 @@ import (
 
 // Proxy implements statuspb.Status gRPC that fanouts requests to given statuspb.Status servers.
 type Proxy struct {
+	statuspb.UnimplementedStatusServer
+
 	logger        log.Logger
 	statusClients func() []statuspb.StatusClient
 }
