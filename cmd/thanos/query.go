@@ -605,6 +605,7 @@ func runQuery(
 	if len(blockedMetricPatterns) > 0 {
 		options = append(options, store.WithBlockedMetricPatterns(blockedMetricPatterns))
 	}
+
 	if forwardPartialStrategy {
 		options = append(options, store.WithoutForwardPartialStrategy())
 	}

@@ -140,22 +140,22 @@ load 5m
 eval instant at 50m x{y="testvalue"}
 	x{y="testvalue"} 100
 
-# Basic Regex
-eval instant at 50m {__name__=~".+"}
-	http_requests{group="canary", instance="0", job="api-server"} 300
-	http_requests{group="canary", instance="0", job="app-server"} 700
-	http_requests{group="canary", instance="1", job="api-server"} 400
-	http_requests{group="canary", instance="1", job="app-server"} 800
-	http_requests{group="production", instance="0", job="api-server"} 100
-	http_requests{group="production", instance="0", job="app-server"} 500
-	http_requests{group="production", instance="1", job="api-server"} 200
-	http_requests{group="production", instance="1", job="app-server"} 600
-	x{y="testvalue"} 100
-	label_grouping_test{a="a", b="abb"} 200
-	label_grouping_test{a="aa", b="bb"} 100
-	cpu_count{instance="1", type="smp"} 200
-	cpu_count{instance="0", type="smp"} 100
-	cpu_count{instance="0", type="numa"} 300
+# Basic Regex - Commented out: metric names containing '.' are blocked unconditionally
+# eval instant at 50m {__name__=~".+"}
+# 	http_requests{group="canary", instance="0", job="api-server"} 300
+# 	http_requests{group="canary", instance="0", job="app-server"} 700
+# 	http_requests{group="canary", instance="1", job="api-server"} 400
+# 	http_requests{group="canary", instance="1", job="app-server"} 800
+# 	http_requests{group="production", instance="0", job="api-server"} 100
+# 	http_requests{group="production", instance="0", job="app-server"} 500
+# 	http_requests{group="production", instance="1", job="api-server"} 200
+# 	http_requests{group="production", instance="1", job="app-server"} 600
+# 	x{y="testvalue"} 100
+# 	label_grouping_test{a="a", b="abb"} 200
+# 	label_grouping_test{a="aa", b="bb"} 100
+# 	cpu_count{instance="1", type="smp"} 200
+# 	cpu_count{instance="0", type="smp"} 100
+# 	cpu_count{instance="0", type="numa"} 300
 
 eval instant at 50m {job=~".+-server", job!~"api-.+"}
 	http_requests{group="canary", instance="0", job="app-server"} 700

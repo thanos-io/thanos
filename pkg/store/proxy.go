@@ -41,6 +41,9 @@ const UninitializedTSDBTime = math.MaxInt64
 // StoreMatcherKey is the context key for the store's allow list.
 const StoreMatcherKey = ctxKey(0)
 
+// metricNameLabel is the label name for metric names in Prometheus.
+const metricNameLabel = "__name__"
+
 // ErrorNoStoresMatched is returned if the query does not match any data.
 // This can happen with Query servers trees and external labels.
 var ErrorNoStoresMatched = errors.New("No StoreAPIs matched for this query")
@@ -104,7 +107,7 @@ type ProxyStore struct {
 	matcherConverter                  *storepb.MatcherConverter
 	lazyRetrievalMaxBufferedResponses int
 	blockedMetricPrefixes             *radix.Tree
-	blockedMetricExacts               map[string]struct{}
+	unconditionalBlockedMetrics       map[string]struct{}
 	forwardPartialStrategy            bool
 	exclusiveExternalLabels           []string
 }
@@ -219,33 +222,31 @@ func WithProxyStoreMatcherConverter(mc *storepb.MatcherConverter) ProxyStoreOpti
 }
 
 // WithBlockedMetricPatterns returns a ProxyStoreOption that sets the blocked metric patterns.
-// It parses input patterns to extract prefixes (like "kube_", "envoy_") by checking suffix characters
-// and stores them in a radix tree for efficient prefix matching. Exact patterns
-// (like "up") are stored in a set for whole match checking.
+// Pattern format: "p<pattern>" for prefix match, "e<pattern>" for exact match.
+// Examples: "pkube_", "eup"
+// Exact match patterns ('e' prefix) are blocked unconditionally.
+// Prefix patterns ('p') are blocked only if insufficient filters are present.
+// Additionally, any metric name containing '.' is ALWAYS blocked unconditionally,
+// even if no patterns are configured (regex patterns like ".+", ".*", etc.).
 func WithBlockedMetricPatterns(patterns []string) ProxyStoreOption {
 	return func(s *ProxyStore) {
 		s.blockedMetricPrefixes = radix.New()
-		s.blockedMetricExacts = make(map[string]struct{})
+		s.unconditionalBlockedMetrics = make(map[string]struct{})
 
-		for _, pattern := range patterns {
-			if pattern == "" {
-				continue
+		for _, input := range patterns {
+			if len(input) < 2 {
+				continue // Need at least 2 chars: type + pattern
 			}
 
-			// Check if pattern ends with * or _ for prefix matching
-			if len(pattern) > 0 {
-				lastChar := pattern[len(pattern)-1]
-				if lastChar == '*' {
-					// Extract prefix (everything before the *)
-					prefix := pattern[:len(pattern)-1]
-					s.blockedMetricPrefixes.Insert(prefix, pattern)
-				} else if lastChar == '_' {
-					// Pattern ends with _ (like "kube_"), treat as prefix
-					s.blockedMetricPrefixes.Insert(pattern, pattern)
-				} else {
-					// No * or _ at the end, store as exact match only
-					s.blockedMetricExacts[pattern] = struct{}{}
-				}
+			typeChar := input[0]
+			pattern := input[1:]
+
+			// Exact match patterns ('e') are blocked unconditionally
+			if typeChar == 'e' {
+				s.unconditionalBlockedMetrics[pattern] = struct{}{}
+			} else if typeChar == 'p' {
+				// Prefix patterns are blocked conditionally (only if insufficient filters)
+				s.blockedMetricPrefixes.Insert(pattern, pattern)
 			}
 		}
 	}
@@ -386,24 +387,34 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		return status.Error(codes.InvalidArgument, errors.New("no matchers specified (excluding selector labels)").Error())
 	}
 
-	// Check X-Source header once for performance
-	isBronsonRequest := s.isBronsonRequest(srv.Context())
-
 	// Check if the query should be blocked due to insufficient filters
-	shouldBlock, metricName, matchedPattern := s.shouldBlockQuery(isBronsonRequest, matchers)
+	shouldBlock, metricName, matchedPattern, isUnconditional := s.shouldBlockQuery(matchers)
 	if shouldBlock {
-		// Log the blocked query with structured logging
-		filterCount := s.countAllFilters(matchers)
-		level.Warn(reqLogger).Log(
-			"msg", "query blocked due to high cardinality metric without sufficient filters",
-			"metric_name", metricName,
-			"filter_count", filterCount,
-		)
+		var errorMsg string
+
+		if isUnconditional {
+			// Unconditional block: exact match or regex pattern (contains '.')
+			level.Warn(reqLogger).Log(
+				"msg", "query blocked: unconditional block on metric name pattern",
+				"pattern", metricName,
+			)
+			errorMsg = fmt.Sprintf("query blocked: metric name pattern '%s' is not allowed", metricName)
+		} else {
+			// Conditional block: prefix match without sufficient filters
+			filterCount := s.countAllFilters(matchers)
+			level.Warn(reqLogger).Log(
+				"msg", "query blocked: high cardinality metric without sufficient filters",
+				"metric_name", metricName,
+				"filter_count", filterCount,
+				"matched_pattern", matchedPattern,
+			)
+			errorMsg = fmt.Sprintf("query blocked: high cardinality metric '%s' matches blocked pattern '%s', please add proper filters to reduce the amount of data to fetch", metricName, matchedPattern)
+		}
 
 		// Increment metrics counter
 		s.metrics.blockedQueriesCount.WithLabelValues(metricName).Inc()
 
-		return status.Error(codes.InvalidArgument, fmt.Errorf("query blocked: high cardinality metric '%s' matches blocked pattern '%s', please add proper filters to reduce the amount of data to fetch", metricName, matchedPattern).Error())
+		return status.Error(codes.InvalidArgument, errors.New(errorMsg).Error())
 	}
 
 	// Track metrics for potential logging of high-cardinality queries
@@ -1082,47 +1093,55 @@ func (s *ProxyStore) hasSufficientFilters(matchers []*labels.Matcher) bool {
 func (s *ProxyStore) countAllFilters(matchers []*labels.Matcher) int {
 	filterCount := 0
 	for _, matcher := range matchers {
-		if matcher.Name != "__name__" {
+		if matcher.Name != metricNameLabel {
 			filterCount++
 		}
 	}
 	return filterCount
 }
 
-// isBronsonRequest checks if the request is from Bronson by examining the X-Source header.
-func (s *ProxyStore) isBronsonRequest(ctx context.Context) bool {
-	if md, ok := metadata.FromIncomingContext(ctx); ok {
-		if sources := md.Get("x-source"); len(sources) > 0 {
-			return sources[0] == "Bronson"
-		}
-	}
-	return false
-}
-
 // shouldBlockQuery determines if a query should be blocked based on metric patterns and label filters.
-// Only blocks queries from Bronson (when isBronsonRequest is true).
-// Returns (shouldBlock, metricName, matchedPattern).
-func (s *ProxyStore) shouldBlockQuery(isBronsonRequest bool, matchers []*labels.Matcher) (bool, string, string) {
-	if s.blockedMetricPrefixes == nil && s.blockedMetricExacts == nil {
-		return false, "", ""
-	}
-
-	// Only apply blocking for Bronson requests
-	if !isBronsonRequest {
-		return false, "", ""
-	}
-
-	// Extract metric name from matchers
+// Returns (shouldBlock, metricName, matchedPattern, isUnconditional).
+// isUnconditional is true when the block is unconditional (exact match or contains '.').
+func (s *ProxyStore) shouldBlockQuery(matchers []*labels.Matcher) (bool, string, string, bool) {
+	// Extract metric name from matchers (either MatchEqual or MatchRegexp)
 	var metricName string
 	for _, matcher := range matchers {
-		if matcher.Name == "__name__" && matcher.Type == labels.MatchEqual {
-			metricName = matcher.Value
-			break
+		if matcher.Name == metricNameLabel {
+			if matcher.Type == labels.MatchEqual || matcher.Type == labels.MatchRegexp {
+				metricName = matcher.Value
+				break
+			}
 		}
 	}
 
 	if metricName == "" {
-		return false, "", "" // No metric name found, allow query
+		return false, "", "", false // No metric name found, allow query
+	}
+
+	// If metric name contains '.', it's a regex pattern - ALWAYS block unconditionally
+	// This happens regardless of whether any blocking patterns are configured
+	if strings.Contains(metricName, ".") {
+		level.Debug(s.logger).Log("msg", "shouldBlockQuery: BLOCKED unconditionally (contains '.')", "metric_name", metricName)
+		return true, metricName, metricName, true
+	}
+
+	// If blocking is not configured at all, allow everything else
+	if s.blockedMetricPrefixes == nil && s.unconditionalBlockedMetrics == nil {
+		return false, "", "", false
+	}
+
+	// Check for unconditional blocks (exact match patterns)
+	if s.unconditionalBlockedMetrics != nil {
+		if _, found := s.unconditionalBlockedMetrics[metricName]; found {
+			level.Debug(s.logger).Log("msg", "shouldBlockQuery: BLOCKED unconditionally (exact match)", "metric_name", metricName)
+			return true, metricName, metricName, true
+		}
+	}
+
+	// If prefix blocking is not configured, don't block anything else
+	if s.blockedMetricPrefixes == nil {
+		return false, "", "", false
 	}
 
 	// Check if metric matches blocked patterns and find which pattern matched
@@ -1130,27 +1149,23 @@ func (s *ProxyStore) shouldBlockQuery(isBronsonRequest bool, matchers []*labels.
 	if matchedPattern != "" {
 		// Block if insufficient filters
 		shouldBlock := !s.hasSufficientFilters(matchers)
-		return shouldBlock, metricName, matchedPattern
+		level.Debug(s.logger).Log("msg", "shouldBlockQuery: pattern matched", "metric_name", metricName,
+			"matched_pattern", matchedPattern, "should_block", shouldBlock, "has_sufficient_filters", !shouldBlock)
+		return shouldBlock, metricName, matchedPattern, false
 	}
 
-	return false, "", ""
+	return false, "", "", false
 }
 
 // getMatchedBlockedPattern returns the first pattern that matches the metric name, or empty string if none match.
-// It first checks for exact matches, then checks for prefix matches in the radix tree.
+// It checks for prefix matches in the radix tree.
 func (s *ProxyStore) getMatchedBlockedPattern(metricName string) string {
-	// First check for exact matches
-	if s.blockedMetricExacts != nil {
-		if _, found := s.blockedMetricExacts[metricName]; found {
-			return metricName
-		}
-	}
-
-	// Then check for prefix matches
+	// Check for prefix matches
 	if s.blockedMetricPrefixes != nil {
 		_, value, found := s.blockedMetricPrefixes.LongestPrefix(metricName)
 		if found {
 			if originalPattern, ok := value.(string); ok {
+				level.Debug(s.logger).Log("msg", "getMatchedBlockedPattern: PREFIX MATCH found", "metric_name", metricName, "matched_pattern", originalPattern)
 				// The radix tree key is the prefix, but we return the original pattern
 				return originalPattern
 			}
