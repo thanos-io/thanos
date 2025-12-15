@@ -48,12 +48,12 @@ func TestCreateAttributes(t *testing.T) {
 		name                      string
 		promoteResourceAttributes []string
 		ignoreAttrs               []string
-		expectedLabels            []labelpb.ZLabel
+		expectedLabels            []*labelpb.Label
 	}{
 		{
 			name:                      "Successful conversion without resource attribute promotion",
 			promoteResourceAttributes: nil,
-			expectedLabels: []labelpb.ZLabel{
+			expectedLabels: []*labelpb.Label{
 				{
 					Name:  "__name__",
 					Value: "test_metric",
@@ -80,7 +80,7 @@ func TestCreateAttributes(t *testing.T) {
 			name:                      "Successful conversion with some attributes ignored",
 			promoteResourceAttributes: nil,
 			ignoreAttrs:               []string{"metric-attr-other"},
-			expectedLabels: []labelpb.ZLabel{
+			expectedLabels: []*labelpb.Label{
 				{
 					Name:  "__name__",
 					Value: "test_metric",
@@ -102,7 +102,7 @@ func TestCreateAttributes(t *testing.T) {
 		{
 			name:                      "Successful conversion with resource attribute promotion",
 			promoteResourceAttributes: []string{"non-existent-attr", "existent-attr"},
-			expectedLabels: []labelpb.ZLabel{
+			expectedLabels: []*labelpb.Label{
 				{
 					Name:  "__name__",
 					Value: "test_metric",
@@ -132,7 +132,7 @@ func TestCreateAttributes(t *testing.T) {
 		{
 			name:                      "Successful conversion with resource attribute promotion, conflicting resource attributes are ignored",
 			promoteResourceAttributes: []string{"non-existent-attr", "existent-attr", "metric-attr", "job", "instance"},
-			expectedLabels: []labelpb.ZLabel{
+			expectedLabels: []*labelpb.Label{
 				{
 					Name:  "__name__",
 					Value: "test_metric",
@@ -162,7 +162,7 @@ func TestCreateAttributes(t *testing.T) {
 		{
 			name:                      "Successful conversion with resource attribute promotion, attributes are only promoted once",
 			promoteResourceAttributes: []string{"existent-attr", "existent-attr"},
-			expectedLabels: []labelpb.ZLabel{
+			expectedLabels: []*labelpb.Label{
 				{
 					Name:  "__name__",
 					Value: "test_metric",
@@ -241,31 +241,31 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
+				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
-				}
-				createdLabels := []labelpb.ZLabel{
+				})
+				createdLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_summary" + createdSuffix},
-				}
-				sumLabels := []labelpb.ZLabel{
+				})
+				sumLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
-				}
+				})
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(labels): {
 						Labels: labels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(sumLabels): {
 						Labels: sumLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(createdLabels): {
 						Labels: createdLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
 						},
 					},
@@ -285,22 +285,22 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
+				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
-				}
-				sumLabels := []labelpb.ZLabel{
+				})
+				sumLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
-				}
+				})
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(labels): {
 						Labels: labels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(sumLabels): {
 						Labels: sumLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
@@ -350,32 +350,32 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
+				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
-				}
-				createdLabels := []labelpb.ZLabel{
+				})
+				createdLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_hist" + createdSuffix},
-				}
-				infLabels := []labelpb.ZLabel{
+				})
+				infLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
 					{Name: model.BucketLabel, Value: "+Inf"},
-				}
+				})
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(infLabels): {
 						Labels: infLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(labels): {
 						Labels: labels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(createdLabels): {
 						Labels: createdLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts)},
 						},
 					},
@@ -395,23 +395,23 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := []labelpb.ZLabel{
+				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
-				}
-				infLabels := []labelpb.ZLabel{
+				})
+				infLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
 					{Name: model.BucketLabel, Value: "+Inf"},
-				}
+				})
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(infLabels): {
 						Labels: infLabels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},
 					timeSeriesSignature(labels): {
 						Labels: labels,
-						Samples: []prompb.Sample{
+						Samples: []*prompb.Sample{
 							{Value: 0, Timestamp: convertTimeStamp(ts)},
 						},
 					},

@@ -20,17 +20,17 @@ func BenchmarkVanillaProtoMarshalUnmarshal(b *testing.B) {
 		ls = append(ls, labels.FromStrings("label_"+string(rune(i)), "value_"+string(rune(i))))
 	}
 	i := &infopb.InfoResponse{
-		LabelSets: labelpb.ZLabelSetsFromPromLabels(
+		LabelSets: labelpb.ZLabelSetsToLabelSets(labelpb.ZLabelSetsFromPromLabels(
 			ls...,
-		),
+		)),
 		ComponentType: "asdsadsadsa",
 		Store: &infopb.StoreInfo{
 			MinTime:          123,
 			MaxTime:          456,
 			SupportsSharding: true,
-			TsdbInfos: []infopb.TSDBInfo{
+			TsdbInfos: []*infopb.TSDBInfo{
 				{
-					Labels:  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("replica", "1"))},
+					Labels:  labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("replica", "1"))}),
 					MinTime: 100,
 					MaxTime: 200,
 				},
@@ -90,19 +90,19 @@ func BenchmarkVanillaProtoMarshalUnmarshal(b *testing.B) {
 
 func TestNonPoolingCodecMarshal(t *testing.T) {
 	i := &infopb.InfoResponse{
-		LabelSets: labelpb.ZLabelSetsFromPromLabels(
+		LabelSets: labelpb.ZLabelSetsToLabelSets(labelpb.ZLabelSetsFromPromLabels(
 			labels.FromStrings("foo", "bar"),
 			labels.FromStrings("baz", "qux"),
 			labels.FromStrings("aaa", "bbb"),
-		),
+		)),
 		ComponentType: "asdsadsadsa",
 		Store: &infopb.StoreInfo{
 			MinTime:          123,
 			MaxTime:          456,
 			SupportsSharding: true,
-			TsdbInfos: []infopb.TSDBInfo{
+			TsdbInfos: []*infopb.TSDBInfo{
 				{
-					Labels:  labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("replica", "1"))},
+					Labels:  labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("replica", "1"))}),
 					MinTime: 100,
 					MaxTime: 200,
 				},
@@ -116,7 +116,9 @@ func TestNonPoolingCodecMarshal(t *testing.T) {
 		},
 	}
 
-	c := &nonPoolingCodec{}
+	c := &nonPoolingCodec{
+		CodecV2: encoding.GetCodecV2("proto"),
+	}
 
 	_, err := c.Marshal(i)
 	require.NoError(t, err)

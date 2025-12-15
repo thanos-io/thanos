@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -55,8 +56,8 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 	req := &storepb.SeriesRequest{
 		MinTime: 1,
 		MaxTime: 3,
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+		Matchers: []*storepb.LabelMatcher{
+			&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 		},
 	}
 
@@ -65,7 +66,8 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 
 	for _, chk := range srv.SeriesSet[0].Chunks {
 		want := xxhash.Sum64(chk.Raw.Data)
-		testutil.Equals(t, want, chk.Raw.Hash)
+		testutil.Assert(t, chk.Raw.Hash != nil, "hash should not be nil")
+		testutil.Equals(t, want, *chk.Raw.Hash)
 	}
 }
 
@@ -100,8 +102,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
 			expectedSeries: []rawSeries{
@@ -116,8 +118,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 2,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
 			expectedSeries: []rawSeries{
@@ -132,8 +134,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 4,
 				MaxTime: 6,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 			},
 			expectedSeries: []rawSeries{},
@@ -143,8 +145,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 				},
 			},
 			expectedError: "rpc error: code = InvalidArgument desc = no matchers specified (excluding external labels)",
@@ -154,8 +156,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
 				},
 			},
 			expectedSeries: []rawSeries{},
@@ -165,8 +167,8 @@ func TestTSDBStore_Series(t *testing.T) {
 			req: &storepb.SeriesRequest{
 				MinTime: 1,
 				MaxTime: 3,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
 				},
 				SkipChunks: true,
 			},
@@ -258,8 +260,8 @@ func TestTSDBStore_SeriesAccessWithDelegateClosing(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: math.MaxInt64,
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+			Matchers: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 			},
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		}, csrv))
@@ -420,8 +422,8 @@ func TestTSDBStore_SeriesAccessWithoutDelegateClosing(t *testing.T) {
 		testutil.Ok(t, store.Series(&storepb.SeriesRequest{
 			MinTime: 0,
 			MaxTime: math.MaxInt64,
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+			Matchers: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 			},
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		}, srv))
@@ -560,20 +562,22 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			// Add external labels & frame it.
 			s := r.GetSeries()
 			bytesLeftForChunks := store.maxBytesPerFrame
-			lbls := make([]labelpb.ZLabel, 0, len(s.Labels)+extLabels.Len())
+			lbls := make([]*labelpb.Label, 0, len(s.Labels)+extLabels.Len())
 			for _, l := range s.Labels {
-				lbls = append(lbls, labelpb.ZLabel{
+				lbl := &labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
+				}
+				lbls = append(lbls, lbl)
+				bytesLeftForChunks -= proto.Size(lbl)
 			}
 			extLabels.Range(func(l labels.Label) {
-				lbls = append(lbls, labelpb.ZLabel{
+				lbl := &labelpb.Label{
 					Name:  l.Name,
 					Value: l.Value,
-				})
-				bytesLeftForChunks -= lbls[len(lbls)-1].Size()
+				}
+				lbls = append(lbls, lbl)
+				bytesLeftForChunks -= proto.Size(lbl)
 			})
 			sort.Slice(lbls, func(i, j int) bool {
 				return lbls[i].Name < lbls[j].Name
@@ -583,7 +587,7 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			frame := &storepb.Series{Labels: lbls}
 			for i, c := range s.Chunks {
 				frame.Chunks = append(frame.Chunks, c)
-				frameBytesLeft -= c.Size()
+				frameBytesLeft -= proto.Size(c)
 
 				if i == len(s.Chunks)-1 {
 					break
@@ -606,8 +610,8 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			Req: &storepb.SeriesRequest{
 				MinTime: 0,
 				MaxTime: math.MaxInt64,
-				Matchers: []storepb.LabelMatcher{
-					{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+				Matchers: []*storepb.LabelMatcher{
+					&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 				},
 				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 			},

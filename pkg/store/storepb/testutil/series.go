@@ -44,6 +44,40 @@ const (
 	LabelLongSuffix = "aaaaaaaaaabbbbbbbbbbccccccccccdddddddddd"
 )
 
+// protoLabelsEqual compares two slices of proto Label pointers for equality.
+func protoLabelsEqual(a, b []*labelpb.Label) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !proto.Equal(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// protoChunksEqual compares two slices of proto AggrChunk pointers for equality.
+func protoChunksEqual(a, b []*storepb.AggrChunk) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !proto.Equal(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// protoSeriesEqual compares two storepb.Series for equality using proto.Equal for nested messages.
+func protoSeriesEqual(a, b *storepb.Series) bool {
+	if !protoLabelsEqual(a.Labels, b.Labels) {
+		return false
+	}
+	return protoChunksEqual(a.Chunks, b.Chunks)
+}
+
 func allPostings(ctx context.Context, t testing.TB, ix tsdb.IndexReader) index.Postings {
 	k, v := index.AllPostingsKey()
 	p, err := ix.Postings(ctx, k, v)
@@ -369,7 +403,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					// Huge responses can produce unreadable diffs - make it more human readable.
 					if len(c.ExpectedSeries) > 4 {
 						for j := range c.ExpectedSeries {
-							testutil.Equals(t, c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels)
+							testutil.Equals(t, true, protoLabelsEqual(c.ExpectedSeries[j].Labels, srv.SeriesSet[j].Labels), "series %d labels mismatch", j)
 
 							// Check chunks when it is not a skip chunk query
 							if !c.Req.SkipChunks {
@@ -377,14 +411,14 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 									testutil.Equals(t, len(c.ExpectedSeries[j].Chunks), len(srv.SeriesSet[j].Chunks), "%v series chunks number mismatch", j)
 								}
 								for ci := range c.ExpectedSeries[j].Chunks {
-									testutil.Equals(t, c.ExpectedSeries[j].Chunks[ci], srv.SeriesSet[j].Chunks[ci], "%v series chunks mismatch %v", j, ci)
+									testutil.Equals(t, true, proto.Equal(c.ExpectedSeries[j].Chunks[ci], srv.SeriesSet[j].Chunks[ci]), "%v series chunks mismatch %v", j, ci)
 								}
 							}
 						}
 					} else {
 						testutil.Equals(t, true, len(c.ExpectedSeries) == len(srv.SeriesSet))
 						for i := range c.ExpectedSeries {
-							testutil.Equals(t, c.ExpectedSeries[i], srv.SeriesSet[i])
+							testutil.Equals(t, true, protoSeriesEqual(c.ExpectedSeries[i], srv.SeriesSet[i]), "series %d mismatch", i)
 						}
 					}
 
@@ -397,7 +431,7 @@ func TestServerSeries(t testutil.TB, store storepb.StoreServer, cases ...*Series
 					testutil.Equals(t, len(c.ExpectedHints), len(actualHints))
 					for i, hint := range actualHints {
 						if c.HintsCompareFunc == nil {
-							testutil.Equals(t, c.ExpectedHints[i], hint)
+							testutil.Assert(t, proto.Equal(&c.ExpectedHints[i], &hint), "hints %d mismatch", i)
 						} else {
 							c.HintsCompareFunc(t, c.ExpectedHints[i], hint)
 						}

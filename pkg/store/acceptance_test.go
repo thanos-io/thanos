@@ -34,7 +34,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/promclient"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
@@ -47,7 +46,7 @@ func TestMain(m *testing.M) {
 }
 
 type labelNameCallCase struct {
-	matchers []storepb.LabelMatcher
+	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
 
@@ -58,7 +57,7 @@ type labelNameCallCase struct {
 type labelValuesCallCase struct {
 	label string
 
-	matchers []storepb.LabelMatcher
+	matchers []*storepb.LabelMatcher
 	start    int64
 	end      int64
 
@@ -67,7 +66,7 @@ type labelValuesCallCase struct {
 }
 
 type seriesCallCase struct {
-	matchers   []storepb.LabelMatcher
+	matchers   []*storepb.LabelMatcher
 	start      int64
 	end        int64
 	skipChunks bool
@@ -154,30 +153,30 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"bar", "foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
+					matchers:      []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
 				},
 				{
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue2"}},
+					matchers:      []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "foovalue2"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
 				},
 				// Matchers on external labels.
 				{
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"bar", "foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:      []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 			},
 			labelValuesCalls: []labelValuesCallCase{
@@ -193,13 +192,13 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					end:            timestamp.FromTime(maxTime),
 					label:          "foo",
 					expectedValues: []string{"foovalue1"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "barvalue1"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "foo",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
 				},
 				// Matchers on external labels.
 				{
@@ -207,40 +206,40 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					end:            timestamp.FromTime(maxTime),
 					label:          "region",
 					expectedValues: []string(nil),
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "nonexistent"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "nonexistent"}},
 				},
 				{
 					start:          timestamp.FromTime(minTime),
 					end:            timestamp.FromTime(maxTime),
 					label:          "region",
 					expectedValues: []string(nil),
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-east"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-east"}},
 				},
 				{
 					start:          timestamp.FromTime(minTime),
 					end:            timestamp.FromTime(maxTime),
 					label:          "foo",
 					expectedValues: []string{"foovalue1", "foovalue2"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:          timestamp.FromTime(minTime),
 					end:            timestamp.FromTime(maxTime),
 					label:          "bar",
 					expectedValues: []string{"barvalue1"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "foo",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 				{
 					start:    timestamp.FromTime(minTime),
 					end:      timestamp.FromTime(maxTime),
 					label:    "bar",
-					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "different"}},
 				},
 			},
 		},
@@ -253,11 +252,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			},
 			seriesCalls: []seriesCallCase{
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
-					},
+					start:      timestamp.FromTime(minTime),
+					end:        timestamp.FromTime(maxTime),
+					matchers:   []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"}},
 					skipChunks: true,
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("foo", "bar", "region", "eu-west"),
@@ -280,8 +277,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
 					label: "region",
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
 						{Type: storepb.LabelMatcher_EQ, Name: "job", Value: "C"},
 					},
 					expectedValues: []string{"eu-west"},
@@ -307,11 +303,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 			},
 			seriesCalls: []seriesCallCase{
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
@@ -321,8 +315,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
@@ -332,18 +325,15 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "missing"},
 					},
 					expectedLabels: []labels.Labels{},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "missing", Value: ""},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "missing", Value: ""}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
@@ -353,33 +343,27 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NEQ, Name: "n", Value: "1"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NEQ, Name: "n", Value: "1"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".+"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".+"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".*"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: ".*"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
@@ -389,11 +373,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: ""},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "i", Value: ""}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
@@ -401,29 +383,24 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NEQ, Name: "missing", Value: ""},
-					},
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NEQ, Name: "missing", Value: ""}},
 					expectedLabels: []labels.Labels{},
 				},
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "a"},
 					},
 					expectedLabels: []labels.Labels{
@@ -432,11 +409,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "^1$"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "n", Value: "^1$"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
@@ -446,8 +421,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -457,8 +431,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^a?$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -467,11 +440,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
@@ -481,8 +452,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -492,8 +462,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.*$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -505,8 +474,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^.+$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -515,33 +483,35 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "^1$"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "^1$"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1|2.5"},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "1|2.5"}},
+					expectedLabels: []labels.Labels{
+						labels.FromStrings("n", "2", "region", "eu-west"),
 					},
+				},
+				{
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "(1|2.5)"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 					},
@@ -549,18 +519,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_NRE, Name: "n", Value: "(1|2.5)"},
-					},
-					expectedLabels: []labels.Labels{
-						labels.FromStrings("n", "2", "region", "eu-west"),
-					},
-				},
-				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -571,8 +530,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^a?$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -582,8 +540,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -594,8 +551,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.*$"},
 					},
 					expectedLabels: []labels.Labels{},
@@ -603,8 +559,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NRE, Name: "i", Value: "^.+$"},
 					},
 					expectedLabels: []labels.Labels{
@@ -614,8 +569,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: ""},
 						{Type: storepb.LabelMatcher_EQ, Name: "i", Value: "a"},
 					},
@@ -626,8 +580,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 				{
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "n", Value: "1"},
 						{Type: storepb.LabelMatcher_NEQ, Name: "i", Value: "b"},
 						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "^(b|a).*$"},
 					},
@@ -636,11 +589,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "(1|2)"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "n", Value: "(1|2)"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
@@ -649,54 +600,44 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "a|b"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: "a|b"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(a|b)"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(a|b)"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("i", "a", "n", "1", "region", "eu-west"),
 						labels.FromStrings("i", "b", "n", "1", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "x1|2"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "n", Value: "x1|2"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "n", Value: "2|2\\.5"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "n", Value: "2|2\\.5"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "2", "region", "eu-west"),
 						labels.FromStrings("n", "2.5", "region", "eu-west"),
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "c||d"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: "c||d"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
@@ -704,11 +645,9 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					},
 				},
 				{
-					start: timestamp.FromTime(minTime),
-					end:   timestamp.FromTime(maxTime),
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(c||d)"},
-					},
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "i", Value: "(c||d)"}},
 					expectedLabels: []labels.Labels{
 						labels.FromStrings("n", "1", "region", "eu-west"),
 						labels.FromStrings("n", "2", "region", "eu-west"),
@@ -729,7 +668,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"__name__", "foo", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "region", Value: ".*"}},
+					matchers:      []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "region", Value: ".*"}},
 				},
 			},
 			labelValuesCalls: []labelValuesCallCase{
@@ -737,8 +676,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start: timestamp.FromTime(minTime),
 					end:   timestamp.FromTime(maxTime),
 					label: "region",
-					matchers: []storepb.LabelMatcher{
-						{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
+					matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"},
 						{Type: storepb.LabelMatcher_RE, Name: "region", Value: ".*"},
 					},
 					expectedValues: []string{"eu-west"},
@@ -761,7 +699,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					start:         timestamp.FromTime(minTime),
 					end:           timestamp.FromTime(maxTime),
 					expectedNames: []string{"__name__", "pod", "region"},
-					matchers:      []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+					matchers:      []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
 				},
 				{
 					start:         timestamp.FromTime(minTime),
@@ -775,7 +713,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					end:            timestamp.FromTime(maxTime),
 					label:          "pod",
 					expectedValues: []string{"pod-1"},
-					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
+					matchers:       []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "kube_pod_info"}},
 				},
 				{
 					start:          timestamp.FromTime(minTime),
@@ -897,8 +835,7 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 		testutil.Ok(t, client.Series(&storepb.SeriesRequest{
 			MinTime: baseT,
 			MaxTime: baseT + offset,
-			Matchers: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
+			Matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
 				{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
 			},
 		}, srv))
@@ -907,10 +844,11 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 
 		firstSeries := srv.SeriesSet[0]
 
-		testutil.Equals(t, []labelpb.ZLabel{
-			{Name: "a", Value: "b"},
-			{Name: "region", Value: "eu-west"},
-		}, firstSeries.Labels)
+		testutil.Equals(t, 2, len(firstSeries.Labels))
+		testutil.Equals(t, "a", firstSeries.Labels[0].Name)
+		testutil.Equals(t, "b", firstSeries.Labels[0].Value)
+		testutil.Equals(t, "region", firstSeries.Labels[1].Name)
+		testutil.Equals(t, "eu-west", firstSeries.Labels[1].Value)
 
 		testutil.Equals(t, 1093, len(firstSeries.Chunks))
 		for i := 0; i < len(firstSeries.Chunks)-1; i++ {
@@ -1185,11 +1123,9 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 	srv := newStoreSeriesServer(ctx)
 
 	testutil.Ok(t, client.Series(&storepb.SeriesRequest{
-		MinTime: minTime.Unix(),
-		MaxTime: maxTime.Unix(),
-		Matchers: []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"},
-		},
+		MinTime:  minTime.Unix(),
+		MaxTime:  maxTime.Unix(),
+		Matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "b"}},
 	}, srv))
 
 	receivedLabels := make([]labels.Labels, 0)

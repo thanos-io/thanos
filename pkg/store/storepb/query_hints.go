@@ -10,14 +10,7 @@ import (
 
 func (m *QueryHints) toPromQL(labelMatchers []*LabelMatcher) string {
 	grouping := m.Grouping.toPromQL()
-	// Convert []*LabelMatcher to []LabelMatcher for MatchersToString
-	matchers := make([]LabelMatcher, 0, len(labelMatchers))
-	for _, lm := range labelMatchers {
-		if lm != nil {
-			matchers = append(matchers, *lm)
-		}
-	}
-	matcherStr := MatchersToString(matchers...)
+	matcherStr := MatchersToString(labelMatchers...)
 	queryRange := m.Range.toPromQL()
 
 	query := fmt.Sprintf("%s %s (%s%s)", m.Func.Name, grouping, matcherStr, queryRange)

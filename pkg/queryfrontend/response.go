@@ -4,9 +4,11 @@
 package queryfrontend
 
 import (
+	"encoding/json"
 	"unsafe"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
 // ThanosResponseExtractor helps to extract specific info from Query Response.
@@ -62,5 +64,79 @@ func (m *ThanosLabelsResponse) GetStats() *queryrange.PrometheusResponseStats {
 
 // GetStats returns response stats. Unimplemented for ThanosSeriesResponse.
 func (m *ThanosSeriesResponse) GetStats() *queryrange.PrometheusResponseStats {
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for ThanosLabelsResponse.
+// Headers are excluded from JSON serialization to match the original gogoproto behavior.
+func (m *ThanosLabelsResponse) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		Status    string   `json:"status"`
+		Data      []string `json:"data"`
+		ErrorType string   `json:"errorType,omitempty"`
+		Error     string   `json:"error,omitempty"`
+	}
+	return json.Marshal(&alias{
+		Status:    m.Status,
+		Data:      m.Data,
+		ErrorType: m.ErrorType,
+		Error:     m.Error,
+	})
+}
+
+// UnmarshalJSON implements json.Unmarshaler for ThanosLabelsResponse.
+// Headers are excluded from JSON serialization to match the original gogoproto behavior.
+func (m *ThanosLabelsResponse) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		Status    string   `json:"status"`
+		Data      []string `json:"data"`
+		ErrorType string   `json:"errorType,omitempty"`
+		Error     string   `json:"error,omitempty"`
+	}
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	m.Status = a.Status
+	m.Data = a.Data
+	m.ErrorType = a.ErrorType
+	m.Error = a.Error
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for ThanosSeriesResponse.
+// Headers are excluded from JSON serialization to match the original gogoproto behavior.
+func (m *ThanosSeriesResponse) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		Status    string              `json:"status"`
+		Data      []*labelpb.LabelSet `json:"data"`
+		ErrorType string              `json:"errorType,omitempty"`
+		Error     string              `json:"error,omitempty"`
+	}
+	return json.Marshal(&alias{
+		Status:    m.Status,
+		Data:      m.Data,
+		ErrorType: m.ErrorType,
+		Error:     m.Error,
+	})
+}
+
+// UnmarshalJSON implements json.Unmarshaler for ThanosSeriesResponse.
+// Headers are excluded from JSON serialization to match the original gogoproto behavior.
+func (m *ThanosSeriesResponse) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		Status    string              `json:"status"`
+		Data      []*labelpb.LabelSet `json:"data"`
+		ErrorType string              `json:"errorType,omitempty"`
+		Error     string              `json:"error,omitempty"`
+	}
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	m.Status = a.Status
+	m.Data = a.Data
+	m.ErrorType = a.ErrorType
+	m.Error = a.Error
 	return nil
 }

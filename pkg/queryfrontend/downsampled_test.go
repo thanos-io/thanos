@@ -14,29 +14,29 @@ import (
 func TestDownsampled_MinResponseTime(t *testing.T) {
 	for _, tc := range []struct {
 		desc          string
-		sampleStreams []queryrange.SampleStream
+		sampleStreams []*queryrange.SampleStream
 		expected      int64
 	}{
 		{
 			desc:          "empty []sampleStream",
-			sampleStreams: []queryrange.SampleStream{},
+			sampleStreams: []*queryrange.SampleStream{},
 			expected:      -1,
 		},
 		{
 			desc: "one SampleStream with zero samples",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{},
+					Samples: []*cortexpb.Sample{},
 				},
 			},
 			expected: -1,
 		},
 		{
 			desc: "one SampleStream with one sample at zero time",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 0},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 0},
 					},
 				},
 			},
@@ -44,10 +44,10 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "one SampleStream with one sample",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
 					},
 				},
 			},
@@ -55,15 +55,15 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "two SampleStreams, first is the earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
 					},
 				},
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 2},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 2},
 					},
 				},
 			},
@@ -71,21 +71,21 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "three SampleStreams, second is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 2},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 2},
 						{TimestampMs: 3},
 					},
 				},
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
 					},
 				},
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 2},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 2},
 					},
 				},
 			},
@@ -93,21 +93,21 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "three SampleStreams, last is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 2},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 2},
 						{TimestampMs: 3},
 					},
 				},
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 2},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 2},
 					},
 				},
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
 					},
 				},
 			},
@@ -115,37 +115,21 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "three histogram SampleStreams, last is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
 						{Timestamp: 3},
 					},
 				},
 				{
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
 					},
 				},
 				{
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 1},
-					},
-				},
-			},
-			expected: 1,
-		},
-		{
-			desc: "mixed float and histogram SampleStreams, float is earliest",
-			sampleStreams: []queryrange.SampleStream{
-				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
-					},
-				},
-				{
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 1},
 					},
 				},
 			},
@@ -153,13 +137,29 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "mixed float and histogram SampleStreams, float is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 1},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
 					},
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+				},
+				{
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
+					},
+				},
+			},
+			expected: 1,
+		},
+		{
+			desc: "mixed float and histogram SampleStreams, float is earliest",
+			sampleStreams: []*queryrange.SampleStream{
+				{
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 1},
+					},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
 					},
 				},
 			},
@@ -167,15 +167,15 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "mixed float and histogram SampleStreams, histogram is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 3},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 3},
 					},
 				},
 				{
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
 					},
 				},
 			},
@@ -183,13 +183,13 @@ func TestDownsampled_MinResponseTime(t *testing.T) {
 		},
 		{
 			desc: "mixed float and histogram SampleStream, histogram is earliest",
-			sampleStreams: []queryrange.SampleStream{
+			sampleStreams: []*queryrange.SampleStream{
 				{
-					Samples: []cortexpb.Sample{
-						{TimestampMs: 3},
+					Samples: []*cortexpb.Sample{
+					&cortexpb.Sample{TimestampMs: 3},
 					},
-					Histograms: []queryrange.SampleHistogramPair{
-						{Timestamp: 2},
+					Histograms: []*queryrange.SampleHistogramPair{
+					&queryrange.SampleHistogramPair{Timestamp: 2},
 					},
 				},
 			},

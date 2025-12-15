@@ -68,16 +68,16 @@ func (m *ZLabel) String() string {
 // ProtoMessage marks this as a protobuf message.
 func (*ZLabel) ProtoMessage() {}
 
-// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
+// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel.
+// With -tags slicelabels, labels.Labels is a slice of labels.Label which has
+// the same memory layout as ZLabel, allowing zero-copy conversion.
 func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
 	return *(*[]ZLabel)(unsafe.Pointer(&lset))
 }
 
-// ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []ZLabel.
-// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
-// Prometheus Labels will hold this memory as well.
+// ZLabelsToPromLabels converts slice of labelpb.ZLabel to Prometheus labels.Labels.
+// With -tags slicelabels, labels.Labels is a slice of labels.Label which has
+// the same memory layout as ZLabel, allowing zero-copy conversion.
 func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
@@ -881,11 +881,40 @@ func DeepCopyLabels(lbls []*Label) []*Label {
 func ZLabelSetsToLabelSets(zss []ZLabelSet) []*LabelSet {
 	result := make([]*LabelSet, len(zss))
 	for i, zs := range zss {
-		result[i] = &LabelSet{
-			Labels: make([]*Label, len(zs.Labels)),
-		}
-		for j, zl := range zs.Labels {
-			result[i].Labels[j] = &Label{Name: zl.Name, Value: zl.Value}
+		result[i] = ZLabelSetToLabelSet(zs)
+	}
+	return result
+}
+
+// ZLabelSetToLabelSet converts a single ZLabelSet to *LabelSet (protobuf v2 generated type).
+func ZLabelSetToLabelSet(zs ZLabelSet) *LabelSet {
+	if len(zs.Labels) == 0 {
+		return nil
+	}
+	result := &LabelSet{
+		Labels: make([]*Label, len(zs.Labels)),
+	}
+	for i, zl := range zs.Labels {
+		result.Labels[i] = &Label{Name: zl.Name, Value: zl.Value}
+	}
+	return result
+}
+
+// ZLabelsToLabels converts []ZLabel to []*Label (protobuf v2 generated type).
+func ZLabelsToLabels(zls []ZLabel) []*Label {
+	result := make([]*Label, len(zls))
+	for i, zl := range zls {
+		result[i] = &Label{Name: zl.Name, Value: zl.Value}
+	}
+	return result
+}
+
+// LabelsToZLabels converts []*Label (protobuf v2 generated type) to []ZLabel.
+func LabelsToZLabels(ls []*Label) []ZLabel {
+	result := make([]ZLabel, len(ls))
+	for i, l := range ls {
+		if l != nil {
+			result[i] = ZLabel{Name: l.Name, Value: l.Value}
 		}
 	}
 	return result

@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pdata/pmetric"
 	"go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -38,7 +39,7 @@ func TestFromMetrics(t *testing.T) {
 		t.Run(fmt.Sprintf("successful/keepIdentifyingAttributes=%v", keepIdentifyingResourceAttributes), func(t *testing.T) {
 			converter := NewPrometheusConverter()
 			payload := createExportRequest(5, 128, 128, 2, 0)
-			var expMetadata []prompb.MetricMetadata
+			var expMetadata []*prompb.MetricMetadata
 			resourceMetricsSlice := payload.Metrics().ResourceMetrics()
 			for i := 0; i < resourceMetricsSlice.Len(); i++ {
 				scopeMetricsSlice := resourceMetricsSlice.At(i).ScopeMetrics()
@@ -47,7 +48,7 @@ func TestFromMetrics(t *testing.T) {
 					for k := 0; k < metricSlice.Len(); k++ {
 						metric := metricSlice.At(k)
 						promName := BuildCompliantName(metric, "", false, false)
-						expMetadata = append(expMetadata, prompb.MetricMetadata{
+						expMetadata = append(expMetadata, &prompb.MetricMetadata{
 							Type:             otelMetricTypeToPromMetricType(metric),
 							MetricFamilyName: promName,
 							Help:             metric.Description(),
@@ -65,7 +66,7 @@ func TestFromMetrics(t *testing.T) {
 			require.NoError(t, err.Err())
 			require.Empty(t, annots)
 
-			if diff := cmp.Diff(expMetadata, converter.Metadata()); diff != "" {
+			if diff := cmp.Diff(expMetadata, converter.Metadata(), protocmp.Transform()); diff != "" {
 				t.Errorf("mismatch (-want +got):\n%s", diff)
 			}
 
@@ -75,7 +76,7 @@ func TestFromMetrics(t *testing.T) {
 			target_info_count := 0
 			for _, s := range ts {
 				b := labels.NewScratchBuilder(2)
-				lbls := labelProtosToLabels(&b, s.Labels)
+				lbls := labelProtosToLabels(&b, labelpb.LabelsToZLabels(s.Labels))
 				if lbls.Get(labels.MetricName) == "target_info" {
 					target_info_count++
 					require.Equal(t, "test-namespace/test-service", lbls.Get("job"))

@@ -88,6 +88,7 @@ var (
 )
 
 type mockedEndpoint struct {
+	infopb.UnimplementedInfoServer
 	infoDelay time.Duration
 	info      infopb.InfoResponse
 	err       error
@@ -154,7 +155,7 @@ func startTestEndpoints(testEndpointMeta []testEndpointMeta) (*testEndpoints, er
 		endpointSrv := &mockedEndpoint{
 			err: meta.err,
 			info: infopb.InfoResponse{
-				LabelSets:      meta.extlsetFn(listener.Addr().String()),
+				LabelSets:      labelpb.ZLabelSetsToLabelSets(meta.extlsetFn(listener.Addr().String())),
 				Store:          meta.Store,
 				MetricMetadata: meta.MetricMetadata,
 				Rules:          meta.Rules,

@@ -836,7 +836,7 @@ func setupSetsOfExpectedAndActualStoreClientLabelSets(
 		testStore := store.TSDBStore{}
 		testStore.SetExtLset(expectedExternalLabelSets[i])
 
-		expectedClientLabelSets := labelpb.ZLabelSetsToPromLabelSets(testStore.LabelSet()...)
+		expectedClientLabelSets := labelpb.LabelSetsToPromLabelSets(testStore.LabelSet())
 		setOfExpectedClientLabelSets = append(setOfExpectedClientLabelSets, expectedClientLabelSets)
 
 		actualClientLabelSets := actualStoreClients[i].LabelSets()

@@ -17,17 +17,17 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 		{
 			a:   &TSDBStatisticsEntry{},
 			b:   &TSDBStatisticsEntry{},
-			exp: &TSDBStatisticsEntry{},
+			exp: &TSDBStatisticsEntry{HeadStatistics: &HeadStatistics{}},
 		},
 		{
 			a: &TSDBStatisticsEntry{
-				HeadStatistics: HeadStatistics{
+				HeadStatistics: &HeadStatistics{
 					NumSeries:     20,
 					NumLabelPairs: 10,
 					MinTime:       5,
 					MaxTime:       100,
 				},
-				SeriesCountByMetricName: []Statistic{
+				SeriesCountByMetricName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 40,
@@ -45,7 +45,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 5,
 					},
 				},
-				LabelValueCountByLabelName: []Statistic{
+				LabelValueCountByLabelName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 40,
@@ -63,7 +63,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 5,
 					},
 				},
-				MemoryInBytesByLabelName: []Statistic{
+				MemoryInBytesByLabelName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 4000,
@@ -81,7 +81,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 500,
 					},
 				},
-				SeriesCountByLabelValuePair: []Statistic{
+				SeriesCountByLabelValuePair: []*Statistic{
 					{
 						Name:  "job=test",
 						Value: 40,
@@ -101,13 +101,13 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 				},
 			},
 			b: &TSDBStatisticsEntry{
-				HeadStatistics: HeadStatistics{
+				HeadStatistics: &HeadStatistics{
 					NumSeries:     20,
 					NumLabelPairs: 10,
 					MinTime:       10,
 					MaxTime:       200,
 				},
-				SeriesCountByMetricName: []Statistic{
+				SeriesCountByMetricName: []*Statistic{
 					{
 						Name:  "instance",
 						Value: 30,
@@ -125,7 +125,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 1,
 					},
 				},
-				LabelValueCountByLabelName: []Statistic{
+				LabelValueCountByLabelName: []*Statistic{
 					{
 						Name:  "instance",
 						Value: 30,
@@ -143,7 +143,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 1,
 					},
 				},
-				MemoryInBytesByLabelName: []Statistic{
+				MemoryInBytesByLabelName: []*Statistic{
 					{
 						Name:  "instance",
 						Value: 3000,
@@ -161,7 +161,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 100,
 					},
 				},
-				SeriesCountByLabelValuePair: []Statistic{
+				SeriesCountByLabelValuePair: []*Statistic{
 					{
 						Name:  "job=test",
 						Value: 30,
@@ -181,13 +181,13 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 				},
 			},
 			exp: &TSDBStatisticsEntry{
-				HeadStatistics: HeadStatistics{
+				HeadStatistics: &HeadStatistics{
 					NumSeries:     40,
 					NumLabelPairs: 20,
 					MinTime:       5,
 					MaxTime:       200,
 				},
-				SeriesCountByMetricName: []Statistic{
+				SeriesCountByMetricName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 60,
@@ -209,7 +209,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 1,
 					},
 				},
-				LabelValueCountByLabelName: []Statistic{
+				LabelValueCountByLabelName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 40,
@@ -231,7 +231,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 1,
 					},
 				},
-				MemoryInBytesByLabelName: []Statistic{
+				MemoryInBytesByLabelName: []*Statistic{
 					{
 						Name:  "__name__",
 						Value: 6000,
@@ -253,7 +253,7 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 100,
 					},
 				},
-				SeriesCountByLabelValuePair: []Statistic{
+				SeriesCountByLabelValuePair: []*Statistic{
 					{
 						Name:  "job=test",
 						Value: 70,

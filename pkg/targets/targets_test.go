@@ -10,6 +10,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestDedupTargets(t *testing.T) {
@@ -29,23 +30,23 @@ func TestDedupTargets(t *testing.T) {
 			targets: &targetspb.TargetDiscovery{
 				DroppedTargets: []*targetspb.DroppedTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:80"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:80"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
 					},
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:80"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:80"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
 					},
 				},
@@ -53,12 +54,12 @@ func TestDedupTargets(t *testing.T) {
 			want: &targetspb.TargetDiscovery{
 				DroppedTargets: []*targetspb.DroppedTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:80"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:80"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
 					},
 				},
@@ -70,38 +71,38 @@ func TestDedupTargets(t *testing.T) {
 			targets: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
 						Health:     targetspb.TargetHealth_UP,
 					},
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
@@ -112,17 +113,17 @@ func TestDedupTargets(t *testing.T) {
 			want: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
@@ -137,38 +138,38 @@ func TestDedupTargets(t *testing.T) {
 			targets: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
 						Health:     targetspb.TargetHealth_UP,
 					},
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
@@ -179,17 +180,17 @@ func TestDedupTargets(t *testing.T) {
 			want: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
@@ -204,66 +205,66 @@ func TestDedupTargets(t *testing.T) {
 			targets: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "0"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "0"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
 						Health:     targetspb.TargetHealth_UP,
-						LastScrape: time.Unix(1, 0),
+						LastScrape: timestamppb.New(time.Unix(1, 0)),
 					},
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
-							{Name: "replica", Value: "1"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
+							&labelpb.Label{Name: "replica", Value: "1"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
 						Health:     targetspb.TargetHealth_UP,
-						LastScrape: time.Unix(2, 0),
+						LastScrape: timestamppb.New(time.Unix(2, 0)),
 					},
 				},
 			},
 			want: &targetspb.TargetDiscovery{
 				ActiveTargets: []*targetspb.ActiveTarget{
 					{
-						DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "__address__", Value: "localhost:9090"},
-							{Name: "__metrics_path__", Value: "/metrics"},
-							{Name: "__scheme__", Value: "http"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						DiscoveredLabels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "__address__", Value: "localhost:9090"},
+							&labelpb.Label{Name: "__metrics_path__", Value: "/metrics"},
+							&labelpb.Label{Name: "__scheme__", Value: "http"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
-						Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-							{Name: "instance", Value: "localhost:9090"},
-							{Name: "job", Value: "myself"},
-							{Name: "prometheus", Value: "ha"},
+						Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
+							&labelpb.Label{Name: "instance", Value: "localhost:9090"},
+							&labelpb.Label{Name: "job", Value: "myself"},
+							&labelpb.Label{Name: "prometheus", Value: "ha"},
 						}},
 						ScrapePool: "myself",
 						ScrapeUrl:  "http://localhost:9090/metrics",
 						Health:     targetspb.TargetHealth_UP,
-						LastScrape: time.Unix(2, 0),
+						LastScrape: timestamppb.New(time.Unix(2, 0)),
 					},
 				},
 			},

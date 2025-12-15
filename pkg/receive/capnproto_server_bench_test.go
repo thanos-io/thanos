@@ -21,23 +21,23 @@ import (
 func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 	wreq := storepb.WriteRequest{
 		Tenant: "example-tenant",
-		Timeseries: []prompb.TimeSeries{
+		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "prometheus"},
-				},
-				Samples: []prompb.Sample{
+				}),
+				Samples: []*prompb.Sample{
 					{Timestamp: 1, Value: 1},
 					{Timestamp: 2, Value: 2},
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "thanos"},
-				},
-				Samples: []prompb.Sample{
+				}),
+				Samples: []*prompb.Sample{
 					{Timestamp: 3, Value: 3},
 					{Timestamp: 4, Value: 4},
 				},

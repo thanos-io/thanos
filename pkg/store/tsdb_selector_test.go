@@ -9,6 +9,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -19,20 +20,20 @@ func TestMatchersForLabelSets(t *testing.T) {
 	tests := []struct {
 		name      string
 		labelSets []labels.Labels
-		want      []storepb.LabelMatcher
+		want      []*storepb.LabelMatcher
 	}{
 		{
 			name:      "empty label sets",
 			labelSets: nil,
-			want:      []storepb.LabelMatcher{},
+			want:      []*storepb.LabelMatcher{},
 		},
 		{
 			name: "single label set with single label",
 			labelSets: []labels.Labels{
 				labels.FromStrings("a", "1"),
 			},
-			want: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
+			want: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
 			},
 		},
 		{
@@ -41,8 +42,8 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("a", "2"),
 			},
-			want: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+			want: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
 		{
@@ -50,9 +51,9 @@ func TestMatchersForLabelSets(t *testing.T) {
 			labelSets: []labels.Labels{
 				labels.FromStrings("a", "1", "b", "2"),
 			},
-			want: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
-				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2"},
+			want: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1"},
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2"},
 			},
 		},
 		{
@@ -61,8 +62,8 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("a", "2"),
 			},
-			want: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+			want: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
 			},
 		},
 		{
@@ -71,9 +72,9 @@ func TestMatchersForLabelSets(t *testing.T) {
 				labels.FromStrings("a", "1"),
 				labels.FromStrings("b", "2"),
 			},
-			want: []storepb.LabelMatcher{
-				{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|^$"},
-				{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2|^$"},
+			want: []*storepb.LabelMatcher{
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|^$"},
+				&storepb.LabelMatcher{Type: storepb.LabelMatcher_RE, Name: "b", Value: "2|^$"},
 			},
 		},
 	}
@@ -84,7 +85,10 @@ func TestMatchersForLabelSets(t *testing.T) {
 				return matchers[i].Name < matchers[j].Name
 			})
 
-			testutil.Equals(t, tt.want, matchers)
+			testutil.Equals(t, len(tt.want), len(matchers))
+			for i := range tt.want {
+				testutil.Assert(t, proto.Equal(tt.want[i], matchers[i]), "matcher %d mismatch", i)
+			}
 		})
 	}
 }

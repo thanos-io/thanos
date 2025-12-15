@@ -6,12 +6,14 @@ package rulespb
 import (
 	"encoding/json"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
@@ -237,35 +239,69 @@ func (m *Rule) UnmarshalJSON(entry []byte) error {
 
 func (m *Rule) MarshalJSON() ([]byte, error) {
 	if r := m.GetRecording(); r != nil {
-		return json.Marshal(struct {
-			*RecordingRule
-			Type string `json:"type"`
-		}{
-			RecordingRule: r,
-			Type:          RuleRecordingType,
-		})
+		return json.Marshal(r)
 	}
-	a := m.GetAlert()
-	if a.Alerts == nil {
-		// Ensure that empty slices are marshaled as '[]' and not 'null'.
-		a.Alerts = make([]*AlertInstance, 0)
-	}
-	return json.Marshal(struct {
-		*Alert
-		Type string `json:"type"`
-	}{
-		Alert: a,
-		Type:  RuleAlertingType,
-	})
+	return json.Marshal(m.GetAlert())
 }
 
 func (r *RuleGroup) MarshalJSON() ([]byte, error) {
-	if r.Rules == nil {
+	rules := r.Rules
+	if rules == nil {
 		// Ensure that empty slices are marshaled as '[]' and not 'null'.
-		r.Rules = make([]*Rule, 0)
+		rules = make([]*Rule, 0)
 	}
-	type plain RuleGroup
-	return json.Marshal((*plain)(r))
+	var lastEval time.Time
+	if r.LastEvaluation != nil {
+		lastEval = r.LastEvaluation.AsTime()
+	}
+	return json.Marshal(struct {
+		Name                    string    `json:"name"`
+		File                    string    `json:"file"`
+		Rules                   []*Rule   `json:"rules"`
+		Interval                float64   `json:"interval"`
+		EvaluationTime          float64   `json:"evaluationTime"`
+		LastEvaluation          time.Time `json:"lastEvaluation"`
+		Limit                   int64     `json:"limit"`
+		PartialResponseStrategy string    `json:"partialResponseStrategy"`
+	}{
+		Name:                    r.Name,
+		File:                    r.File,
+		Rules:                   rules,
+		Interval:                r.Interval,
+		EvaluationTime:          r.EvaluationDurationSeconds,
+		LastEvaluation:          lastEval,
+		Limit:                   r.Limit,
+		PartialResponseStrategy: r.PartialResponseStrategy.String(),
+	})
+}
+
+func (r *RuleGroup) UnmarshalJSON(data []byte) error {
+	var v struct {
+		Name                    string    `json:"name"`
+		File                    string    `json:"file"`
+		Rules                   []*Rule   `json:"rules"`
+		Interval                float64   `json:"interval"`
+		EvaluationTime          float64   `json:"evaluationTime"`
+		LastEvaluation          time.Time `json:"lastEvaluation"`
+		Limit                   int64     `json:"limit"`
+		PartialResponseStrategy string    `json:"partialResponseStrategy"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	r.Name = v.Name
+	r.File = v.File
+	r.Rules = v.Rules
+	r.Interval = v.Interval
+	r.EvaluationDurationSeconds = v.EvaluationTime
+	if !v.LastEvaluation.IsZero() {
+		r.LastEvaluation = timestamppb.New(v.LastEvaluation)
+	}
+	r.Limit = v.Limit
+	if err := r.PartialResponseStrategy.UnmarshalJSON([]byte(strconv.Quote(v.PartialResponseStrategy))); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (x *AlertState) UnmarshalJSON(entry []byte) error {
@@ -288,6 +324,222 @@ func (x *AlertState) UnmarshalJSON(entry []byte) error {
 
 func (x *AlertState) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.Quote(strings.ToLower(x.String()))), nil
+}
+
+// labelSetToMap converts a LabelSet to a map for JSON serialization in Prometheus API format.
+func labelSetToMap(ls *labelpb.LabelSet) map[string]string {
+	if ls == nil {
+		return map[string]string{}
+	}
+	m := make(map[string]string, len(ls.Labels))
+	for _, l := range ls.Labels {
+		m[l.Name] = l.Value
+	}
+	return m
+}
+
+// mapToLabelSet converts a map from JSON to a LabelSet.
+// Labels are sorted by name to ensure deterministic ordering.
+func mapToLabelSet(m map[string]string) *labelpb.LabelSet {
+	if len(m) == 0 {
+		return &labelpb.LabelSet{}
+	}
+	lbls := make([]*labelpb.Label, 0, len(m))
+	for k, v := range m {
+		lbls = append(lbls, &labelpb.Label{Name: k, Value: v})
+	}
+	// Sort labels by name to ensure deterministic ordering
+	sort.Slice(lbls, func(i, j int) bool {
+		return lbls[i].Name < lbls[j].Name
+	})
+	return &labelpb.LabelSet{Labels: lbls}
+}
+
+// RecordingRule JSON marshaling for Prometheus API compatibility.
+func (r *RecordingRule) MarshalJSON() ([]byte, error) {
+	var lastEval time.Time
+	if r.LastEvaluation != nil {
+		lastEval = r.LastEvaluation.AsTime()
+	}
+	return json.Marshal(struct {
+		Name           string            `json:"name"`
+		Query          string            `json:"query"`
+		Labels         map[string]string `json:"labels"`
+		Health         string            `json:"health"`
+		LastError      string            `json:"lastError,omitempty"`
+		EvaluationTime float64           `json:"evaluationTime"`
+		LastEvaluation time.Time         `json:"lastEvaluation"`
+		Type           string            `json:"type"`
+	}{
+		Name:           r.Name,
+		Query:          r.Query,
+		Labels:         labelSetToMap(r.Labels),
+		Health:         r.Health,
+		LastError:      r.LastError,
+		EvaluationTime: r.EvaluationDurationSeconds,
+		LastEvaluation: lastEval,
+		Type:           RuleRecordingType,
+	})
+}
+
+func (r *RecordingRule) UnmarshalJSON(data []byte) error {
+	var v struct {
+		Name           string            `json:"name"`
+		Query          string            `json:"query"`
+		Labels         map[string]string `json:"labels"`
+		Health         string            `json:"health"`
+		LastError      string            `json:"lastError,omitempty"`
+		EvaluationTime float64           `json:"evaluationTime"`
+		LastEvaluation time.Time         `json:"lastEvaluation"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	r.Name = v.Name
+	r.Query = v.Query
+	r.Labels = mapToLabelSet(v.Labels)
+	r.Health = v.Health
+	r.LastError = v.LastError
+	r.EvaluationDurationSeconds = v.EvaluationTime
+	if !v.LastEvaluation.IsZero() {
+		r.LastEvaluation = timestamppb.New(v.LastEvaluation)
+	}
+	return nil
+}
+
+// Alert JSON marshaling for Prometheus API compatibility.
+func (a *Alert) MarshalJSON() ([]byte, error) {
+	alerts := a.Alerts
+	if alerts == nil {
+		alerts = make([]*AlertInstance, 0)
+	}
+	var lastEval time.Time
+	if a.LastEvaluation != nil {
+		lastEval = a.LastEvaluation.AsTime()
+	}
+	return json.Marshal(struct {
+		State          string            `json:"state"`
+		Name           string            `json:"name"`
+		Query          string            `json:"query"`
+		Duration       float64           `json:"duration"`
+		Labels         map[string]string `json:"labels"`
+		Annotations    map[string]string `json:"annotations"`
+		Alerts         []*AlertInstance  `json:"alerts"`
+		Health         string            `json:"health"`
+		LastError      string            `json:"lastError,omitempty"`
+		EvaluationTime float64           `json:"evaluationTime"`
+		LastEvaluation time.Time         `json:"lastEvaluation"`
+		KeepFiringFor  float64           `json:"keepFiringFor"`
+		Type           string            `json:"type"`
+	}{
+		State:          strings.ToLower(a.State.String()),
+		Name:           a.Name,
+		Query:          a.Query,
+		Duration:       a.DurationSeconds,
+		Labels:         labelSetToMap(a.Labels),
+		Annotations:    labelSetToMap(a.Annotations),
+		Alerts:         alerts,
+		Health:         a.Health,
+		LastError:      a.LastError,
+		EvaluationTime: a.EvaluationDurationSeconds,
+		LastEvaluation: lastEval,
+		KeepFiringFor:  a.KeepFiringForSeconds,
+		Type:           RuleAlertingType,
+	})
+}
+
+func (a *Alert) UnmarshalJSON(data []byte) error {
+	var v struct {
+		State          AlertState        `json:"state"`
+		Name           string            `json:"name"`
+		Query          string            `json:"query"`
+		Duration       float64           `json:"duration"`
+		Labels         map[string]string `json:"labels"`
+		Annotations    map[string]string `json:"annotations"`
+		Alerts         []*AlertInstance  `json:"alerts"`
+		Health         string            `json:"health"`
+		LastError      string            `json:"lastError,omitempty"`
+		EvaluationTime float64           `json:"evaluationTime"`
+		LastEvaluation time.Time         `json:"lastEvaluation"`
+		KeepFiringFor  float64           `json:"keepFiringFor"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	a.State = v.State
+	a.Name = v.Name
+	a.Query = v.Query
+	a.DurationSeconds = v.Duration
+	a.Labels = mapToLabelSet(v.Labels)
+	a.Annotations = mapToLabelSet(v.Annotations)
+	a.Alerts = v.Alerts
+	a.Health = v.Health
+	a.LastError = v.LastError
+	a.EvaluationDurationSeconds = v.EvaluationTime
+	if !v.LastEvaluation.IsZero() {
+		a.LastEvaluation = timestamppb.New(v.LastEvaluation)
+	}
+	a.KeepFiringForSeconds = v.KeepFiringFor
+	return nil
+}
+
+// AlertInstance JSON marshaling for Prometheus API compatibility.
+func (a *AlertInstance) MarshalJSON() ([]byte, error) {
+	var activeAt *time.Time
+	if a.ActiveAt != nil {
+		t := a.ActiveAt.AsTime()
+		activeAt = &t
+	}
+	return json.Marshal(struct {
+		Labels                  map[string]string `json:"labels"`
+		Annotations             map[string]string `json:"annotations"`
+		State                   string            `json:"state"`
+		ActiveAt                *time.Time        `json:"activeAt,omitempty"`
+		Value                   string            `json:"value"`
+		PartialResponseStrategy string            `json:"partialResponseStrategy"`
+	}{
+		Labels:                  labelSetToMap(a.Labels),
+		Annotations:             labelSetToMap(a.Annotations),
+		State:                   strings.ToLower(a.State.String()),
+		ActiveAt:                activeAt,
+		Value:                   a.Value,
+		PartialResponseStrategy: a.PartialResponseStrategy.String(),
+	})
+}
+
+func (a *AlertInstance) UnmarshalJSON(data []byte) error {
+	var v struct {
+		Labels                  map[string]string `json:"labels"`
+		Annotations             map[string]string `json:"annotations"`
+		State                   string            `json:"state"`
+		ActiveAt                *time.Time        `json:"activeAt,omitempty"`
+		Value                   string            `json:"value"`
+		PartialResponseStrategy string            `json:"partialResponseStrategy"`
+	}
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	if len(v.Labels) > 0 {
+		a.Labels = mapToLabelSet(v.Labels)
+	}
+	if len(v.Annotations) > 0 {
+		a.Annotations = mapToLabelSet(v.Annotations)
+	}
+	if v.State != "" {
+		state, ok := AlertState_value[strings.ToUpper(v.State)]
+		if !ok {
+			return errors.Errorf("unknown alert state: %s", v.State)
+		}
+		a.State = AlertState(state)
+	}
+	if v.ActiveAt != nil {
+		a.ActiveAt = timestamppb.New(*v.ActiveAt)
+	}
+	a.Value = v.Value
+	if err := a.PartialResponseStrategy.UnmarshalJSON([]byte(strconv.Quote(v.PartialResponseStrategy))); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Compare compares alert state x and y and returns:

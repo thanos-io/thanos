@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/efficientgo/core/testutil"
 )
@@ -253,18 +254,18 @@ func BenchmarkZLabelsMarshalUnmarshal(b *testing.B) {
 
 	b.Run("Label", func(b *testing.B) {
 		b.ReportAllocs()
-		lbls := LabelSet{Labels: make([]Label, 0, num)}
+		lbls := LabelSet{Labels: make([]*Label, 0, num)}
 		for i := range num {
-			lbls.Labels = append(lbls.Labels, Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
+			lbls.Labels = append(lbls.Labels, &Label{Name: fmt.Sprintf(fmtLbl, i), Value: fmt.Sprintf(fmtLbl, i)})
 		}
 		b.ResetTimer()
 
 		for b.Loop() {
-			data, err := lbls.Marshal()
+			data, err := proto.Marshal(&lbls)
 			testutil.Ok(b, err)
 
 			dest = Label{}
-			testutil.Ok(b, (&dest).Unmarshal(data))
+			testutil.Ok(b, proto.Unmarshal(data, &dest))
 		}
 	})
 
@@ -544,14 +545,14 @@ func BenchmarkHasWithPrefix(b *testing.B) {
 
 func BenchmarkLabelUnmarshal(b *testing.B) {
 	lblset := LabelSet{
-		Labels: []Label{},
+		Labels: []*Label{},
 	}
 
 	for i := range 1000 {
-		lblset.Labels = append(lblset.Labels, Label{Name: fmt.Sprintf("label%d", i), Value: fmt.Sprintf("value%d", i)})
+		lblset.Labels = append(lblset.Labels, &Label{Name: fmt.Sprintf("label%d", i), Value: fmt.Sprintf("value%d", i)})
 	}
 
-	lblsetm, err := lblset.Marshal()
+	lblsetm, err := proto.Marshal(&lblset)
 	testutil.Ok(b, err)
 
 	b.Run("Unmarshal regular", func(b *testing.B) {
@@ -561,7 +562,7 @@ func BenchmarkLabelUnmarshal(b *testing.B) {
 		for b.Loop() {
 			l := LabelSet{}
 
-			require.NoError(b, l.Unmarshal(lblsetm))
+			require.NoError(b, proto.Unmarshal(lblsetm, &l))
 		}
 	})
 

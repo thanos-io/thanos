@@ -135,8 +135,7 @@ func TestTenantProxyPassing(t *testing.T) {
 		_, _ = q.LabelValues(ctx, &storepb.LabelValuesRequest{})
 		_, _ = q.LabelNames(ctx, &storepb.LabelNamesRequest{})
 
-		seriesMatchers := []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+		seriesMatchers := []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 		}
 
 		_ = q.Series(&storepb.SeriesRequest{Matchers: seriesMatchers}, &storeSeriesServer{ctx: ctx})
@@ -180,8 +179,7 @@ func TestTenantProxyPassing(t *testing.T) {
 		_, _ = q.LabelValues(ctx, &storepb.LabelValuesRequest{})
 		_, _ = q.LabelNames(ctx, &storepb.LabelNamesRequest{})
 
-		seriesMatchers := []storepb.LabelMatcher{
-			{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
+		seriesMatchers := []*storepb.LabelMatcher{&storepb.LabelMatcher{Type: storepb.LabelMatcher_EQ, Name: "foo", Value: "bar"},
 		}
 
 		_ = q.Series(&storepb.SeriesRequest{Matchers: seriesMatchers}, &storeSeriesServer{ctx: ctx})

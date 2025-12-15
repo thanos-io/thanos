@@ -931,6 +931,157 @@ func init() {
 	jsoniter.RegisterTypeDecoderFunc("queryrange.PrometheusResponseQueryableSamplesStatsPerStep", PrometheusResponseQueryableSamplesStatsPerStepJsoniterDecode)
 }
 
+// MarshalJSON implements json.Marshaler for PrometheusResponse.
+// It produces lowercase JSON field names to match the Prometheus API format.
+func (r *PrometheusResponse) MarshalJSON() ([]byte, error) {
+	// Create an anonymous struct with lowercase JSON tags
+	resp := struct {
+		Status    string          `json:"status"`
+		Data      *PrometheusData `json:"data,omitempty"`
+		ErrorType string          `json:"errorType,omitempty"`
+		Error     string          `json:"error,omitempty"`
+		Warnings  []string        `json:"warnings,omitempty"`
+	}{
+		Status:    r.Status,
+		Data:      r.Data,
+		ErrorType: r.ErrorType,
+		Error:     r.Error,
+		Warnings:  r.Warnings,
+	}
+	return json.Marshal(resp)
+}
+
+// UnmarshalJSON implements json.Unmarshaler for PrometheusResponse.
+// It accepts lowercase JSON field names matching the Prometheus API format.
+func (r *PrometheusResponse) UnmarshalJSON(data []byte) error {
+	resp := struct {
+		Status    string          `json:"status"`
+		Data      *PrometheusData `json:"data,omitempty"`
+		ErrorType string          `json:"errorType,omitempty"`
+		Error     string          `json:"error,omitempty"`
+		Warnings  []string        `json:"warnings,omitempty"`
+	}{}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	r.Status = resp.Status
+	r.Data = resp.Data
+	r.ErrorType = resp.ErrorType
+	r.Error = resp.Error
+	r.Warnings = resp.Warnings
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for PrometheusData.
+// It produces lowercase JSON field names to match the Prometheus API format.
+func (d *PrometheusData) MarshalJSON() ([]byte, error) {
+	resp := struct {
+		ResultType string                   `json:"resultType"`
+		Result     []*SampleStream          `json:"result"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis   *Analysis                `json:"analysis"`
+	}{
+		ResultType: d.ResultType,
+		Result:     d.Result,
+		Stats:      d.Stats,
+		Analysis:   d.Analysis,
+	}
+	return json.Marshal(resp)
+}
+
+// UnmarshalJSON implements json.Unmarshaler for PrometheusData.
+// It accepts lowercase JSON field names matching the Prometheus API format.
+func (d *PrometheusData) UnmarshalJSON(data []byte) error {
+	resp := struct {
+		ResultType string                   `json:"resultType"`
+		Result     []*SampleStream          `json:"result"`
+		Stats      *PrometheusResponseStats `json:"stats,omitempty"`
+		Analysis   *Analysis                `json:"analysis,omitempty"`
+	}{}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	d.ResultType = resp.ResultType
+	d.Result = resp.Result
+	d.Stats = resp.Stats
+	d.Analysis = resp.Analysis
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for PrometheusResponseSamplesStats.
+// It ensures peakSamples is always included even when 0.
+func (s *PrometheusResponseSamplesStats) MarshalJSON() ([]byte, error) {
+	resp := struct {
+		PeakSamples                  int32                                             `json:"peakSamples"`
+		TotalQueryableSamples        int64                                             `json:"totalQueryableSamples"`
+		TotalQueryableSamplesPerStep []*PrometheusResponseQueryableSamplesStatsPerStep `json:"totalQueryableSamplesPerStep,omitempty"`
+	}{
+		PeakSamples:                  s.PeakSamples,
+		TotalQueryableSamples:        s.TotalQueryableSamples,
+		TotalQueryableSamplesPerStep: s.TotalQueryableSamplesPerStep,
+	}
+	return json.Marshal(resp)
+}
+
+// UnmarshalJSON implements json.Unmarshaler for PrometheusResponseSamplesStats.
+func (s *PrometheusResponseSamplesStats) UnmarshalJSON(data []byte) error {
+	resp := struct {
+		PeakSamples                  int32                                             `json:"peakSamples"`
+		TotalQueryableSamples        int64                                             `json:"totalQueryableSamples"`
+		TotalQueryableSamplesPerStep []*PrometheusResponseQueryableSamplesStatsPerStep `json:"totalQueryableSamplesPerStep,omitempty"`
+	}{}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	s.PeakSamples = resp.PeakSamples
+	s.TotalQueryableSamples = resp.TotalQueryableSamples
+	s.TotalQueryableSamplesPerStep = resp.TotalQueryableSamplesPerStep
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for Analysis.
+// It produces a string format for ExecutionTime.
+func (a *Analysis) MarshalJSON() ([]byte, error) {
+	if a == nil {
+		return []byte("null"), nil
+	}
+	resp := struct {
+		Name          string      `json:"name,omitempty"`
+		ExecutionTime string      `json:"executionTime,omitempty"`
+		Children      []*Analysis `json:"children"`
+	}{
+		Name:     a.Name,
+		Children: a.Children,
+	}
+	if a.ExecutionTime != nil {
+		resp.ExecutionTime = a.ExecutionTime.AsDuration().String()
+	}
+	return json.Marshal(resp)
+}
+
+// UnmarshalJSON implements json.Unmarshaler for Analysis.
+// It accepts a string format for ExecutionTime.
+func (a *Analysis) UnmarshalJSON(data []byte) error {
+	resp := struct {
+		Name          string      `json:"name,omitempty"`
+		ExecutionTime string      `json:"executionTime,omitempty"`
+		Children      []*Analysis `json:"children,omitempty"`
+	}{}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return err
+	}
+	a.Name = resp.Name
+	a.Children = resp.Children
+	if resp.ExecutionTime != "" {
+		d, err := time.ParseDuration(resp.ExecutionTime)
+		if err != nil {
+			return err
+		}
+		a.ExecutionTime = durationpb.New(d)
+	}
+	return nil
+}
+
 type Duration time.Duration
 
 func (d Duration) MarshalJSON() ([]byte, error) {

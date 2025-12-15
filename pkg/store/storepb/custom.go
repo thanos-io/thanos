@@ -405,10 +405,13 @@ func PromMatchersToMatchers(ms ...*labels.Matcher) ([]*LabelMatcher, error) {
 
 // MatchersToPromMatchers returns Prometheus matchers from proto matchers.
 // NOTE: It allocates memory.
-func MatchersToPromMatchers(ms ...LabelMatcher) ([]*labels.Matcher, error) {
+func MatchersToPromMatchers(ms ...*LabelMatcher) ([]*labels.Matcher, error) {
 	res := make([]*labels.Matcher, 0, len(ms))
-	for i := range ms {
-		pm, err := MatcherToPromMatcher(ms[i])
+	for _, m := range ms {
+		if m == nil {
+			continue
+		}
+		pm, err := MatcherToPromMatcher(*m)
 		if err != nil {
 			return nil, err
 		}
@@ -455,7 +458,7 @@ func MatcherToPromMatcher(m LabelMatcher) (*labels.Matcher, error) {
 
 // MatchersToString converts label matchers to string format.
 // String should be parsable as a valid PromQL query metric selector.
-func MatchersToString(ms ...LabelMatcher) string {
+func MatchersToString(ms ...*LabelMatcher) string {
 	var res string
 	for i, m := range ms {
 		res += m.PromString()

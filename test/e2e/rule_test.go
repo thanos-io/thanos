@@ -284,7 +284,7 @@ func rulegroupCorrectData(t *testing.T, ctx context.Context, endpoint string) {
 
 	for _, g := range data.Data.Groups {
 		testutil.Assert(t, g.EvaluationDurationSeconds > 0, "expected it to take more than zero seconds to evaluate")
-		testutil.Assert(t, !g.LastEvaluation.IsZero(), "expected the rule group to be evaluated at least once")
+		testutil.Assert(t, g.LastEvaluation != nil && g.LastEvaluation.AsTime().Unix() > 0, "expected the rule group to be evaluated at least once")
 	}
 }
 

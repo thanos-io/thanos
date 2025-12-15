@@ -41,9 +41,9 @@ func Test_statsMiddleware_AddsHeaderWithStats(t *testing.T) {
 			fakeHandler := &fakeHandler{
 				response: &PrometheusResponse{
 					Status: "success",
-					Data: PrometheusData{
+					Data: &PrometheusData{
 						ResultType: "vector",
-						Result:     []SampleStream{},
+						Result:     []*SampleStream{},
 						Stats: &PrometheusResponseStats{
 							Samples: &PrometheusResponseSamplesStats{
 								TotalQueryableSamples: tt.totalSamples,

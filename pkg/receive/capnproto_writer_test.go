@@ -25,27 +25,27 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	writer := NewCapNProtoWriter(logger, m, &CapNProtoWriterOptions{})
 
 	// Create test data with valid exemplars
-	timeseries := []prompb.TimeSeries{
+	timeseries := []*prompb.TimeSeries{
 		{
-			Labels: []labelpb.ZLabel{
+			Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 				{Name: "__name__", Value: "test_metric"},
 				{Name: "job", Value: "test"},
-			},
-			Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-			Exemplars: []prompb.Exemplar{
+			}),
+			Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+			Exemplars: []*prompb.Exemplar{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 						{Name: "trace_id", Value: "abc123"},
 						{Name: "span_id", Value: "def456"},
-					},
+					}),
 					Value:     10.5,
 					Timestamp: 10,
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 						{Name: "trace_id", Value: "xyz789"},
 						{Name: "span_id", Value: "uvw012"},
-					},
+					}),
 					Value:     20.5,
 					Timestamp: 11,
 				},
@@ -121,24 +121,24 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 	t.Parallel()
 
-	lbls := []labelpb.ZLabel{{Name: "__name__", Value: "test"}}
+	lbls := labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "__name__", Value: "test"}})
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
-		expectedIngested []prompb.TimeSeries
+		expectedIngested []*prompb.TimeSeries
 		maxExemplars     int64
 		opts             *WriterOptions
 	}{
 		"should succeed on valid series with exemplars": {
 			reqs: []*prompb.WriteRequest{{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels: lbls,
 						// Ingesting an exemplar requires a sample to create the series first.
-						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-						Exemplars: []prompb.Exemplar{
+						Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "trace_id", Value: "123"}},
+								Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "trace_id", Value: "123"}}),
 								Value:     11,
 								Timestamp: 12,
 							},
@@ -151,13 +151,13 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 		},
 		"should fail on empty exemplar label name": {
 			reqs: []*prompb.WriteRequest{{
-				Timeseries: []prompb.TimeSeries{
+				Timeseries: []*prompb.TimeSeries{
 					{
 						Labels:  lbls,
-						Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
-						Exemplars: []prompb.Exemplar{
+						Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
+						Exemplars: []*prompb.Exemplar{
 							{
-								Labels:    []labelpb.ZLabel{{Name: "", Value: "123"}},
+								Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "", Value: "123"}}),
 								Value:     11,
 								Timestamp: 12,
 							},

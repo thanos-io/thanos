@@ -10,6 +10,7 @@ import (
 
 	"capnproto.org/go/capnp/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -22,7 +23,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 		numClusters = 3
 		numPods     = 2
 	)
-	series := make([]prompb.TimeSeries, 0, numSeries)
+	series := make([]*prompb.TimeSeries, 0, numSeries)
 	for range numSeries {
 		lbls := make([]labelpb.ZLabel, 0, numClusters*numPods)
 		for j := range numClusters {
@@ -33,9 +34,9 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 				})
 			}
 		}
-		series = append(series, prompb.TimeSeries{
-			Labels: lbls,
-			Samples: []prompb.Sample{
+		series = append(series, &prompb.TimeSeries{
+			Labels: labelpb.ZLabelsToLabels(lbls),
+			Samples: []*prompb.Sample{
 				{
 					Value:     1,
 					Timestamp: 2,
@@ -48,7 +49,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 		Timeseries: series,
 	}
 	var (
-		protoBytes, err                 = wreq.Marshal()
+		protoBytes, err                 = proto.Marshal(&wreq)
 		capnprotoBytes, paddedErr       = Marshal(wreq.Tenant, wreq.Timeseries)
 		capnprotoBytesPacked, packedErr = MarshalPacked(wreq.Tenant, wreq.Timeseries)
 	)
@@ -58,7 +59,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	b.Run("marshal_proto", func(b *testing.B) {
 		for b.Loop() {
 			var err error
-			_, err = wreq.Marshal()
+			_, err = proto.Marshal(&wreq)
 			require.NoError(b, err)
 		}
 	})
@@ -92,7 +93,7 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	b.Run("unmarshal_proto", func(b *testing.B) {
 		for b.Loop() {
 			wr := storepb.WriteRequest{}
-			require.NoError(b, wr.Unmarshal(protoBytes))
+			require.NoError(b, proto.Unmarshal(protoBytes, &wr))
 		}
 	})
 	b.Run("unmarshal", func(b *testing.B) {

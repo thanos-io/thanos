@@ -19,19 +19,16 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/util"
 )
 
-// FromLabelAdaptersToLabels casts []LabelAdapter to labels.Labels.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
-//
-// Note: while resulting labels.Labels is supposedly sorted, this function
-// doesn't enforce that. If input is not sorted, output will be wrong.
+// FromLabelAdaptersToLabels converts []LabelAdapter to labels.Labels.
+// With -tags slicelabels, labels.Labels is a slice of labels.Label which has
+// the same memory layout as LabelAdapter, allowing zero-copy conversion.
 func FromLabelAdaptersToLabels(ls []LabelAdapter) labels.Labels {
 	return *(*labels.Labels)(unsafe.Pointer(&ls))
 }
 
-// FromLabelsToLabelAdapters casts labels.Labels to []LabelAdapter.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
+// FromLabelsToLabelAdapters converts labels.Labels to []LabelAdapter.
+// With -tags slicelabels, labels.Labels is a slice of labels.Label which has
+// the same memory layout as LabelAdapter, allowing zero-copy conversion.
 func FromLabelsToLabelAdapters(ls labels.Labels) []LabelAdapter {
 	return *(*[]LabelAdapter)(unsafe.Pointer(&ls))
 }
@@ -106,6 +103,26 @@ func FromLabelPairsToLabels(ls []*LabelPair) labels.Labels {
 // FromLabelPairsToMetric converts []*LabelPair to a model.Metric.
 func FromLabelPairsToMetric(ls []*LabelPair) model.Metric {
 	return util.LabelsToMetric(FromLabelPairsToLabels(ls))
+}
+
+// ToSamplePointers converts []Sample to []*Sample.
+func ToSamplePointers(samples []Sample) []*Sample {
+	result := make([]*Sample, len(samples))
+	for i := range samples {
+		result[i] = &samples[i]
+	}
+	return result
+}
+
+// FromSamplePointers converts []*Sample to []Sample.
+func FromSamplePointers(samples []*Sample) []Sample {
+	result := make([]Sample, len(samples))
+	for i, s := range samples {
+		if s != nil {
+			result[i] = *s
+		}
+	}
+	return result
 }
 
 type byLabel []LabelAdapter

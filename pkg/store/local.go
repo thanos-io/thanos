@@ -12,12 +12,12 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -30,6 +30,7 @@ import (
 // Inefficient implementation for quick StoreAPI view.
 // Chunk order is exactly the same as in a given file.
 type LocalStore struct {
+	storepb.UnimplementedStoreServer
 	logger    log.Logger
 	extLabels labels.Labels
 
@@ -82,7 +83,7 @@ func NewLocalStoreFromJSONMmappableFile(
 	skanner := NewNoCopyScanner(content, split)
 	resp := &storepb.SeriesResponse{}
 	for skanner.Scan() {
-		if err := jsonpb.Unmarshal(bytes.NewReader(skanner.Bytes()), resp); err != nil {
+		if err := protojson.Unmarshal(skanner.Bytes(), resp); err != nil {
 			return nil, errors.Wrapf(err, "unmarshal storepb.SeriesResponse frame for file %s", path)
 		}
 		series := resp.GetSeries()

@@ -18,8 +18,8 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/google/go-cmp/cmp"
 	"github.com/oklog/ulid/v2"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
@@ -29,6 +29,8 @@ import (
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -39,6 +41,9 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
+
+// ptr returns a pointer to v.
+func ptr[T any](v T) *T { return &v }
 
 func TestMultiTSDB(t *testing.T) {
 	t.Parallel()
@@ -193,12 +198,12 @@ func TestMultiTSDB(t *testing.T) {
 
 var (
 	expectedFooResp = &storepb.Series{
-		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
-		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
+		Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}),
+		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: ptr(uint64(9768694233508509040))}}},
 	}
 	expectedBarResp = &storepb.Series{
-		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
-		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
+		Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}),
+		Chunks: []*storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: ptr(uint64(2304287992246504442))}}},
 	}
 )
 
@@ -237,12 +242,12 @@ Outer:
 			if !ok {
 				break Outer
 			}
-			testutil.Equals(t, expectedFooResp, r)
+			require.Empty(t, cmp.Diff(expectedFooResp, r, protocmp.Transform()))
 		case r, ok := <-respBar:
 			if !ok {
 				break Outer
 			}
-			testutil.Equals(t, expectedBarResp, r)
+			require.Empty(t, cmp.Diff(expectedBarResp, r, protocmp.Transform()))
 		}
 	}
 	testutil.Ok(t, err)
@@ -252,7 +257,7 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 	sc, err := storeClient.Series(context.Background(), &storepb.SeriesRequest{
 		MinTime:  0,
 		MaxTime:  10,
-		Matchers: []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+		Matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
 	})
 	if err != nil {
 		return err
@@ -277,7 +282,7 @@ func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error
 var (
 	expectedFooRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
+			SeriesLabels: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}}),
 			Exemplars: []*exemplarspb.Exemplar{
 				{Value: 1, Ts: 1},
 				{Value: 2.1212, Ts: 2},
@@ -287,11 +292,11 @@ var (
 	}
 	expectedBarRespExemplars = []exemplarspb.ExemplarData{
 		{
-			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
+			SeriesLabels: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}}),
 			Exemplars: []*exemplarspb.Exemplar{
-				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}}},
-				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}}},
-				{Value: 33.1313, Ts: 3, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "ghi"}}}},
+				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}})},
+				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}})},
+				{Value: 33.1313, Ts: 3, Labels: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "ghi"}}})},
 			},
 		},
 	}
@@ -374,7 +379,7 @@ func newExemplarsServer(ctx context.Context) *exemplarsServer {
 }
 
 func (e *exemplarsServer) Send(r *exemplarspb.ExemplarsResponse) error {
-	e.Size += int64(r.Size())
+	e.Size += int64(proto.Size(r))
 
 	if r.GetWarning() != "" {
 		e.Warnings = append(e.Warnings, r.GetWarning())
@@ -397,10 +402,11 @@ func (s *exemplarsServer) Context() context.Context {
 func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarData) {
 	testutil.Equals(t, len(expected), len(data))
 	for i := range data {
-		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
+		require.Empty(t, cmp.Diff(expected[i].SeriesLabels, data[i].SeriesLabels, protocmp.Transform()))
 		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
 		for j := range data[i].Exemplars {
-			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
+			// Use protocmp.IgnoreEmptyMessages() to treat nil and empty messages as equivalent
+			require.Empty(t, cmp.Diff(expected[i].Exemplars[j], data[i].Exemplars[j], protocmp.Transform(), protocmp.IgnoreEmptyMessages()))
 		}
 	}
 }
@@ -996,7 +1002,7 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 			req := &storepb.SeriesRequest{
 				MinTime:  0,
 				MaxTime:  10,
-				Matchers: []storepb.LabelMatcher{{Name: "foo", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				Matchers: []*storepb.LabelMatcher{&storepb.LabelMatcher{Name: "foo", Value: ".*", Type: storepb.LabelMatcher_RE}},
 			}
 
 			for _, c := range clients {

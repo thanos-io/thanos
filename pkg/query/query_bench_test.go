@@ -115,7 +115,7 @@ func BenchmarkGRPCServer(b *testing.B) {
 		retS, err := sc.Series(context.Background(), &storepb.SeriesRequest{
 			MinTime: math.MinInt64,
 			MaxTime: math.MaxInt64,
-			Matchers: []storepb.LabelMatcher{
+			Matchers: []*storepb.LabelMatcher{
 				{
 					Type:  storepb.LabelMatcher_RE,
 					Name:  model.MetricNameLabel,
@@ -191,7 +191,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		testutil.Ok(t, head.Close())
 		for i := range created {
 			if !dedup || j == 0 {
-				lset := labelpb.ZLabelsToPromLabels(created[i].Labels).Copy()
+				lset := labelpb.LabelsToPromLabels(created[i].Labels).Copy()
 				if dedup {
 					lset = lset.MatchLabels(false, "a_replica")
 				}

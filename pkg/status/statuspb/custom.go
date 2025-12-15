@@ -29,16 +29,21 @@ func NewWarningTSDBStatisticsResponse(warning error) *TSDBStatisticsResponse {
 
 // Merge merges the provided TSDBStatisticsEntry with the receiver.
 func (tse *TSDBStatisticsEntry) Merge(stats *TSDBStatisticsEntry) {
-	tse.HeadStatistics.NumSeries += stats.HeadStatistics.NumSeries
-	tse.HeadStatistics.NumLabelPairs += stats.HeadStatistics.NumLabelPairs
-	tse.HeadStatistics.ChunkCount += stats.HeadStatistics.ChunkCount
-
-	if tse.HeadStatistics.MinTime <= 0 || tse.HeadStatistics.MinTime > stats.HeadStatistics.MinTime {
-		tse.HeadStatistics.MinTime = stats.HeadStatistics.MinTime
+	if tse.HeadStatistics == nil {
+		tse.HeadStatistics = &HeadStatistics{}
 	}
+	if stats.HeadStatistics != nil {
+		tse.HeadStatistics.NumSeries += stats.HeadStatistics.NumSeries
+		tse.HeadStatistics.NumLabelPairs += stats.HeadStatistics.NumLabelPairs
+		tse.HeadStatistics.ChunkCount += stats.HeadStatistics.ChunkCount
 
-	if tse.HeadStatistics.MaxTime < stats.HeadStatistics.MaxTime {
-		tse.HeadStatistics.MaxTime = stats.HeadStatistics.MaxTime
+		if tse.HeadStatistics.MinTime <= 0 || tse.HeadStatistics.MinTime > stats.HeadStatistics.MinTime {
+			tse.HeadStatistics.MinTime = stats.HeadStatistics.MinTime
+		}
+
+		if tse.HeadStatistics.MaxTime < stats.HeadStatistics.MaxTime {
+			tse.HeadStatistics.MaxTime = stats.HeadStatistics.MaxTime
+		}
 	}
 
 	tse.SeriesCountByMetricName = mergeStatistics(tse.SeriesCountByMetricName, stats.SeriesCountByMetricName, addValue)

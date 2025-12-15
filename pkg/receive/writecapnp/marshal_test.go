@@ -40,34 +40,35 @@ func TestMarshalWriteRequest(t *testing.T) {
 
 	wreq := storepb.WriteRequest{
 		Tenant: "example-tenant",
-		Timeseries: []prompb.TimeSeries{
+		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "prometheus"},
-				},
-				Samples: []prompb.Sample{
+				}),
+				Samples: []*prompb.Sample{
 					{Timestamp: 1, Value: 1},
 					{Timestamp: 2, Value: 2},
 				},
-				Histograms: []prompb.Histogram{
-					prompb.HistogramToHistogramProto(1, testHistogram),
-					prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2)),
-				},
-				Exemplars: []prompb.Exemplar{
+				Histograms: func() []*prompb.Histogram {
+					h1 := prompb.HistogramToHistogramProto(1, testHistogram)
+					h2 := prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2))
+					return []*prompb.Histogram{&h1, &h2}
+				}(),
+				Exemplars: []*prompb.Exemplar{
 					{
-						Labels:    []labelpb.ZLabel{{Name: "traceID", Value: "1234"}},
+						Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "traceID", Value: "1234"}}),
 						Value:     10,
 						Timestamp: 14,
 					},
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "thanos"},
-				},
-				Samples: []prompb.Sample{
+				}),
+				Samples: []*prompb.Sample{
 					{Timestamp: 3, Value: 3},
 					{Timestamp: 4, Value: 4},
 				},
@@ -123,17 +124,17 @@ func TestMarshalWriteRequest(t *testing.T) {
 			for i, hs := range expected.Histograms {
 				require.Equal(t, hs.Timestamp, actual.Histograms[i].Timestamp)
 				if hs.IsFloatHistogram() {
-					fh := prompb.FloatHistogramProtoToFloatHistogram(hs)
+					fh := prompb.FloatHistogramProtoToFloatHistogram(*hs)
 					require.Equal(t, fh, actual.Histograms[i].FloatHistogram)
 				} else {
-					h := prompb.HistogramProtoToHistogram(hs)
+					h := prompb.HistogramProtoToHistogram(*hs)
 					require.Equal(t, h, actual.Histograms[i].Histogram)
 				}
 			}
 		})
 		t.Run("test_exemplars", func(t *testing.T) {
 			for i, ex := range expected.Exemplars {
-				require.Equal(t, labelpb.ZLabelsToPromLabels(ex.Labels), actual.Exemplars[i].Labels)
+				require.Equal(t, labelpb.LabelsToPromLabels(ex.Labels), actual.Exemplars[i].Labels)
 				require.Equal(t, ex.Timestamp, actual.Exemplars[i].Ts)
 				require.Equal(t, ex.Value, actual.Exemplars[i].Value)
 			}
@@ -143,28 +144,32 @@ func TestMarshalWriteRequest(t *testing.T) {
 	}
 }
 
+func histogramPtr(h prompb.Histogram) *prompb.Histogram {
+	return &h
+}
+
 func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 	wreq := storepb.WriteRequest{
 		Tenant: "example-tenant",
-		Timeseries: []prompb.TimeSeries{
+		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "job", Value: "prometheus-1"},
-				},
-				Histograms: []prompb.Histogram{
-					prompb.HistogramToHistogramProto(1, &histogram.Histogram{}),
-					prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1)),
-					prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2)),
+				}),
+				Histograms: []*prompb.Histogram{
+					histogramPtr(prompb.HistogramToHistogramProto(1, &histogram.Histogram{})),
+					histogramPtr(prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1))),
+					histogramPtr(prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2))),
 				},
 			},
 			{
-				Labels: []labelpb.ZLabel{
+				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
 					{Name: "job", Value: "prometheus-2"},
-				},
-				Histograms: []prompb.Histogram{
-					prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1)),
-					prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2)),
-					prompb.HistogramToHistogramProto(1, &histogram.Histogram{}),
+				}),
+				Histograms: []*prompb.Histogram{
+					histogramPtr(prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1))),
+					histogramPtr(prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2))),
+					histogramPtr(prompb.HistogramToHistogramProto(1, &histogram.Histogram{})),
 				},
 			},
 		},
@@ -211,9 +216,9 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 	for _, ts := range wreq.Timeseries {
 		for _, h := range ts.Histograms {
 			if h.IsFloatHistogram() {
-				floatHistograms = append(floatHistograms, prompb.FloatHistogramProtoToFloatHistogram(h))
+				floatHistograms = append(floatHistograms, prompb.FloatHistogramProtoToFloatHistogram(*h))
 			} else {
-				histograms = append(histograms, prompb.HistogramProtoToHistogram(h))
+				histograms = append(histograms, prompb.HistogramProtoToHistogram(*h))
 			}
 		}
 	}
