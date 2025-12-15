@@ -23,7 +23,7 @@ type ExemplarStore struct {
 // UnmarshalJSON implements json.Unmarshaler.
 func (m *Exemplar) UnmarshalJSON(b []byte) error {
 	v := struct {
-		Labels    labelpb.ZLabelSet
+		Labels    labels.Labels
 		TimeStamp model.Time
 		Value     model.SampleValue
 	}{}
@@ -31,7 +31,7 @@ func (m *Exemplar) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
-	m.Labels = ZLabelSetToLabelSet(v.Labels)
+	m.Labels = PromLabelsToLabelSet(v.Labels)
 	m.Ts = int64(v.TimeStamp)
 	m.Value = float64(v.Value)
 
@@ -131,17 +131,5 @@ func PromLabelsToLabelSet(lset labels.Labels) *labelpb.LabelSet {
 			Value: l.Value,
 		})
 	})
-	return &labelpb.LabelSet{Labels: result}
-}
-
-// ZLabelSetToLabelSet converts labelpb.ZLabelSet to *labelpb.LabelSet.
-func ZLabelSetToLabelSet(zls labelpb.ZLabelSet) *labelpb.LabelSet {
-	result := make([]*labelpb.Label, 0, len(zls.Labels))
-	for _, l := range zls.Labels {
-		result = append(result, &labelpb.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
 	return &labelpb.LabelSet{Labels: result}
 }

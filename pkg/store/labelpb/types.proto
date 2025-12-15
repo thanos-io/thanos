@@ -6,9 +6,6 @@ package thanos;
 
 option go_package = "github.com/thanos-io/thanos/pkg/store/labelpb";
 
-// Label is a key-value pair identifying a series.
-// NOTE: ZLabel and ZLabelSet types are defined manually in Go code (label.go) for
-// zero-copy label handling. They have the same wire format as Label and LabelSet.
 message Label {
     string name  = 1;
     string value = 2;

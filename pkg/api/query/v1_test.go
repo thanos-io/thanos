@@ -1680,7 +1680,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up)",
-			Labels:                    labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label"}}}),
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label"}}}),
 			LastError:                 "err1",
 		}),
 		rulespb.NewRecordingRule(&rulespb.RecordingRule{
@@ -1689,7 +1689,7 @@ func TestRulesHandler(t *testing.T) {
 			EvaluationDurationSeconds: 12,
 			Health:                    "x",
 			Query:                     "sum(up1)",
-			Labels:                    labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label2"}}}),
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label2"}}}),
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
 			Name:                      "3",
@@ -1699,12 +1699,12 @@ func TestRulesHandler(t *testing.T) {
 			Query:                     "sum(up2) == 2",
 			DurationSeconds:           101,
 			KeepFiringForSeconds:      102,
-			Labels:                    labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label3"}}}),
-			Annotations:               labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "ann", Value: "a1"}}}),
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label3"}}}),
+			Annotations:               &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "ann", Value: "a1"}}}),
 			Alerts: []*rulespb.AlertInstance{
 				{
-					Labels:      labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "1"}}}),
-					Annotations: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "2"}}}),
+					Labels:      &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "inside", Value: "1"}}}),
+					Annotations: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "insideann", Value: "2"}}}),
 					State:       rulespb.AlertState_FIRING,
 					ActiveAt:    timestamppb.New(twoHAgo),
 					Value:       "1",
@@ -1712,8 +1712,8 @@ func TestRulesHandler(t *testing.T) {
 					PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 				},
 				{
-					Labels:      labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "inside", Value: "3"}}}),
-					Annotations: labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "insideann", Value: "4"}}}),
+					Labels:      &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "inside", Value: "3"}}}),
+					Annotations: &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "insideann", Value: "4"}}}),
 					State:       rulespb.AlertState_PENDING,
 					ActiveAt:    nil,
 					Value:       "2",
@@ -1731,7 +1731,7 @@ func TestRulesHandler(t *testing.T) {
 			DurationSeconds:           102,
 			KeepFiringForSeconds:      103,
 			Query:                     "sum(up3) == 3",
-			Labels:                    labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label4"}}}),
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label4"}}}),
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 		rulespb.NewAlertingRule(&rulespb.Alert{
@@ -1742,7 +1742,7 @@ func TestRulesHandler(t *testing.T) {
 			DurationSeconds:           61,
 			KeepFiringForSeconds:      62,
 			Query:                     "sum(up4) == 4",
-			Labels:                    labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "some", Value: "label5"}}}),
+			Labels:                    &labelpb.LabelSet{Labels: []*labelpb.Label{{Name: "some", Value: "label5"}}}),
 			State:                     rulespb.AlertState_INACTIVE,
 		}),
 	}

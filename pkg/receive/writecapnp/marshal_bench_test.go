@@ -25,17 +25,17 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 	)
 	series := make([]*prompb.TimeSeries, 0, numSeries)
 	for range numSeries {
-		lbls := make([]labelpb.ZLabel, 0, numClusters*numPods)
+		lbls := make([]*labelpb.Label, 0, numClusters*numPods)
 		for j := range numClusters {
 			for k := range numPods {
-				lbls = append(lbls, labelpb.ZLabel{
+				lbls = append(lbls, &labelpb.Label{
 					Name:  fmt.Sprintf("cluster-%d", j),
 					Value: fmt.Sprintf("pod-%d", k),
 				})
 			}
 		}
 		series = append(series, &prompb.TimeSeries{
-			Labels: labelpb.ZLabelsToLabels(lbls),
+			Labels: lbls,
 			Samples: []*prompb.Sample{
 				{
 					Value:     1,

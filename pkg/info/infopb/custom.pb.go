@@ -8,20 +8,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
-// NewTSDBInfo creates a new TSDBInfo from ZLabels.
-// It converts ZLabels to the proto LabelSet format.
-func NewTSDBInfo(mint, maxt int64, lbls []labelpb.ZLabel) *TSDBInfo {
-	protoLabels := make([]*labelpb.Label, 0, len(lbls))
-	for _, l := range lbls {
-		protoLabels = append(protoLabels, &labelpb.Label{
-			Name:  l.Name,
-			Value: l.Value,
-		})
-	}
+// NewTSDBInfo creates a new TSDBInfo from Prometheus labels.
+func NewTSDBInfo(mint, maxt int64, lbls labels.Labels) *TSDBInfo {
 	return &TSDBInfo{
-		Labels: &labelpb.LabelSet{
-			Labels: protoLabels,
-		},
+		Labels:  labelpb.PromLabelsToLabelSet(lbls),
 		MinTime: mint,
 		MaxTime: maxt,
 	}

@@ -138,7 +138,7 @@ func (f *fakeAppender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v
 	if ref == 0 {
 		ref = storage.SeriesRef(l.Hash())
 	}
-	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v})
+	f.samples[ref] = append(f.samples[ref], prompb.Sample{Timestamp: t, Value: v}
 	return ref, f.appendErr()
 }
 
@@ -217,7 +217,7 @@ func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (Wr
 	return c, nil
 }
 
-var _ = (peersContainer)(&fakePeersGroup{})
+var _ = (peersContainer)(&fakePeersGroup{}
 
 func newTestHandlerHashring(
 	appendables []*fakeAppendable,
@@ -249,7 +249,7 @@ func newTestHandlerHashring(
 			ForwardTimeout:    5 * time.Minute,
 			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts),
 			Limiter:           limiter,
-		})
+		}
 		handlers = append(handlers, h)
 		h.peers = fakePeers
 		endpoint := ag.newEndpoint()
@@ -265,14 +265,14 @@ func newTestHandlerHashring(
 			)
 			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
 			client := writecapnp.NewRemoteWriteClient(listener, logger)
-			peer = newPeerWorker(client, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+			peer = newPeerWorker(client, prometheus.NewHistogram(prometheus.HistogramOpts{}, 1)
 			closers = append(closers, func() error {
 				srv.Shutdown()
 				return goerrors.Join(listener.Close(), client.Close())
-			})
+			}
 			go func() { _ = srv.ListenAndServe() }()
 		} else {
-			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}, 1)
 		}
 		fakePeers.clients[endpoint] = peer
 	}
@@ -508,7 +508,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
 				{
-					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}, nil, nil),
 				},
 				{
 					appender: newFakeAppender(nil, nil, nil),
@@ -542,7 +542,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
 				{
-					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}, nil, nil),
 				},
 				{
 					appender: newFakeAppender(conflictErrFn, nil, nil),
@@ -565,7 +565,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					appender: newFakeAppender(nil, nil, nil),
 				},
 				{
-					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}), nil, nil),
+					appender: newFakeAppender(cycleErrors([]error{storage.ErrOutOfBounds, storage.ErrOutOfOrderSample, storage.ErrDuplicateSampleForTimestamp}, nil, nil),
 				},
 			},
 		},
@@ -677,7 +677,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					for _, h := range handlers {
 						h.Close()
 					}
-				})
+				}
 			}()
 			tenant := "test"
 
@@ -746,7 +746,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 
 				}
 			}
-		})
+		}
 	}
 }
 
@@ -756,7 +756,7 @@ func TestReceiveQuorumHashmod(t *testing.T) {
 	for _, capnpReplication := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
 			testReceiveQuorum(t, AlgorithmHashmod, false, capnpReplication)
-		})
+		}
 	}
 }
 
@@ -766,7 +766,7 @@ func TestReceiveQuorumKetama(t *testing.T) {
 	for _, capnpReplication := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
 			testReceiveQuorum(t, AlgorithmKetama, false, capnpReplication)
-		})
+		}
 	}
 }
 
@@ -776,7 +776,7 @@ func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
 	for _, capnpReplication := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
 			testReceiveQuorum(t, AlgorithmHashmod, true, capnpReplication)
-		})
+		}
 	}
 }
 
@@ -786,7 +786,7 @@ func TestReceiveWithConsistencyDelayKetama(t *testing.T) {
 	for _, capnpReplication := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capnproto-replication=%t", capnpReplication), func(t *testing.T) {
 			testReceiveQuorum(t, AlgorithmKetama, true, capnpReplication)
-		})
+		}
 	}
 }
 
@@ -855,7 +855,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					for _, h := range handlers {
 						h.Close()
 					}
-				})
+				}
 			}()
 
 			handler := handlers[0]
@@ -872,7 +872,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 						},
 					},
 				},
-			})
+			}
 			if err != nil {
 				t.Fatal("handler: failed to generate limit configuration")
 			}
@@ -888,9 +888,9 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			}
 
 			for i := 0; i < tc.amountSeries; i += 1 {
-				label := labelpb.ZLabel{Name: "foo", Value: "bar"}
+				label := &labelpb.Label{Name: "foo", Value: "bar"}
 				series := &prompb.TimeSeries{
-					Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{label}),
+					Labels: []*labelpb.Label{label},
 				}
 				for j := 0; j < tc.amountSamples; j += 1 {
 					sample := &prompb.Sample{Value: float64(j), Timestamp: int64(j)}
@@ -907,7 +907,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			if rec.Code != tc.status {
 				t.Errorf("handler: got unexpected HTTP status code: expected %d, got %d; body: %s", tc.status, rec.Code, rec.Body.String())
 			}
-		})
+		}
 	}
 }
 
@@ -948,7 +948,7 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal request")
 	}
-	req, err := http.NewRequest("POST", h.options.Endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
+	req, err := http.NewRequest("POST", h.options.Endpoint, bytes.NewBuffer(snappy.Encode(nil, buf))
 	if err != nil {
 		return nil, errors.Wrap(err, "create request")
 	}
@@ -1045,15 +1045,15 @@ func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.Se
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would
 // be sent to Thanos receive.
 // It has one sample and allow passing multiple series, in same manner as typical Prometheus would batch it.
-func serializeSeriesWithOneSample(t testing.TB, series [][]labelpb.ZLabel) []byte {
+func serializeSeriesWithOneSample(t testing.TB, series [][]*labelpb.Label) []byte {
 	r := &prompb.WriteRequest{Timeseries: make([]*prompb.TimeSeries, 0, len(series))}
 
 	for _, s := range series {
 		r.Timeseries = append(r.Timeseries, &prompb.TimeSeries{
-			Labels: labelpb.ZLabelsToLabels(s),
+			Labels: s,
 			// Timestamp does not matter, it will be overridden.
 			Samples: []*prompb.Sample{{Value: math.MaxFloat64, Timestamp: math.MinInt64}},
-		})
+		}
 	}
 	body, err := proto.Marshal(r)
 	testutil.Ok(t, err)
@@ -1064,12 +1064,12 @@ func makeSeriesWithValues(numSeries int) []*prompb.TimeSeries {
 	series := make([]*prompb.TimeSeries, numSeries)
 	for i := range numSeries {
 		series[i] = &prompb.TimeSeries{
-			Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+			Labels: []*labelpb.Label{
 				{
 					Name:  fmt.Sprintf("pod-%d", i),
 					Value: fmt.Sprintf("nginx-%d", i),
 				},
-			}),
+			},
 			Samples: []*prompb.Sample{
 				{
 					Value:     float64(i),
@@ -1112,7 +1112,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
-	handler.writer = NewWriter(logger, m, &WriterOptions{})
+	handler.writer = NewWriter(logger, m, &WriterOptions{}
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
@@ -1123,13 +1123,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}{
 		{
 			name: "typical labels under 1KB, 500 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 500)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 500)
 				for s := range series {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := range lbls {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1138,13 +1138,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 5000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 5000)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 5000)
 				for s := range series {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := range lbls {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1153,13 +1153,13 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "typical labels under 1KB, 20000 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 20000)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 20000)
 				for s := range series {
-					lbls := make([]labelpb.ZLabel, 10)
+					lbls := make([]*labelpb.Label, 10)
 					for i := range lbls {
 						// Label ~20B name, 50B value.
-						lbls[i] = labelpb.ZLabel{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
+						lbls[i] = &labelpb.Label{Name: fmt.Sprintf("abcdefghijabcdefghijabcdefghij%d", i), Value: fmt.Sprintf("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij%d", i)}
 					}
 					series[s] = lbls
 				}
@@ -1168,8 +1168,8 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		},
 		{
 			name: "extremely large label value 10MB, 10 of them",
-			writeRequest: serializeSeriesWithOneSample(b, func() [][]labelpb.ZLabel {
-				series := make([][]labelpb.ZLabel, 10)
+			writeRequest: serializeSeriesWithOneSample(b, func() [][]*labelpb.Label {
+				series := make([][]*labelpb.Label, 10)
 				for s := range series {
 					lbl := &strings.Builder{}
 					lbl.Grow(1024 * 1024 * 10) // 10MB.
@@ -1177,7 +1177,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 					for i := 0; i < lbl.Cap()/len(word); i++ {
 						_, _ = lbl.WriteString(word)
 					}
-					series[s] = []labelpb.ZLabel{{Name: "__name__", Value: lbl.String()}}
+					series[s] = []*labelpb.Label{{Name: "__name__", Value: lbl.String()}}
 				}
 				return series
 			}()),
@@ -1198,7 +1198,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
 					_, err = app.Appender(ctx)
 					return err
-				}))
+				})
 			}
 
 			b.Run("OK", func(b testutil.TB) {
@@ -1206,10 +1206,10 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for range n {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))}
 					testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 				}
-			})
+			}
 
 			handler.options.DefaultTenantID = fmt.Sprintf("%v-conflicting", tcase.name)
 			handler.writer.multiTSDB = &tsOverrideTenantStorage{TenantStorage: m, interval: -1} // Timestamp can't go down, which will cause conflict error.
@@ -1225,12 +1225,12 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
 					_, err = app.Appender(ctx)
 					return err
-				}))
+				})
 			}
 
 			// First request should be fine, since we don't change timestamp, rest is wrong.
 			r := httptest.NewRecorder()
-			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+			handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))}
 			testutil.Equals(b, http.StatusOK, r.Code, "got non 200 error: %v", r.Body.String())
 
 			b.Run("conflict errors", func(b testutil.TB) {
@@ -1238,14 +1238,14 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				b.ResetTimer()
 				for i := range n {
 					r := httptest.NewRecorder()
-					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))})
+					handler.receiveHTTP(r, &http.Request{ContentLength: int64(len(tcase.writeRequest)), Body: io.NopCloser(bytes.NewReader(tcase.writeRequest))}
 					testutil.Equals(b, http.StatusConflict, r.Code, "%v-%s", i, func() string {
 						b, _ := io.ReadAll(r.Body)
 						return string(b)
 					}())
 				}
-			})
-		})
+			}
+		}
 	}
 
 	runtime.GC()
@@ -1312,7 +1312,7 @@ func TestIsTenantValid(t *testing.T) {
 				return
 			}
 			testutil.Ok(t, err)
-		})
+		}
 	}
 }
 
@@ -1330,7 +1330,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1339,7 +1339,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1352,7 +1352,7 @@ func TestRelabel(t *testing.T) {
 			expectedWriteRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1361,7 +1361,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1386,7 +1386,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1395,7 +1395,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1408,7 +1408,7 @@ func TestRelabel(t *testing.T) {
 			expectedWriteRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1417,7 +1417,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1447,7 +1447,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1456,7 +1456,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1469,7 +1469,7 @@ func TestRelabel(t *testing.T) {
 			expectedWriteRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "foo",
@@ -1478,7 +1478,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "test",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1500,7 +1500,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1509,7 +1509,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1522,12 +1522,12 @@ func TestRelabel(t *testing.T) {
 			expectedWriteRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1550,7 +1550,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1559,7 +1559,7 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: 0,
@@ -1584,7 +1584,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1593,15 +1593,15 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
 									},
-								}),
+								},
 								Value:     1,
 								Timestamp: 1,
 							},
@@ -1612,20 +1612,20 @@ func TestRelabel(t *testing.T) {
 			expectedWriteRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
 							},
-						}),
+						},
 						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
 									},
-								}),
+								},
 								Value:     1,
 								Timestamp: 1,
 							},
@@ -1646,7 +1646,7 @@ func TestRelabel(t *testing.T) {
 			writeRequest: prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+						Labels: []*labelpb.Label{
 							{
 								Name:  "__name__",
 								Value: "test_metric",
@@ -1655,15 +1655,15 @@ func TestRelabel(t *testing.T) {
 								Name:  "foo",
 								Value: "bar",
 							},
-						}),
+						},
 						Exemplars: []*prompb.Exemplar{
 							{
-								Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+								Labels: []*labelpb.Label{
 									{
 										Name:  "traceID",
 										Value: "foo",
 									},
-								}),
+								},
 								Value:     1,
 								Timestamp: 1,
 							},
@@ -1679,11 +1679,11 @@ func TestRelabel(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			h := NewHandler(nil, &Options{
 				RelabelConfigs: tcase.relabel,
-			})
+			}
 
 			h.relabel(&tcase.writeRequest)
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
-		})
+		}
 	}
 }
 
@@ -1700,7 +1700,7 @@ func TestGetStatsLimitParameter(t *testing.T) {
 
 		_, err = getStatsLimitParameter(r)
 		testutil.NotOk(t, err)
-	})
+	}
 	t.Run("invalid limit parameter, too large", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
 		testutil.Ok(t, err)
@@ -1711,7 +1711,7 @@ func TestGetStatsLimitParameter(t *testing.T) {
 
 		_, err = getStatsLimitParameter(r)
 		testutil.NotOk(t, err)
-	})
+	}
 	t.Run("not present returns default", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
 		testutil.Ok(t, err)
@@ -1719,7 +1719,7 @@ func TestGetStatsLimitParameter(t *testing.T) {
 		limit, err := getStatsLimitParameter(r)
 		testutil.Ok(t, err)
 		testutil.Equals(t, limit, DefaultStatsLimit)
-	})
+	}
 	t.Run("if present and valid, the parameter is returned", func(t *testing.T) {
 		r, err := http.NewRequest(http.MethodGet, "http://0:0", nil)
 		testutil.Ok(t, err)
@@ -1733,7 +1733,7 @@ func TestGetStatsLimitParameter(t *testing.T) {
 		limit, err := getStatsLimitParameter(r)
 		testutil.Ok(t, err)
 		testutil.Equals(t, limit, givenLimit)
-	})
+	}
 }
 
 func TestHashringChangeCallsClose(t *testing.T) {
@@ -1769,7 +1769,7 @@ func TestHashringChangeCallsClose(t *testing.T) {
 func TestHandlerEarlyStop(t *testing.T) {
 	t.Parallel()
 
-	h := NewHandler(nil, &Options{})
+	h := NewHandler(nil, &Options{}
 	h.Close()
 
 	err := h.Run()
@@ -1797,10 +1797,10 @@ func TestDistributeSeries(t *testing.T) {
 	const tenantIDLabelName = "thanos_tenant_id"
 	h := NewHandler(nil, &Options{
 		SplitTenantLabelName: tenantIDLabelName,
-	})
+	}
 
 	endpoint := Endpoint{Address: "http://localhost:9090", CapNProtoAddress: "http://localhost:19391"}
-	hashring, err := newSimpleHashring([]Endpoint{endpoint})
+	hashring, err := newSimpleHashring([]Endpoint{endpoint}
 	require.NoError(t, err)
 	hr := &hashringSeenTenants{Hashring: hashring}
 	h.Hashring(hr)
@@ -1810,10 +1810,10 @@ func TestDistributeSeries(t *testing.T) {
 		[]uint64{0},
 		[]*prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsToLabels(labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar"))),
+				Labels: labelpb.PromLabelsToLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar"))),
 			},
 			{
-				Labels: labelpb.ZLabelsToLabels(labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo"))),
+				Labels: labelpb.PromLabelsToLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo"))),
 			},
 		},
 	)
@@ -1846,7 +1846,7 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 			newFakeTenantAppendable(appendable),
 			&WriterOptions{},
 		),
-	})
+	}
 
 	// initialize hashring with a single local endpoint matching the handler endpoint to force
 	// using local write
@@ -1854,7 +1854,7 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 		{
 			Address: h.options.Endpoint,
 		},
-	})
+	}
 	require.NoError(t, err)
 	hr := &hashringSeenTenants{Hashring: hashring}
 	h.Hashring(hr)
@@ -1862,17 +1862,17 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 	response, err := h.RemoteWrite(context.Background(), &storepb.WriteRequest{
 		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsToLabels(labelpb.ZLabelsFromPromLabels(
+				Labels: labelpb.PromLabelsToLabels(
 					labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
 				),
 			},
 			{
-				Labels: labelpb.ZLabelsToLabels(labelpb.ZLabelsFromPromLabels(
+				Labels: labelpb.PromLabelsToLabels(
 					labels.FromStrings("b", "a", tenantIDLabelName, "foo")),
 				),
 			},
 		},
-	})
+	}
 
 	require.NoError(t, err)
 	require.NotNil(t, response)
@@ -1882,7 +1882,7 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 func TestHandlerFlippingHashrings(t *testing.T) {
 	t.Parallel()
 
-	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{})
+	h := NewHandler(log.NewLogfmtLogger(os.Stderr), &Options{}
 	t.Cleanup(h.Close)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1892,13 +1892,13 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 		{
 			Address: "http://localhost:9090",
 		},
-	})
+	}
 	require.NoError(t, err)
 	h2, err := newSimpleHashring([]Endpoint{
 		{
 			Address: "http://localhost:9091",
 		},
-	})
+	}
 	require.NoError(t, err)
 
 	h.Hashring(h1)
@@ -1919,7 +1919,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
 				Timeseries: []*prompb.TimeSeries{
 					{
-						Labels: labelpb.ZLabelsToLabels(labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar"))),
+						Labels: labelpb.PromLabelsToLabels(labels.FromStrings("foo", "bar"))),
 						Samples: []*prompb.Sample{
 							{
 								Timestamp: time.Now().Unix(),
@@ -1928,7 +1928,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 						},
 					},
 				},
-			})
+			}
 			require.Error(t, err)
 		}
 	}()

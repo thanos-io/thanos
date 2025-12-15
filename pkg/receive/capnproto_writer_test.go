@@ -27,25 +27,25 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	// Create test data with valid exemplars
 	timeseries := []*prompb.TimeSeries{
 		{
-			Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+			Labels: []*labelpb.Label{
 				{Name: "__name__", Value: "test_metric"},
 				{Name: "job", Value: "test"},
-			}),
+			},
 			Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
 			Exemplars: []*prompb.Exemplar{
 				{
-					Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "trace_id", Value: "abc123"},
 						{Name: "span_id", Value: "def456"},
-					}),
+					},
 					Value:     10.5,
 					Timestamp: 10,
 				},
 				{
-					Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "trace_id", Value: "xyz789"},
 						{Name: "span_id", Value: "uvw012"},
-					}),
+					},
 					Value:     20.5,
 					Timestamp: 11,
 				},
@@ -95,7 +95,7 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	require.Equal(t, 10.5, firstExemplar.Value, "First exemplar value should match")
 	require.Equal(t, int64(10), firstExemplar.Ts, "First exemplar timestamp should match")
 
-	// Convert ZLabels to map for easier comparison
+	// Convert Labels to map for easier comparison
 	firstLabels := make(map[string]string)
 	for _, label := range firstExemplar.Labels.Labels {
 		firstLabels[label.Name] = label.Value
@@ -121,7 +121,7 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 	t.Parallel()
 
-	lbls := labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "__name__", Value: "test"}})
+	lbls := []*labelpb.Label{{Name: "__name__", Value: "test"}}
 	tests := map[string]struct {
 		reqs             []*prompb.WriteRequest
 		expectedErr      error
@@ -138,7 +138,7 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 						Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
 						Exemplars: []*prompb.Exemplar{
 							{
-								Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "trace_id", Value: "123"}}),
+								Labels:    []*labelpb.Label{{Name: "trace_id", Value: "123"}},
 								Value:     11,
 								Timestamp: 12,
 							},
@@ -157,7 +157,7 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 						Samples: []*prompb.Sample{{Value: 1, Timestamp: 10}},
 						Exemplars: []*prompb.Exemplar{
 							{
-								Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "", Value: "123"}}),
+								Labels:    []*labelpb.Label{{Name: "", Value: "123"}},
 								Value:     11,
 								Timestamp: 12,
 							},

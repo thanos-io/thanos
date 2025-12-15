@@ -635,10 +635,10 @@ func TestPrometheusConverter_addExponentialHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			wantSeries: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist"},
 					{Name: "attr", Value: "test_attr"},
-				})
+				}
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(labels): {
 						Labels: labels,
@@ -694,14 +694,14 @@ func TestPrometheusConverter_addExponentialHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			wantSeries: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist"},
 					{Name: "attr", Value: "test_attr"},
-				})
-				labelsAnother := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				}
+				labelsAnother := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist"},
 					{Name: "attr", Value: "test_attr_two"},
-				})
+				}
 
 				return map[uint64]*prompb.TimeSeries{
 					timeSeriesSignature(labels): {

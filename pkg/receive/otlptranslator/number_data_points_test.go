@@ -38,7 +38,7 @@ func TestPrometheusConverter_addGaugeNumberDataPoints(t *testing.T) {
 				)
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -93,7 +93,7 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				)
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -121,7 +121,7 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return m
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test"},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -154,10 +154,10 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				})
-				createdLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				createdLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum" + createdSuffix},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -190,7 +190,7 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -217,7 +217,7 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_sum"},
 				})
 				return map[uint64]*prompb.TimeSeries{

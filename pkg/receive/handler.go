@@ -570,7 +570,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
+	// NOTE: Due to zero copy Labels, Labels used from WriteRequests keeps memory
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
 	var wreq prompb.WriteRequest

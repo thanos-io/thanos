@@ -550,26 +550,6 @@ func AggrChunksFromPointers(chks []*AggrChunk) []AggrChunk {
 	return result
 }
 
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-type Label = labelpb.ZLabel
-
-// Deprecated.
-// TODO(bwplotka): Remove this in next PR. Done to reduce diff only.
-type LabelSet = labelpb.ZLabelSet
-
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func CompareLabels(a, b []Label) int {
-	return labels.Compare(labelpb.ZLabelsToPromLabels(a), labelpb.ZLabelsToPromLabels(b))
-}
-
-// Deprecated.
-// TODO(bwplotka): Remove this once Cortex dep will stop using it.
-func LabelsToPromLabelsUnsafe(lset []Label) labels.Labels {
-	return labelpb.ZLabelsToPromLabels(lset)
-}
-
 // XORNumSamples return number of samples. Returns 0 if it's not XOR chunk.
 func (m *Chunk) XORNumSamples() int {
 	if m.Type == Chunk_XOR {
@@ -586,25 +566,13 @@ type SeriesStatsCounter struct {
 	Samples int
 }
 
-// CountSeriesFromZLabels counts series using ZLabel slice.
-func (c *SeriesStatsCounter) CountSeriesFromZLabels(seriesLabels []labelpb.ZLabel) {
+// CountSeries counts series using proto Label slice.
+func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
 	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
 		c.Series++
 	}
-}
-
-// CountSeries counts series using proto Label slice.
-func (c *SeriesStatsCounter) CountSeries(seriesLabels []*labelpb.Label) {
-	// Convert to ZLabel for hashing
-	zlabels := make([]labelpb.ZLabel, 0, len(seriesLabels))
-	for _, l := range seriesLabels {
-		if l != nil {
-			zlabels = append(zlabels, labelpb.ZLabel{Name: l.Name, Value: l.Value})
-		}
-	}
-	c.CountSeriesFromZLabels(zlabels)
 }
 
 func (c *SeriesStatsCounter) Count(series *Series) {

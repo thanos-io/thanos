@@ -23,7 +23,7 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 		Tenant: "example-tenant",
 		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "prometheus"},
 				}),
@@ -33,7 +33,7 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 				},
 			},
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "thanos"},
 				}),

@@ -42,10 +42,10 @@ func TestMarshalWriteRequest(t *testing.T) {
 		Tenant: "example-tenant",
 		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "prometheus"},
-				}),
+				},
 				Samples: []*prompb.Sample{
 					{Timestamp: 1, Value: 1},
 					{Timestamp: 2, Value: 2},
@@ -57,17 +57,17 @@ func TestMarshalWriteRequest(t *testing.T) {
 				}(),
 				Exemplars: []*prompb.Exemplar{
 					{
-						Labels:    labelpb.ZLabelsToLabels([]labelpb.ZLabel{{Name: "traceID", Value: "1234"}}),
+						Labels:    []*labelpb.Label{{Name: "traceID", Value: "1234"}},
 						Value:     10,
 						Timestamp: 14,
 					},
 				},
 			},
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "__name__", Value: "up"},
 					{Name: "job", Value: "thanos"},
-				}),
+				},
 				Samples: []*prompb.Sample{
 					{Timestamp: 3, Value: 3},
 					{Timestamp: 4, Value: 4},
@@ -153,9 +153,9 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 		Tenant: "example-tenant",
 		Timeseries: []*prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "job", Value: "prometheus-1"},
-				}),
+				},
 				Histograms: []*prompb.Histogram{
 					histogramPtr(prompb.HistogramToHistogramProto(1, &histogram.Histogram{})),
 					histogramPtr(prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1))),
@@ -163,9 +163,9 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 				},
 			},
 			{
-				Labels: labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				Labels: []*labelpb.Label{
 					{Name: "job", Value: "prometheus-2"},
-				}),
+				},
 				Histograms: []*prompb.Histogram{
 					histogramPtr(prompb.HistogramToHistogramProto(1, tsdbutil.GenerateTestHistogram(1))),
 					histogramPtr(prompb.FloatHistogramToHistogramProto(2, tsdbutil.GenerateTestFloatHistogram(2))),

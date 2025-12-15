@@ -226,7 +226,7 @@ func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
 		infos = append(infos, infopb.NewTSDBInfo(
 			info.MinTime,
 			info.MaxTime,
-			labelpb.ZLabelsFromPromLabels(builder.Labels())),
+			builder.Labels()),
 		)
 	}
 	return infos

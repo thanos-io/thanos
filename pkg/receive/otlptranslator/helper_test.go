@@ -241,13 +241,13 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
 				})
-				createdLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				createdLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_summary" + createdSuffix},
 				})
-				sumLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				sumLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -285,10 +285,10 @@ func TestPrometheusConverter_AddSummaryDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_summary" + countStr},
 				})
-				sumLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				sumLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_summary" + sumStr},
 				})
 				return map[uint64]*prompb.TimeSeries{
@@ -350,13 +350,13 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
 				})
-				createdLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				createdLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist" + createdSuffix},
 				})
-				infLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				infLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
 					{Name: model.BucketLabel, Value: "+Inf"},
 				})
@@ -395,10 +395,10 @@ func TestPrometheusConverter_AddHistogramDataPoints(t *testing.T) {
 				return metric
 			},
 			want: func() map[uint64]*prompb.TimeSeries {
-				labels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				labels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist" + countStr},
 				})
-				infLabels := labelpb.ZLabelsToLabels([]labelpb.ZLabel{
+				infLabels := []*labelpb.Label{
 					{Name: model.MetricNameLabel, Value: "test_hist_bucket"},
 					{Name: model.BucketLabel, Value: "+Inf"},
 				})

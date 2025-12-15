@@ -37,28 +37,25 @@ func (s *ShardMatcher) Close() {
 	}
 }
 
-func (s *ShardMatcher) MatchesZLabels(zLabels []labelpb.ZLabel) bool {
+// MatchesLabels checks if the given Prometheus labels match the shard.
+func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
 	// Match all series when query is not sharded
 	if s == nil || !s.isSharded {
 		return true
 	}
 
 	*s.buf = (*s.buf)[:0]
-	for _, lbl := range zLabels {
-		if shardByLabel(s.shardingLabelset, lbl, s.by) {
+	lbls.Range(func(lbl labels.Label) {
+		if shardByLabelName(s.shardingLabelset, lbl.Name, s.by) {
 			*s.buf = append(*s.buf, lbl.Name...)
 			*s.buf = append(*s.buf, sep[0])
 			*s.buf = append(*s.buf, lbl.Value...)
 			*s.buf = append(*s.buf, sep[0])
 		}
-	}
+	})
 
 	hash := xxhash.Sum64(*s.buf)
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
-}
-
-func (s *ShardMatcher) MatchesLabels(lbls labels.Labels) bool {
-	return s.MatchesZLabels(labelpb.ZLabelsFromPromLabels(lbls))
 }
 
 // MatchesLabelPointers checks if the given label pointers match the shard.
@@ -73,8 +70,7 @@ func (s *ShardMatcher) MatchesLabelPointers(lbls []*labelpb.Label) bool {
 		if lbl == nil {
 			continue
 		}
-		zlbl := labelpb.ZLabel{Name: lbl.Name, Value: lbl.Value}
-		if shardByLabel(s.shardingLabelset, zlbl, s.by) {
+		if shardByLabelName(s.shardingLabelset, lbl.Name, s.by) {
 			*s.buf = append(*s.buf, lbl.Name...)
 			*s.buf = append(*s.buf, sep[0])
 			*s.buf = append(*s.buf, lbl.Value...)
@@ -86,8 +82,8 @@ func (s *ShardMatcher) MatchesLabelPointers(lbls []*labelpb.Label) bool {
 	return hash%uint64(s.totalShards) == uint64(s.shardIndex)
 }
 
-func shardByLabel(labelSet map[string]struct{}, zlabel labelpb.ZLabel, groupingBy bool) bool {
-	_, shardHasLabel := labelSet[zlabel.Name]
+func shardByLabelName(labelSet map[string]struct{}, name string, groupingBy bool) bool {
+	_, shardHasLabel := labelSet[name]
 	if groupingBy && shardHasLabel {
 		return true
 	}

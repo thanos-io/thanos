@@ -101,7 +101,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []*prompb.Time
 	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
-		if err := labelpb.ValidateLabelsFromProto(t.Labels); err != nil {
+		if err := labelpb.ValidateLabels(t.Labels); err != nil {
 			lset := labelpb.LabelsToPromLabels(t.Labels)
 			errorTracker.addLabelsError(err, lset, tLogger)
 			continue
@@ -114,7 +114,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []*prompb.Time
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocLabelStrings(&t.Labels)
+			labelpb.ReAllocLabelStrings(t.Labels, false)
 			lset = labelpb.LabelsToPromLabels(t.Labels)
 		}
 

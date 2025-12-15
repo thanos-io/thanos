@@ -65,12 +65,12 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []*infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
+				infopb.NewTSDBInfo(0, 10, []*labelpb.Label{{Name: "lbl", Value: "val1"}}),
 			},
 		},
 		&storetestutil.TestClient{
 			StoreTSDBInfos: []*infopb.TSDBInfo{
-				infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+				infopb.NewTSDBInfo(0, 20, []*labelpb.Label{{Name: "lbl", Value: "val2"}}),
 			},
 		},
 	}
@@ -80,8 +80,8 @@ func TestProxyStore_TSDBInfos(t *testing.T) {
 	)
 
 	expected := []*infopb.TSDBInfo{
-		infopb.NewTSDBInfo(0, 10, []labelpb.ZLabel{{Name: "lbl", Value: "val1"}}),
-		infopb.NewTSDBInfo(0, 20, []labelpb.ZLabel{{Name: "lbl", Value: "val2"}}),
+		infopb.NewTSDBInfo(0, 10, []*labelpb.Label{{Name: "lbl", Value: "val1"}}),
+		infopb.NewTSDBInfo(0, 20, []*labelpb.Label{{Name: "lbl", Value: "val2"}}),
 	}
 	testutil.Equals(t, expected, q.TSDBInfos())
 }

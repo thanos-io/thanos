@@ -120,7 +120,7 @@ func (s simpleHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 		return Endpoint{}, &insufficientNodesError{have: uint64(len(s)), want: n + 1}
 	}
 
-	return s[(labelpb.HashWithPrefixFromProto(tenant, ts.Labels)+n)%uint64(len(s))], nil
+	return s[(labelpb.HashWithPrefix(tenant, ts.Labels)+n)%uint64(len(s))], nil
 }
 
 type section struct {
@@ -233,7 +233,7 @@ func (c ketamaHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (En
 		return Endpoint{}, &insufficientNodesError{have: c.numEndpoints, want: n + 1}
 	}
 
-	v := labelpb.HashWithPrefixFromProto(tenant, ts.Labels)
+	v := labelpb.HashWithPrefix(tenant, ts.Labels)
 
 	var i uint64
 	i = uint64(sort.Search(len(c.sections), func(i int) bool {

@@ -829,32 +829,32 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 		name              string
 		relabel           string
 		expectedIDs       []ulid.ULID
-		expectedAdvLabels []labelpb.ZLabelSet
+		expectedAdvLabels []*labelpb.LabelSet
 	}{
 		{
 			name:        "no sharding",
 			expectedIDs: all,
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []&labelpb.LabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -869,15 +869,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[2]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []&labelpb.LabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -892,21 +892,21 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - cluster
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1], all[3]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []&labelpb.LabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r2"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -925,15 +925,15 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs: []ulid.ULID{all[0], all[1]},
-			expectedAdvLabels: []labelpb.ZLabelSet{
+			expectedAdvLabels: []&labelpb.LabelSet{
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
 					},
 				},
 				{
-					Labels: []labelpb.ZLabel{
+					Labels: []*labelpb.Label{
 						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
@@ -952,7 +952,7 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
               - region
             `,
 			expectedIDs:       []ulid.ULID{},
-			expectedAdvLabels: []labelpb.ZLabelSet{},
+			expectedAdvLabels: []&labelpb.LabelSet{},
 		},
 	} {
 		t.Run(sc.name, func(t *testing.T) {

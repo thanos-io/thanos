@@ -25,7 +25,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-func labelProtosToLabels(b *labels.ScratchBuilder, labelPairs []labelpb.ZLabel) labels.Labels {
+func labelProtosToLabels(b *labels.ScratchBuilder, labelPairs []*labelpb.Label) labels.Labels {
 	b.Reset()
 	for _, l := range labelPairs {
 		b.Add(l.Name, l.Value)
@@ -76,7 +76,7 @@ func TestFromMetrics(t *testing.T) {
 			target_info_count := 0
 			for _, s := range ts {
 				b := labels.NewScratchBuilder(2)
-				lbls := labelProtosToLabels(&b, labelpb.LabelsToZLabels(s.Labels))
+				lbls := labelProtosToLabels(&b, s.Labels)
 				if lbls.Get(labels.MetricName) == "target_info" {
 					target_info_count++
 					require.Equal(t, "test-namespace/test-service", lbls.Get("job"))

@@ -70,7 +70,7 @@ func (r *resortingServer) Send(response *storepb.SeriesResponse) error {
 	}
 
 	series := response.GetSeries()
-	labelpb.ReAllocLabelStrings(&series.Labels)
+	labelpb.ReAllocLabelStrings(series.Labels, false)
 	r.series = append(r.series, series)
 	return nil
 }

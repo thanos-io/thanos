@@ -262,9 +262,9 @@ func TestRemoteEngine_MinT(t *testing.T) {
 }
 
 func zLabelSetFromStrings(ss ...string) *labelpb.LabelSet {
-	return labelpb.ZLabelSetToLabelSet(labelpb.ZLabelSet{
-		Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(ss...)),
-	})
+	return &labelpb.LabelSet{
+		Labels: labelpb.PromLabelsToLabels(labels.FromStrings(ss...)),
+	}
 }
 
 type warnClient struct {

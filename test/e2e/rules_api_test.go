@@ -101,7 +101,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 						{Name: "foo", Value: "bar"},
 						{Name: "prometheus", Value: "ha"},
 						{Name: "severity", Value: "page"},
@@ -118,7 +118,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_AbortOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 						{Name: "foo", Value: "bar"},
 						{Name: "severity", Value: "page"},
 					}},
@@ -134,7 +134,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WarnOnPartialResponse",
 					State: rulespb.AlertState_FIRING,
 					Query: "absent(some_metric)",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthGood),
@@ -150,7 +150,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 					Name:  "TestAlert_WithLimit",
 					State: rulespb.AlertState_INACTIVE,
 					Query: `promhttp_metric_handler_requests_total`,
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+					Labels: &labelpb.LabelSet{Labels: []*labelpb.Label{
 						{Name: "severity", Value: "page"},
 					}},
 					Health: string(rules.HealthBad),
