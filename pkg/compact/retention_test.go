@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -846,4 +847,394 @@ func uploadTenantBlock(t *testing.T, bkt objstore.Bucket, id, tenant string, min
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000001", strings.NewReader("@test-data@")))
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000002", strings.NewReader("@test-data@")))
 	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000003", strings.NewReader("@test-data@")))
+}
+
+func TestApplyFastRetentionByTenant(t *testing.T) {
+	t.Parallel()
+
+	type testBlock struct {
+		id, tenant string
+		minTime    time.Time
+		maxTime    time.Time
+		lvl        int
+	}
+
+	logger := log.NewNopLogger()
+	ctx := context.TODO()
+
+	for _, tt := range []struct {
+		name              string
+		blocks            []testBlock
+		retentionByTenant map[string]compact.RetentionPolicy
+		want              []string
+		wantDeleted       int
+		wantCorrupt       int
+		wantErr           bool
+	}{
+		{
+			name:   "empty bucket",
+			blocks: []testBlock{},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 24 * time.Hour},
+			},
+			want:        []string{},
+			wantDeleted: 0,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "delete expired blocks with wildcard policy",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-3 * 24 * time.Hour),
+					time.Now().Add(-2 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-b",
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * time.Hour},
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
+			wantDeleted: 1,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "delete corrupt blocks (no tenant label)",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"", // no tenant - corrupt
+					time.Now().Add(-5 * time.Hour),
+					time.Now().Add(-4 * time.Hour),
+					compact.Level1,
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * time.Hour},
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW48/"},
+			wantDeleted: 0,
+			wantCorrupt: 1,
+			wantErr:     false,
+		},
+		{
+			name: "specific tenant policy takes precedence over wildcard",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-special",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-normal",
+					time.Now().Add(-15 * 24 * time.Hour),
+					time.Now().Add(-14 * 24 * time.Hour),
+					compact.Level1,
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*":              {RetentionDuration: 10 * 24 * time.Hour}, // 10 days wildcard
+				"tenant-special": {RetentionDuration: 20 * 24 * time.Hour}, // 20 days specific
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW48/"},
+			wantDeleted: 1,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "skip blocks without matching policy",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-b",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level1,
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"tenant-a": {RetentionDuration: 10 * 24 * time.Hour}, // only tenant-a has policy
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
+			wantDeleted: 1,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "default only deletes level 1 blocks",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-a",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level2, // level 2 should NOT be deleted without IsAll
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * 24 * time.Hour, IsAll: false},
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"}, // level 2 block kept
+			wantDeleted: 1,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "IsAll flag deletes all levels",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-a",
+					time.Now().Add(-30 * 24 * time.Hour),
+					time.Now().Add(-29 * 24 * time.Hour),
+					compact.Level2, // level 2 should be deleted with IsAll
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * 24 * time.Hour, IsAll: true},
+			},
+			want:        []string{},
+			wantDeleted: 2,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+		{
+			name: "cutoff date based retention",
+			blocks: []testBlock{
+				{
+					"01CPHBEX20729MJQZXE3W0BW48",
+					"tenant-a",
+					time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+					time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+					compact.Level1,
+				},
+				{
+					"01CPHBEX20729MJQZXE3W0BW49",
+					"tenant-a",
+					time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC),
+					time.Date(2024, 11, 2, 0, 0, 0, 0, time.UTC),
+					compact.Level1,
+				},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {CutoffDate: time.Date(2024, 10, 1, 0, 0, 0, 0, time.UTC)},
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
+			wantDeleted: 1,
+			wantCorrupt: 0,
+			wantErr:     false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+			for _, b := range tt.blocks {
+				if b.tenant == "" {
+					uploadBlockWithoutTenant(t, bkt, b.id, b.minTime, b.maxTime, b.lvl)
+				} else {
+					uploadTenantBlock(t, bkt, b.id, b.tenant, b.minTime, b.maxTime, b.lvl)
+				}
+			}
+
+			blocksDeleted := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+			err := compact.ApplyFastRetentionByTenant(ctx, logger, bkt, tt.retentionByTenant, "", 4, false, blocksDeleted)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ApplyFastRetentionByTenant() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			got := []string{}
+			testutil.Ok(t, bkt.Iter(context.TODO(), "", func(name string) error {
+				if !strings.Contains(name, "/") || strings.HasSuffix(name, "/") {
+					if strings.HasSuffix(name, "/") {
+						got = append(got, name)
+					}
+				}
+				return nil
+			}))
+
+			testutil.Equals(t, tt.want, got)
+		})
+	}
+}
+
+func TestApplyFastRetentionByTenantWithCache(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewNopLogger()
+	ctx := context.TODO()
+
+	// Create temp cache directory
+	cacheDir := t.TempDir()
+
+	// Create test blocks in bucket
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+
+	// Block 1: expired, should be deleted
+	uploadTenantBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", "tenant-a",
+		time.Now().Add(-30*24*time.Hour), time.Now().Add(-29*24*time.Hour), compact.Level1)
+
+	// Block 2: not expired, should be kept
+	uploadTenantBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW49", "tenant-a",
+		time.Now().Add(-5*time.Hour), time.Now().Add(-4*time.Hour), compact.Level1)
+
+	// Create cache entries for both blocks
+	for _, id := range []string{"01CPHBEX20729MJQZXE3W0BW48", "01CPHBEX20729MJQZXE3W0BW49"} {
+		blockDir := filepath.Join(cacheDir, id)
+		testutil.Ok(t, os.MkdirAll(blockDir, 0755))
+
+		// Download and save meta to cache
+		m, err := block.DownloadMeta(ctx, logger, bkt, ulid.MustParse(id))
+		testutil.Ok(t, err)
+		testutil.Ok(t, m.WriteToDir(logger, blockDir))
+	}
+
+	retentionByTenant := map[string]compact.RetentionPolicy{
+		"*": {RetentionDuration: 10 * 24 * time.Hour},
+	}
+
+	blocksDeleted := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+	// Run with cache directory
+	err := compact.ApplyFastRetentionByTenant(ctx, logger, bkt, retentionByTenant, cacheDir, 4, false, blocksDeleted)
+	testutil.Ok(t, err)
+
+	// Verify bucket state - only block 49 should remain
+	got := []string{}
+	testutil.Ok(t, bkt.Iter(ctx, "", func(name string) error {
+		if strings.HasSuffix(name, "/") {
+			got = append(got, name)
+		}
+		return nil
+	}))
+	testutil.Equals(t, []string{"01CPHBEX20729MJQZXE3W0BW49/"}, got)
+
+	// Verify block 48 is completely deleted from bucket (meta.json and chunks)
+	exists, err := bkt.Exists(ctx, "01CPHBEX20729MJQZXE3W0BW48/meta.json")
+	testutil.Ok(t, err)
+	testutil.Assert(t, !exists, "block 48 meta.json should be deleted from bucket")
+
+	exists, err = bkt.Exists(ctx, "01CPHBEX20729MJQZXE3W0BW48/chunks/000001")
+	testutil.Ok(t, err)
+	testutil.Assert(t, !exists, "block 48 chunks should be deleted from bucket")
+
+	// Verify block 49 still exists in bucket with all files
+	exists, err = bkt.Exists(ctx, "01CPHBEX20729MJQZXE3W0BW49/meta.json")
+	testutil.Ok(t, err)
+	testutil.Assert(t, exists, "block 49 meta.json should exist in bucket")
+
+	exists, err = bkt.Exists(ctx, "01CPHBEX20729MJQZXE3W0BW49/chunks/000001")
+	testutil.Ok(t, err)
+	testutil.Assert(t, exists, "block 49 chunks should exist in bucket")
+
+	// Verify cache state - block 48 cache should be deleted
+	_, err = os.Stat(filepath.Join(cacheDir, "01CPHBEX20729MJQZXE3W0BW48"))
+	testutil.Assert(t, os.IsNotExist(err), "cache for deleted block should be removed")
+
+	// Block 49 cache should still exist
+	_, err = os.Stat(filepath.Join(cacheDir, "01CPHBEX20729MJQZXE3W0BW49"))
+	testutil.Ok(t, err)
+
+	// Verify counter
+	testutil.Equals(t, 1.0, promtest.ToFloat64(blocksDeleted))
+}
+
+func TestApplyFastRetentionByTenantDryRun(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewNopLogger()
+	ctx := context.TODO()
+
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+
+	// Create expired block
+	uploadTenantBlock(t, bkt, "01CPHBEX20729MJQZXE3W0BW48", "tenant-a",
+		time.Now().Add(-30*24*time.Hour), time.Now().Add(-29*24*time.Hour), compact.Level1)
+
+	retentionByTenant := map[string]compact.RetentionPolicy{
+		"*": {RetentionDuration: 10 * 24 * time.Hour},
+	}
+
+	blocksDeleted := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+	// Run with dry-run enabled
+	err := compact.ApplyFastRetentionByTenant(ctx, logger, bkt, retentionByTenant, "", 4, true, blocksDeleted)
+	testutil.Ok(t, err)
+
+	// Verify block is NOT deleted in dry-run mode
+	got := []string{}
+	testutil.Ok(t, bkt.Iter(ctx, "", func(name string) error {
+		if strings.HasSuffix(name, "/") {
+			got = append(got, name)
+		}
+		return nil
+	}))
+	testutil.Equals(t, []string{"01CPHBEX20729MJQZXE3W0BW48/"}, got)
+
+	// But counter should still be incremented
+	testutil.Equals(t, 1.0, promtest.ToFloat64(blocksDeleted))
+}
+
+func uploadBlockWithoutTenant(t *testing.T, bkt objstore.Bucket, id string, minTime, maxTime time.Time, lvl int) {
+	t.Helper()
+	meta1 := metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    ulid.MustParse(id),
+			MinTime: minTime.Unix() * 1000,
+			MaxTime: maxTime.Unix() * 1000,
+			Version: 1,
+			Compaction: tsdb.BlockMetaCompaction{
+				Level: lvl,
+			},
+		},
+		Thanos: metadata.Thanos{
+			Labels: map[string]string{}, // no tenant label
+		},
+	}
+
+	b, err := json.Marshal(meta1)
+	testutil.Ok(t, err)
+
+	testutil.Ok(t, bkt.Upload(context.Background(), id+"/meta.json", bytes.NewReader(b)))
+	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000001", strings.NewReader("@test-data@")))
 }

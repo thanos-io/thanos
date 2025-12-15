@@ -6,8 +6,11 @@ package compact
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +21,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -172,5 +177,215 @@ func ApplyRetentionPolicyByTenant(
 		}
 	}
 	level.Info(logger).Log("msg", "tenant retention apply done", "deleted", deleted, "skipped", skipped, "notExpired", notExpired)
+	return nil
+}
+
+// ApplyFastRetentionByTenant applies tenant-based retention policies using streaming deletion.
+// Unlike ApplyRetentionPolicyByTenant, this processes blocks one-by-one without syncing all metadata first.
+// If cacheDir is set and contains block directories, it iterates from cache (enabling resume).
+// Otherwise, it lists blocks from the bucket.
+// Blocks without tenant label are deleted immediately as corrupt.
+func ApplyFastRetentionByTenant(
+	ctx context.Context,
+	logger log.Logger,
+	bkt objstore.Bucket,
+	retentionByTenant map[string]RetentionPolicy,
+	cacheDir string,
+	concurrency int,
+	dryRun bool,
+	blocksDeleted prometheus.Counter,
+) error {
+	if len(retentionByTenant) == 0 {
+		level.Info(logger).Log("msg", "fast retention is disabled due to no policy")
+		return nil
+	}
+
+	startTime := time.Now()
+	var scanned, deleted, corrupt, skipped, errCount atomic.Int64
+
+	blockChan := make(chan ulid.ULID, concurrency*2)
+	eg, gCtx := errgroup.WithContext(ctx)
+
+	// Check if wildcard policy exists
+	wildcardPolicy, hasWildcard := retentionByTenant[wildCardTenant]
+
+	// Start producer goroutine
+	eg.Go(func() error {
+		defer close(blockChan)
+		return produceBlockIDs(gCtx, logger, bkt, cacheDir, blockChan)
+	})
+
+	// Start consumer goroutines
+	for i := 0; i < concurrency; i++ {
+		eg.Go(func() error {
+			for id := range blockChan {
+				scanned.Inc()
+
+				// Load meta from cache or bucket
+				meta, err := loadMetaFromCacheOrBucket(gCtx, logger, bkt, id, cacheDir)
+				if err != nil {
+					level.Error(logger).Log("msg", "failed to load meta", "id", id, "err", err)
+					errCount.Inc()
+					continue
+				}
+
+				tenant := meta.Thanos.GetTenant()
+
+				// Blocks without tenant label are corrupt - delete immediately
+				if tenant == metadata.DefaultTenant {
+					level.Warn(logger).Log("msg", "deleting corrupt block (no tenant label)", "id", id)
+					if !dryRun {
+						if err := deleteBlockAndCache(gCtx, logger, bkt, id, cacheDir); err != nil {
+							level.Error(logger).Log("msg", "failed to delete corrupt block", "id", id, "err", err)
+							errCount.Inc()
+							continue
+						}
+					}
+					blocksDeleted.Inc()
+					corrupt.Inc()
+					continue
+				}
+
+				// Look up retention policy (tenant-specific first, then wildcard)
+				policy, ok := retentionByTenant[tenant]
+				if !ok {
+					if hasWildcard {
+						policy = wildcardPolicy
+					} else {
+						skipped.Inc()
+						continue
+					}
+				}
+
+				// Default behavior: only delete level 1 blocks unless IsAll is true
+				if !policy.IsAll && meta.Compaction.Level != Level1 {
+					skipped.Inc()
+					continue
+				}
+
+				maxTime := time.Unix(meta.MaxTime/1000, 0)
+				if policy.isExpired(maxTime) {
+					level.Info(logger).Log("msg", "deleting expired block", "id", id, "tenant", tenant, "maxTime", maxTime.String())
+					if !dryRun {
+						if err := deleteBlockAndCache(gCtx, logger, bkt, id, cacheDir); err != nil {
+							level.Error(logger).Log("msg", "failed to delete block", "id", id, "err", err)
+							errCount.Inc()
+							continue
+						}
+					}
+					blocksDeleted.Inc()
+					deleted.Inc()
+				} else {
+					skipped.Inc()
+				}
+			}
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return errors.Wrap(err, "fast retention processing")
+	}
+
+	level.Info(logger).Log(
+		"msg", "fast retention completed",
+		"scanned", scanned.Load(),
+		"deleted", deleted.Load(),
+		"corrupt", corrupt.Load(),
+		"skipped", skipped.Load(),
+		"errors", errCount.Load(),
+		"duration", time.Since(startTime),
+		"dry_run", dryRun,
+	)
+	return nil
+}
+
+// produceBlockIDs sends block IDs to the channel, reading from cache or bucket.
+func produceBlockIDs(ctx context.Context, logger log.Logger, bkt objstore.Bucket, cacheDir string, blockChan chan<- ulid.ULID) error {
+	level.Info(logger).Log("msg", "starting block ID production", cacheDir, cacheDir)
+	// If cache dir is set and has block directories, iterate from cache
+	if cacheDir != "" {
+		entries, err := os.ReadDir(cacheDir)
+		if err == nil && len(entries) > 0 {
+			level.Info(logger).Log("msg", "iterating blocks from local cache", "cache_dir", cacheDir, "entries", len(entries))
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				id, ok := block.IsBlockDir(entry.Name())
+				if !ok {
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case blockChan <- id:
+				}
+			}
+			return nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			level.Warn(logger).Log("msg", "failed to read cache dir, falling back to bucket", "err", err)
+		}
+	}
+
+	// Fallback: iterate from bucket
+	level.Info(logger).Log("msg", "iterating blocks from bucket")
+	return bkt.Iter(ctx, "", func(name string) error {
+		// Only process top-level directories (block ULIDs)
+		if strings.Count(name, "/") > 1 {
+			return nil
+		}
+		name = strings.TrimSuffix(name, "/")
+		id, ok := block.IsBlockDir(name)
+		if !ok {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case blockChan <- id:
+		}
+		return nil
+	})
+}
+
+// loadMetaFromCacheOrBucket loads meta.json from local cache first, then falls back to bucket.
+func loadMetaFromCacheOrBucket(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, cacheDir string) (*metadata.Meta, error) {
+	// Try cache first
+	if cacheDir != "" {
+		cachedBlockDir := filepath.Join(cacheDir, id.String())
+		m, err := metadata.ReadFromDir(cachedBlockDir)
+		if err == nil {
+			return m, nil
+		}
+		if !os.IsNotExist(err) {
+			level.Debug(logger).Log("msg", "failed to read meta from cache", "id", id, "err", err)
+		}
+	}
+
+	// Fallback to bucket
+	m, err := block.DownloadMeta(ctx, logger, bkt, id)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// deleteBlockAndCache deletes a block from bucket and removes from local cache.
+func deleteBlockAndCache(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, cacheDir string) error {
+	// Delete from bucket first
+	if err := block.Delete(ctx, logger, bkt, id); err != nil {
+		return err
+	}
+
+	// Delete from local cache (best effort)
+	if cacheDir != "" {
+		cachedBlockDir := filepath.Join(cacheDir, id.String())
+		if err := os.RemoveAll(cachedBlockDir); err != nil && !os.IsNotExist(err) {
+			level.Warn(logger).Log("msg", "failed to remove block from cache", "id", id, "err", err)
+		}
+	}
+
 	return nil
 }

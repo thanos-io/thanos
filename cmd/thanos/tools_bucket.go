@@ -165,6 +165,13 @@ type bucketUploadBlocksConfig struct {
 	labels []string
 }
 
+type bucketFastRetentionConfig struct {
+	cacheDir             string
+	concurrency          int
+	dryRun               bool
+	enableFolderDeletion bool
+}
+
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
 	cmd.Flag("repair", "Attempt to repair blocks for which issues were detected").
 		Short('r').Default("false").BoolVar(&tbc.repair)
@@ -305,6 +312,7 @@ func registerBucket(app extkingpin.AppClause) {
 	registerBucketMarkBlock(cmd, objStoreConfig)
 	registerBucketRewrite(cmd, objStoreConfig)
 	registerBucketRetention(cmd, objStoreConfig)
+	registerBucketFastRetention(cmd, objStoreConfig)
 	registerBucketUploadBlocks(cmd, objStoreConfig)
 }
 
@@ -1433,6 +1441,71 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 
 		if err := compact.ApplyRetentionPolicyByResolution(ctx, logger, insBkt, sy.Metas(), retentionByResolution, stubCounter); err != nil {
 			return errors.Wrap(err, "retention failed")
+		}
+		return nil
+	})
+}
+
+func registerBucketFastRetention(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
+	cmd := app.Command("fast-retention", "Fast retention applies tenant-based retention policies using streaming deletion. "+
+		"Unlike the regular retention command, this processes blocks one-by-one without syncing all metadata first. "+
+		"Supports resume via local cache directory. Please make sure no compactor is running on the same bucket.")
+
+	tbc := &bucketFastRetentionConfig{}
+
+	cmd.Flag("cache-dir", "Local cache directory containing pre-synced meta.json files (e.g., compactor's meta-syncer dir). "+
+		"If set and contains block directories, iterates from cache instead of bucket for faster processing and resume support.").
+		StringVar(&tbc.cacheDir)
+	cmd.Flag("concurrency", "Number of concurrent delete workers.").
+		Default("32").IntVar(&tbc.concurrency)
+	cmd.Flag("dry-run", "Log what would be deleted without actually deleting.").
+		Default("false").BoolVar(&tbc.dryRun)
+	cmd.Flag("enable-folder-deletion", "Support Azure Blob HNS folder deletion. This is a workaround for Azure Blob HNS folder deletion issue.").
+		Default("true").BoolVar(&tbc.enableFolderDeletion)
+	retentionTenants := cmd.Flag("retention.tenant",
+		"Per-tenant retention policy. Format: '<tenant>:<duration>d' or '<tenant>:<yyyy-mm-dd>'. "+
+			"Use '*' as tenant for wildcard policy. Blocks without tenant label are deleted as corrupt. "+
+			"Example: --retention.tenant='foo:30d' --retention.tenant='*:90d'").
+		Strings()
+
+	cmd.Setup(func(g *run.Group, logger log.Logger, reg *prometheus.Registry, _ opentracing.Tracer, _ <-chan struct{}, _ bool) error {
+		if len(*retentionTenants) == 0 {
+			return errors.New("at least one --retention.tenant flag is required")
+		}
+
+		retentionByTenant, err := compact.ParesRetentionPolicyByTenant(logger, *retentionTenants)
+		if err != nil {
+			return errors.Wrap(err, "parse retention policies")
+		}
+
+		confContentYaml, err := objStoreConfig.Content()
+		if err != nil {
+			return err
+		}
+
+		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String(), nil)
+		if tbc.enableFolderDeletion {
+			bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt)
+			level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled", "name", bkt.Name())
+		}
+		if err != nil {
+			return err
+		}
+		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
+
+		// Dummy actor to immediately kill the group after the run function returns.
+		g.Add(func() error { return nil }, func(error) {})
+
+		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
+
+		ctx := context.Background()
+
+		level.Warn(logger).Log("msg", "GLOBAL COMPACTOR SHOULD __NOT__ BE RUNNING ON THE SAME BUCKET")
+
+		stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+
+		if err := compact.ApplyFastRetentionByTenant(ctx, logger, insBkt, retentionByTenant, tbc.cacheDir, tbc.concurrency, tbc.dryRun, stubCounter); err != nil {
+			return errors.Wrap(err, "fast retention failed")
 		}
 		return nil
 	})
