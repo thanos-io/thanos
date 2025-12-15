@@ -1813,16 +1813,30 @@ func seriesEquals(t *testing.T, expected []rawSeries, got []storepb.Series) {
 	}
 }
 
+func BenchmarkStoreMatches(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		baseStoreMatches(b)
+	}
+}
+
 func TestStoreMatches(t *testing.T) {
 	t.Parallel()
 
+	baseStoreMatches(t)
+}
+
+func baseStoreMatches(t testing.TB) {
 	for _, c := range []struct {
 		s          Client
 		mint, maxt int64
 		ms         []*labels.Matcher
 
-		expectedMatch  bool
-		expectedReason string
+		expectedMatch       bool
+		expectedReason      string
+		disableDebugLogging bool
 	}{
 		{
 			s: &storetestutil.TestClient{ExtLset: []labels.Labels{labels.FromStrings("a", "b")}},
@@ -1957,17 +1971,15 @@ func TestStoreMatches(t *testing.T) {
 				labels.MustNewMatcher(labels.MatchEqual, "a", "b"),
 				labels.MustNewMatcher(labels.MatchEqual, labels.MetricName, "test_metric_name"),
 			},
-			maxt:           1,
-			expectedMatch:  false,
-			expectedReason: "store does not match filter for matchers: [a=\"b\" __name__=\"test_metric_name\"]",
+			maxt:                1,
+			expectedMatch:       false,
+			expectedReason:      "store does not match filter for matchers",
+			disableDebugLogging: true,
 		},
 	} {
-		t.Run("", func(t *testing.T) {
-			ok, reason := storeMatches(context.TODO(), true, c.s, c.mint, c.maxt, c.ms...)
-			testutil.Equals(t, c.expectedMatch, ok)
-			testutil.Equals(t, c.expectedReason, reason)
-
-		})
+		ok, reason := storeMatches(context.TODO(), !c.disableDebugLogging, c.s, c.mint, c.maxt, c.ms...)
+		testutil.Equals(t, c.expectedMatch, ok)
+		testutil.Equals(t, c.expectedReason, reason)
 	}
 }
 
