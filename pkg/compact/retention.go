@@ -224,8 +224,18 @@ func ApplyFastRetentionByTenant(
 				// Load meta from cache or bucket
 				meta, err := loadMetaFromCacheOrBucket(gCtx, logger, bkt, id, cacheDir)
 				if err != nil {
-					level.Error(logger).Log("msg", "failed to load meta", "id", id, "err", err)
-					errCount.Inc()
+					// Any block without meta.json is corrupt/incomplete and should be deleted
+					// meta.json is the first object created, so its absence indicates corruption
+					level.Warn(logger).Log("msg", "deleting corrupt block (missing meta.json)", "id", id, "err", err)
+					if !dryRun {
+						if err := deleteBlockAndCache(gCtx, logger, bkt, id, cacheDir); err != nil {
+							level.Error(logger).Log("msg", "failed to delete corrupt block", "id", id, "err", err)
+							errCount.Inc()
+							continue
+						}
+					}
+					blocksDeleted.Inc()
+					corrupt.Inc()
 					continue
 				}
 

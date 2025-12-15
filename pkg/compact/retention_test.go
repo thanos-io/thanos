@@ -822,41 +822,65 @@ func TestApplyRetentionPolicyByTenant(t *testing.T) {
 }
 
 func uploadTenantBlock(t *testing.T, bkt objstore.Bucket, id, tenant string, minTime, maxTime time.Time, lvl int) {
+	uploadTenantBlockWithOptions(t, bkt, id, tenant, minTime, maxTime, lvl, false, false)
+}
+
+func uploadTenantBlockWithOptions(t *testing.T, bkt objstore.Bucket, id, tenant string, minTime, maxTime time.Time, lvl int, noMeta, deletionMark bool) {
 	t.Helper()
-	meta1 := metadata.Meta{
-		BlockMeta: tsdb.BlockMeta{
-			ULID:    ulid.MustParse(id),
-			MinTime: minTime.Unix() * 1000,
-			MaxTime: maxTime.Unix() * 1000,
-			Version: 1,
-			Compaction: tsdb.BlockMetaCompaction{
-				Level: lvl,
+	ctx := context.Background()
+
+	// Upload meta.json unless noMeta is true
+	if !noMeta {
+		meta1 := metadata.Meta{
+			BlockMeta: tsdb.BlockMeta{
+				ULID:    ulid.MustParse(id),
+				MinTime: minTime.Unix() * 1000,
+				MaxTime: maxTime.Unix() * 1000,
+				Version: 1,
+				Compaction: tsdb.BlockMetaCompaction{
+					Level: lvl,
+				},
 			},
-		},
-		Thanos: metadata.Thanos{
-			Labels: map[string]string{
-				metadata.TenantLabel: tenant,
+			Thanos: metadata.Thanos{
+				Labels: map[string]string{
+					metadata.TenantLabel: tenant,
+				},
 			},
-		},
+		}
+
+		b, err := json.Marshal(meta1)
+		testutil.Ok(t, err)
+		testutil.Ok(t, bkt.Upload(ctx, id+"/meta.json", bytes.NewReader(b)))
 	}
 
-	b, err := json.Marshal(meta1)
-	testutil.Ok(t, err)
+	// Always upload chunks
+	testutil.Ok(t, bkt.Upload(ctx, id+"/chunks/000001", strings.NewReader("@test-data@")))
+	testutil.Ok(t, bkt.Upload(ctx, id+"/chunks/000002", strings.NewReader("@test-data@")))
+	testutil.Ok(t, bkt.Upload(ctx, id+"/chunks/000003", strings.NewReader("@test-data@")))
 
-	testutil.Ok(t, bkt.Upload(context.Background(), id+"/meta.json", bytes.NewReader(b)))
-	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000001", strings.NewReader("@test-data@")))
-	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000002", strings.NewReader("@test-data@")))
-	testutil.Ok(t, bkt.Upload(context.Background(), id+"/chunks/000003", strings.NewReader("@test-data@")))
+	// Optionally upload deletion-mark.json
+	if deletionMark {
+		mark := metadata.DeletionMark{
+			ID:           ulid.MustParse(id),
+			DeletionTime: time.Now().Unix(),
+			Version:      metadata.DeletionMarkVersion1,
+		}
+		markBytes, err := json.Marshal(mark)
+		testutil.Ok(t, err)
+		testutil.Ok(t, bkt.Upload(ctx, id+"/"+metadata.DeletionMarkFilename, bytes.NewReader(markBytes)))
+	}
 }
 
 func TestApplyFastRetentionByTenant(t *testing.T) {
 	t.Parallel()
 
 	type testBlock struct {
-		id, tenant string
-		minTime    time.Time
-		maxTime    time.Time
-		lvl        int
+		id, tenant   string
+		minTime      time.Time
+		maxTime      time.Time
+		lvl          int
+		noMeta       bool // if true, don't upload meta.json (simulates corrupt block)
+		deletionMark bool // if true, upload deletion-mark.json
 	}
 
 	logger := log.NewNopLogger()
@@ -885,20 +909,8 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "delete expired blocks with wildcard policy",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Now().Add(-3 * 24 * time.Hour),
-					time.Now().Add(-2 * 24 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-b",
-					time.Now().Add(-5 * time.Hour),
-					time.Now().Add(-4 * time.Hour),
-					compact.Level1,
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-3 * 24 * time.Hour), time.Now().Add(-2 * 24 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-b", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
 				"*": {RetentionDuration: 10 * time.Hour},
@@ -911,20 +923,8 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "delete corrupt blocks (no tenant label)",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Now().Add(-5 * time.Hour),
-					time.Now().Add(-4 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"", // no tenant - corrupt
-					time.Now().Add(-5 * time.Hour),
-					time.Now().Add(-4 * time.Hour),
-					compact.Level1,
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
 				"*": {RetentionDuration: 10 * time.Hour},
@@ -937,24 +937,12 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "specific tenant policy takes precedence over wildcard",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-special",
-					time.Now().Add(-15 * 24 * time.Hour),
-					time.Now().Add(-14 * 24 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-normal",
-					time.Now().Add(-15 * 24 * time.Hour),
-					time.Now().Add(-14 * 24 * time.Hour),
-					compact.Level1,
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-special", time.Now().Add(-15 * 24 * time.Hour), time.Now().Add(-14 * 24 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-normal", time.Now().Add(-15 * 24 * time.Hour), time.Now().Add(-14 * 24 * time.Hour), compact.Level1, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
-				"*":              {RetentionDuration: 10 * 24 * time.Hour}, // 10 days wildcard
-				"tenant-special": {RetentionDuration: 20 * 24 * time.Hour}, // 20 days specific
+				"*":              {RetentionDuration: 10 * 24 * time.Hour},
+				"tenant-special": {RetentionDuration: 20 * 24 * time.Hour},
 			},
 			want:        []string{"01CPHBEX20729MJQZXE3W0BW48/"},
 			wantDeleted: 1,
@@ -964,23 +952,11 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "skip blocks without matching policy",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-b",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level1,
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-b", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level1, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
-				"tenant-a": {RetentionDuration: 10 * 24 * time.Hour}, // only tenant-a has policy
+				"tenant-a": {RetentionDuration: 10 * 24 * time.Hour},
 			},
 			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
 			wantDeleted: 1,
@@ -990,25 +966,13 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "default only deletes level 1 blocks",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-a",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level2, // level 2 should NOT be deleted without IsAll
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-a", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level2, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
 				"*": {RetentionDuration: 10 * 24 * time.Hour, IsAll: false},
 			},
-			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"}, // level 2 block kept
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
 			wantDeleted: 1,
 			wantCorrupt: 0,
 			wantErr:     false,
@@ -1016,20 +980,8 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "IsAll flag deletes all levels",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-a",
-					time.Now().Add(-30 * 24 * time.Hour),
-					time.Now().Add(-29 * 24 * time.Hour),
-					compact.Level2, // level 2 should be deleted with IsAll
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-a", time.Now().Add(-30 * 24 * time.Hour), time.Now().Add(-29 * 24 * time.Hour), compact.Level2, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
 				"*": {RetentionDuration: 10 * 24 * time.Hour, IsAll: true},
@@ -1042,20 +994,8 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 		{
 			name: "cutoff date based retention",
 			blocks: []testBlock{
-				{
-					"01CPHBEX20729MJQZXE3W0BW48",
-					"tenant-a",
-					time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-					time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
-					compact.Level1,
-				},
-				{
-					"01CPHBEX20729MJQZXE3W0BW49",
-					"tenant-a",
-					time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC),
-					time.Date(2024, 11, 2, 0, 0, 0, 0, time.UTC),
-					compact.Level1,
-				},
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC), compact.Level1, false, false},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-a", time.Date(2024, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2024, 11, 2, 0, 0, 0, 0, time.UTC), compact.Level1, false, false},
 			},
 			retentionByTenant: map[string]compact.RetentionPolicy{
 				"*": {CutoffDate: time.Date(2024, 10, 1, 0, 0, 0, 0, time.UTC)},
@@ -1065,6 +1005,33 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 			wantCorrupt: 0,
 			wantErr:     false,
 		},
+		{
+			name: "delete block with deletion-mark.json but no meta.json",
+			blocks: []testBlock{
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, true, true},
+				{"01CPHBEX20729MJQZXE3W0BW49", "tenant-a", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, false, false},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * 24 * time.Hour},
+			},
+			want:        []string{"01CPHBEX20729MJQZXE3W0BW49/"},
+			wantDeleted: 0,
+			wantCorrupt: 1,
+			wantErr:     false,
+		},
+		{
+			name: "delete block with only meta.json missing",
+			blocks: []testBlock{
+				{"01CPHBEX20729MJQZXE3W0BW48", "tenant-a", time.Now().Add(-5 * time.Hour), time.Now().Add(-4 * time.Hour), compact.Level1, true, false},
+			},
+			retentionByTenant: map[string]compact.RetentionPolicy{
+				"*": {RetentionDuration: 10 * 24 * time.Hour},
+			},
+			want:        []string{},
+			wantDeleted: 0,
+			wantCorrupt: 1,
+			wantErr:     false,
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
@@ -1072,7 +1039,7 @@ func TestApplyFastRetentionByTenant(t *testing.T) {
 				if b.tenant == "" {
 					uploadBlockWithoutTenant(t, bkt, b.id, b.minTime, b.maxTime, b.lvl)
 				} else {
-					uploadTenantBlock(t, bkt, b.id, b.tenant, b.minTime, b.maxTime, b.lvl)
+					uploadTenantBlockWithOptions(t, bkt, b.id, b.tenant, b.minTime, b.maxTime, b.lvl, b.noMeta, b.deletionMark)
 				}
 			}
 
