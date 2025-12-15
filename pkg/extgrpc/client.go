@@ -24,58 +24,61 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
-type nonPoolingCodec struct {
+// vtprotoCodec is a gRPC codec that uses vtprotobuf for optimized marshaling/unmarshaling.
+// It supports memory pooling for WriteRequest to reduce allocations in high-throughput paths.
+type vtprotoCodec struct {
 	encoding.CodecV2
 }
 
 func init() {
-	encoding.RegisterCodecV2(&nonPoolingCodec{
+	encoding.RegisterCodecV2(&vtprotoCodec{
 		CodecV2: encoding.GetCodecV2("proto"),
 	})
 }
 
-func (n *nonPoolingCodec) Name() string {
+func (c *vtprotoCodec) Name() string {
 	return "proto"
 }
 
 var nopPool = mem.NopBufferPool{}
 
-func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
-	gmsg, ok := v.(gogoMsg)
-	if !ok {
-		return n.CodecV2.Unmarshal(data, v)
-	}
-
-	// TODO(GiedriusS): we use unsafe code around labels so we cannot use pooling here.
-	buf := data.MaterializeToBuffer(nopPool)
-
-	return gmsg.Unmarshal(buf.ReadOnlyData())
+// vtprotoMsg is the interface for vtprotobuf generated messages.
+type vtprotoMsg interface {
+	SizeVT() int
+	MarshalToSizedBufferVT([]byte) (int, error)
+	UnmarshalVT([]byte) error
 }
 
-type gogoMsg interface {
-	Size() int
-	MarshalToSizedBuffer([]byte) (int, error)
-	Unmarshal([]byte) error
+func (c *vtprotoCodec) Unmarshal(data mem.BufferSlice, v any) error {
+	// For other vtprotobuf messages, use the optimized UnmarshalVT method.
+	if vtmsg, ok := v.(vtprotoMsg); ok {
+		buf := data.MaterializeToBuffer(nopPool)
+		return vtmsg.UnmarshalVT(buf.ReadOnlyData())
+	}
+
+	// Fallback to default codec for non-vtprotobuf messages.
+	return c.CodecV2.Unmarshal(data, v)
 }
 
-func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
-	gmsg, ok := v.(gogoMsg)
-	if !ok {
-		return c.CodecV2.Marshal(v)
+func (c *vtprotoCodec) Marshal(v any) (mem.BufferSlice, error) {
+	// Use vtprotobuf optimized marshaling for vtproto messages.
+	if vtmsg, ok := v.(vtprotoMsg); ok {
+		size := vtmsg.SizeVT()
+		pool := mem.DefaultBufferPool()
+		buf := pool.Get(size)
+
+		n, err := vtmsg.MarshalToSizedBufferVT((*buf)[:size])
+		if err != nil {
+			pool.Put(buf)
+			return mem.BufferSlice{}, err
+		}
+
+		bufExact := (*buf)[:n]
+		return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
 	}
-	size := gmsg.Size()
-	pool := mem.DefaultBufferPool()
-	buf := pool.Get(size)
 
-	n, err := gmsg.MarshalToSizedBuffer((*buf)[:size])
-	if err != nil {
-		pool.Put(buf)
-		return mem.BufferSlice{}, err
-	}
-
-	bufExact := (*buf)[:n]
-
-	return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
+	// Fallback to default codec for non-vtprotobuf messages.
+	return c.CodecV2.Marshal(v)
 }
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.

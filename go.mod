@@ -119,6 +119,7 @@ require (
 	github.com/VictoriaMetrics/easyproto v0.1.4
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/oklog/ulid/v2 v2.1.1
+	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10
 	github.com/prometheus/otlptranslator v0.0.0-20250620074007-94f535e0c588
 	github.com/tjhop/slog-gokit v0.1.4
 	go.opentelemetry.io/collector/pdata v1.35.0
@@ -253,7 +254,6 @@ require (
 	github.com/oracle/oci-go-sdk/v65 v65.93.1 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
-	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prometheus/sigv4 v0.2.0 // indirect

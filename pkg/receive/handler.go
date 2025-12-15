@@ -1015,13 +1015,18 @@ func (h *Handler) sendRemoteWrite(
 
 	// This is called "real" because it's 1-indexed.
 	realReplicationIndex := int64(endpointReplica.replica + 1)
+	// Get WriteRequest from pool to reduce allocations.
+	req := storepb.WriteRequestFromVTPool()
+	req.Timeseries = trackedSeries.timeSeries
+	req.Tenant = tenant
+	// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
+	req.Replica = realReplicationIndex
+
 	// Actually make the request against the endpoint we determined should handle these time series.
-	cl.RemoteWriteAsync(ctx, &storepb.WriteRequest{
-		Timeseries: trackedSeries.timeSeries,
-		Tenant:     tenant,
-		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-		Replica: realReplicationIndex,
-	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+	cl.RemoteWriteAsync(ctx, req, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+		// Return the request to the pool after the RPC completes.
+		req.ReturnToVTPool()
+
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -1074,6 +1079,11 @@ func quorumReached(successes []int, successThreshold int) bool {
 func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*storepb.WriteResponse, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
+
+	// Return the WriteRequest to the pool after processing.
+	// The request was unmarshaled by the vtprotoCodec and benefits from
+	// pooling as it reuses the underlying Timeseries slice capacity.
+	defer r.ReturnToVTPool()
 
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
