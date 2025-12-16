@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/labelpbv2"
 )
 
 func NewTargetsResponse(targets *TargetDiscovery) *TargetsResponse {
@@ -64,11 +64,11 @@ func (t1 *ActiveTarget) Compare(t2 *ActiveTarget) int {
 		return d
 	}
 
-	if d := labels.Compare(t1.DiscoveredLabels.PromLabels(), t2.DiscoveredLabels.PromLabels()); d != 0 {
+	if d := labels.Compare(labels.Labels(t1.DiscoveredLabels), labels.Labels(t2.DiscoveredLabels)); d != 0 {
 		return d
 	}
 
-	if d := labels.Compare(t1.Labels.PromLabels(), t2.Labels.PromLabels()); d != 0 {
+	if d := labels.Compare(labels.Labels(t1.Labels), labels.Labels(t2.Labels)); d != 0 {
 		return d
 	}
 
@@ -92,7 +92,7 @@ func (t1 *ActiveTarget) CompareState(t2 *ActiveTarget) int {
 }
 
 func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
-	if d := labels.Compare(t1.DiscoveredLabels.PromLabels(), t2.DiscoveredLabels.PromLabels()); d != 0 {
+	if d := labels.Compare(labels.Labels(t1.DiscoveredLabels), labels.Labels(t2.DiscoveredLabels)); d != 0 {
 		return d
 	}
 
@@ -100,31 +100,13 @@ func (t1 *DroppedTarget) Compare(t2 *DroppedTarget) int {
 }
 
 func (t *ActiveTarget) SetLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.Labels = result
+	t.Labels = labelpbv2.LabelSetV2(ls)
 }
 
 func (t *ActiveTarget) SetDiscoveredLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = labelpbv2.LabelSetV2(ls)
 }
 
 func (t *DroppedTarget) SetDiscoveredLabels(ls labels.Labels) {
-	var result labelpb.ZLabelSet
-
-	if !ls.IsEmpty() {
-		result = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(ls)}
-	}
-
-	t.DiscoveredLabels = result
+	t.DiscoveredLabels = labelpbv2.LabelSetV2(ls)
 }

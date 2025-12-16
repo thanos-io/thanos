@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/labelpbv2"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
@@ -62,7 +63,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	targetAndAssert(t, ctx, q.Endpoint("http"), "", &targetspb.TargetDiscovery{
 		ActiveTargets: []*targetspb.ActiveTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: labelpbv2.DebugConvertZLabelsToLabelSetV2([]labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:9090"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -70,12 +71,12 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
-				}},
-				Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				}),
+				Labels: labelpbv2.DebugConvertZLabelsToLabelSetV2([]labelpb.ZLabel{
 					{Name: "instance", Value: "localhost:9090"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
-				}},
+				}),
 				ScrapePool: "myself",
 				ScrapeUrl:  "http://localhost:9090/metrics",
 				Health:     targetspb.TargetHealth_UP,
@@ -83,7 +84,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 		},
 		DroppedTargets: []*targetspb.DroppedTarget{
 			{
-				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+				DiscoveredLabels: labelpbv2.DebugConvertZLabelsToLabelSetV2([]labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:80"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
@@ -91,7 +92,7 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
-				}},
+				}),
 			},
 		},
 	})
