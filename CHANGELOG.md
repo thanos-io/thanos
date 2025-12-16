@@ -2111,4 +2111,4 @@ Initial version to have a stable reference before [gossip protocol removal](docs
 - Grafana dashboards for Thanos components.
 
 ### Added
-- [#8602](https://github.com/thanos-io/thanos/pull/8602) Add Add Ksolves Thanos Support url in Home Page under Support and Training section. 
+- [#8602](https://github.com/thanos-io/thanos/pull/8602) Add Add Ksolves Thanos Support url in Home Page under Support and Training section.
