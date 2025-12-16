@@ -245,33 +245,17 @@ func runCompact(
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
-	var blockLister block.Lister
-	switch syncStrategy(conf.blockListStrategy) {
-	case concurrentDiscovery:
-		blockLister = block.NewConcurrentLister(logger, insBkt)
-	case recursiveDiscovery:
-		blockLister = block.NewRecursiveLister(logger, insBkt)
-	default:
-		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
+	blockLister, err := getBlockLister(logger, &conf, insBkt)
+	if err != nil {
+		return errors.Wrap(err, "create block lister")
 	}
 	baseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create meta fetcher")
 	}
 
-	enableVerticalCompaction := conf.enableVerticalCompaction
-	dedupReplicaLabels := strutil.ParseFlagLabels(conf.dedupReplicaLabels)
-	if len(dedupReplicaLabels) > 0 {
-		enableVerticalCompaction = true
-		level.Info(logger).Log(
-			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","),
-		)
-	}
-	if enableVerticalCompaction {
-		level.Info(logger).Log(
-			"msg", "vertical compaction is enabled", "compact.enable-vertical-compaction", fmt.Sprintf("%v", conf.enableVerticalCompaction),
-		)
-	}
+	enableVerticalCompaction, dedupReplicaLabels := checkVerticalCompaction(logger, &conf)
+
 	var (
 		api = blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, insBkt)
 		sy  *compact.Syncer
@@ -319,13 +303,9 @@ func runCompact(
 		}
 	}
 
-	levels, err := compactions.levels(conf.maxCompactionLevel)
+	levels, err := getCompactionLevels(logger, &conf)
 	if err != nil {
-		return errors.Wrap(err, "get compaction levels")
-	}
-
-	if conf.maxCompactionLevel < compactions.maxLevel() {
-		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -338,19 +318,9 @@ func runCompact(
 		}
 	}()
 
-	var mergeFunc storage.VerticalChunkSeriesMergeFunc
-	switch conf.dedupFunc {
-	case compact.DedupAlgorithmPenalty:
-		mergeFunc = dedup.NewChunkSeriesMerger()
-
-		if len(dedupReplicaLabels) == 0 {
-			return errors.New("penalty based deduplication needs at least one replica label specified")
-		}
-	case "":
-		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
-
-	default:
-		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+	mergeFunc, err := getMergeFunc(&conf, dedupReplicaLabels)
+	if err != nil {
+		return errors.Wrap(err, "get merge func")
 	}
 
 	// Instantiate the compactor with different time slices. Timestamps in TSDB
@@ -418,34 +388,9 @@ func runCompact(
 		return errors.Wrap(err, "create bucket compactor")
 	}
 
-	retentionByResolution := map[compact.ResolutionLevel]time.Duration{
-		compact.ResolutionLevelRaw: time.Duration(conf.retentionRaw),
-		compact.ResolutionLevel5m:  time.Duration(conf.retentionFiveMin),
-		compact.ResolutionLevel1h:  time.Duration(conf.retentionOneHr),
-	}
-
-	if retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() != 0 {
-		// If downsampling is enabled, error if raw retention is not sufficient for downsampling to occur (upper bound 10 days for 1h resolution)
-		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() < downsample.ResLevel1DownsampleRange {
-			return errors.New("raw resolution must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
-		}
-		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
-	}
-	if retentionByResolution[compact.ResolutionLevel5m].Milliseconds() != 0 {
-		// If retention is lower than minimum downsample range, then no downsampling at this resolution will be persisted
-		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Milliseconds() < downsample.ResLevel2DownsampleRange {
-			return errors.New("5m resolution retention must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
-		}
-		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
-	}
-	if retentionByResolution[compact.ResolutionLevel1h].Milliseconds() != 0 {
-		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
-	}
-
-	retentionByTenant, err := compact.ParesRetentionPolicyByTenant(logger, *conf.retentionTenants)
+	retentionByResolution, retentionByTenant, err := getRetentionPolicies(logger, &conf)
 	if err != nil {
-		level.Error(logger).Log("msg", "failed to parse retention policy by tenant", "err", err)
-		return err
+		return errors.Wrap(err, "get retention policies")
 	}
 
 	var cleanMtx sync.Mutex
@@ -757,6 +702,101 @@ func runCompact(
 	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
 	return nil
+}
+
+func getBlockLister(logger log.Logger, conf *compactConfig, insBkt objstore.InstrumentedBucketReader) (block.Lister, error) {
+	switch syncStrategy(conf.blockListStrategy) {
+	case concurrentDiscovery:
+		return block.NewConcurrentLister(logger, insBkt), nil
+	case recursiveDiscovery:
+		return block.NewRecursiveLister(logger, insBkt), nil
+	default:
+		return nil, errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
+	}
+}
+
+func checkVerticalCompaction(logger log.Logger, conf *compactConfig) (bool, []string) {
+	enableVerticalCompaction := conf.enableVerticalCompaction
+	dedupReplicaLabels := strutil.ParseFlagLabels(conf.dedupReplicaLabels)
+
+	if len(dedupReplicaLabels) > 0 {
+		enableVerticalCompaction = true
+		level.Info(logger).Log(
+			"msg", "deduplication.replica-label specified, enabling vertical compaction", "dedupReplicaLabels", strings.Join(dedupReplicaLabels, ","),
+		)
+	}
+	if enableVerticalCompaction {
+		level.Info(logger).Log(
+			"msg", "vertical compaction is enabled", "compact.enable-vertical-compaction", fmt.Sprintf("%v", conf.enableVerticalCompaction),
+		)
+	}
+	return enableVerticalCompaction, dedupReplicaLabels
+}
+
+func getCompactionLevels(logger log.Logger, conf *compactConfig) ([]int64, error) {
+	levels, err := compactions.levels(conf.maxCompactionLevel)
+	if err != nil {
+		return nil, errors.Wrap(err, "get compaction levels")
+	}
+
+	if conf.maxCompactionLevel < compactions.maxLevel() {
+		level.Warn(logger).Log("msg", "Max compaction level is lower than should be", "current", conf.maxCompactionLevel, "default", compactions.maxLevel())
+	}
+
+	return levels, nil
+}
+
+func getMergeFunc(conf *compactConfig, dedupReplicaLabels []string) (storage.VerticalChunkSeriesMergeFunc, error) {
+	var mergeFunc storage.VerticalChunkSeriesMergeFunc
+	switch conf.dedupFunc {
+	case compact.DedupAlgorithmPenalty:
+		mergeFunc = dedup.NewChunkSeriesMerger()
+
+		if len(dedupReplicaLabels) == 0 {
+			return nil, errors.New("penalty based deduplication needs at least one replica label specified")
+		}
+	case "":
+		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+
+	default:
+		return nil, errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
+	}
+
+	return mergeFunc, nil
+}
+
+func getRetentionPolicies(logger log.Logger, conf *compactConfig) (map[compact.ResolutionLevel]time.Duration, map[string]compact.RetentionPolicy, error) {
+	retentionByResolution := map[compact.ResolutionLevel]time.Duration{
+		compact.ResolutionLevelRaw: time.Duration(conf.retentionRaw),
+		compact.ResolutionLevel5m:  time.Duration(conf.retentionFiveMin),
+		compact.ResolutionLevel1h:  time.Duration(conf.retentionOneHr),
+	}
+
+	if retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() != 0 {
+		// If downsampling is enabled, error if raw retention is not sufficient for downsampling to occur (upper bound 10 days for 1h resolution)
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevelRaw].Milliseconds() < downsample.ResLevel1DownsampleRange {
+			return nil, nil, errors.New("raw resolution must be higher than the minimum block size after which 5m resolution downsampling will occur (40 hours)")
+		}
+		level.Info(logger).Log("msg", "retention policy of raw samples is enabled", "duration", retentionByResolution[compact.ResolutionLevelRaw])
+	}
+	if retentionByResolution[compact.ResolutionLevel5m].Milliseconds() != 0 {
+		// If retention is lower than minimum downsample range, then no downsampling at this resolution will be persisted
+		if !conf.disableDownsampling && retentionByResolution[compact.ResolutionLevel5m].Milliseconds() < downsample.ResLevel2DownsampleRange {
+			return nil, nil, errors.New("5m resolution retention must be higher than the minimum block size after which 1h resolution downsampling will occur (10 days)")
+		}
+		level.Info(logger).Log("msg", "retention policy of 5 min aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel5m])
+	}
+	if retentionByResolution[compact.ResolutionLevel1h].Milliseconds() != 0 {
+		level.Info(logger).Log("msg", "retention policy of 1 hour aggregated samples is enabled", "duration", retentionByResolution[compact.ResolutionLevel1h])
+	}
+
+	retentionByTenant, err := compact.ParesRetentionPolicyByTenant(logger, *conf.retentionTenants)
+	if err != nil {
+		level.Error(logger).Log("msg", "failed to parse retention policy by tenant", "err", err)
+		return nil, nil, err
+	}
+
+	return retentionByResolution, retentionByTenant, nil
 }
 
 type compactConfig struct {
