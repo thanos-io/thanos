@@ -50,9 +50,9 @@ type tlsConfig struct {
 }
 
 type clientGRPCConfig struct {
-	TLSConfig       tlsConfig `yaml:"tls_config"`
-	ServerName      string    `yaml:"server_name"`
-	CompressionType string    `yaml:"compression_type"`
+	TLSConfig   tlsConfig `yaml:"tls_config"`
+	ServerName  string    `yaml:"server_name"`
+	Compression string    `yaml:"compression"`
 }
 
 type endpointSettings struct {
@@ -87,11 +87,11 @@ func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
 }
 
 func (cfg *clientGRPCConfig) ValidateCompression() error {
-	if cfg.CompressionType == "" {
-		cfg.CompressionType = "none"
+	if cfg.Compression == "" {
+		cfg.Compression = "none"
 	}
-	if cfg.CompressionType != "none" && cfg.CompressionType != "snappy" {
-		return errors.Newf("invalid compression: %s, must be 'none' or 'snappy'", cfg.CompressionType)
+	if cfg.Compression != "none" && cfg.Compression != "snappy" {
+		return errors.Newf("invalid compression: %s, must be 'none' or 'snappy'", cfg.Compression)
 	}
 	return nil
 }
@@ -410,7 +410,7 @@ func setupEndpointSet(
 			}
 			endpointDialOpts := append(dialOpts, tlsOpt)
 
-			compression := ecfg.ClientConfig.CompressionType
+			compression := ecfg.ClientConfig.Compression
 			if compression == "" || compression == "none" {
 				compression = globalCompression
 			}
