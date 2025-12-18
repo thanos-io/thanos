@@ -662,6 +662,11 @@ func TestBucketStoreConfig_validate(t *testing.T) {
 }
 
 func TestBucketStore_TSDBInfo(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx := t.Context()
@@ -1389,6 +1394,11 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 }
 
 func TestBucketSeries(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
@@ -1398,6 +1408,11 @@ func TestBucketSeries(t *testing.T) {
 }
 
 func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
@@ -1407,6 +1422,11 @@ func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
 }
 
 func TestBucketHistogramSeries(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
@@ -1416,6 +1436,11 @@ func TestBucketHistogramSeries(t *testing.T) {
 }
 
 func TestBucketFloatHistogramSeries(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
@@ -1425,6 +1450,11 @@ func TestBucketFloatHistogramSeries(t *testing.T) {
 }
 
 func TestBucketSkipChunksSeries(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
@@ -3547,6 +3577,11 @@ func TestToPostingGroup(t *testing.T) {
 
 // TestExpandedPostings is a test whether there is a race between multiple ExpandPostings() calls.
 func TestExpandedPostingsRace(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	const blockCount = 10
@@ -4038,6 +4073,11 @@ func (m *compositeBytesLimiterMock) ReserveWithType(num uint64, dataType StoreDa
 }
 
 func TestBucketStoreMetadataLimit(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)

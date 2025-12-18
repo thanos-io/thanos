@@ -393,6 +393,11 @@ func BenchmarkMergedSeriesSet(b *testing.B) {
 }
 
 func TestMergedSeriesSet_Labels(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Run("overlapping chunks", func(t *testing.T) {
 		benchmarkMergedSeriesSet(testutil.NewTB(t), true)
 	})

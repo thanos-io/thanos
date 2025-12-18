@@ -530,6 +530,11 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 }
 
 func TestMultiTSDBAddNewTenant(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 	const iterations = 10
 	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
@@ -961,6 +966,11 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 }
 
 func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	dir := t.TempDir()

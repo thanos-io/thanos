@@ -30,6 +30,11 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	now := model.Now()
