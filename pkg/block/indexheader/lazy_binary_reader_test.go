@@ -252,6 +252,11 @@ func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
 }
 
 func TestLazyBinaryReader_LoadUnloadRaceCondition(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	// Run the test for a fixed amount of time.
 	const runDuration = 5 * time.Second
 

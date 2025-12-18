@@ -771,6 +771,11 @@ func TestReceiveQuorumKetama(t *testing.T) {
 }
 
 func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	for _, capnpReplication := range []bool{false, true} {
@@ -781,6 +786,11 @@ func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
 }
 
 func TestReceiveWithConsistencyDelayKetama(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	for _, capnpReplication := range []bool{false, true} {
@@ -997,6 +1007,11 @@ func BenchmarkHandlerReceiveHTTP(b *testing.B) {
 }
 
 func TestHandlerReceiveHTTP(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	benchmarkHandlerMultiTSDBReceiveRemoteWrite(testutil.NewTB(t))

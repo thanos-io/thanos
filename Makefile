@@ -319,13 +319,19 @@ test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test -tags slicelabels -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@go test $(SHORT) -tags slicelabels -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
 test-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-local:
 	$(MAKE) test
+
+.PHONY: test-local-short
+test-local-short: ## Runs test excluding tests for ALL  object storage integrations. Only quick tests (<5s).
+test-local-short: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
+test-local-short:
+	$(MAKE) test SHORT="-short"
 
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.

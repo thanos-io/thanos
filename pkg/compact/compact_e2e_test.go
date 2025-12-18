@@ -176,11 +176,21 @@ func MetricCount(c prometheus.Collector) int {
 }
 
 func TestGroupCompactE2E(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	testGroupCompactE2e(t, nil)
 }
 
 // Penalty based merger should get the same result as the blocks don't have overlap.
 func TestGroupCompactPenaltyDedupE2E(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	testGroupCompactE2e(t, dedup.NewChunkSeriesMerger())
 }
 
