@@ -1121,10 +1121,11 @@ func (s *ProxyStore) shouldBlockQuery(matchers []*labels.Matcher) (bool, string,
 
 	// If metric name contains '.', it's a regex pattern - ALWAYS block unconditionally
 	// This happens regardless of whether any blocking patterns are configured
-	if strings.Contains(metricName, ".") {
-		level.Debug(s.logger).Log("msg", "shouldBlockQuery: BLOCKED unconditionally (contains '.')", "metric_name", metricName)
-		return true, metricName, metricName, true
-	}
+	// TODO: @pranav.mishra: Add another flag to slowly roll out this feature.
+	// if strings.Contains(metricName, ".") {
+	// 	level.Debug(s.logger).Log("msg", "shouldBlockQuery: BLOCKED unconditionally (contains '.')", "metric_name", metricName)
+	// 	return true, metricName, metricName, true
+	// }
 
 	// If blocking is not configured at all, allow everything else
 	if s.blockedMetricPrefixes == nil && s.unconditionalBlockedMetrics == nil {
