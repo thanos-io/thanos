@@ -49,10 +49,10 @@ type tlsConfig struct {
 	CAFile                   string `yaml:"ca_file"`
 }
 
-// TODO(Naman): Add in PER-ENDPOINT COMPRESSION
 type clientGRPCConfig struct {
-	TLSConfig  tlsConfig `yaml:"tls_config"`
-	ServerName string    `yaml:"server_name"`
+	TLSConfig       tlsConfig `yaml:"tls_config"`
+	ServerName      string    `yaml:"server_name"`
+	CompressionType string    `yaml:"compression_type"`
 }
 
 type endpointSettings struct {
@@ -84,6 +84,16 @@ func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
 		cfg.TLSConfig.KeyFile == "" &&
 		cfg.TLSConfig.CAFile == "" &&
 		cfg.ServerName == ""
+}
+
+func (cfg *clientGRPCConfig) ValidateCompression() error {
+	if cfg.CompressionType == "" {
+		cfg.CompressionType = "none"
+	}
+	if cfg.CompressionType != "none" && cfg.CompressionType != "snappy" {
+		return errors.Newf("invalid compression: %s, must be 'none' or 'snappy'", cfg.CompressionType)
+	}
+	return nil
 }
 
 func (er *endpointConfigProvider) config() EndpointConfig {
@@ -134,13 +144,17 @@ func (er *endpointConfigProvider) addStaticEndpoints(cfg *EndpointConfig) {
 	}
 }
 
-func validateEndpointConfig(cfg EndpointConfig) error {
-	for _, ecfg := range cfg.Endpoints {
+func validateEndpointConfig(cfg *EndpointConfig) error {
+	for i := range cfg.Endpoints {
+		ecfg := &cfg.Endpoints[i]
 		if dns.IsDynamicNode(ecfg.Address) && ecfg.Strict {
 			return errors.Newf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode.", ecfg.Address)
 		}
 		if !ecfg.Group && len(ecfg.ServiceConfig) != 0 {
 			return errors.Newf("%s service_config is only valid for endpoint groups.", ecfg.Address)
+		}
+		if err := ecfg.ClientConfig.ValidateCompression(); err != nil {
+			return errors.Wrapf(err, "endpoint %s", ecfg.Address)
 		}
 	}
 	return nil
@@ -171,10 +185,10 @@ func newEndpointConfigProvider(
 		return nil, errors.Wrapf(err, "unable to load config file")
 	}
 	res.addStaticEndpoints(&cfg)
-	res.cfg = cfg
-	if err := validateEndpointConfig(cfg); err != nil {
+	if err := validateEndpointConfig(&cfg); err != nil {
 		return nil, errors.Wrapf(err, "unable to validate endpoints")
 	}
+	res.cfg = cfg
 
 	// only static endpoints
 	if len(configFile.Path()) == 0 {
@@ -192,7 +206,7 @@ func newEndpointConfigProvider(
 			return
 		}
 		res.addStaticEndpoints(&cfg)
-		if err := validateEndpointConfig(cfg); err != nil {
+		if err := validateEndpointConfig(&cfg); err != nil {
 			level.Error(logger).Log("msg", "failed to validate endpoint config", "err", err)
 			return
 		}
@@ -223,6 +237,7 @@ func setupEndpointSet(
 	queryTimeout time.Duration,
 	dialOpts []grpc.DialOption,
 	globalTLSOpt grpc.DialOption,
+	globalCompression string,
 	injectTestAddresses []string,
 	queryConnMetricLabels ...string,
 ) (*query.EndpointSet, error) {
@@ -394,6 +409,15 @@ func setupEndpointSet(
 				tlsOpt, _ = extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "")
 			}
 			endpointDialOpts := append(dialOpts, tlsOpt)
+
+			compression := ecfg.ClientConfig.CompressionType
+			if compression == "" || compression == "none" {
+				compression = globalCompression
+			}
+			if compression != "" && compression != "none" {
+				endpointDialOpts = append(endpointDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(compression)))
+			}
+
 			if group {
 				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(endpointDialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
 			} else if !dns.IsDynamicNode(addr) {
@@ -403,6 +427,9 @@ func setupEndpointSet(
 		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
 			dynamicDialOpts := append(dialOpts, globalTLSOpt)
+			if globalCompression != "" && globalCompression != "none" {
+				dynamicDialOpts = append(dynamicDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(globalCompression)))
+			}
 			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dynamicDialOpts...))
 		}
 		return removeDuplicateEndpointSpecs(specs)

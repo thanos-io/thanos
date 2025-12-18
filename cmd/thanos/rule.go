@@ -452,6 +452,7 @@ func runRule(
 			conf.evalInterval,
 			dialOpts,
 			tlsDialOpts,
+			"", // no global compression
 			[]string{},
 		)
 		if err != nil {

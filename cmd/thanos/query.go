@@ -300,6 +300,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*queryTimeout),
 			dialOpts,
 			globalTLSOpt,
+			grpcClientConfig.compression, // global grpc tls compression.
 			*injectTestAddresses,
 			*queryConnMetricLabels...,
 		)

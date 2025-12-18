@@ -90,9 +90,6 @@ func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Regist
 	if err != nil {
 		return nil, errors.Wrapf(err, "building gRPC client")
 	}
-	if gc.compression != compressionNone {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(gc.compression)))
-	}
 	return dialOpts, nil
 }
 
