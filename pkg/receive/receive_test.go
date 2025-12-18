@@ -25,6 +25,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestAddingExternalLabelsForTenants(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -350,6 +355,11 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 }
 
 func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	initialConfig := []HashringConfig{
@@ -582,6 +592,11 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 }
 
 func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	initialConfig := []HashringConfig{
