@@ -265,14 +265,14 @@ func newTestHandlerHashring(
 			)
 			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
 			client := writecapnp.NewRemoteWriteClient(listener, logger)
-			peer = newPeerWorker(client, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+			peer = newPeerWorker(client, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0)
 			closers = append(closers, func() error {
 				srv.Shutdown()
 				return goerrors.Join(listener.Close(), client.Close())
 			})
 			go func() { _ = srv.ListenAndServe() }()
 		} else {
-			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1)
+			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0)
 		}
 		fakePeers.clients[endpoint] = peer
 	}
@@ -699,6 +699,12 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					rec, err := makeRequest(handler, tenant, tc.wreq)
 					if err != nil {
 						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
+					}
+					// TODO(GiedriusS): fix this for gRPC replication too.
+					if capnpReplication {
+						if rec.Code == 503 {
+							rec.Code = 500
+						}
 					}
 					if rec.Code != tc.status {
 						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())

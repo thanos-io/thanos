@@ -1281,3 +1281,53 @@ func TestReceiveCpnp(t *testing.T) {
 	)
 
 }
+
+func TestReceiveCpnpDelayed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("This test takes some time.")
+	}
+	e, err := e2e.NewDockerEnvironment("receive-cpnp-d")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	i1 := e2ethanos.NewReceiveBuilder(e, "ingestor1").WithIngestionEnabled().Init()
+	i2 := e2ethanos.NewReceiveBuilder(e, "ingestor2").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i1, i2))
+
+	h := receive.HashringConfig{
+		TenantMatcherType: "glob",
+		Tenants: []string{
+			"default*",
+		},
+		Endpoints: []receive.Endpoint{
+			{Address: i1.InternalEndpoint("grpc"), CapNProtoAddress: i1.InternalEndpoint("capnp")},
+			{Address: i2.InternalEndpoint("grpc"), CapNProtoAddress: i2.InternalEndpoint("capnp")},
+		},
+	}
+
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(20 * time.Second).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	ts := time.Now()
+
+	for i := range 1000 {
+		t.Log("writing a request:", i, time.Now().UnixMilli())
+
+		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+			return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []prompb.Label{
+							{Name: model.MetricNameLabel, Value: fmt.Sprintf("myself%d", i)},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: timestamp.FromTime(ts)},
+						},
+					},
+				},
+			})
+		}))
+	}
+
+	testutil.Ok(t, i1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+}

@@ -11,6 +11,7 @@ import (
 	"io"
 	stdlog "log"
 	"math"
+	"math/rand"
 	"net"
 	"net/http"
 	"slices"
@@ -112,6 +113,7 @@ type Options struct {
 	DialOpts                []grpc.DialOption
 	ForwardTimeout          time.Duration
 	MaxBackoff              time.Duration
+	MaxArtificialDelay      time.Duration
 	RelabelConfigs          []*relabel.Config
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
@@ -186,6 +188,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				},
 			),
 			workers,
+			o.MaxArtificialDelay,
 			o.ReplicationProtocol,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
@@ -1355,11 +1358,12 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint) *peerWorker {
+func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
 	return &peerWorker{
-		client:       client,
-		wp:           pool.NewWorkerPool(asyncWorkerCount),
-		forwardDelay: forwardDelay,
+		client:             client,
+		wp:                 pool.NewWorkerPool(asyncWorkerCount),
+		forwardDelay:       forwardDelay,
+		maxArtificialDelay: maxArtificialDelay,
 	}
 }
 
@@ -1392,7 +1396,8 @@ type peerWorker struct {
 	client peerClient
 	wp     pool.WorkerPool
 
-	forwardDelay prometheus.Histogram
+	forwardDelay       prometheus.Histogram
+	maxArtificialDelay time.Duration
 }
 
 func newPeerGroup(
@@ -1400,6 +1405,7 @@ func newPeerGroup(
 	backoff backoff.Backoff,
 	forwardDelay prometheus.Histogram,
 	asyncForwardWorkersCount uint,
+	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
 	dialOpts ...grpc.DialOption,
 ) *peerGroup {
@@ -1412,6 +1418,7 @@ func newPeerGroup(
 		peerStates:               make(map[Endpoint]*retryState),
 		expBackoff:               backoff,
 		forwardDelay:             forwardDelay,
+		maxArtificialDelay:       maxArtificialDelay,
 		asyncForwardWorkersCount: asyncForwardWorkersCount,
 		replicationProtocol:      replicationProtocol,
 	}
@@ -1429,6 +1436,17 @@ type peersContainer interface {
 func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
 	now := time.Now()
 	p.wp.Go(func() {
+		if p.maxArtificialDelay > 0 {
+			var randDuration = time.Duration(rand.Int63n(int64(p.maxArtificialDelay)))
+			if randDuration < 1*time.Second {
+				randDuration = 1 * time.Second
+			}
+
+			select {
+			case <-time.After(randDuration):
+			case <-ctx.Done():
+			}
+		}
 		p.forwardDelay.Observe(time.Since(now).Seconds())
 
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
@@ -1460,8 +1478,11 @@ type peerGroup struct {
 	forwardDelay             prometheus.Histogram
 	asyncForwardWorkersCount uint
 	replicationProtocol      ReplicationProtocol
+	maxArtificialDelay       time.Duration
 
 	m sync.RWMutex
+
+	conns atomic.Uint64
 
 	// dialer is used for testing.
 	dialer func(target string, opts ...grpc.DialOption) (conn *grpc.ClientConn, err error)
@@ -1515,6 +1536,8 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 		return c, nil
 	}
 
+	p.conns.Inc()
+
 	var client peerClient
 	switch p.replicationProtocol {
 	case CapNProtoReplication:
@@ -1532,7 +1555,12 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 		return nil, errors.Errorf("unknown replication protocol %v", p.replicationProtocol)
 	}
 
-	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount)
+	var delay time.Duration
+	if p.conns.Load() == 2 {
+		delay = p.maxArtificialDelay
+	}
+
+	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount, delay)
 	return p.connections[endpoint], nil
 }
 
