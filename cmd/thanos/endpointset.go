@@ -49,18 +49,18 @@ type tlsConfig struct {
 	CAFile                   string `yaml:"ca_file"`
 }
 
-type clientGRPCConfig struct {
+type clientConfig struct {
 	TLSConfig   tlsConfig `yaml:"tls_config"`
 	ServerName  string    `yaml:"server_name"`
 	Compression string    `yaml:"compression"`
 }
 
 type endpointSettings struct {
-	Strict        bool             `yaml:"strict"`
-	Group         bool             `yaml:"group"`
-	Address       string           `yaml:"address"`
-	ServiceConfig string           `yaml:"service_config"`
-	ClientConfig  clientGRPCConfig `yaml:"grpc_client_config"`
+	Strict        bool         `yaml:"strict"`
+	Group         bool         `yaml:"group"`
+	Address       string       `yaml:"address"`
+	ServiceConfig string       `yaml:"service_config"`
+	ClientConfig  clientConfig `yaml:"client_config"`
 }
 
 type EndpointConfig struct {
@@ -78,7 +78,7 @@ type endpointConfigProvider struct {
 	strictEndpointGroups []string
 }
 
-func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
+func (cfg *clientConfig) UseGlobalTLSOpts() bool {
 	return !cfg.TLSConfig.Enabled &&
 		cfg.TLSConfig.CertFile == "" &&
 		cfg.TLSConfig.KeyFile == "" &&
@@ -86,7 +86,7 @@ func (cfg *clientGRPCConfig) UseGlobalTLSOpts() bool {
 		cfg.ServerName == ""
 }
 
-func (cfg *clientGRPCConfig) ValidateCompression() error {
+func (cfg *clientConfig) ValidateCompression() error {
 	if cfg.Compression == "" {
 		cfg.Compression = "none"
 	}

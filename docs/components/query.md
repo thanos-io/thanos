@@ -300,7 +300,7 @@ Example file in YAML:
 ```yaml
 endpoints:
   - address: "<endpoint-address>"
-    grpc_client_config:
+    client_config:
       tls_config:
         enabled: <bool>
         insecure_skip_verify: <bool>
@@ -313,7 +313,7 @@ endpoints:
 
 When `enabled` is true, TLS is configured to make use of certs path provided for the endpoint. If no path/invalid path is provided, global TLS configuration is used as a fallback. If `enabled` is false, cleartext is used.
 
-In order to make use of global TLS config, don't provide any `grpc_client_config`:
+In order to make use of global TLS config, don't provide any `client_config`:
 
 ```yaml
 endpoints:
