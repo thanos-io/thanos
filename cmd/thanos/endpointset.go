@@ -394,7 +394,8 @@ func setupEndpointSet(
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr, tlsEnabled := ecfg.Strict, ecfg.Group, ecfg.Address, ecfg.ClientConfig.TLSConfig.Enabled
 			var tlsOpt grpc.DialOption
-			if ecfg.ClientConfig.UseGlobalTLSOpts() {
+			useGlobalConfig := ecfg.ClientConfig.UseGlobalTLSOpts()
+			if useGlobalConfig {
 				tlsOpt = globalTLSOpt
 			} else if tlsEnabled {
 				var err error
@@ -403,6 +404,7 @@ func setupEndpointSet(
 				if err != nil {
 					level.Error(logger).Log("msg", "failed to create endpoint TLS, falling back to global", "addr", addr, "err", err)
 					tlsOpt = globalTLSOpt
+					useGlobalConfig = true // Also use global compression on fallback
 				}
 			} else {
 				// If tlsEnabled is disabled we will use cleartext
@@ -411,7 +413,7 @@ func setupEndpointSet(
 			endpointDialOpts := append(dialOpts, tlsOpt)
 
 			var compression string
-			if ecfg.ClientConfig.UseGlobalTLSOpts() {
+			if useGlobalConfig {
 				compression = globalCompression
 			} else {
 				compression = ecfg.ClientConfig.Compression
