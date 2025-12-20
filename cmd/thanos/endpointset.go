@@ -410,11 +410,13 @@ func setupEndpointSet(
 			}
 			endpointDialOpts := append(dialOpts, tlsOpt)
 
-			compression := ecfg.ClientConfig.Compression
-			if compression == "" || compression == "none" {
+			var compression string
+			if ecfg.ClientConfig.UseGlobalTLSOpts() {
 				compression = globalCompression
+			} else {
+				compression = ecfg.ClientConfig.Compression
 			}
-			if compression != "" && compression != "none" {
+			if compression != "none" {
 				endpointDialOpts = append(endpointDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(compression)))
 			}
 
@@ -427,7 +429,7 @@ func setupEndpointSet(
 		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
 			dynamicDialOpts := append(dialOpts, globalTLSOpt)
-			if globalCompression != "" && globalCompression != "none" {
+			if globalCompression != "none" {
 				dynamicDialOpts = append(dynamicDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(globalCompression)))
 			}
 			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dynamicDialOpts...))
