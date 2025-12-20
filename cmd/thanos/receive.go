@@ -288,6 +288,7 @@ func runReceive(
 		DialOpts:             dialOpts,
 		ForwardTimeout:       time.Duration(*conf.forwardTimeout),
 		MaxBackoff:           time.Duration(*conf.maxBackoff),
+		MaxArtificialDelay:   time.Duration(*conf.maxArtificialDelay),
 		TSDBStats:            dbs,
 		Limiter:              limiter,
 
@@ -889,6 +890,7 @@ type receiveConfig struct {
 	replicationFactor   uint64
 	forwardTimeout      *model.Duration
 	maxBackoff          *model.Duration
+	maxArtificialDelay  *model.Duration
 	compression         string
 	replicationProtocol string
 	grpcServiceConfig   string
@@ -989,6 +991,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
 
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(tenancy.DefaultTenantHeader).StringVar(&rc.tenantHeader)
+
+	rc.maxArtificialDelay = extkingpin.ModelDuration(cmd.Flag("receive.artificial-max-delay", "Maximum artificial delay for the 2nd peer.").Default("0s").Hidden())
 
 	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
 
