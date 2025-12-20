@@ -291,6 +291,35 @@ In case of nested Thanos Query components, it's important to note that tenancy e
 
 Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
 
+### Per-Endpoint TLS Configuration
+
+Configuring per-endpoint TLS:
+
+Example file in YAML:
+
+```yaml
+endpoints:
+  - address: "<endpoint-address>"
+    grpc_client_config:
+      tls_config:
+        enabled: <bool>
+        insecure_skip_verify: <bool>
+        cert_file: "<path>"
+        key_file: "<path>"
+        ca_file: "<path>"
+      server_name: "<str>"
+      compression: "<str>"  # "none" or "snappy"
+```
+
+When `enabled` is true, TLS is configured to make use of certs path provided for the endpoint. If no path/invalid path is provided, global TLS configuration is used as a fallback. If `enabled` is false, cleartext is used.
+
+In order to make use of global TLS config, don't provide any `grpc_client_config`:
+
+```yaml
+endpoints:
+  - address: "<endpoint-address>"
+```
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
