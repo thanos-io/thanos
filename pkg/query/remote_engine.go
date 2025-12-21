@@ -95,23 +95,30 @@ type remoteEndpoints struct {
 	logger     log.Logger
 	getClients func() []Client
 	opts       Opts
+
+	enginesOnce sync.Once
+	engines     []api.RemoteEngine
 }
 
 func NewRemoteEndpoints(logger log.Logger, getClients func() []Client, opts Opts) api.RemoteEndpoints {
-	return remoteEndpoints{
+	return &remoteEndpoints{
 		logger:     logger,
 		getClients: getClients,
 		opts:       opts,
 	}
 }
 
-func (r remoteEndpoints) Engines() []api.RemoteEngine {
-	clients := r.getClients()
-	engines := make([]api.RemoteEngine, len(clients))
-	for i := range clients {
-		engines[i] = NewRemoteEngine(r.logger, clients[i], r.opts)
-	}
-	return engines
+func (r *remoteEndpoints) Engines() []api.RemoteEngine {
+	r.enginesOnce.Do(func() {
+		clients := r.getClients()
+		engines := make([]api.RemoteEngine, len(clients))
+		for i := range clients {
+			engines[i] = NewRemoteEngine(r.logger, clients[i], r.opts)
+		}
+
+		r.engines = engines
+	})
+	return r.engines
 }
 
 type remoteEngine struct {
