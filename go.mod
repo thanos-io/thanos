@@ -96,7 +96,7 @@ require (
 	golang.org/x/time v0.12.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/grpc/examples v0.0.0-20250407062114-b368379ef8f6
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -116,6 +116,7 @@ require (
 )
 
 require (
+	github.com/CrowdStrike/csproto v0.35.0
 	github.com/VictoriaMetrics/easyproto v0.1.4
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/oklog/ulid/v2 v2.1.1
@@ -314,6 +315,8 @@ require (
 replace (
 	// Pinnning capnp due to https://github.com/thanos-io/thanos/issues/7944
 	capnproto.org/go/capnp/v3 => capnproto.org/go/capnp/v3 v3.0.0-alpha.30
+
+	github.com/CrowdStrike/csproto => github.com/GiedriusS/csproto v0.0.0-20251216094542-7d9b4a04b65c
 
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.

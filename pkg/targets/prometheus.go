@@ -54,14 +54,14 @@ func (p *Prometheus) Targets(r *targetspb.TargetsRequest, s targetspb.Targets_Ta
 
 func enrichTargetsWithExtLabels(targets *targetspb.TargetDiscovery, extLset labels.Labels) {
 	for i, target := range targets.ActiveTargets {
-		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(target.DiscoveredLabels.PromLabels(), extLset))
-		target.SetLabels(labelpb.ExtendSortedLabels(target.Labels.PromLabels(), extLset))
+		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(labels.Labels(target.DiscoveredLabels), extLset))
+		target.SetLabels(labelpb.ExtendSortedLabels(labels.Labels(target.Labels), extLset))
 
 		targets.ActiveTargets[i] = target
 	}
 
 	for i, target := range targets.DroppedTargets {
-		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(target.DiscoveredLabels.PromLabels(), extLset))
+		target.SetDiscoveredLabels(labelpb.ExtendSortedLabels(labels.Labels(target.DiscoveredLabels), extLset))
 
 		targets.DroppedTargets[i] = target
 	}
