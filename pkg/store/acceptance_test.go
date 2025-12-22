@@ -926,6 +926,11 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 }
 
 func TestBucketStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1022,6 +1027,11 @@ func TestBucketStore_Acceptance(t *testing.T) {
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1055,6 +1065,11 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 }
 
 func TestTSDBStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1207,6 +1222,11 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 }
 
 func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1241,6 +1261,11 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 // based on relabel configuration, ensuring that only matching stores are included
 // in TSDBInfos, LabelValues, and other metadata operations.
 func TestTSDBSelectorFilteringBehavior(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
