@@ -191,7 +191,7 @@ func TestLazyBinaryReader_ShouldReopenOnUsageAfterClose(t *testing.T) {
 			testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.loadFailedCount))
 
 			// Closing an already closed lazy reader should be a no-op.
-			for i := 0; i < 2; i++ {
+			for range 2 {
 				testutil.Ok(t, r.Close())
 				testutil.Equals(t, float64(2), promtestutil.ToFloat64(m.unloadCount))
 				testutil.Equals(t, float64(0), promtestutil.ToFloat64(m.unloadFailedCount))
@@ -252,6 +252,11 @@ func TestLazyBinaryReader_unload_ShouldReturnErrorIfNotIdle(t *testing.T) {
 }
 
 func TestLazyBinaryReader_LoadUnloadRaceCondition(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	// Run the test for a fixed amount of time.
 	const runDuration = 5 * time.Second
 

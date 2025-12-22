@@ -17,6 +17,11 @@ import (
 )
 
 func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	var (
@@ -35,7 +40,7 @@ func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
 	}()
 	defer srv.Shutdown()
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		client := writecapnp.NewRemoteWriteClient(listener, log.NewLogfmtLogger(os.Stdout))
 		_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
 			Tenant: "default",
@@ -65,7 +70,7 @@ func TestCapNProtoServer_MultipleConcurrentClients(t *testing.T) {
 	}()
 	defer srv.Shutdown()
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		client := writecapnp.NewRemoteWriteClient(listener, log.NewLogfmtLogger(os.Stdout))
 		_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
 			Tenant: "default",

@@ -44,7 +44,7 @@ var supportedAPIVersions = []APIVersion{
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (v *APIVersion) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (v *APIVersion) UnmarshalYAML(unmarshal func(any) error) error {
 	var s string
 	if err := unmarshal(&s); err != nil {
 		return errors.Wrap(err, "invalid Alertmanager API version")
@@ -72,7 +72,7 @@ func DefaultAlertmanagerConfig() AlertmanagerConfig {
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (c *AlertmanagerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (c *AlertmanagerConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	*c = DefaultAlertmanagerConfig()
 	type plain AlertmanagerConfig
 	return unmarshal((*plain)(c))

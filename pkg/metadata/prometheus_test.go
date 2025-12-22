@@ -27,12 +27,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestPrometheus_Metadata_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	upctx, upcancel := context.WithTimeout(ctx, 10*time.Second)
 	defer upcancel()

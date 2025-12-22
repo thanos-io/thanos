@@ -25,6 +25,11 @@ import (
 )
 
 func TestPrometheus_Targets_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()
@@ -48,8 +53,7 @@ scrape_configs:
 	logger := log.NewNopLogger()
 	testutil.Ok(t, p.Start(context.Background(), logger))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	u, err := url.Parse("http://" + p.Addr())
 	testutil.Ok(t, err)

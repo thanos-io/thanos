@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"maps"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -449,7 +450,9 @@ func runRule(
 			conf.query.dnsSDInterval,
 			5*time.Minute,
 			5*time.Second,
+			conf.evalInterval,
 			dialOpts,
+			[]string{},
 		)
 		if err != nil {
 			return err
@@ -587,9 +590,7 @@ func runRule(
 	)
 	{
 		if conf.extendedFunctionsEnabled {
-			for k, fn := range parse.XFunctions {
-				parser.Functions[k] = fn
-			}
+			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
 		if len(conf.EnableFeatures) > 0 {

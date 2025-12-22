@@ -393,6 +393,11 @@ func BenchmarkMergedSeriesSet(b *testing.B) {
 }
 
 func TestMergedSeriesSet_Labels(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Run("overlapping chunks", func(t *testing.T) {
 		benchmarkMergedSeriesSet(testutil.NewTB(t), true)
 	})
@@ -524,7 +529,7 @@ func TestMatchersToString_Translate(t *testing.T) {
 			promMsParsed, err := extpromql.ParseMetricSelector(c.expected)
 			testutil.Ok(t, err, "unexpected error parsing %q", c.expected)
 			testutil.Assert(t, len(promMs) == len(promMsParsed))
-			for i := 0; i < len(promMs); i++ {
+			for i := range promMs {
 				testutil.Equals(t, promMs[i].String(), promMsParsed[i].String())
 			}
 		})

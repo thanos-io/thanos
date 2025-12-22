@@ -50,3 +50,15 @@ validators:
   # Frequent DNS issues. 
   - regex: 'build\.thebeat\.co'
     type: 'ignore'
+  # TLS certificate issues
+  - regex: 'itnext\.io'
+    type: 'ignore'
+  - regex: 'medium\.com'
+    type: 'ignore'
+  - regex: 'engineering\.hellofresh\.com'
+    type: 'ignore'
+  - regex: 'blog\.devops\.dev'
+    type: 'ignore'
+  - regex: 'codeburst\.io'
+    type: 'ignore'
+

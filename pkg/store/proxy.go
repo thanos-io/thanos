@@ -176,7 +176,7 @@ func NewProxyStore(
 		stores:         stores,
 		component:      component,
 		selectorLabels: selectorLabels,
-		buffers: sync.Pool{New: func() interface{} {
+		buffers: sync.Pool{New: func() any {
 			b := make([]byte, 0, initialBufSize)
 			return &b
 		}},
@@ -328,7 +328,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
-		st := st
 
 		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses)
 		if err != nil {
@@ -427,7 +426,6 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-		st := st
 
 		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
@@ -531,7 +529,6 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-		st := st
 
 		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
@@ -661,7 +658,12 @@ func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt i
 	}
 
 	if !s.Matches(matchers) {
-		return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+		const s = "store does not match filter for matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+		}
+
+		return false, s
 	}
 
 	return true, ""

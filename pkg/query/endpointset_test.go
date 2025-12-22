@@ -9,16 +9,20 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
@@ -338,7 +342,7 @@ func TestEndpointSetUpdate(t *testing.T) {
 					// Simulate very long external labels.
 					extlsetFn: func(addr string) []labelpb.ZLabelSet {
 						sLabel := []string{}
-						for i := 0; i < 1000; i++ {
+						for range 1000 {
 							sLabel = append(sLabel, "lbl")
 							sLabel = append(sLabel, "val")
 						}
@@ -595,14 +599,12 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 	defer endpointSet.Close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Never(t, func() bool {
 			numStatuses := len(endpointSet.GetStoreClients())
 			return numStatuses != numResponses && numStatuses != 0
 		}, 3*time.Second, 100*time.Millisecond)
-	}()
+	})
 
 	endpointSet.Update(context.Background())
 	testutil.Equals(t, numResponses, len(endpointSet.GetEndpointStatus()))
@@ -611,6 +613,11 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
@@ -682,7 +689,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 			}
 			return specs
 		},
-		time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -710,11 +717,13 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	// Check stats.
 	expected := newEndpointAPIStats()
-	expected[component.Sidecar.String()] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]): 1,
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
-	}
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+	expected = expected.append(
+		discoveredEndpointAddr[0], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]), component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[1], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]), component.Sidecar.String(),
+	)
+	testutil.Equals(t, expected.Sort(), endpointSet.endpointsMetric.storeNodes.Sort())
 
 	// Remove address from discovered and reset last check, which should ensure cleanup of status on next update.
 	now = now.Add(3 * time.Minute)
@@ -723,7 +732,7 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	testutil.Equals(t, 2, len(endpointSet.endpoints))
 
 	endpoints.CloseOne(discoveredEndpointAddr[0])
-	delete(expected[component.Sidecar.String()], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[0]))
+	expected = expected[1:]
 
 	// We expect Update to tear down store client for closed store server.
 	endpointSet.Update(context.Background())
@@ -738,7 +747,6 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 	testutil.Equals(t, 2, len(lset))
 	testutil.Equals(t, addr, lset[0].Get("addr"))
 	testutil.Equals(t, "b", lset[1].Get("a"))
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
 
 	// New big batch of endpoints.
 	endpoint2, err := startTestEndpoints([]testEndpointMeta{
@@ -969,26 +977,63 @@ func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
 
 	// Check stats.
 	expected = newEndpointAPIStats()
-	expected[component.Query.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}":             1,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
-	}
-	expected[component.Rule.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"}": 2,
-	}
-	expected[component.Sidecar.String()] = map[string]int{
-		fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]): 1,
-		"{l1=\"v2\", l2=\"v3\"}": 2,
-	}
-	expected[component.Store.String()] = map[string]int{
-		"":                                   2,
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 3,
-	}
-	expected[component.Receive.String()] = map[string]int{
-		"{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}": 2,
-	}
-	testutil.Equals(t, expected, endpointSet.endpointsMetric.storeNodes)
+	expected = expected.append(
+		discoveredEndpointAddr[6], "{l1=\"v2\", l2=\"v3\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[2], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[3], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Query.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[8], "{l1=\"v2\", l2=\"v3\"}", component.Rule.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[7], "{l1=\"v2\", l2=\"v3\"}", component.Rule.String(),
+	)
 
+	expected = expected.append(
+		discoveredEndpointAddr[1], fmt.Sprintf("{a=\"b\"},{addr=\"%s\"}", discoveredEndpointAddr[1]), component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[4], "{l1=\"v2\", l2=\"v3\"}", component.Sidecar.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[5], "{l1=\"v2\", l2=\"v3\"}", component.Sidecar.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[12], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[11], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[13], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Store.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[10], "", component.Store.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[9], "", component.Store.String(),
+	)
+
+	expected = expected.append(
+		discoveredEndpointAddr[14], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Receive.String(),
+	)
+	expected = expected.append(
+		discoveredEndpointAddr[15], "{l1=\"v2\", l2=\"v3\"},{l3=\"v4\"}", component.Receive.String(),
+	)
+
+	expected = expected.Sort()
+	endpointSet.endpointsMetric.storeNodes = endpointSet.endpointsMetric.storeNodes.Sort()
+	testutil.Equals(t, len(expected), len(endpointSet.endpointsMetric.storeNodes))
+	for i := range expected {
+		t.Log(i)
+		testutil.Equals(t, expected[i], endpointSet.endpointsMetric.storeNodes[i])
+	}
 	// Close remaining endpoint from previous batch
 	endpoints.CloseOne(discoveredEndpointAddr[1])
 	endpointSet.Update(context.Background())
@@ -1051,7 +1096,7 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 			}
 			return specs
 		},
-		time.Minute, 2*time.Second)
+		time.Minute, 2*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Should not matter how many of these we run.
@@ -1067,6 +1112,11 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 
 // TestEndpoint_Update_QuerierStrict tests what happens when the strict mode is enabled/disabled.
 func TestEndpoint_Update_QuerierStrict(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
@@ -1162,7 +1212,7 @@ func TestEndpoint_Update_QuerierStrict(t *testing.T) {
 			NewGRPCEndpointSpec(discoveredEndpointAddr[1], false, testGRPCOpts...),
 			NewGRPCEndpointSpec(discoveredEndpointAddr[2], true, testGRPCOpts...),
 		}
-	}, time.Minute, 1*time.Second)
+	}, time.Minute, 1*time.Second, 10*time.Second)
 	defer endpointSet.Close()
 
 	// Initial update.
@@ -1343,7 +1393,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 					return tc.states[currentState].endpointSpec()
 				},
-				time.Minute, 2*time.Second)
+				time.Minute, 2*time.Second, 10*time.Second)
 
 			defer endpointSet.Close()
 
@@ -1429,7 +1479,7 @@ func TestEndpointSet_APIs_Discovery(t *testing.T) {
 
 func makeInfoResponses(n int) []testEndpointMeta {
 	responses := make([]testEndpointMeta, 0, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		responses = append(responses, testEndpointMeta{
 			InfoResponse: sidecarInfo,
 			extlsetFn: func(addr string) []labelpb.ZLabelSet {
@@ -1528,14 +1578,14 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 }
 
 func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, nil, nil,
+	endpointSet := NewEndpointSet(now, log.NewLogfmtLogger(os.Stderr), nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict, testGRPCOpts...))
 			}
 			return specs
 		},
-		time.Minute, time.Second, metricLabels...)
+		time.Minute, time.Second, 10*time.Second, metricLabels...)
 	return endpointSet
 }
 
@@ -1598,10 +1648,7 @@ func TestDeadlockLocking(t *testing.T) {
 	deadline := time.Now().Add(3 * time.Second)
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.update(time.Now, &endpointMetadata{
 				InfoResponse: &infopb.InfoResponse{},
 			}, nil)
@@ -1610,10 +1657,7 @@ func TestDeadlockLocking(t *testing.T) {
 	})
 
 	g.Go(func() error {
-		for {
-			if time.Now().After(deadline) {
-				break
-			}
+		for !time.Now().After(deadline) {
 			mockEndpointRef.HasStoreAPI()
 			mockEndpointRef.HasExemplarsAPI()
 			mockEndpointRef.HasMetricMetadataAPI()
@@ -1771,7 +1815,7 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		var wg sync.WaitGroup
 		errors := make([]error, 3)
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
@@ -1821,7 +1865,7 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		defer endpointSet.Close()
 
 		// Call Update multiple times
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			endpointSet.Update(context.Background())
 		}
 
@@ -1835,5 +1879,38 @@ func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 		// Verify only one endpoint set (no duplicates from multiple updates)
 		testutil.Equals(t, 1, len(endpointSet.GetEndpointStatus()))
 		testutil.Equals(t, 1, len(endpointSet.GetStoreClients()))
+	})
+}
+
+func TestEndpointCloseGCTime(t *testing.T) {
+	endpoints, err := startTestEndpoints([]testEndpointMeta{
+		{
+			InfoResponse: sidecarInfo,
+			extlsetFn: func(addr string) []labelpb.ZLabelSet {
+				return labelpb.ZLabelSetsFromPromLabels(
+					labels.FromStrings("addr", addr),
+				)
+			},
+		},
+	})
+	testutil.Ok(t, err)
+	t.Cleanup(endpoints.Close)
+
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	endpointSet.Update(context.Background())
+
+	synctest.Test(t, func(t *testing.T) {
+		now := time.Now()
+		er := endpointSet.endpoints[discoveredEndpointAddr[0]]
+
+		endpointSet.Close()
+		time.Sleep(endpointSet.gcTimeout)
+		elapsed := time.Since(now)
+		testutil.Assert(t, elapsed == 1*time.Minute, "expected gcTimeout to be 1 minute, got %v", elapsed)
+
+		synctest.Wait()
+		state := er.cc.GetState()
+		testutil.Assert(t, state == connectivity.Shutdown, "expected connection state to be Shutdown, got %v", state)
 	})
 }

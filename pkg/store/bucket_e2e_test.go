@@ -97,7 +97,7 @@ func prepareTestBlocks(t testing.TB, now time.Time, count int, dir string, bkt o
 	ctx := context.Background()
 	logger := log.NewNopLogger()
 
-	for i := 0; i < count; i++ {
+	for range count {
 		mint := timestamp.FromTime(now)
 		now = now.Add(2 * time.Hour)
 		maxt := timestamp.FromTime(now)
@@ -483,6 +483,11 @@ func testBucketStore_e2e(t *testing.T, ctx context.Context, s *storeSuite) {
 }
 
 func TestBucketStore_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -525,7 +530,7 @@ func TestBucketStore_e2e(t *testing.T) {
 type naivePartitioner struct{}
 
 func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) (parts []Part) {
-	for i := 0; i < length; i++ {
+	for i := range length {
 		s, e := rng(i)
 		parts = append(parts, Part{Start: s, End: e, ElemRng: [2]int{i, i + 1}})
 	}
@@ -536,6 +541,11 @@ func (g naivePartitioner) Partition(length int, rng func(int) (uint64, uint64)) 
 // This tests if our, sometimes concurrent, fetches for different parts works.
 // Regression test against: https://github.com/thanos-io/thanos/issues/829.
 func TestBucketStore_ManyParts_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -556,10 +566,14 @@ func TestBucketStore_ManyParts_e2e(t *testing.T) {
 }
 
 func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bkt := objstore.NewInMemBucket()
 
 	dir := t.TempDir()
@@ -611,6 +625,11 @@ func TestBucketStore_TimePartitioning_e2e(t *testing.T) {
 }
 
 func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	// The query will fetch 2 series from 6 blocks, so we do expect to hit a total of 12 chunks.
@@ -648,8 +667,7 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()
@@ -683,10 +701,14 @@ func TestBucketStore_Series_ChunksLimiter_e2e(t *testing.T) {
 }
 
 func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	bkt := objstore.NewInMemBucket()
 
 	dir := t.TempDir()
@@ -725,6 +747,11 @@ func TestBucketStore_Series_CustomBytesLimiters_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelNames_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -829,6 +856,11 @@ func TestBucketStore_LabelNames_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	cases := map[string]struct {
@@ -848,8 +880,7 @@ func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 
 			bkt := objstore.NewInMemBucket()
 			dir := t.TempDir()
@@ -882,6 +913,11 @@ func TestBucketStore_LabelNames_SeriesLimiter_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelValues_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	objtesting.ForeachStore(t, func(t *testing.T, bkt objstore.Bucket) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -989,6 +1025,11 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 }
 
 func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	cases := map[string]struct {
@@ -1008,8 +1049,7 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 
 	for testName, testData := range cases {
 		t.Run(testName, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			ctx := t.Context()
 			bkt := objstore.NewInMemBucket()
 
 			dir := t.TempDir()

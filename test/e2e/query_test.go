@@ -32,6 +32,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 	config_util "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
@@ -53,6 +54,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	prompb_copy "github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
@@ -196,6 +198,58 @@ config:
 	}))
 }
 
+func TestQueryHandlesNotAvailableGrpc(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("q-na")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
+
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
+
+	testutil.Ok(t, prom1.Stop())
+
+	t.Log("waiting for sidecar1 to notice that Prometheus is down")
+
+outer:
+	for {
+		select {
+		case <-t.Context().Done():
+			t.Fatal("sidecar1 did not notice that Prometheus is down in time")
+		case <-time.After(1 * time.Second):
+
+			if err := sidecar1.WaitSumMetrics(e2emon.Equals(0), "thanos_sidecar_prometheus_up"); err != nil {
+				t.Logf("sidecar1 metrics still show that Prometheus is up: %v", err)
+			} else {
+				break outer
+			}
+		}
+	}
+
+	q := e2ethanos.NewQuerierBuilder(e, "1").WithEndpointGroups("1.2.3.4:1111").WithInjectEndpointGroupAddrs(sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	for range 20 {
+		_, _, err := simpleInstantQuery(t, context.Background(), q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+			Deduplicate:             false,
+			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+		}, 1)
+		if err != nil {
+			if strings.Contains(err.Error(), "no such host") {
+				t.Fatalf("found error even though expected not to: %s", err.Error())
+			}
+		}
+		select {
+		case <-time.After(500 * time.Millisecond):
+		case <-t.Context().Done():
+		}
+	}
+}
+
 func TestSidecarNotReady(t *testing.T) {
 	t.Parallel()
 
@@ -207,8 +261,7 @@ func TestSidecarNotReady(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 	testutil.Ok(t, prom.Stop())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Sidecar should not be ready - it cannot accept traffic if Prometheus is down.
 	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() (rerr error) {
@@ -1333,7 +1386,7 @@ func checkNetworkRequests(t *testing.T, addr string) {
 		newCtx, newCancel := chromedp.NewContext(ctx)
 		t.Cleanup(newCancel)
 		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(newCtx, func(ev interface{}) {
+		chromedp.ListenTarget(newCtx, func(ev any) {
 			switch ev := ev.(type) {
 			case *network.EventLoadingFailed:
 				networkErrors = append(networkErrors, ev.ErrorText)
@@ -1388,7 +1441,7 @@ func instantQuery(t testing.TB, ctx context.Context, addr string, q func() strin
 	return result
 }
 
-func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) {
+func simpleInstantQuery(t testing.TB, ctx context.Context, addr string, q func() string, ts func() time.Time, opts promclient.QueryOptions, expectedSeriesLen int) (model.Vector, *promclient.Explanation, error) { //nolint:unparam
 	res, warnings, explanation, err := promclient.NewDefaultClient().QueryInstant(ctx, urlParse(t, "http://"+addr), q(), ts(), opts)
 	if err != nil {
 		return nil, nil, err
@@ -1442,7 +1495,9 @@ func queryWaitAndAssert(t *testing.T, ctx context.Context, addr string, q func()
 		if reflect.DeepEqual(expected, result) {
 			return nil
 		}
-		return errors.New("series are different")
+
+		return fmt.Errorf("series are different: %s",
+			cmp.Diff(expected, result))
 	}))
 
 	testutil.Equals(t, expected, result)
@@ -1572,7 +1627,7 @@ func remoteWrite(ctx context.Context, timeseries []prompb.TimeSeries, addr strin
 	req.Header.Set("X-Prometheus-Remote-Write-Version", "0.1.0")
 
 	// Execute HTTP request
-	res, err := promclient.NewDefaultClient().HTTPClient.Do(req.WithContext(ctx))
+	res, err := promclient.NewDefaultClient().Do(req.WithContext(ctx))
 	if err != nil {
 		return err
 	}

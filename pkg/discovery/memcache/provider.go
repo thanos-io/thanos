@@ -6,6 +6,7 @@ package memcache
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -94,9 +95,7 @@ func (p *Provider) Resolve(ctx context.Context, addresses []string, flushOld boo
 	if flushOld && len(errs) == 0 {
 		p.clusterConfigs = map[string]*clusterConfig{}
 	}
-	for addr, config := range clusterConfigs {
-		p.clusterConfigs[addr] = config
-	}
+	maps.Copy(p.clusterConfigs, clusterConfigs)
 
 	return errs.Err()
 }

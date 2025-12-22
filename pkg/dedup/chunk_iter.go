@@ -138,11 +138,11 @@ func (h chunkIteratorHeap) Less(i, j int) bool {
 	return at.MinTime < bt.MinTime
 }
 
-func (h *chunkIteratorHeap) Push(x interface{}) {
+func (h *chunkIteratorHeap) Push(x any) {
 	*h = append(*h, x.(chunks.Iterator))
 }
 
-func (h *chunkIteratorHeap) Pop() interface{} {
+func (h *chunkIteratorHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

@@ -33,6 +33,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestReloader_ConfigApply(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -136,11 +141,9 @@ config:
 
 	rctx, cancel3 := context.WithCancel(ctx)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		testutil.Ok(t, reloader.Watch(rctx))
-	}()
+	})
 
 	reloadsSeen := 0
 	attemptsCnt := 0
@@ -201,6 +204,11 @@ config:
 }
 
 func TestReloader_ConfigRollback(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -265,11 +273,9 @@ faulty_config:
 
 	rctx, cancel2 := context.WithCancel(ctx)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		testutil.Ok(t, reloader.Watch(rctx))
-	}()
+	})
 
 	reloadsSeen := 0
 	faulty := false
@@ -522,9 +528,7 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		defer cancel()
 
 		reloadsSeen := 0
@@ -560,7 +564,7 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 	err = reloader.Watch(ctx)
 	cancel()
 	g.Wait()
@@ -698,9 +702,7 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		defer cancel()
 
 		reloadsSeen := 0
@@ -777,7 +779,7 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 	err = reloader.Watch(ctx)
 	cancel()
 	g.Wait()
@@ -993,9 +995,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		defer cancel()
 
 		reloadsSeen := 0
@@ -1031,7 +1031,7 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 	err = reloader.Watch(ctx)
 	cancel()
 	g.Wait()
@@ -1107,9 +1107,7 @@ func TestReloader_DirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		defer cancel()
 
 		reloadsSeen := 0
@@ -1172,7 +1170,7 @@ func TestReloader_DirectoriesApplyBasedOnWatchInterval(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 	err = reloader.Watch(ctx)
 	cancel()
 	g.Wait()
@@ -1232,11 +1230,9 @@ config:
 
 	rctx, cancel2 := context.WithCancel(ctx)
 	g := sync.WaitGroup{}
-	g.Add(1)
-	go func() {
-		defer g.Done()
+	g.Go(func() {
 		testutil.Ok(t, reloader.Watch(rctx))
-	}()
+	})
 
 Outer:
 	for {

@@ -17,6 +17,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -881,15 +882,14 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 				ref storage.SeriesRef
 				err error
 			)
-			for i := int64(0); i < offset; i++ {
+			for i := range offset {
 				ref, err = app.Append(ref, labels.FromStrings("a", "b"), baseT+i, 1)
 				testutil.Ok(t, err)
 			}
 			testutil.Ok(t, app.Commit())
 
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		client := startStore(t, extLset, appendFn)
 		srv := newStoreSeriesServer(ctx)
@@ -926,6 +926,11 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 }
 
 func TestBucketStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1022,6 +1027,11 @@ func TestBucketStore_Acceptance(t *testing.T) {
 }
 
 func TestPrometheusStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1055,6 +1065,11 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 }
 
 func TestTSDBStore_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1164,7 +1179,7 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 		p1 := startNestedStore(tt, appendFn, extLset1, extLset2, extLset3)
 
 		clients := []Client{
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset1, extLset2, extLset3}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1, atomic.Bool{}), ExtLset: []labels.Labels{extLset1, extLset2, extLset3}},
 		}
 
 		relabelCfgs := []*relabel.Config{{
@@ -1207,6 +1222,11 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 }
 
 func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1227,8 +1247,8 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 		p2 := startNestedStore(tt, extLset2, appendFn)
 
 		clients := []Client{
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1), ExtLset: []labels.Labels{extLset1}},
-			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2), ExtLset: []labels.Labels{extLset2}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p1, atomic.Bool{}), ExtLset: []labels.Labels{extLset1}},
+			storetestutil.TestClient{StoreClient: storepb.ServerAsClient(p2, atomic.Bool{}), ExtLset: []labels.Labels{extLset2}},
 		}
 
 		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval))
@@ -1241,6 +1261,11 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 // based on relabel configuration, ensuring that only matching stores are included
 // in TSDBInfos, LabelValues, and other metadata operations.
 func TestTSDBSelectorFilteringBehavior(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
@@ -1262,11 +1287,11 @@ func TestTSDBSelectorFilteringBehavior(t *testing.T) {
 
 		clients := []Client{
 			storetestutil.TestClient{
-				StoreClient: storepb.ServerAsClient(store1),
+				StoreClient: storepb.ServerAsClient(store1, atomic.Bool{}),
 				ExtLset:     []labels.Labels{extLset},
 			},
 			storetestutil.TestClient{
-				StoreClient: storepb.ServerAsClient(store2),
+				StoreClient: storepb.ServerAsClient(store2, atomic.Bool{}),
 				ExtLset:     []labels.Labels{droppedLset},
 			},
 		}

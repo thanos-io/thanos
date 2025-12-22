@@ -30,6 +30,11 @@ import (
 )
 
 func TestWriter(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	now := model.Now()
@@ -536,7 +541,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
@@ -547,7 +552,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for b.Loop() {
 			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
 		}
 	})
@@ -563,12 +568,12 @@ func generateLabelsAndSeries(numLabels int, numSeries int, generateHistograms bo
 	// Generate some labels first.
 	l := make([]labelpb.ZLabel, 0, numLabels)
 	l = append(l, labelpb.ZLabel{Name: "__name__", Value: "test"})
-	for i := 0; i < numLabels; i++ {
+	for i := range numLabels {
 		l = append(l, labelpb.ZLabel{Name: fmt.Sprintf("label_%s", string(rune('a'+i))), Value: fmt.Sprintf("%d", i)})
 	}
 
 	ts := make([]prompb.TimeSeries, numSeries)
-	for j := 0; j < numSeries; j++ {
+	for j := range numSeries {
 		ts[j] = prompb.TimeSeries{
 			Labels: l,
 		}
