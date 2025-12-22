@@ -235,6 +235,8 @@ func runReceive(
 		multiTSDBOptions = append(multiTSDBOptions, receive.WithMatchersCache(cache))
 	}
 
+	multiTSDBOptions = append(multiTSDBOptions, receive.WithUploadConcurrency(conf.uploadConcurrency))
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -916,6 +918,7 @@ type receiveConfig struct {
 	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	skipCorruptedBlocks   bool
+	uploadConcurrency     int
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
@@ -1092,6 +1095,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.skipCorruptedBlocks)
+
+	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("0").IntVar(&rc.uploadConcurrency)
 
 	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 

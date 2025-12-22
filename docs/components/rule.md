@@ -362,6 +362,9 @@ Flags:
                                  Possible values are: "", "SHA256".
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --query=<query> ...        Addresses of statically configured query
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
