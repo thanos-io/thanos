@@ -33,6 +33,11 @@ func TestMain(m *testing.M) {
 }
 
 func TestReloader_ConfigApply(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
@@ -199,6 +204,11 @@ config:
 }
 
 func TestReloader_ConfigRollback(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

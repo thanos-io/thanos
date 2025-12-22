@@ -147,6 +147,11 @@ func BenchmarkGRPCServer(b *testing.B) {
 // this many times and within different interval e.g
 // TODO(bwplotka): Add benchmarks with PromQL involvement.
 func TestQuerySelect(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	tb := testutil.NewTB(t)

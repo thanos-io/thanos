@@ -880,6 +880,8 @@ for _, tcase := range []struct{
 
 Avoid unit testing based on real-time. Always try to mock time that is used within struct by using, for example, a `timeNow func() time.Time` field. For production code, you can initialize the field with `time.Now`. For test code, you can set a custom time that will be used by the struct.
 
+You can also try using the new `synctest` package to simulate time.
+
 <table>
 <tbody>
 <tr><th>Avoid 🔥</th></tr>

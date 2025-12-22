@@ -377,6 +377,11 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistency(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	series := makeSeries()
@@ -399,6 +404,11 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 }
 
 func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	for _, tt := range []struct {

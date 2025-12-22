@@ -25,6 +25,11 @@ import (
 )
 
 func TestPrometheus_Targets_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	p, err := e2eutil.NewPrometheus()
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, p.Stop()) }()

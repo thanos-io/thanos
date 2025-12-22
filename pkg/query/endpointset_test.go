@@ -613,6 +613,11 @@ func TestEndpointSetUpdate_AtomicEndpointAdditions(t *testing.T) {
 }
 
 func TestEndpointSetUpdate_AvailabilityScenarios(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	endpoints, err := startTestEndpoints([]testEndpointMeta{
@@ -1107,6 +1112,11 @@ func TestEndpointSet_Update_NoneAvailable(t *testing.T) {
 
 // TestEndpoint_Update_QuerierStrict tests what happens when the strict mode is enabled/disabled.
 func TestEndpoint_Update_QuerierStrict(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	endpoints, err := startTestEndpoints([]testEndpointMeta{

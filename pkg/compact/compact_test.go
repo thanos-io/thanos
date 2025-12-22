@@ -553,6 +553,11 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 }
 
 func TestNoMarkFilterAtomic(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	ctx := context.TODO()
@@ -631,6 +636,11 @@ func TestNoMarkFilterAtomic(t *testing.T) {
 }
 
 func TestGarbageCollect_FilterRace(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(timeoutCancel)
 
