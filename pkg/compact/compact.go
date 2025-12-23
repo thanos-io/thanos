@@ -616,7 +616,7 @@ type CompactionProgressCalculator struct {
 }
 
 // NewCompactProgressCalculator creates a new CompactionProgressCalculator.
-func NewCompactionProgressCalculator(reg prometheus.Registerer, planner *tsdbBasedPlanner) *CompactionProgressCalculator {
+func NewCompactionProgressCalculator(reg prometheus.Registerer, planner Planner) *CompactionProgressCalculator {
 	return &CompactionProgressCalculator{
 		planner: planner,
 		CompactProgressMetrics: &CompactProgressMetrics{
