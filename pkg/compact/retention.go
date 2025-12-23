@@ -222,7 +222,7 @@ func ApplyFastRetentionByTenant(
 				scanned.Inc()
 
 				// Load meta from cache or bucket
-				meta, err := loadMetaFromCacheOrBucket(gCtx, logger, bkt, id, cacheDir)
+				meta, err := LoadMetaFromCacheOrBucket(gCtx, logger, bkt, id, cacheDir)
 				if err != nil {
 					// Any block without meta.json is corrupt/incomplete and should be deleted
 					// meta.json is the first object created, so its absence indicates corruption
@@ -361,7 +361,9 @@ func produceBlockIDs(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 }
 
 // loadMetaFromCacheOrBucket loads meta.json from local cache first, then falls back to bucket.
-func loadMetaFromCacheOrBucket(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, cacheDir string) (*metadata.Meta, error) {
+// LoadMetaFromCacheOrBucket loads block metadata from cache directory first, falls back to bucket.
+// Exported for use by bucket tools.
+func LoadMetaFromCacheOrBucket(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid.ULID, cacheDir string) (*metadata.Meta, error) {
 	// Try cache first
 	if cacheDir != "" {
 		cachedBlockDir := filepath.Join(cacheDir, id.String())

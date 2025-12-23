@@ -145,6 +145,7 @@ type bucketCleanupConfig struct {
 	consistencyDelay     time.Duration
 	blockSyncConcurrency int
 	deleteDelay          time.Duration
+	cacheDir             string
 }
 
 type bucketRetentionConfig struct {
@@ -166,10 +167,9 @@ type bucketUploadBlocksConfig struct {
 }
 
 type bucketFastRetentionConfig struct {
-	cacheDir             string
-	concurrency          int
-	dryRun               bool
-	enableFolderDeletion bool
+	cacheDir    string
+	concurrency int
+	dryRun      bool
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -278,6 +278,8 @@ func (tbc *bucketCleanupConfig) registerBucketCleanupFlag(cmd extkingpin.FlagCla
 		Default("30m").DurationVar(&tbc.consistencyDelay)
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when syncing block metadata from object storage.").
 		Default("20").IntVar(&tbc.blockSyncConcurrency)
+	cmd.Flag("cache-dir", "Local cache directory containing pre-synced meta.json files (typically compactor's meta-syncer dir).").
+		Default("/var/thanos/data/meta-syncer").StringVar(&tbc.cacheDir)
 	return tbc
 }
 
@@ -811,6 +813,47 @@ func registerBucketDownsample(app extkingpin.AppClause, objStoreConfig *extflag.
 	})
 }
 
+// loadMetasFromCache loads block metadata from a local cache directory instead of syncing from bucket.
+// This reads meta.json files from <cacheDir>/<blockID>/meta.json and reuses the existing
+// loadMetaFromCacheOrBucket helper from retention.go.
+func loadMetasFromCache(ctx context.Context, logger log.Logger, bkt objstore.Bucket, sy *compact.Syncer, cacheDir string) error {
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read cache directory %s. Please ensure the compactor's meta-syncer directory is accessible", cacheDir)
+	}
+
+	metas := make(map[ulid.ULID]*metadata.Meta)
+	partial := make(map[ulid.ULID]error)
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Try to parse directory name as ULID
+		id, err := ulid.Parse(entry.Name())
+		if err != nil {
+			level.Debug(logger).Log("msg", "skipping non-ulid directory", "name", entry.Name())
+			continue
+		}
+
+		// Reuse existing helper function
+		meta, err := compact.LoadMetaFromCacheOrBucket(ctx, logger, bkt, id, cacheDir)
+		if err != nil {
+			level.Warn(logger).Log("msg", "failed to load meta", "block", id, "err", err)
+			partial[id] = err
+			continue
+		}
+
+		metas[id] = meta
+	}
+
+	level.Info(logger).Log("msg", "loaded metas from cache", "count", len(metas), "partial", len(partial))
+
+	// Store the metas in syncer (bypass the Fetch call that downloads from bucket)
+	return sy.SetMetas(metas, partial)
+}
+
 func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Cleanup.String(), "Cleans up all blocks marked for deletion.")
 
@@ -835,6 +878,10 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 		}
 
 		bkt, err := client.NewBucket(logger, confContentYaml, component.Cleanup.String(), nil)
+		if err != nil {
+			return err
+		}
+		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt)
 		if err != nil {
 			return err
 		}
@@ -885,12 +932,20 @@ func registerBucketCleanup(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 			}
 		}
 
-		level.Info(logger).Log("msg", "syncing blocks metadata")
-		if err := sy.SyncMetas(ctx); err != nil {
-			return errors.Wrap(err, "sync blocks")
+		// Load metadata from cache directory if available, otherwise sync from bucket
+		if tbc.cacheDir != "" {
+			level.Info(logger).Log("msg", "loading blocks metadata from cache", "cache_dir", tbc.cacheDir)
+			if err := loadMetasFromCache(ctx, logger, insBkt, sy, tbc.cacheDir); err != nil {
+				return errors.Wrap(err, "load metas from cache")
+			}
+			level.Info(logger).Log("msg", "loaded blocks from cache done")
+		} else {
+			level.Info(logger).Log("msg", "syncing blocks metadata from bucket")
+			if err := sy.SyncMetas(ctx); err != nil {
+				return errors.Wrap(err, "sync blocks")
+			}
+			level.Info(logger).Log("msg", "synced blocks done")
 		}
-
-		level.Info(logger).Log("msg", "synced blocks done")
 
 		compact.BestEffortCleanAbortedPartialUploads(ctx, logger, sy.Partial(), insBkt, stubCounter, stubCounter, stubCounter)
 		if err := blocksCleaner.DeleteMarkedBlocks(ctx); err != nil {
@@ -1096,6 +1151,10 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 		if err != nil {
 			return err
 		}
+		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt) // always wrap with azure folder deletion sdk
+		if err != nil {
+			return err
+		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		var ids []ulid.ULID
@@ -1123,7 +1182,7 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 				}
 				switch tbc.marker {
 				case metadata.DeletionMarkFilename:
-					if err := block.MarkForDeletion(ctx, logger, insBkt, id, tbc.details, promauto.With(nil).NewCounter(prometheus.CounterOpts{})); err != nil {
+					if err := block.Delete(ctx, logger, insBkt, id); err != nil {
 						return errors.Wrapf(err, "mark %v for %v", id, tbc.marker)
 					}
 				case metadata.NoCompactMarkFilename:
@@ -1384,6 +1443,10 @@ func registerBucketRetention(app extkingpin.AppClause, objStoreConfig *extflag.P
 		if err != nil {
 			return err
 		}
+		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt) // always wrap with azure folder deletion sdk
+		if err != nil {
+			return err
+		}
 		insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		// Dummy actor to immediately kill the group after the run function returns.
@@ -1460,8 +1523,6 @@ func registerBucketFastRetention(app extkingpin.AppClause, objStoreConfig *extfl
 		Default("32").IntVar(&tbc.concurrency)
 	cmd.Flag("dry-run", "Log what would be deleted without actually deleting.").
 		Default("false").BoolVar(&tbc.dryRun)
-	cmd.Flag("enable-folder-deletion", "Support Azure Blob HNS folder deletion. This is a workaround for Azure Blob HNS folder deletion issue.").
-		Default("true").BoolVar(&tbc.enableFolderDeletion)
 	retentionTenants := cmd.Flag("retention.tenant",
 		"Per-tenant retention policy. Format: '<tenant>:<duration>d' or '<tenant>:<yyyy-mm-dd>'. "+
 			"Use '*' as tenant for wildcard policy. Blocks without tenant label are deleted as corrupt. "+
@@ -1484,10 +1545,10 @@ func registerBucketFastRetention(app extkingpin.AppClause, objStoreConfig *extfl
 		}
 
 		bkt, err := client.NewBucket(logger, confContentYaml, component.Retention.String(), nil)
-		if tbc.enableFolderDeletion {
-			bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt)
-			level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled", "name", bkt.Name())
+		if err != nil {
+			return err
 		}
+		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt) // always wrap with azure folder deletion sdk
 		if err != nil {
 			return err
 		}

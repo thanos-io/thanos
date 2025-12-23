@@ -188,6 +188,17 @@ func (s *Syncer) SyncMetas(ctx context.Context) error {
 	return nil
 }
 
+// SetMetas stores metadata in the syncer (useful when loading from local cache instead of bucket).
+// This bypasses the Fetch call.
+func (s *Syncer) SetMetas(metas map[ulid.ULID]*metadata.Meta, partial map[ulid.ULID]error) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.blocks = metas
+	s.partial = partial
+	return nil
+}
+
 // Partial returns partial blocks since last sync.
 func (s *Syncer) Partial() map[ulid.ULID]error {
 	s.mtx.Lock()

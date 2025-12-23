@@ -32,7 +32,7 @@ func WrapWithAzDataLakeSdk(logger log.Logger, confContentYaml []byte, bkt objsto
 		level.Info(logger).Log("msg", "folder deletion is only enabled with Azure HNS", "bucket_type", bucketConf.Type)
 		return bkt, nil
 	}
-	level.Info(logger).Log("msg", "wrap bucket with Azure DataLake Gen2 SDK")
+	level.Info(logger).Log("msg", "wrap bucket with Azure DataLake Gen2 SDK", "name", bkt.Name())
 	config, err := yaml.Marshal(bucketConf.Config)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal content of bucket configuration")
