@@ -166,9 +166,10 @@ type bucketMarkBlockConfig struct {
 }
 
 type bucketUploadBlocksConfig struct {
-	path            string
-	labels          []string
-	uploadCompacted bool
+	path              string
+	labels            []string
+	uploadCompacted   bool
+	uploadConcurrency int
 }
 
 func (tbc *bucketVerifyConfig) registerBucketVerifyFlag(cmd extkingpin.FlagClause) *bucketVerifyConfig {
@@ -302,6 +303,7 @@ func (tbc *bucketUploadBlocksConfig) registerBucketUploadBlocksFlag(cmd extkingp
 	cmd.Flag("path", "Path to the directory containing blocks to upload.").Default("./data").StringVar(&tbc.path)
 	cmd.Flag("label", "External labels to add to the uploaded blocks (repeated).").PlaceHolder("key=\"value\"").StringsVar(&tbc.labels)
 	cmd.Flag("shipper.upload-compacted", "If true shipper will try to upload compacted blocks as well.").Default("false").BoolVar(&tbc.uploadCompacted)
+	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("5").IntVar(&tbc.uploadConcurrency)
 
 	return tbc
 }
@@ -1512,6 +1514,7 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 			shipper.WithMetaFileName(shipper.DefaultMetaFilename),
 			shipper.WithLabels(func() labels.Labels { return lset }),
 			shipper.WithUploadCompacted(tbc.uploadCompacted),
+			shipper.WithUploadConcurrency(tbc.uploadConcurrency),
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())
