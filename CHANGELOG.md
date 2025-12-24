@@ -13,11 +13,16 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
+- [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
+- [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
 
 ### Added
 
+- [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
 
 ### Changed
+
+- [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
 
 ## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 27
 

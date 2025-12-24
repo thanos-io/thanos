@@ -217,6 +217,7 @@ type Flags struct {
 	TSDBRetention      model.Duration `json:"storage.tsdb.retention"`
 	TSDBMinTime        model.Duration `json:"storage.tsdb.min-block-duration"`
 	TSDBMaxTime        model.Duration `json:"storage.tsdb.max-block-duration"`
+	TSDBDelayCompact   string         `json:"storage.tsdb.delay-compact-file.path"`
 	WebEnableAdminAPI  bool           `json:"web.enable-admin-api"`
 	WebEnableLifecycle bool           `json:"web.enable-lifecycle"`
 }
@@ -231,6 +232,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
 		TSDBMinTime        modelDuration `json:"storage.tsdb.min-block-duration"`
 		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
+		TSDBDelayCompact   string        `json:"storage.tsdb.delay-compact-file.path"`
 		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`
 		WebEnableLifecycle modelBool     `json:"web.enable-lifecycle"`
 	}{}
@@ -244,6 +246,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBRetention:      model.Duration(parsableFlags.TSDBRetention),
 		TSDBMinTime:        model.Duration(parsableFlags.TSDBMinTime),
 		TSDBMaxTime:        model.Duration(parsableFlags.TSDBMaxTime),
+		TSDBDelayCompact:   parsableFlags.TSDBDelayCompact,
 		WebEnableAdminAPI:  bool(parsableFlags.WebEnableAdminAPI),
 		WebEnableLifecycle: bool(parsableFlags.WebEnableLifecycle),
 	}
