@@ -885,7 +885,7 @@ type Compactor interface {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -922,7 +922,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compIDs, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
+		shouldRerun, compIDs, err = cg.compact(ctx, cancel, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	errChan <- err
@@ -1138,9 +1138,11 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
+func (cg *Group) compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
+
+	go cg.cancelContextOnError(ctx, cancel, errChan)
 
 	// Check for overlapped blocks.
 	overlappingBlocks := false
@@ -1356,6 +1358,20 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	return true, compIDs, nil
 }
 
+func (cg *Group) cancelContextOnError(ctx context.Context, cancel context.CancelFunc, errChan chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err := <-errChan:
+			level.Error(cg.logger).Log("msg", "error detected during compaction, aborting current compaction", "error", err)
+			cancel()
+			return
+		}
+	}
+
+}
+
 func (cg *Group) deleteBlock(id ulid.ULID, bdir string, blockDeletableChecker BlockDeletableChecker) error {
 	if err := os.RemoveAll(bdir); err != nil {
 		return errors.Wrapf(err, "remove old block dir %s", id)
@@ -1485,7 +1501,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		for i := 0; i < c.concurrency; i++ {
 			wg.Go(func() {
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					groupCtx, groupCtxCancel := context.WithCancel(ctx)
+					shouldRerunGroup, _, err := g.Compact(groupCtx, groupCtxCancel, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					groupCtxCancel()
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
