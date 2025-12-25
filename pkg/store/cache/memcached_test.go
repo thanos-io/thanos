@@ -95,7 +95,7 @@ func TestMemcachedIndexCache_FetchMultiPostings(t *testing.T) {
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StorePostings(p.block, p.label, p.value, tenancy.DefaultTenant)
+				c.StorePostings(p.block, p.label, p.value, tenancy.DefaultTenant, memcachedDefaultTTL)
 			}
 
 			// Fetch postings from cached and assert on it.
@@ -176,7 +176,7 @@ func TestMemcachedIndexCache_FetchExpandedPostings(t *testing.T) {
 			// Store the postings expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreExpandedPostings(p.block, p.matchers, p.value, tenancy.DefaultTenant)
+				c.StoreExpandedPostings(p.block, p.matchers, p.value, tenancy.DefaultTenant, memcachedDefaultTTL)
 			}
 
 			// Fetch postings from cached and assert on it.
@@ -271,7 +271,7 @@ func TestMemcachedIndexCache_FetchMultiSeries(t *testing.T) {
 			// Store the series expected before running the test.
 			ctx := context.Background()
 			for _, p := range testData.setup {
-				c.StoreSeries(p.block, p.id, p.value, tenancy.DefaultTenant)
+				c.StoreSeries(p.block, p.id, p.value, tenancy.DefaultTenant, memcachedDefaultTTL)
 			}
 
 			// Fetch series from cached and assert on it.
