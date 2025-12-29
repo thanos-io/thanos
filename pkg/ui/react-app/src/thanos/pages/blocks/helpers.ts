@@ -97,10 +97,16 @@ export const sortBlocks = (
         if (key) {
           return key;
         } else {
-          let t = titles[stringify(b.thanos.labels)];
+          const labelString = stringify(b.thanos.labels).trim();
+          // Display actual labels if available for better visibility
+          if (labelString !== '') {
+            return labelString;
+          }
+          // Fall back to numbered title only for blocks with no labels
+          let t = titles[labelString];
           if (t === undefined) {
             t = String(Object.keys(titles).length + 1);
-            titles[stringify(b.thanos.labels)] = t;
+            titles[labelString] = t;
           }
           return t;
         }
