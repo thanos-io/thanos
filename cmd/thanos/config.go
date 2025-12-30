@@ -346,13 +346,18 @@ func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimit
 	return gml
 }
 
-func configureGoAutoMemLimit(common goMemLimitConfig) error {
+func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
+	var (
+		err    error
+		limits int64 = -1
+	)
+
 	if common.memlimitRatio <= 0.0 || common.memlimitRatio > 1.0 {
-		return errors.New("--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
+		return limits, errors.New("--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
 	}
 
 	if common.enableAutoGoMemlimit {
-		if _, err := memlimit.SetGoMemLimitWithOpts(
+		limits, err = memlimit.SetGoMemLimitWithOpts(
 			memlimit.WithRatio(common.memlimitRatio),
 			memlimit.WithProvider(
 				memlimit.ApplyFallback(
@@ -360,10 +365,11 @@ func configureGoAutoMemLimit(common goMemLimitConfig) error {
 					memlimit.FromSystem,
 				),
 			),
-		); err != nil {
-			return errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
+		)
+		if err != nil {
+			return -1, errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
 		}
 	}
 
-	return nil
+	return limits, nil
 }
