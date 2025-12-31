@@ -9,9 +9,10 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/util/annotations"
 
-	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/labelpbv2"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
 )
 
@@ -80,13 +81,6 @@ func dedupDroppedTargets(droppedTargets []*targetspb.DroppedTarget, replicaLabel
 		return droppedTargets
 	}
 
-	// Sort each target's label names such that they are comparable.
-	for _, t := range droppedTargets {
-		sort.Slice(t.DiscoveredLabels.Labels, func(i, j int) bool {
-			return t.DiscoveredLabels.Labels[i].Name < t.DiscoveredLabels.Labels[j].Name
-		})
-	}
-
 	// Sort targets globally based on synthesized deduplication labels, also considering replica labels and their values.
 	sort.Slice(droppedTargets, func(i, j int) bool {
 		return droppedTargets[i].Compare(droppedTargets[j]) < 0
@@ -94,13 +88,13 @@ func dedupDroppedTargets(droppedTargets []*targetspb.DroppedTarget, replicaLabel
 
 	// Remove targets based on synthesized deduplication labels, this time ignoring replica labels
 	i := 0
-	droppedTargets[i].DiscoveredLabels.Labels = removeReplicaLabels(
-		droppedTargets[i].DiscoveredLabels.Labels,
+	droppedTargets[i].DiscoveredLabels = removeReplicaLabelsProm(
+		droppedTargets[i].DiscoveredLabels,
 		replicaLabels,
 	)
 	for j := 1; j < len(droppedTargets); j++ {
-		droppedTargets[j].DiscoveredLabels.Labels = removeReplicaLabels(
-			droppedTargets[j].DiscoveredLabels.Labels,
+		droppedTargets[j].DiscoveredLabels = removeReplicaLabelsProm(
+			droppedTargets[j].DiscoveredLabels,
 			replicaLabels,
 		)
 		if droppedTargets[i].Compare(droppedTargets[j]) != 0 {
@@ -120,12 +114,6 @@ func dedupActiveTargets(activeTargets []*targetspb.ActiveTarget, replicaLabels m
 	}
 
 	// Sort each target's label names such that they are comparable.
-	for _, t := range activeTargets {
-		sort.Slice(t.DiscoveredLabels.Labels, func(i, j int) bool {
-			return t.DiscoveredLabels.Labels[i].Name < t.DiscoveredLabels.Labels[j].Name
-		})
-	}
-
 	// Sort targets globally based on synthesized deduplication labels, also considering replica labels and their values.
 	sort.Slice(activeTargets, func(i, j int) bool {
 		return activeTargets[i].Compare(activeTargets[j]) < 0
@@ -133,21 +121,21 @@ func dedupActiveTargets(activeTargets []*targetspb.ActiveTarget, replicaLabels m
 
 	// Remove targets based on synthesized deduplication labels, this time ignoring replica labels and last scrape.
 	i := 0
-	activeTargets[i].DiscoveredLabels.Labels = removeReplicaLabels(
-		activeTargets[i].DiscoveredLabels.Labels,
+	activeTargets[i].DiscoveredLabels = removeReplicaLabelsProm(
+		activeTargets[i].DiscoveredLabels,
 		replicaLabels,
 	)
-	activeTargets[i].Labels.Labels = removeReplicaLabels(
-		activeTargets[i].Labels.Labels,
+	activeTargets[i].Labels = removeReplicaLabelsProm(
+		activeTargets[i].Labels,
 		replicaLabels,
 	)
 	for j := 1; j < len(activeTargets); j++ {
-		activeTargets[j].DiscoveredLabels.Labels = removeReplicaLabels(
-			activeTargets[j].DiscoveredLabels.Labels,
+		activeTargets[j].DiscoveredLabels = removeReplicaLabelsProm(
+			activeTargets[j].DiscoveredLabels,
 			replicaLabels,
 		)
-		activeTargets[j].Labels.Labels = removeReplicaLabels(
-			activeTargets[j].Labels.Labels,
+		activeTargets[j].Labels = removeReplicaLabelsProm(
+			activeTargets[j].Labels,
 			replicaLabels,
 		)
 
@@ -169,15 +157,12 @@ func dedupActiveTargets(activeTargets []*targetspb.ActiveTarget, replicaLabels m
 	return activeTargets[:i+1]
 }
 
-func removeReplicaLabels(labels []storepb.Label, replicaLabels map[string]struct{}) []storepb.Label {
-	newLabels := make([]storepb.Label, 0, len(labels))
-	for _, l := range labels {
-		if _, ok := replicaLabels[l.Name]; !ok {
-			newLabels = append(newLabels, l)
-		}
+func removeReplicaLabelsProm(ls labelpbv2.LabelSetV2, replicaLabels map[string]struct{}) labelpbv2.LabelSetV2 {
+	lbls := labels.NewBuilder(labels.Labels(ls))
+	for rl := range replicaLabels {
+		lbls.Del(rl)
 	}
-
-	return newLabels
+	return labelpbv2.LabelSetV2(lbls.Labels())
 }
 
 type targetsServer struct {
