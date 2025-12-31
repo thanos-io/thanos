@@ -519,7 +519,9 @@ func runReceive(
 		}
 	}
 
-	{
+	// Only start CapNProto server when replication protocol is set to capnproto.
+	if receive.ReplicationProtocol(conf.replicationProtocol) == receive.CapNProtoReplication {
+		level.Info(logger).Log("msg", "starting Cap'n Proto server", "address", conf.replicationAddr)
 		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
 			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 		})
@@ -537,6 +539,8 @@ func runReceive(
 				level.Warn(logger).Log("msg", "Cap'n Proto server did not shut down gracefully", "err", err.Error())
 			}
 		})
+	} else {
+		level.Info(logger).Log("msg", "Cap'n Proto server disabled", "reason", "replication protocol is not set to capnproto", "current_protocol", conf.replicationProtocol)
 	}
 
 	level.Info(logger).Log("msg", "starting receiver")
