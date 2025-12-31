@@ -18,4 +18,6 @@ We have a suite of tests that can run very quickly. It's recommended to run them
 make test-local-short
 ```
 
-We have an intention to provide pre-commit hooks that would automate this workflow in the future.
+If you want to run it automatically before each commit then we provide pre-commit hooks for that.
+
+After cloning the repository, run `git config core.hooksPath hooks` to use `hooks` as the directory where hooks are stored.
