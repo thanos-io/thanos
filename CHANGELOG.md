@@ -15,6 +15,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 - [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
+- [#8093](https://github.com/thanos-io/thanos/issues/8093) Receive: Fixed CapNProto server starting unconditionally. The server now only starts when `--receive.replication-protocol=capnproto` is explicitly set, preventing port conflicts and unnecessary resource usage when using the default Protobuf protocol.
+
 
 ### Added
 
