@@ -6,7 +6,6 @@ package cacheutil
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -302,8 +301,12 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	start := time.Now()
 	results := make(map[string][]byte, len(keys))
 
+	prefixedKeys := make([]string, len(keys))
+	prefixToOriginal := make(map[string]string, len(keys))
 	for i, k := range keys {
-		keys[i] = c.addPrefix(k)
+		pk := c.addPrefix(k)
+		prefixedKeys[i] = pk
+		prefixToOriginal[pk] = k
 	}
 
 	if c.config.ReadTimeout > 0 {
@@ -313,13 +316,14 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	}
 
 	// NOTE(GiedriusS): TTL is the default one in case PTTL fails. 8 hours should be good enough IMHO.
-	resps, err := rueidis.MGetCache(c.client, ctx, 8*time.Hour, keys)
+	resps, err := rueidis.MGetCache(c.client, ctx, 8*time.Hour, prefixedKeys)
 	if err != nil {
 		level.Warn(c.logger).Log("msg", "failed to mget items from redis", "err", err, "items", len(resps))
 	}
 	for key, resp := range resps {
 		if val, err := resp.ToString(); err == nil {
-			results[key] = stringToBytes(val)
+			origKey := prefixToOriginal[key]
+			results[origKey] = stringToBytes(val)
 		}
 	}
 	c.durationGetMulti.Observe(time.Since(start).Seconds())
