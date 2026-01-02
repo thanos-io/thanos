@@ -216,7 +216,7 @@ func (it errSeriesIterator) Err() error { return it.err }
 // of a list of time-sorted, non-overlapping chunks.
 type chunkSeriesIterator struct {
 	chunks  []chunkenc.Iterator
-	i       int
+	i, n    int
 	lastVal chunkenc.ValueType
 
 	cur chunkenc.Iterator
@@ -226,7 +226,7 @@ func newChunkSeriesIterator(cs []chunkenc.Iterator) chunkenc.Iterator {
 	if len(cs) == 0 {
 		return errSeriesIterator{err: errors.New("got empty chunks")}
 	}
-	return &chunkSeriesIterator{chunks: cs, cur: cs[0]}
+	return &chunkSeriesIterator{chunks: cs, cur: cs[0], n: len(cs)}
 }
 
 func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
@@ -234,7 +234,7 @@ func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
-		ct := it.AtT()
+		ct := it.cur.AtT()
 		if ct >= t {
 			return it.lastVal
 		}
@@ -262,21 +262,20 @@ func (it *chunkSeriesIterator) AtT() int64 {
 }
 
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
-	lastT := it.AtT()
-
-	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
+	if valueType := it.cur.Next(); valueType != chunkenc.ValNone {
 		it.lastVal = valueType
 		return valueType
 	}
-	if it.Err() != nil {
+	it.i++
+	if it.i >= it.n {
 		return chunkenc.ValNone
 	}
-	if it.i >= len(it.chunks)-1 {
+	if it.cur.Err() != nil {
 		return chunkenc.ValNone
 	}
 	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
 	// We must ensure to skip any overlapping range between adjacent chunks.
-	it.i++
+	lastT := it.cur.AtT()
 	it.cur = it.chunks[it.i]
 	return it.Seek(lastT + 1)
 }
