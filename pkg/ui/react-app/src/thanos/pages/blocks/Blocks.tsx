@@ -1,6 +1,6 @@
 import React, { ChangeEvent, FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { UncontrolledAlert } from 'reactstrap';
+import { Button, Input, InputGroup, InputGroupAddon, UncontrolledAlert, Form } from 'reactstrap';
 import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
@@ -15,6 +15,14 @@ import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
 import Checkbox from '../../../components/Checkbox';
 import { FlagMap } from '../../../pages/flags/Flags';
+import TimeInput from '../../../pages/graph/TimeInput';
+import { formatDuration, parseDuration } from '../../../utils';
+import { faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
+const daySeconds = 24 * 60 * 60;
+
+const rangeSteps = [1, 7, 30, 180, 360, 720].map((s) => s * daySeconds * 1000);
 
 export interface BlockListProps {
   blocks: Block[];
@@ -27,13 +35,34 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
 
+  const sixMonthsInMs = 180 * daySeconds * 1000; // 6 months in milliseconds
+  const [enableTimeFiltering, setEnableTimeFiltering] = useState<boolean>(false);
+  const [range, setRange] = useState<number>(sixMonthsInMs);
+  const [localEndTime, setLocalEndTime] = useState<number | null>(Date.now()); // Default to current time
+
   const { blocks, label, err } = data;
 
+  // Use local state for time filtering
+  const endTime = enableTimeFiltering ? localEndTime : null;
+  const onChangeRange = (newRange: number) => setRange(newRange);
+  const onChangeEndTime = (newEndTime: number | null) => setLocalEndTime(newEndTime);
+
+  // Filter blocks by time range when time filtering is enabled
+  const timeFilteredBlocks = useMemo(() => {
+    if (enableTimeFiltering && endTime !== null && range > 0) {
+      const startTime = endTime - range;
+      return blocks.filter((block) => {
+        return !(endTime < block.minTime || startTime > block.maxTime);
+      });
+    }
+    return blocks;
+  }, [blocks, enableTimeFiltering, endTime, range]);
+
   const [gridMinTime, gridMaxTime] = useMemo(() => {
-    if (!err && blocks.length > 0) {
-      let gridMinTime = blocks[0].minTime;
-      let gridMaxTime = blocks[0].maxTime;
-      blocks.forEach((block) => {
+    if (!err && timeFilteredBlocks.length > 0) {
+      let gridMinTime = timeFilteredBlocks[0].minTime;
+      let gridMaxTime = timeFilteredBlocks[0].maxTime;
+      timeFilteredBlocks.forEach((block) => {
         if (block.minTime < gridMinTime) {
           gridMinTime = block.minTime;
         }
@@ -44,12 +73,16 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
       return [gridMinTime, gridMaxTime];
     }
     return [0, 0];
-  }, [blocks, err]);
+  }, [timeFilteredBlocks, err]);
+
+  // Calculate view time based on time filtering
+  const calculatedViewMinTime = enableTimeFiltering && endTime !== null && range > 0 ? endTime - range : gridMinTime;
+  const calculatedViewMaxTime = enableTimeFiltering && endTime !== null ? endTime : gridMaxTime;
 
   const [
     {
-      'min-time': viewMinTime,
-      'max-time': viewMaxTime,
+      'min-time': queryViewMinTime,
+      'max-time': queryViewMaxTime,
       ulid: blockSearchParam,
       'find-overlapping': findOverlappingParam,
       'filter-compaction': filterCompactionParam,
@@ -57,13 +90,17 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     },
     setQuery,
   ] = useQueryParams({
-    'min-time': withDefault(NumberParam, gridMinTime),
-    'max-time': withDefault(NumberParam, gridMaxTime),
+    'min-time': withDefault(NumberParam, calculatedViewMinTime),
+    'max-time': withDefault(NumberParam, calculatedViewMaxTime),
     ulid: withDefault(StringParam, ''),
     'find-overlapping': withDefault(BooleanParam, false),
     'filter-compaction': withDefault(BooleanParam, false),
     'compaction-level': withDefault(NumberParam, 0),
   });
+
+  // Use calculated view times when time filtering is enabled
+  const viewMinTime = enableTimeFiltering ? calculatedViewMinTime : queryViewMinTime;
+  const viewMaxTime = enableTimeFiltering ? calculatedViewMaxTime : queryViewMaxTime;
 
   const [filterCompaction, setFilterCompaction] = useState<boolean>(filterCompactionParam);
   const [findOverlappingBlocks, setFindOverlappingBlocks] = useState<boolean>(findOverlappingParam);
@@ -71,8 +108,13 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const [compactionLevelInput, setCompactionLevelInput] = useState<string>(compactionLevelParam.toString());
   const [blockSearch, setBlockSearch] = useState<string>(blockSearchParam);
 
-  const blockPools = useMemo(() => sortBlocks(blocks, label, findOverlappingBlocks), [blocks, label, findOverlappingBlocks]);
-  const filteredBlocks = useMemo(() => getBlockByUlid(blocks, blockSearch), [blocks, blockSearch]);
+  const rangeRef = React.createRef<HTMLInputElement>();
+
+  const blockPools = useMemo(
+    () => sortBlocks(timeFilteredBlocks, label, findOverlappingBlocks),
+    [timeFilteredBlocks, label, findOverlappingBlocks]
+  );
+  const filteredBlocks = useMemo(() => getBlockByUlid(timeFilteredBlocks, blockSearch), [timeFilteredBlocks, blockSearch]);
   const filteredBlockPools = useMemo(() => getFilteredBlockPools(blockPools, filteredBlocks), [filteredBlocks, blockPools]);
 
   const { response: flagsRes } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
@@ -120,6 +162,41 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     setCompactionLevelInput(target.value);
   };
 
+  const onChangeRangeInput = (rangeText: string): void => {
+    const newRange = parseDuration(rangeText);
+    if (newRange === null) {
+      onChangeRange(range);
+    } else {
+      onChangeRange(newRange);
+    }
+  };
+
+  const changeRangeInput = (newRange: number): void => {
+    if (rangeRef.current) {
+      rangeRef.current.value = formatDuration(newRange);
+    }
+  };
+
+  const increaseRange = (): void => {
+    for (const step of rangeSteps) {
+      if (range < step) {
+        changeRangeInput(step);
+        onChangeRange(step);
+        return;
+      }
+    }
+  };
+
+  const decreaseRange = (): void => {
+    for (const step of rangeSteps.slice().reverse()) {
+      if (range > step) {
+        changeRangeInput(step);
+        onChangeRange(step);
+        return;
+      }
+    }
+  };
+
   if (err) return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
 
   return (
@@ -131,7 +208,45 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
             onClick={() => setBlockSearchInput(searchState)}
             defaultValue={blockSearchParam}
           />
-          <div className={styles.blockFilter}>
+          <Form inline className="graph-controls" onSubmit={(e) => e.preventDefault()}>
+            <Checkbox
+              id="enable-time-filtering"
+              onChange={({ target }) => setEnableTimeFiltering(target.checked)}
+              defaultChecked={enableTimeFiltering}
+              wrapperStyles={{ marginBottom: 0 }}
+            >
+              Enable time filtering
+            </Checkbox>
+
+            <InputGroup className="range-input" size="sm">
+              <InputGroupAddon addonType="prepend">
+                <Button title="Decrease range" onClick={decreaseRange} disabled={!enableTimeFiltering}>
+                  <FontAwesomeIcon icon={faMinus} fixedWidth />
+                </Button>
+              </InputGroupAddon>
+
+              <Input
+                defaultValue={formatDuration(range)}
+                innerRef={rangeRef}
+                onBlur={() => onChangeRangeInput(rangeRef.current!.value)}
+                disabled={!enableTimeFiltering}
+              />
+
+              <InputGroupAddon addonType="append">
+                <Button title="Increase range" onClick={increaseRange} disabled={!enableTimeFiltering}>
+                  <FontAwesomeIcon icon={faPlus} fixedWidth />
+                </Button>
+              </InputGroupAddon>
+            </InputGroup>
+
+            <TimeInput
+              time={endTime}
+              useLocalTime={true}
+              range={range}
+              placeholder="End time"
+              onChangeTime={onChangeEndTime}
+            />
+
             <Checkbox
               id="find-overlap-block-checkbox"
               onChange={({ target }) => {
@@ -141,9 +256,11 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
                 setFindOverlappingBlocks(target.checked);
               }}
               defaultChecked={findOverlappingBlocks}
+              wrapperStyles={{ marginBottom: 0 }}
             >
               Enable finding overlapping blocks
             </Checkbox>
+
             <BlockFilterCompaction
               id="filter-compaction-checkbox"
               defaultChecked={filterCompaction}
@@ -153,7 +270,7 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
               }}
               defaultValue={compactionLevelInput}
             />
-          </div>
+          </Form>
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
