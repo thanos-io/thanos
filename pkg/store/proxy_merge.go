@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -490,7 +491,23 @@ func newLazyRespSet(
 				seriesStats.Count(resp.GetSeries())
 			}
 
+			if batch := resp.GetBatch(); batch != nil {
+				for _, series := range batch.Series {
+					seriesStats.Count(series)
+				}
+			}
+
 			l.bufferedResponsesMtx.Lock()
+			if batch := resp.GetBatch(); batch != nil {
+				for _, series := range batch.Series {
+					if l.rb.append(storepb.NewSeriesResponse(series)) {
+						l.dataOrFinishEvent.Signal()
+					}
+				}
+				l.bufferedResponsesMtx.Unlock()
+				return true
+			}
+
 			if l.rb.append(resp) {
 				l.dataOrFinishEvent.Signal()
 			}
@@ -740,6 +757,16 @@ func newEagerRespSet(
 
 			if resp.GetSeries() != nil {
 				seriesStats.Count(resp.GetSeries())
+			}
+
+			if batch := resp.GetBatch(); batch != nil {
+				l.bufferedResponses = slices.Grow(l.bufferedResponses, len(batch.Series))
+				for _, series := range batch.Series {
+					seriesStats.Count(series)
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewSeriesResponse(series))
+				}
+
+				return true
 			}
 
 			l.bufferedResponses = append(l.bufferedResponses, resp)
