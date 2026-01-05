@@ -111,6 +111,10 @@ message SeriesRequest {
 
   // limit is used to limit the number of results returned
   int64 limit = 15;
+
+  // response_batch_size is used to batch Series messages into one SeriesResponse
+  // If set to 0 or 1, each Series is sent as a separate response
+  int64 response_batch_size = 16;
 }
 
 // QueryHints represents hints from PromQL that might help to
@@ -187,6 +191,9 @@ message SeriesResponse {
     /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
     /// be handled in such case (ie. merged vs keep the first/last one).
     google.protobuf.Any hints = 3;
+
+    /// batch is an array of series so more than 1 series can be included in the response
+    SeriesBatch batch = 4;
   }
 }
 

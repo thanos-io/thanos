@@ -53,6 +53,16 @@ func NewHintsSeriesResponse(hints *types.Any) *SeriesResponse {
 	}
 }
 
+func NewBatchResponse(batch []*Series) *SeriesResponse {
+	return &SeriesResponse{
+		Result: &SeriesResponse_Batch{
+			Batch: &SeriesBatch{
+				Series: batch,
+			},
+		},
+	}
+}
+
 func GRPCCodeFromWarn(warn string) codes.Code {
 	if strings.Contains(warn, "rpc error: code = ResourceExhausted") {
 		return codes.ResourceExhausted
