@@ -15,12 +15,68 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/mem"
 
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
+
+type nonPoolingCodec struct {
+	encoding.CodecV2
+}
+
+func init() {
+	encoding.RegisterCodecV2(&nonPoolingCodec{
+		CodecV2: encoding.GetCodecV2("proto"),
+	})
+}
+
+func (n *nonPoolingCodec) Name() string {
+	return "proto"
+}
+
+var nopPool = mem.NopBufferPool{}
+
+func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
+	gmsg, ok := v.(gogoMsg)
+	if !ok {
+		return n.CodecV2.Unmarshal(data, v)
+	}
+
+	// TODO(GiedriusS): we use unsafe code around labels so we cannot use pooling here.
+	buf := data.MaterializeToBuffer(nopPool)
+
+	return gmsg.Unmarshal(buf.ReadOnlyData())
+}
+
+type gogoMsg interface {
+	Size() int
+	MarshalToSizedBuffer([]byte) (int, error)
+	Unmarshal([]byte) error
+}
+
+func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
+	gmsg, ok := v.(gogoMsg)
+	if !ok {
+		return c.CodecV2.Marshal(v)
+	}
+	size := gmsg.Size()
+	pool := mem.DefaultBufferPool()
+	buf := pool.Get(size)
+
+	n, err := gmsg.MarshalToSizedBuffer((*buf)[:size])
+	if err != nil {
+		pool.Put(buf)
+		return mem.BufferSlice{}, err
+	}
+
+	bufExact := (*buf)[:n]
+
+	return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
+}
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
@@ -42,6 +98,7 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 
 	return []grpc.DialOption{
 		grpc.WithDefaultServiceConfig(serviceConfig),
+		grpc.WithDisableServiceConfig(),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
 	}
 }

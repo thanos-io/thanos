@@ -26,6 +26,11 @@ import (
 )
 
 func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	t.Run("compressed", func(t *testing.T) {
@@ -72,6 +77,11 @@ func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
 }
 
 func TestDiffVarintCodec(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	t.Parallel()
 
 	chunksDir := t.TempDir()

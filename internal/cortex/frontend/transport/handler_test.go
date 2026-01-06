@@ -75,6 +75,18 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			},
 		},
 		{
+			name: "Query with prefixed API string",
+			url:  "/external-prefix/api/v1/query?query=absent(up)&start=1714262400&end=1714266000",
+			logParts: []string{
+				"slow query detected",
+				"time_taken=",
+				"path=/external-prefix/api/v1/query",
+				"param_query=absent(up)",
+				"param_start=1714262400",
+				"param_end=1714266000",
+			},
+		},
+		{
 			name: "Non-query endpoint",
 			url:  "/favicon.ico",
 			// No slow query log for non-query endpoints

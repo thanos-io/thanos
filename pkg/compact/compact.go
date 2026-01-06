@@ -404,6 +404,31 @@ func (g *DefaultGrouper) Groups(blocks map[ulid.ULID]*metadata.Meta) (res []*Gro
 	sort.Slice(res, func(i, j int) bool {
 		return res[i].Key() < res[j].Key()
 	})
+
+	for _, gr := range groups {
+		var combinedExtensions map[string]any
+		for _, m := range gr.metasByMinTime {
+			ext, ok := m.Thanos.Extensions.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			if combinedExtensions == nil {
+				combinedExtensions = make(map[string]any)
+				maps.Copy(combinedExtensions, ext)
+				continue
+			}
+
+			// Perform logical AND - if the extension exists in all blocks, we keep it.
+			for k := range combinedExtensions {
+				if _, exists := ext[k]; !exists {
+					delete(combinedExtensions, k)
+				}
+			}
+		}
+
+		gr.SetExtensions(combinedExtensions)
+	}
 	return res, nil
 }
 
@@ -624,7 +649,7 @@ func (ps *CompactionProgressCalculator) ProgressCalculate(ctx context.Context, g
 			if len(g.IDs()) == 1 {
 				continue
 			}
-			plan, err := ps.planner.Plan(ctx, g.metasByMinTime, nil, g.extensions)
+			plan, err := ps.planner.Plan(ctx, g.metasByMinTime, nil, g.Extensions())
 			if err != nil {
 				return errors.Wrapf(err, "could not plan")
 			}
@@ -1156,7 +1181,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 
 	var toCompact []*metadata.Meta
 	if err := tracing.DoInSpanWithErr(ctx, "compaction_planning", func(ctx context.Context) (e error) {
-		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.extensions)
+		toCompact, e = planner.Plan(ctx, cg.metasByMinTime, errChan, cg.Extensions())
 		return e
 	}); err != nil {
 		return false, nil, errors.Wrap(err, "plan compaction")
@@ -1303,7 +1328,7 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 			Downsample:   metadata.ThanosDownsample{Resolution: cg.resolution},
 			Source:       metadata.CompactorSource,
 			SegmentFiles: block.GetSegmentFiles(bdir),
-			Extensions:   cg.extensions,
+			Extensions:   cg.Extensions(),
 		}
 		if stats.ChunkMaxSize > 0 {
 			thanosMeta.IndexStats.ChunkMaxSize = stats.ChunkMaxSize

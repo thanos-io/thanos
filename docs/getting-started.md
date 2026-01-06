@@ -24,7 +24,7 @@ Thanos aims for a simple deployment and maintenance model. The only dependencies
 
 You can find the latest Thanos release [here](https://github.com/thanos-io/thanos/releases).
 
-Main should be stable and usable. Every commit to main builds docker image named `main-<data>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
+Main should be stable and usable. Every commit to main builds docker image named `main-<date>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
 We also perform minor releases every 6 weeks.
 

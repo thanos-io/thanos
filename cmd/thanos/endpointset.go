@@ -197,7 +197,9 @@ func setupEndpointSet(
 	dnsSDInterval time.Duration,
 	unhealthyTimeout time.Duration,
 	endpointTimeout time.Duration,
+	queryTimeout time.Duration,
 	dialOpts []grpc.DialOption,
+	injectTestAddresses []string,
 	queryConnMetricLabels ...string,
 ) (*query.EndpointSet, error) {
 	configProvider, err := newEndpointConfigProvider(
@@ -221,6 +223,7 @@ func setupEndpointSet(
 			dns.ResolverType(dnsSDResolver),
 		),
 		dnsSDInterval,
+		injectTestAddresses,
 	)
 	dnsEndpointProvider := dns.NewProvider(
 		logger,
@@ -362,7 +365,7 @@ func setupEndpointSet(
 			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dialOpts...))
 		}
 		return removeDuplicateEndpointSpecs(specs)
-	}, unhealthyTimeout, endpointTimeout, queryConnMetricLabels...)
+	}, unhealthyTimeout, endpointTimeout, queryTimeout, queryConnMetricLabels...)
 
 	g.Add(func() error {
 		return runutil.Repeat(endpointTimeout, ctx.Done(), func() error {

@@ -658,7 +658,12 @@ func storeMatches(ctx context.Context, debugLogging bool, s Client, mint, maxt i
 	}
 
 	if !s.Matches(matchers) {
-		return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+		const s = "store does not match filter for matchers"
+		if debugLogging {
+			return false, fmt.Sprintf("store does not match filter for matchers: %v", matchers)
+		}
+
+		return false, s
 	}
 
 	return true, ""

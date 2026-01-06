@@ -450,7 +450,9 @@ func runRule(
 			conf.query.dnsSDInterval,
 			5*time.Minute,
 			5*time.Second,
+			conf.evalInterval,
 			dialOpts,
+			[]string{},
 		)
 		if err != nil {
 			return err
