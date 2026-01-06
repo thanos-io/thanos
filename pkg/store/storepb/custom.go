@@ -360,11 +360,31 @@ func (x *PartialResponseStrategy) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.Quote(x.String())), nil
 }
 
+// isRedundantMatcher checks if a matcher is redundant for backend queries.
+// Redundant matchers (e.g., =~".*") match all values but cause index lookup
+// performance overhead, especially for high-cardinality labels. See ES-1676952.
+// TODO: =~".+" and !~"" require label presence (not truly redundant).
+// Need to handle these without false positives in future iterations.
+func isRedundantMatcher(m *labels.Matcher) bool {
+	switch m.Type {
+	case labels.MatchRegexp:
+		return m.Value == ".*"
+	default:
+		return false
+	}
+}
+
 // PromMatchersToMatchers returns proto matchers from Prometheus matchers.
 // NOTE: It allocates memory.
 func PromMatchersToMatchers(ms ...*labels.Matcher) ([]LabelMatcher, error) {
 	res := make([]LabelMatcher, 0, len(ms))
 	for _, m := range ms {
+		// Only skip redundant matchers if we have more than 1 matcher
+		// Otherwise, keep at least 1 matcher to avoid empty matcher set
+		if isRedundantMatcher(m) && len(ms) > 1 {
+			continue
+		}
+
 		var t LabelMatcher_Type
 
 		switch m.Type {

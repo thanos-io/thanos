@@ -804,3 +804,77 @@ func BenchmarkMatcherConverter_REWithAndWithoutCache(b *testing.B) {
 		}
 	})
 }
+
+func TestPromMatchersToMatchers_RedundantMatcherFiltering(t *testing.T) {
+	cases := []struct {
+		name             string
+		inputMatchers    []*labels.Matcher
+		expectedMatchers []LabelMatcher
+		description      string
+	}{
+		{
+			name: "Single redundant matcher =~'.*' - should NOT be filtered",
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "label1", ".*"),
+			},
+			expectedMatchers: []LabelMatcher{
+				{Name: "label1", Type: LabelMatcher_RE, Value: ".*"},
+			},
+			description: "When there's only one matcher, even if redundant, it should be kept to avoid empty matcher set",
+		},
+		{
+			name: "Multiple matchers with one redundant =~'.*' - redundant should be filtered",
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "up"),
+				labels.MustNewMatcher(labels.MatchRegexp, "label1", ".*"),
+			},
+			expectedMatchers: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+			},
+			description: "When there are multiple matchers, redundant ones should be filtered out",
+		},
+		{
+			name: "Multiple matchers with multiple redundant =~'.*' - all redundant should be filtered",
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "up"),
+				labels.MustNewMatcher(labels.MatchRegexp, "label1", ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, "label2", ".*"),
+				labels.MustNewMatcher(labels.MatchEqual, "job", "test"),
+			},
+			expectedMatchers: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+				{Name: "job", Type: LabelMatcher_EQ, Value: "test"},
+			},
+			description: "Multiple redundant matchers should all be filtered out when other matchers exist",
+		},
+		{
+			name: "Non-redundant regex matcher =~'.+' - should NOT be filtered",
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchEqual, "__name__", "up"),
+				labels.MustNewMatcher(labels.MatchRegexp, "label1", ".+"),
+			},
+			expectedMatchers: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "up"},
+				{Name: "label1", Type: LabelMatcher_RE, Value: ".+"},
+			},
+			description: "=~'.+' is not redundant (requires label presence), should be kept",
+		},
+		{
+			name: "All matchers are redundant - current implementation returns empty set",
+			inputMatchers: []*labels.Matcher{
+				labels.MustNewMatcher(labels.MatchRegexp, "label1", ".*"),
+				labels.MustNewMatcher(labels.MatchRegexp, "label2", ".*"),
+			},
+			expectedMatchers: []LabelMatcher{},
+			description:      "Current implementation: when ALL matchers are redundant (len > 1), they all get filtered, resulting in empty set. This is a known edge case.",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := PromMatchersToMatchers(tc.inputMatchers...)
+			require.NoError(t, err, tc.description)
+			require.Equal(t, tc.expectedMatchers, result, tc.description)
+		})
+	}
+}
