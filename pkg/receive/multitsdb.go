@@ -6,7 +6,7 @@ package receive
 import (
 	"context"
 	"fmt"
-	"maps"
+	"math/rand"
 	"os"
 	"path"
 	"path/filepath"
@@ -80,6 +80,8 @@ type MultiTSDB struct {
 	blockExpandedPostingsCacheSize uint64
 
 	initSingleFlight singleflight.Group
+
+	gcImmediately bool
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -89,6 +91,12 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
+	}
+}
+
+func WithGCImmediately() MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.gcImmediately = true
 	}
 }
 
@@ -116,8 +124,33 @@ func WithUploadConcurrency(concurrency int) MultiTSDBOption {
 	}
 }
 
-// NewMultiTSDB creates new MultiTSDB.
-// NOTE: Passed labels must be sorted lexicographically (alphabetically).
+/*
+NewMultiTSDB creates a new MultiTSDB instance.
+
+State machine for tenants:
+- Modifying the state of MultiTSDB so we need to protect this with a lock.
+  - First request comes in for tenant T. It is created automatically.
+  - The TSDB of T is synchronously initialized if not already initialized.
+  - The MultiTSDB clients list is updated.
+
+Tenant T can be: active, GC ready / read-only, deleted.
+
+Periodically, in a randomized manner compaction happens. This needs to be a tenant level operation so no need to lock MultiTSDB.
+If the tenant is a read-only mode then we need to skip it.
+
+Periodically, check if compaction needs to happen for each tenant. This is a tenant-level operation. Upload data if needed.
+
+Periodically, prune tenants that have not received data for longer than retention period. First, mark that tenant as GC ready / read-only.
+Only do this for tenants that have all blocks uploaded.
+
+If a write comes in for a tenant that is GC ready / read-only, we need to switch it back to active mode.
+
+After a tenant is marked as GC ready / read-only, check after 1 minute if no writes have happened. If no writes happened,
+take a MultiTSDB lock and remove the tenant from the list. Update clients.
+
+Invariants:
+- Any object storage operations must not block reading or writing new samples.
+*/
 func NewMultiTSDB(
 	dataDir string,
 	l log.Logger,
@@ -277,16 +310,15 @@ func (l *localClient) SupportsWithoutReplicaLabels() bool {
 	return true
 }
 
-func (t *tenant) setReadOnly(ro bool) {
-	t.readOnly.Store(ro)
-}
-
 type tenant struct {
 	readyS        *ReadyStorage
 	storeTSDB     *store.TSDBStore
 	exemplarsTSDB *exemplars.TSDB
 	ship          *shipper.Shipper
 	reg           *UnRegisterer
+	doneC         chan struct{}
+
+	closeOnce sync.Once
 
 	readOnly atomic.Bool
 
@@ -295,6 +327,51 @@ type tenant struct {
 
 	// For tests.
 	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
+
+	retentionDuration int64
+	logger            log.Logger
+
+	tenantName string
+
+	maxBlockDuration int64
+
+	lastSuccessfulHeadCompaction atomic.Int64
+}
+
+// shouldBeMarkedInactive checks if the tenant should be marked as inactive / read-only.
+func (t *tenant) shouldBeMarkedInactive() bool {
+	// NOTE(GiedriusS): it could also happen that compaction is failing and it is not producing new blocks.
+	// But if compaction is failing then that probably also means that the storage layer is hosed
+	// and if that is the case then we cannot do anything about it anyway.
+	head := t.tsdb.Head()
+	if head.MaxTime() < 0 {
+		return false
+	}
+
+	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
+	if sinceLastAppendMillis <= t.retentionDuration {
+		return false
+	}
+
+	s := t.shipper()
+	if s == nil {
+		return true
+	}
+
+	// NOTE(GiedriusS): compaction needs to be successful so that we would ensure that all new blocks are uploaded.
+	lastCompactionNs := t.lastSuccessfulHeadCompaction.Load()
+	if lastCompactionNs == 0 || time.Since(time.Unix(0, lastCompactionNs)) > 6*time.Hour {
+		level.Error(t.logger).Log("msg", "compaction is stuck so not marking tenant as inactive", "now", time.Now(), "last_compaction", time.Unix(0, lastCompactionNs), "diff", time.Since(time.Unix(0, lastCompactionNs)))
+		return false
+	}
+
+	allBlocks, err := s.AreAllBlocksUploaded()
+	if err != nil {
+		level.Error(t.logger).Log("msg", "failed to check if all blocks are uploaded", "err", err)
+		return false
+	}
+
+	return allBlocks
 }
 
 func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
@@ -304,10 +381,120 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 		}
 		logger := log.With(m.logger, "tenant", tenantID)
 
-		return nil, m.startTSDB(logger, tenantID, t)
+		err := m.startTSDB(logger, tenantID, t)
+		if err != nil {
+			return nil, err
+		}
+
+		t.startPeriodicHeadCompaction()
+		if t.shipper() != nil {
+			t.startPeriodicUploader()
+		}
+
+		return nil, nil
 	})
 
 	return err
+}
+
+const compactionDelayPercentBlockLength = 10
+
+// generateCompactionDelay() generates a time.Duration of up to compactionDelayPercentBlockLength% of the block range. Used to stagger compactions & uploads.
+func (t *tenant) generateCompactionDelay() time.Duration {
+	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
+}
+
+func (t *tenant) startPeriodicHeadCompaction() {
+	// NOTE(GiedriusS): from the old cmd/thanos/receive.go.
+	var interval = 2 * time.Duration(t.maxBlockDuration) * time.Millisecond
+
+	doIter := func() error {
+		db := t.readyS.Get()
+		if db == nil {
+			return fmt.Errorf("no DB found")
+		}
+		head := db.Head()
+		if head.MinTime() < 0 {
+			return nil
+		}
+		sinceOldestDataMillis := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+
+		// NOTE(GiedriusS): this is what Prometheus does. 0.5 is an extra appending window.
+		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
+		if sinceOldestDataMillis > compactionThreshold {
+			if err := t.compactHead(db); err != nil {
+				return fmt.Errorf("compact head: %w", err)
+			}
+			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
+		}
+
+		return nil
+	}
+
+	compactionDelay := t.generateCompactionDelay()
+	go func() {
+		level.Info(t.logger).Log("msg", "starting periodic head compaction", "initial_delay", compactionDelay.String(), "interval", interval.String())
+		select {
+		case <-time.After(compactionDelay):
+		case <-t.doneC:
+			return
+		}
+
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				level.Info(t.logger).Log("msg", "running periodic head compaction")
+				if err := doIter(); err != nil {
+					level.Error(t.logger).Log("msg", "periodic head compaction failed", "err", err)
+				}
+
+			case <-t.doneC:
+				return
+			}
+		}
+	}()
+}
+
+func (t *tenant) startPeriodicUploader() {
+	s := t.shipper()
+	if s == nil {
+		panic("BUG: periodic uploader started but shipper is nil")
+	}
+
+	var interval = 30 * time.Second
+
+	doIter := func() error {
+		syncCtx, cancel := context.WithTimeout(context.Background(), interval)
+		defer cancel()
+		if _, err := s.Sync(syncCtx); err != nil {
+			return fmt.Errorf("sync: %w", err)
+		}
+
+		return nil
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		if err := doIter(); err != nil {
+			level.Error(t.logger).Log("msg", "initial upload failed", "err", err)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := doIter(); err != nil {
+					level.Error(t.logger).Log("msg", "periodic upload failed", "err", err)
+				}
+			case <-t.doneC:
+				return
+			}
+		}
+	}()
 }
 
 func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
@@ -333,11 +520,42 @@ func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 	return deletable
 }
 
-func newTenant() *tenant {
+func newTenant(l log.Logger, retentionDuration, maxBlockDuration int64, name string) *tenant {
 	return &tenant{
-		readyS: &ReadyStorage{},
-		mtx:    &sync.RWMutex{},
+		readyS:            &ReadyStorage{},
+		mtx:               &sync.RWMutex{},
+		retentionDuration: retentionDuration,
+		logger:            log.With(l, "tenant", name),
+		doneC:             make(chan struct{}),
+		tenantName:        name,
+		maxBlockDuration:  maxBlockDuration,
 	}
+}
+
+type closeDelete int
+
+const DELETE_DATA closeDelete = 0
+const KEEP_DATA closeDelete = 1
+
+func (t *tenant) close(cd closeDelete) {
+	t.closeOnce.Do(func() {
+		close(t.doneC)
+
+		// NOTE(GiedriusS): on paper, we could Close() again but the TSDB's Close() function is not idempotent.
+		// If storage starts erroring out then we are hosed anyway, so just log an error.
+		if err := t.tsdb.Close(); err != nil {
+			level.Error(t.logger).Log("msg", "failed closing tenant's TSDB", "tenant", t.tenantName, "err", err)
+		}
+
+		if cd == DELETE_DATA {
+			if err := os.RemoveAll(t.tsdb.Dir()); err != nil {
+				level.Error(t.logger).Log("msg", "failed removing tenant's TSDB directory", "tenant", t.tenantName, "err", err)
+			}
+		}
+
+		t.readyS.set(nil)
+		t.setComponents(nil, nil, nil, nil, nil)
+	})
 }
 
 func (t *tenant) readyStorage() *ReadyStorage {
@@ -429,7 +647,7 @@ func (t *MultiTSDB) Flush() error {
 		}
 		level.Info(t.logger).Log("msg", "flushing TSDB", "tenant", id)
 		wg.Go(func() {
-			if err := t.flushHead(db); err != nil {
+			if err := tenant.flushHead(db); err != nil {
 				errmtx.Lock()
 				merr.Add(err)
 				errmtx.Unlock()
@@ -441,12 +659,12 @@ func (t *MultiTSDB) Flush() error {
 	return merr.Err()
 }
 
-func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
+func (t *tenant) flushHead(db *tsdb.DB) error {
 	head := db.Head()
 	if head.MinTime() == head.MaxTime() {
 		return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()))
 	}
-	blockAlignedMaxt := head.MaxTime() - (head.MaxTime() % t.tsdbOpts.MaxBlockDuration)
+	blockAlignedMaxt := head.MaxTime() - (head.MaxTime() % t.maxBlockDuration)
 	// Flush a well aligned TSDB block.
 	if err := db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), blockAlignedMaxt-1)); err != nil {
 		return err
@@ -455,173 +673,89 @@ func (t *MultiTSDB) flushHead(db *tsdb.DB) error {
 	return db.CompactHead(tsdb.NewRangeHead(head, head.MinTime(), head.MaxTime()-1))
 }
 
-func (t *MultiTSDB) Close() error {
+func (t *tenant) compactHead(db *tsdb.DB) error {
+	head := db.Head()
+	mint := head.MinTime()
+	blockAlignedMint := mint - (mint % t.maxBlockDuration)
+	maxt := blockAlignedMint + t.maxBlockDuration - 1
+	return db.CompactHead(tsdb.NewRangeHead(head, mint, maxt))
+}
+
+func (t *MultiTSDB) Close() {
 	t.mtx.Lock()
 	defer t.mtx.Unlock()
 
-	merr := errutil.MultiError{}
-	for id, tenant := range t.tenants {
-		db := tenant.readyStorage().Get()
-		if db == nil {
-			level.Error(t.logger).Log("msg", "closing TSDB failed; not ready", "tenant", id)
-			continue
-		}
-		level.Info(t.logger).Log("msg", "closing TSDB", "tenant", id)
-		merr.Add(db.Close())
+	for _, tenant := range t.tenants {
+		tenant.close(KEEP_DATA)
 	}
-	return merr.Err()
 }
+
+func (t *MultiTSDB) maybeDeleteTenant(tenant *tenant) {
+	// It is not read-only anymore, so skip deletion.
+	if !tenant.readOnly.Load() {
+		level.Info(t.logger).Log("msg", "tenant is no longer read-only, skipping deletion", "tenant", tenant.tenantName)
+		return
+	}
+
+	// It could have uploaded something in the meantime, so check again.
+	if !tenant.shouldBeMarkedInactive() {
+		level.Info(t.logger).Log("msg", "tenant should no longer be marked as inactive, skipping deletion", "tenant", tenant.tenantName)
+		return
+	}
+
+	level.Info(t.logger).Log("msg", "tenant is being deleted due to inactivity", "tenant", tenant.tenantName)
+
+	tenant.close(DELETE_DATA)
+	t.removeTenantUnlocked(tenant.tenantName)
+
+}
+
+const tenantGCDelay = 1 * time.Minute
 
 // Prune flushes and closes the TSDB for tenants that haven't received
 // any new samples for longer than the TSDB retention period.
 func (t *MultiTSDB) Prune(ctx context.Context) error {
-	// Retention of 0 means infinite retention.
 	if t.tsdbOpts.RetentionDuration == 0 {
 		return nil
 	}
 	level.Info(t.logger).Log("msg", "Running pruning job")
 
 	var (
-		wg   sync.WaitGroup
-		merr errutil.SyncMultiError
-
-		prunedTenants []string
-		pmtx          sync.Mutex
-
-		tenants = make(map[string]*tenant)
+		markedInactive int
 	)
 
-	t.mtx.RLock()
-	maps.Copy(tenants, t.tenants)
-	t.mtx.RUnlock()
+	t.mtx.Lock()
+	defer t.mtx.Unlock()
 
 	begin := time.Now()
-	for tenantID, tenantInstance := range tenants {
-		wg.Add(1)
-		go func(tenantID string, tenantInstance *tenant) {
-			defer wg.Done()
+	for _, tenant := range t.tenants {
+		if shouldBeMarked := tenant.shouldBeMarkedInactive(); !shouldBeMarked {
+			continue
+		}
+		markedInactive++
 
-			pruned, err := t.pruneTSDB(ctx, log.With(t.logger, "tenant", tenantID), tenantInstance, tenantID)
-			if err != nil {
-				merr.Add(err)
-				return
-			}
+		oldReadOnly := tenant.readOnly.Swap(true)
+		if !oldReadOnly {
+			level.Info(t.logger).Log("msg", "marking tenant as read-only due to inactivity", "tenant", tenant.tenantName)
 
-			if pruned {
-				pmtx.Lock()
-				defer pmtx.Unlock()
-				prunedTenants = append(prunedTenants, tenantID)
+			if t.gcImmediately {
+				t.maybeDeleteTenant(tenant)
+			} else {
+				time.AfterFunc(tenantGCDelay, func() {
+					t.mtx.Lock()
+					defer t.mtx.Unlock()
+					t.maybeDeleteTenant(tenant)
+				})
 			}
-		}(tenantID, tenantInstance)
+		}
 	}
-	wg.Wait()
 
-	level.Info(t.logger).Log("msg", "Pruning job completed", "pruned_tenants_count", len(prunedTenants), "pruned_tenants", prunedTenants, "took_seconds", time.Since(begin).Seconds())
+	level.Info(t.logger).Log("msg", "Pruning job completed", "marked_inactive_tenants_count", markedInactive, "took_seconds", time.Since(begin).Seconds())
 
-	return merr.Err()
+	return nil
 }
 
-// pruneTSDB removes a TSDB if its past the retention period.
-// It compacts the TSDB head, sends all remaining blocks to S3 and removes the TSDB from disk.
-func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInstance *tenant, tenantID string) (pruned bool, rerr error) {
-	tenantTSDB := tenantInstance.readyStorage()
-	if tenantTSDB == nil {
-		return false, nil
-	}
-
-	tdb := tenantTSDB.Get()
-	if tdb == nil {
-		return false, nil
-	}
-
-	head := tdb.Head()
-	if head.MaxTime() < 0 {
-		return false, nil
-	}
-
-	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
-	compactThreshold := int64(1.5 * float64(t.tsdbOpts.MaxBlockDuration))
-	if sinceLastAppendMillis <= compactThreshold {
-		return false, nil
-	}
-
-	// Acquire a write lock and check that no writes have occurred in-between locks.
-	tenantTSDB.mtx.Lock()
-	defer tenantTSDB.mtx.Unlock()
-
-	// Make sure the shipper is not running in parallel.
-	tenantInstance.mtx.Lock()
-	shipper := tenantInstance.ship
-	tenantInstance.ship = nil
-	tenantInstance.mtx.Unlock()
-
-	defer func() {
-		if pruned {
-			return
-		}
-		// If the tenant was not pruned, re-enable the shipper.
-		tenantInstance.mtx.Lock()
-		tenantInstance.ship = shipper
-		tenantInstance.mtx.Unlock()
-	}()
-
-	sinceLastAppendMillis = time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
-	if sinceLastAppendMillis <= compactThreshold {
-		return false, nil
-	}
-
-	level.Info(logger).Log("msg", "Compacting tenant")
-	if err := t.flushHead(tdb); err != nil {
-		return false, err
-	}
-
-	if sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration {
-		return false, nil
-	}
-
-	level.Info(logger).Log("msg", "Pruning tenant")
-	if shipper != nil {
-		// No other code can reach this shipper anymore so enable it again to be able to sync manually.
-		uploaded, err := shipper.Sync(ctx)
-		if err != nil {
-			return false, err
-		}
-
-		if uploaded > 0 {
-			level.Info(logger).Log("msg", "Uploaded head block")
-		}
-	}
-
-	tenantInstance.setReadOnly(true)
-	defer func() {
-		if pruned {
-			return
-		}
-
-		tenantInstance.setReadOnly(false)
-	}()
-
-	if err := tdb.Close(); err != nil {
-		return false, err
-	}
-
-	if err := os.RemoveAll(tdb.Dir()); err != nil {
-		return false, err
-	}
-
-	tenantInstance.mtx.Lock()
-	tenantInstance.readyS.set(nil)
-	tenantInstance.setComponents(nil, nil, nil, nil, nil)
-	tenantInstance.mtx.Unlock()
-
-	t.mtx.Lock()
-	t.removeTenantUnlocked(tenantID)
-	t.mtx.Unlock()
-
-	return true, nil
-}
-
-func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
+func (t *MultiTSDB) SyncAllTenants(ctx context.Context) (int, error) {
 	if t.bucket == nil {
 		return 0, errors.New("bucket is not specified, Sync should not be invoked")
 	}
@@ -637,7 +771,6 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 	)
 
 	for tenantID, tenant := range t.tenants {
-		level.Debug(t.logger).Log("msg", "uploading block for tenant", "tenant", tenantID)
 		s := tenant.shipper()
 		if s == nil {
 			continue
@@ -650,9 +783,12 @@ func (t *MultiTSDB) Sync(ctx context.Context) (int, error) {
 				errmtx.Unlock()
 			}
 			uploaded.Add(int64(up))
+			level.Debug(t.logger).Log("msg", "uploaded blocks for tenant", "tenant", tenantID, "blocks_count", up)
+
 		})
 	}
 	wg.Wait()
+
 	return int(uploaded.Load()), merr.Err()
 }
 
@@ -762,6 +898,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	opts.BlocksToDelete = tenant.blocksToDelete
 	opts.EnableDelayedCompaction = true
 	opts.CompactionDelayMaxPercent = tsdb.DefaultCompactionDelayMaxPercent
+	opts.IsolationDisabled = true
 
 	opts.BlockChunkQuerierFunc = func(b tsdb.BlockReader, mint, maxt int64) (storage.ChunkQuerier, error) {
 		if expandedPostingsCache != nil {
@@ -812,6 +949,12 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		t.removeTenantLocked(tenantID)
 		return err
 	}
+	// NOTE(GiedriusS): disable compactions because we need to always create a block periodically even though it could remain in the WAL
+	// forever. Reason being is that object storage serves as a backup. If ONLY auto compactions were enabled, it could be that
+	// some tenant might never produce a block and that data will remain on disk forever. So, for clarity let's just disable auto
+	// compactions and do it ourselves so that the logic wouldn't clash together.
+	s.DisableCompactions()
+
 	var ship *shipper.Shipper
 	if t.bucket != nil {
 		ship = shipper.New(
@@ -846,25 +989,15 @@ func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
 }
 
 func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
-	// Fast path, as creating tenants is a very rare operation.
-	t.mtx.RLock()
-	tenant, exist := t.tenants[tenantID]
-	t.mtx.RUnlock()
-	if exist {
-		return tenant, t.initTSDBIfNeeded(tenantID, tenant)
-	}
-
-	// Slow path needs to lock fully and attempt to read again to prevent race
-	// conditions, where since the fast path was tried, there may have actually
-	// been the same tenant inserted in the map.
 	t.mtx.Lock()
-	tenant, exist = t.tenants[tenantID]
+	tenant, exist := t.tenants[tenantID]
 	if exist {
+		tenant.readOnly.CompareAndSwap(true, false)
 		t.mtx.Unlock()
 		return tenant, t.initTSDBIfNeeded(tenantID, tenant)
 	}
 
-	tenant = newTenant()
+	tenant = newTenant(t.logger, t.tsdbOpts.RetentionDuration, t.tsdbOpts.MaxBlockDuration, tenantID)
 	t.addTenantUnlocked(tenantID, tenant)
 	t.mtx.Unlock()
 

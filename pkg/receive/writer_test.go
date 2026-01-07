@@ -446,7 +446,7 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 		false,
 		metadata.NoneFunc,
 	)
-	t.Cleanup(func() { testutil.Ok(t, m.Close()) })
+	t.Cleanup(m.Close)
 
 	testutil.Ok(t, m.Flush())
 	testutil.Ok(t, m.Open())
@@ -511,7 +511,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		false,
 		metadata.NoneFunc,
 	)
-	b.Cleanup(func() { testutil.Ok(b, m.Close()) })
+	b.Cleanup(m.Close)
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
