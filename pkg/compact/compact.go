@@ -858,7 +858,9 @@ func (c DefaultBlockDeletableChecker) CanDelete(_ *Group, _ ulid.ULID) bool {
 type CompactionLifecycleCallback interface {
 	PreCompactionCallback(ctx context.Context, logger log.Logger, group *Group, toCompactBlocks []*metadata.Meta) error
 	PostCompactionCallback(ctx context.Context, logger log.Logger, group *Group, blockID ulid.ULID) error
-	MonitorCompactionPlan(ctx context.Context, ctxCancel context.CancelFunc, extensions any)
+	// This callback takes in the context cancel in order to fast fail the ongoing compaction
+	// if there is a change in the compaction plan
+	CompactionListenerCallback(ctx context.Context, ctxCancel context.CancelFunc, extensions any)
 	GetBlockPopulator(ctx context.Context, logger log.Logger, group *Group) (tsdb.BlockPopulator, error)
 }
 
@@ -887,7 +889,7 @@ func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ context.Con
 	return nil
 }
 
-func (c DefaultCompactionLifecycleCallback) MonitorCompactionPlan(ctx context.Context, ctxCancel context.CancelFunc, extensions any) {
+func (c DefaultCompactionLifecycleCallback) CompactionListenerCallback(ctx context.Context, ctxCancel context.CancelFunc, extensions any) {
 }
 
 func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
@@ -1210,7 +1212,7 @@ func (cg *Group) compact(ctx context.Context, cancel context.CancelFunc, dir str
 	g, errCtx := errgroup.WithContext(ctx)
 	g.SetLimit(cg.compactBlocksFetchConcurrency)
 
-	go compactionLifecycleCallback.MonitorCompactionPlan(ctx, cancel, cg.extensions)
+	compactionLifecycleCallback.CompactionListenerCallback(ctx, cancel, cg.extensions)
 
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, m := range toCompact {
