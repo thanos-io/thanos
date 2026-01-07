@@ -1146,7 +1146,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		false,
 		metadata.NoneFunc,
 	)
-	defer func() { testutil.Ok(b, m.Close()) }()
+	b.Cleanup(func() {
+		m.Close()
+	})
 	handler.writer = NewWriter(logger, m, &WriterOptions{})
 
 	testutil.Ok(b, m.Flush())

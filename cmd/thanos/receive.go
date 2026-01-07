@@ -692,10 +692,7 @@ func startTSDBAndUpload(g *run.Group,
 			} else {
 				level.Info(logger).Log("msg", "storage is flushed successfully")
 			}
-			if err := dbs.Close(); err != nil {
-				level.Error(logger).Log("err", err, "msg", "failed to close storage")
-				return
-			}
+			dbs.Close()
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
@@ -752,7 +749,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Debug(logger).Log("msg", "upload phase starting")
 			start := time.Now()
 
-			uploaded, err := dbs.Sync(ctx)
+			uploaded, err := dbs.SyncAllTenants(ctx)
 			if err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
 				return err
@@ -780,7 +777,7 @@ func startTSDBAndUpload(g *run.Group,
 					<-uploadC // Closed by storage routine when it's done.
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
-					uploaded, err := dbs.Sync(ctx)
+					uploaded, err := dbs.SyncAllTenants(ctx)
 					if err != nil {
 						cancel()
 						level.Error(logger).Log("msg", "the final upload failed", "err", err)
@@ -792,10 +789,6 @@ func startTSDBAndUpload(g *run.Group,
 
 				defer close(uploadDone)
 
-				// Run the uploader in a loop.
-				tick := time.NewTicker(30 * time.Second)
-				defer tick.Stop()
-
 				for {
 					select {
 					case <-ctx.Done():
@@ -806,10 +799,6 @@ func startTSDBAndUpload(g *run.Group,
 							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
-					case <-tick.C:
-						if err := upload(ctx); err != nil {
-							level.Error(logger).Log("msg", "recurring upload failed", "err", err)
-						}
 					}
 				}
 			}, func(error) {
