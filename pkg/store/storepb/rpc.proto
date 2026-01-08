@@ -133,6 +133,19 @@ message QueryHints {
 
   // Range vector selector.
   Range range = 5;
+
+  // Projection hints. They are currently unused in the Thanos promql engine but can be used by different
+  // implementations of the Store interface and engines.
+  // These hints are useful for queries like `sum by (label) (rate(metric[5m]))` - we can safely evaluate it
+  // even if we only fetch the `label` label. For some storage implementations this is beneficial.
+
+  // projection_labels are the minimum amount of labels required to be fetched for this Series call.
+  // When honored it is required to add an __series_hash__ label containing the hash of all labels
+  // of a particular series so that the engine can still perform horizontal joins.
+  repeated string projection_labels = 6;
+
+  // projection_include defines if we have to include or exclude the labels from the projection_labels field.
+  bool projection_include = 7;
 }
 
 // ShardInfo are the parameters used to shard series in Stores.
