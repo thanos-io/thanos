@@ -5,7 +5,7 @@ package receive
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -427,10 +427,13 @@ func readFile(logger log.Logger, path string) ([]byte, error) {
 
 // hashAsMetricValue generates metric value from hash of data.
 func hashAsMetricValue(data []byte) float64 {
-	sum := md5.Sum(data)
-	// We only want 48 bits as a float64 only has a 53 bit mantissa.
-	smallSum := sum[0:6]
-	var bytes = make([]byte, 8)
-	copy(bytes, smallSum)
+	sum := sha256.Sum256(data)
+	bytes := make([]byte, 8)
+	// Keep only the first 48 bits since a float64 has a 53 bit mantissa.
+	// Little-endian representation:
+	// | mantissa| exponent| sign|
+	// +---------+---------+-----+
+	// | 53 bits | 11 bits |1 bit|
+	copy(bytes, sum[:6])
 	return float64(binary.LittleEndian.Uint64(bytes))
 }
