@@ -244,10 +244,9 @@ func runReceive(
 		}
 	}
 
-	// TODO(brancz): remove after a couple of versions
-	// Migrate non-multi-tsdb capable storage to multi-tsdb disk layout.
-	if err := migrateLegacyStorage(logger, conf.dataDir, conf.defaultTenantID); err != nil {
-		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
+	// Create TSDB for the default tenant.
+	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
+		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
 	relabeller, err := receive.NewRelabeller(conf.relabelConfigPath, reg, logger, conf.relabelConfigReloadTimer)
@@ -1019,36 +1018,23 @@ func startTSDBAndUpload(g *run.Group,
 	return nil
 }
 
-func migrateLegacyStorage(logger log.Logger, dataDir, defaultTenantID string) error {
+func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
 	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
 
 	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "default tenant data dir already present, not attempting to migrate storage")
+		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
 		return nil
 	}
 
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "no existing storage found, no data migration attempted")
+		level.Info(logger).Log("msg", "no existing storage found, not creating default tenant data dir")
 		return nil
 	}
 
-	level.Info(logger).Log("msg", "found legacy storage, migrating to multi-tsdb layout with default tenant", "defaultTenantID", defaultTenantID)
-
-	files, err := os.ReadDir(dataDir)
-	if err != nil {
-		return errors.Wrapf(err, "read legacy data dir: %v", dataDir)
-	}
+	level.Info(logger).Log("msg", "default tenant data dir not found, creating", "defaultTenantID", defaultTenantID)
 
 	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
 		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
-	}
-
-	for _, f := range files {
-		from := path.Join(dataDir, f.Name())
-		to := path.Join(defaultTenantDataDir, f.Name())
-		if err := os.Rename(from, to); err != nil {
-			return errors.Wrapf(err, "migrate file from %v to %v", from, to)
-		}
 	}
 
 	return nil
