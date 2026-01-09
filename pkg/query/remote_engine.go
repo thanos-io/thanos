@@ -341,6 +341,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			ReplicaLabels:         r.opts.ReplicaLabels,
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
+			ResponseBatchSize:     64,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -370,22 +371,33 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 				qryStats = *s
 				continue
 			}
-
-			ts := msg.GetTimeseries()
-			if ts == nil {
+			if batch := msg.GetTimeseriesBatch(); batch != nil {
+				for _, ts := range batch.Series {
+					builder.Reset()
+					for _, l := range ts.Labels {
+						builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+					}
+					if len(ts.Histograms) > 0 {
+						result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+					} else {
+						result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
+					}
+				}
 				continue
 			}
-			builder.Reset()
-			for _, l := range ts.Labels {
-				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
-			}
-			// Point might have a different timestamp, force it to the evaluation
-			// timestamp as that is when we ran the evaluation.
-			// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
-			if len(ts.Histograms) > 0 {
-				result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
-			} else {
-				result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
+			if ts := msg.GetTimeseries(); ts != nil {
+				builder.Reset()
+				for _, l := range ts.Labels {
+					builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+				}
+				// Point might have a different timestamp, force it to the evaluation
+				// timestamp as that is when we ran the evaluation.
+				// See https://github.com/prometheus/prometheus/blob/b727e69b7601b069ded5c34348dca41b80988f4b/promql/engine.go#L693-L699
+				if len(ts.Histograms) > 0 {
+					result = append(result, promql.Sample{Metric: builder.Labels(), H: prompb.FromProtoHistogram(ts.Histograms[0]), T: r.start.UnixMilli()})
+				} else {
+					result = append(result, promql.Sample{Metric: builder.Labels(), F: ts.Samples[0].Value, T: r.start.UnixMilli()})
+				}
 			}
 		}
 		r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
@@ -408,6 +420,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		ReplicaLabels:         r.opts.ReplicaLabels,
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
+		ResponseBatchSize:     64,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
@@ -437,33 +450,57 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			qryStats = *s
 			continue
 		}
-
-		ts := msg.GetTimeseries()
-		if ts == nil {
+		if batch := msg.GetTimeseriesBatch(); batch != nil {
+			for _, ts := range batch.Series {
+				builder.Reset()
+				for _, l := range ts.Labels {
+					builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+				}
+				series := promql.Series{
+					Metric:     builder.Labels(),
+					Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
+					Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
+				}
+				for _, s := range ts.Samples {
+					series.Floats = append(series.Floats, promql.FPoint{
+						T: s.Timestamp,
+						F: s.Value,
+					})
+				}
+				for _, hp := range ts.Histograms {
+					series.Histograms = append(series.Histograms, promql.HPoint{
+						T: hp.Timestamp,
+						H: prompb.FloatHistogramProtoToFloatHistogram(hp),
+					})
+				}
+				result = append(result, series)
+			}
 			continue
 		}
-		builder.Reset()
-		for _, l := range ts.Labels {
-			builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+		if ts := msg.GetTimeseries(); ts != nil {
+			builder.Reset()
+			for _, l := range ts.Labels {
+				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+			}
+			series := promql.Series{
+				Metric:     builder.Labels(),
+				Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
+				Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
+			}
+			for _, s := range ts.Samples {
+				series.Floats = append(series.Floats, promql.FPoint{
+					T: s.Timestamp,
+					F: s.Value,
+				})
+			}
+			for _, hp := range ts.Histograms {
+				series.Histograms = append(series.Histograms, promql.HPoint{
+					T: hp.Timestamp,
+					H: prompb.FloatHistogramProtoToFloatHistogram(hp),
+				})
+			}
+			result = append(result, series)
 		}
-		series := promql.Series{
-			Metric:     builder.Labels(),
-			Floats:     make([]promql.FPoint, 0, len(ts.Samples)),
-			Histograms: make([]promql.HPoint, 0, len(ts.Histograms)),
-		}
-		for _, s := range ts.Samples {
-			series.Floats = append(series.Floats, promql.FPoint{
-				T: s.Timestamp,
-				F: s.Value,
-			})
-		}
-		for _, hp := range ts.Histograms {
-			series.Histograms = append(series.Histograms, promql.HPoint{
-				T: hp.Timestamp,
-				H: prompb.FloatHistogramProtoToFloatHistogram(hp),
-			})
-		}
-		result = append(result, series)
 	}
 	r.samplesStats.UpdatePeak(int(qryStats.PeakSamples))
 	r.samplesStats.TotalSamples = qryStats.SamplesTotal
