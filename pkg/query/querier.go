@@ -371,6 +371,10 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		PartialResponseStrategy: q.partialResponseStrategy,
 		SkipChunks:              q.skipChunks,
 		ResponseBatchSize:       int64(q.seriesResponseBatchSize),
+		QueryHints: &storepb.QueryHints{
+			ProjectionLabels:  hints.ProjectionLabels,
+			ProjectionInclude: hints.ProjectionInclude,
+		},
 	}
 	if q.isDedupEnabled() {
 		// Soft ask to sort without replica labels and push them at the end of labelset.
