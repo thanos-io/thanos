@@ -227,7 +227,7 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activ
 		}
 
 		lastModified, _ := attrs.LastModified()
-		delete(partialBlocks, id)
+		partialBlocks[id] = false
 
 		select {
 		case <-ctx.Done():

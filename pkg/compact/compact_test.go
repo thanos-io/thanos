@@ -748,3 +748,76 @@ func TestGarbageCollect_FilterRace(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestCompactExtensions(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+
+	var bkt objstore.Bucket
+	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact extensions"})
+	grouper := NewDefaultGrouper(logger, bkt, false, false, reg, temp, temp, temp, "", 1, 1)
+
+	for _, tcase := range []struct {
+		name          string
+		blocks        map[ulid.ULID]*metadata.Meta
+		outExtensions map[string]any
+	}{
+		{
+			outExtensions: make(map[string]any),
+			name:          "group with different extensions",
+			blocks: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(1, nil): {
+					BlockMeta: tsdb.BlockMeta{
+						ULID: ulid.MustNew(1, nil),
+					},
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{},
+					},
+				},
+				ulid.MustNew(2, nil): {
+					BlockMeta: tsdb.BlockMeta{
+						ULID: ulid.MustNew(2, nil),
+					},
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{"foo": "bar"},
+					},
+				},
+			},
+		},
+		{
+			outExtensions: map[string]any{"foo": "bar"},
+			name:          "group with same extensions",
+			blocks: map[ulid.ULID]*metadata.Meta{
+				ulid.MustNew(1, nil): {
+					BlockMeta: tsdb.BlockMeta{
+						ULID: ulid.MustNew(1, nil),
+					},
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{"foo": "bar"},
+					},
+				},
+				ulid.MustNew(2, nil): {
+					BlockMeta: tsdb.BlockMeta{
+						ULID: ulid.MustNew(2, nil),
+					},
+					Thanos: metadata.Thanos{
+						Extensions: map[string]any{"foo": "bar"},
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			groups, err := grouper.Groups(tcase.blocks)
+			testutil.Ok(t, err)
+
+			for _, g := range groups {
+				ext := g.Extensions()
+				testutil.Equals(t, tcase.outExtensions, ext)
+			}
+			testutil.Assert(t, len(groups) > 0)
+		})
+	}
+}

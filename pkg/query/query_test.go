@@ -82,6 +82,7 @@ func TestQuerier_Proxy(t *testing.T) {
 			1000000,
 			5*time.Minute,
 			dedup.AlgorithmPenalty,
+			1,
 		)
 
 		createQueryableFn := func(stores []*testStore) storage.Queryable {
