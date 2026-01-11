@@ -100,6 +100,8 @@ func registerReceive(app *extkingpin.App) {
 			MaxExemplars:                   conf.tsdbMaxExemplars,
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
+			HeadChunksWriteBufferSize:      conf.tsdbHeadChunksWriteBufferSize,
+			StripeSize:                     conf.tsdbStripeSize,
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
 			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
@@ -1099,8 +1101,10 @@ type receiveConfig struct {
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbDisableFlushOnShutdown   bool
 	tsdbEnableNativeHistograms   bool
-	tsdbEnableTenantPathPrefix   bool
-	tsdbPathSegmentsBeforeTenant []string
+	tsdbEnableTenantPathPrefix        bool
+	tsdbPathSegmentsBeforeTenant      []string
+	tsdbHeadChunksWriteBufferSize     int
+	tsdbStripeSize                    int
 
 	walCompression       bool
 	noLockFile           bool
@@ -1281,6 +1285,17 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"[EXPERIMENTAL] Specifies the path segments before the tenant for object storage."+
 			"Must only be used in combination with tsdb.enable-tenant-path-prefix.").
 		Default("raw").Hidden().StringsVar(&rc.tsdbPathSegmentsBeforeTenant)
+
+	cmd.Flag("tsdb.head-chunks-write-buffer-size-bytes",
+		"Configures the write buffer size used by the head chunks mapper. "+
+			"Lower values reduce memory usage but may impact write performance. "+
+			"Min: 65536 (64KB), Max: 8388608 (8MB).").
+		Default("4194304").Hidden().IntVar(&rc.tsdbHeadChunksWriteBufferSize)
+
+	cmd.Flag("tsdb.stripe-size",
+		"The number of shards of series hash map (must be a power of 2). "+
+			"Reducing this will decrease memory footprint, but can negatively impact performance.").
+		Default("16384").Hidden().IntVar(&rc.tsdbStripeSize)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
