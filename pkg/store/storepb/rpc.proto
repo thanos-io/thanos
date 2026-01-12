@@ -111,6 +111,10 @@ message SeriesRequest {
 
   // limit is used to limit the number of results returned
   int64 limit = 15;
+
+  // response_batch_size is used to batch Series messages into one SeriesResponse
+  // If set to 0 or 1, each Series is sent as a separate response
+  int64 response_batch_size = 16;
 }
 
 // QueryHints represents hints from PromQL that might help to
@@ -129,6 +133,19 @@ message QueryHints {
 
   // Range vector selector.
   Range range = 5;
+
+  // Projection hints. They are currently unused in the Thanos promql engine but can be used by different
+  // implementations of the Store interface and engines.
+  // These hints are useful for queries like `sum by (label) (rate(metric[5m]))` - we can safely evaluate it
+  // even if we only fetch the `label` label. For some storage implementations this is beneficial.
+
+  // projection_labels are the minimum amount of labels required to be fetched for this Series call.
+  // When honored it is required to add an __series_hash__ label containing the hash of all labels
+  // of a particular series so that the engine can still perform horizontal joins.
+  repeated string projection_labels = 6;
+
+  // projection_include defines if we have to include or exclude the labels from the projection_labels field.
+  bool projection_include = 7;
 }
 
 // ShardInfo are the parameters used to shard series in Stores.
@@ -187,6 +204,9 @@ message SeriesResponse {
     /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
     /// be handled in such case (ie. merged vs keep the first/last one).
     google.protobuf.Any hints = 3;
+
+    /// batch is an array of series so more than 1 series can be included in the response
+    SeriesBatch batch = 4;
   }
 }
 

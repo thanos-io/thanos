@@ -666,6 +666,77 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 			},
 			expected: `max without (container,pod) ({__name__="kube_pod_info", namespace=~"kube-.+"}[600000ms])`,
 		},
+		{
+			name: "Query with projection hints (include)",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "http_requests_total",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "sum",
+					},
+					Grouping: &Grouping{
+						By:     true,
+						Labels: []string{"job"},
+					},
+					ProjectionLabels:  []string{"job", "__name__"},
+					ProjectionInclude: true,
+				},
+			},
+			expected: `sum by (job) projection (job,__name__) ({__name__="http_requests_total"})`,
+		},
+		{
+			name: "Query with projection hints (exclude)",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "http_requests_total",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "sum",
+					},
+					Grouping: &Grouping{
+						By:     true,
+						Labels: []string{"job"},
+					},
+					ProjectionLabels:  []string{"instance", "pod"},
+					ProjectionInclude: false,
+				},
+			},
+			expected: `sum by (job) projection without (instance,pod) ({__name__="http_requests_total"})`,
+		},
+		{
+			name: "Query with projection hints and range",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "node_cpu_seconds_total",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "rate",
+					},
+					Range: &Range{
+						Millis: 5 * time.Minute.Milliseconds(),
+					},
+					ProjectionLabels:  []string{"cpu", "mode"},
+					ProjectionInclude: true,
+				},
+			},
+			expected: `rate projection (cpu,mode) ({__name__="node_cpu_seconds_total"}[300000ms])`,
+		},
 	}
 
 	for _, tc := range ts {
