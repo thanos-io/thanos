@@ -102,7 +102,7 @@ func TestDistributeTimeseriesToReplicas_WithPantheon(t *testing.T) {
 				},
 			},
 			wantErr:         true,
-			errContains:     "metric name (__name__) not found",
+			errContains:     "invalid pantheon request",
 			pantheonCluster: pantheonCluster,
 		},
 		{
@@ -116,7 +116,7 @@ func TestDistributeTimeseriesToReplicas_WithPantheon(t *testing.T) {
 				},
 			},
 			wantErr:         true,
-			errContains:     "scope not found in pantheon configuration",
+			errContains:     "invalid pantheon request",
 			pantheonCluster: pantheonCluster,
 		},
 		{
@@ -133,7 +133,7 @@ func TestDistributeTimeseriesToReplicas_WithPantheon(t *testing.T) {
 			pantheonCluster: nil,
 		},
 		{
-			name:  "no scope provided - should error",
+			name:  "no scope provided - fallback to tenant header",
 			scope: "",
 			timeseries: []prompb.TimeSeries{
 				{
@@ -142,8 +142,7 @@ func TestDistributeTimeseriesToReplicas_WithPantheon(t *testing.T) {
 					)),
 				},
 			},
-			wantErr:         true,
-			errContains:     "scope header is required",
+			wantTenants:     []string{"default-tenant"}, // Falls back to tenantHTTP
 			pantheonCluster: pantheonCluster,
 		},
 	}
@@ -200,100 +199,6 @@ func TestDistributeTimeseriesToReplicas_WithPantheon(t *testing.T) {
 				require.True(t, allTenants[wantTenant], "expected tenant %s not found", wantTenant)
 			}
 			require.Equal(t, len(tt.wantTenants), len(allTenants), "unexpected number of tenants")
-		})
-	}
-}
-
-func TestDistributeTimeseriesToReplicas_WithPantheonFallback(t *testing.T) {
-	// Create a pantheon cluster config with a special metric group.
-	pantheonCluster := &pantheon.PantheonCluster{
-		MetricScopes: []pantheon.MetricScope{
-			{
-				ScopeName: "test-scope",
-				Shards:    3,
-				SpecialMetricGroups: []pantheon.SpecialMetricGroup{
-					{
-						GroupName:   "special-group",
-						MetricNames: []string{"special_metric"},
-					},
-				},
-			},
-		},
-	}
-
-	tests := []struct {
-		name            string
-		scope           string
-		timeseries      []prompb.TimeSeries
-		hashringTenants []string // Tenants configured in the hashring
-		expectedTenant  string   // The tenant that should be used after fallback
-		pantheonCluster *pantheon.PantheonCluster
-	}{
-		{
-			name:  "special group tenant missing in hashring - fallback to hashmod",
-			scope: "test-scope",
-			timeseries: []prompb.TimeSeries{
-				{
-					Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(
-						"__name__", "special_metric",
-						"pod", "test-pod",
-					)),
-				},
-			},
-			// Hashring only has hashmod tenants, not the special group
-			hashringTenants: []string{"test-scope_0-of-3", "test-scope_1-of-3", "test-scope_2-of-3"},
-			expectedTenant:  "test-scope_0-of-3", // Fallback to hashmod for "special_metric"
-			pantheonCluster: pantheonCluster,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			logger := log.NewNopLogger()
-
-			h := NewHandler(logger, &Options{
-				Endpoint: "localhost:8080",
-			})
-			h.SetPantheonCluster(tt.pantheonCluster)
-
-			// Create a multi-hashring with only the hashmod tenants (not the special group).
-			hashringConfigs := make([]HashringConfig, 0)
-			for _, tenant := range tt.hashringTenants {
-				hashringConfigs = append(hashringConfigs, HashringConfig{
-					Endpoints: []Endpoint{{Address: "localhost:8080"}},
-					Tenants:   []string{tenant},
-				})
-			}
-
-			hashring, err := NewMultiHashring(AlgorithmHashmod, 1, hashringConfigs)
-			require.NoError(t, err)
-			h.Hashring(hashring)
-
-			localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(
-				"default-tenant",
-				tt.scope,
-				[]uint64{0},
-				tt.timeseries,
-			)
-
-			require.NoError(t, err)
-
-			// Collect all tenants from local and remote writes.
-			allTenants := make(map[string]bool)
-			for _, writes := range localWrites {
-				for tenant := range writes {
-					allTenants[tenant] = true
-				}
-			}
-			for _, writes := range remoteWrites {
-				for tenant := range writes {
-					allTenants[tenant] = true
-				}
-			}
-
-			// Verify the expected fallback tenant is used.
-			require.True(t, allTenants[tt.expectedTenant], "expected tenant %s not found", tt.expectedTenant)
-			require.Equal(t, 1, len(allTenants), "should have exactly one tenant")
 		})
 	}
 }

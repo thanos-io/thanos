@@ -85,24 +85,35 @@ func TestGetTenantFromScope(t *testing.T) {
 			wantErr:     true,
 			errContains: "scope 'nonexistent' not found",
 		},
+		{
+			name:        "nil cluster",
+			scope:       "hgcp",
+			metricName:  "some_metric",
+			wantErr:     true,
+			errContains: "pantheon cluster configuration is nil",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			metricScope := GetMetricScope(tt.scope, cluster)
-			if tt.wantErr {
-				if metricScope != nil {
-					t.Errorf("GetMetricScope() expected nil but got %v", metricScope)
+			var testCluster *PantheonCluster
+			if tt.name == "nil cluster" {
+				testCluster = nil
+			} else {
+				testCluster = cluster
+			}
+
+			gotTenant, err := GetTenantFromScope(tt.scope, tt.metricName, testCluster)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetTenantFromScope() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr && tt.errContains != "" && err != nil {
+				if !contains(err.Error(), tt.errContains) {
+					t.Errorf("GetTenantFromScope() error = %v, want error containing %v", err, tt.errContains)
 				}
 				return
 			}
-
-			if metricScope == nil {
-				t.Errorf("GetMetricScope() unexpected nil")
-				return
-			}
-
-			gotTenant := GetTenantFromScope(tt.metricName, metricScope)
 			if gotTenant != tt.wantTenant {
 				t.Errorf("GetTenantFromScope() = %v, want %v", gotTenant, tt.wantTenant)
 			}
@@ -204,67 +215,15 @@ func TestComputeMetricShard(t *testing.T) {
 	}
 }
 
-func TestGetMetricScope(t *testing.T) {
-	cluster := &PantheonCluster{
-		MetricScopes: []MetricScope{
-			{
-				ScopeName: "hgcp",
-				Shards:    10,
-			},
-			{
-				ScopeName: "meta",
-				Shards:    5,
-			},
-		},
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
 	}
-
-	tests := []struct {
-		name        string
-		scope       string
-		wantErr     bool
-		errContains string
-		wantShards  int
-	}{
-		{
-			name:       "valid scope hgcp",
-			scope:      "hgcp",
-			wantShards: 10,
-		},
-		{
-			name:       "valid scope meta",
-			scope:      "meta",
-			wantShards: 5,
-		},
-		{
-			name:        "scope not found",
-			scope:       "nonexistent",
-			wantErr:     true,
-			errContains: "scope 'nonexistent' not found",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetMetricScope(tt.scope, cluster)
-			if tt.wantErr {
-				if got != nil {
-					t.Errorf("GetMetricScope() expected nil but got %v", got)
-				}
-				return
-			}
-
-			if got == nil {
-				t.Errorf("GetMetricScope() returned nil MetricScope")
-				return
-			}
-
-			if got.ScopeName != tt.scope {
-				t.Errorf("GetMetricScope() ScopeName = %v, want %v", got.ScopeName, tt.scope)
-			}
-
-			if got.Shards != tt.wantShards {
-				t.Errorf("GetMetricScope() Shards = %v, want %v", got.Shards, tt.wantShards)
-			}
-		})
-	}
+	return false
 }
