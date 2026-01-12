@@ -1338,7 +1338,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 // This is used to configure this Receiver's forwarding and ingesting behavior at runtime.
 func (rc *receiveConfig) determineMode() receive.ReceiverMode {
 	// Has the user provided some kind of hashring configuration?
-	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != "" || rc.pantheonV2WriterFilePath != ""
+	hashringSpecified := rc.hashringsFileContent != "" || rc.hashringsFilePath != ""
 	// Has the user specified the --receive.local-endpoint flag?
 	localEndpointSpecified := rc.endpoint != ""
 
