@@ -37,7 +37,7 @@ func (b *batchableServer) Flush() error {
 		if err := b.Store_SeriesServer.Send(storepb.NewBatchResponse(b.series)); err != nil {
 			return err
 		}
-		b.series = b.series[:0]
+		b.series = make([]*storepb.Series, 0, b.batchSize)
 	}
 
 	return nil
@@ -50,7 +50,7 @@ func (b *batchableServer) Send(response *storepb.SeriesResponse) error {
 			if err := b.Store_SeriesServer.Send(storepb.NewBatchResponse(b.series)); err != nil {
 				return err
 			}
-			b.series = b.series[:0]
+			b.series = make([]*storepb.Series, 0, b.batchSize)
 		}
 		return b.Store_SeriesServer.Send(response)
 	}
@@ -61,7 +61,7 @@ func (b *batchableServer) Send(response *storepb.SeriesResponse) error {
 		if err := b.Store_SeriesServer.Send(storepb.NewBatchResponse(b.series)); err != nil {
 			return err
 		}
-		b.series = b.series[:0]
+		b.series = make([]*storepb.Series, 0, b.batchSize)
 	}
 
 	return nil
