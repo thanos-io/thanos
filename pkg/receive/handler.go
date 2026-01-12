@@ -45,7 +45,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/pantheon"
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -130,11 +129,10 @@ type Handler struct {
 	splitTenantLabelName string
 	httpSrv              *http.Server
 
-	mtx             sync.RWMutex
-	hashring        Hashring
-	pantheonCluster *pantheon.PantheonCluster
-	peers           peersContainer
-	receiverMode    ReceiverMode
+	mtx          sync.RWMutex
+	hashring     Hashring
+	peers        peersContainer
+	receiverMode ReceiverMode
 
 	forwardRequests   *prometheus.CounterVec
 	endpointFailures  *prometheus.CounterVec
@@ -345,14 +343,6 @@ func (h *Handler) Hashring(hashring Hashring) {
 
 	h.hashring = hashring
 	h.peers.reset()
-}
-
-// SetPantheonCluster sets the Pantheon cluster configuration for the handler.
-func (h *Handler) SetPantheonCluster(cluster *pantheon.PantheonCluster) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
-
-	h.pantheonCluster = cluster
 }
 
 // getSortedStringSliceDiff returns items which are in slice1 but not in slice2.

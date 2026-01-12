@@ -46,7 +46,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
-	"github.com/thanos-io/thanos/pkg/pantheon"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -376,13 +375,6 @@ func runReceive(
 	level.Debug(logger).Log("msg", "setting up hashring")
 	{
 		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
-			return err
-		}
-	}
-
-	level.Debug(logger).Log("msg", "setting up Pantheon config")
-	{
-		if err := setupPantheonConfig(g, logger, reg, conf, webHandler); err != nil {
 			return err
 		}
 	}
@@ -750,57 +742,6 @@ func setupHashring(g *run.Group,
 	return nil
 }
 
-// setupPantheonConfig sets up the Pantheon cluster configuration watcher if provided.
-func setupPantheonConfig(g *run.Group,
-	logger log.Logger,
-	reg *prometheus.Registry,
-	conf *receiveConfig,
-	webHandler *receive.Handler,
-) error {
-	if conf.pantheonFilePath == "" {
-		return nil
-	}
-
-	cw, err := receive.NewPantheonConfigWatcher(log.With(logger, "component", "pantheon-config-watcher"), reg, conf.pantheonFilePath, *conf.pantheonRefreshInterval)
-	if err != nil {
-		return errors.Wrap(err, "failed to initialize Pantheon config watcher")
-	}
-
-	// Check the Pantheon configuration before running the watcher.
-	if err := cw.ValidateConfig(); err != nil {
-		cw.Stop()
-		return errors.Wrap(err, "failed to validate Pantheon configuration file")
-	}
-
-	updates := make(chan *pantheon.PantheonCluster, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	g.Add(func() error {
-		return receive.PantheonConfigFromWatcher(ctx, updates, cw)
-	}, func(error) {
-		cancel()
-	})
-
-	cancelConsumer := make(chan struct{})
-	g.Add(func() error {
-		for {
-			select {
-			case c, ok := <-updates:
-				if !ok {
-					return nil
-				}
-				webHandler.SetPantheonCluster(c)
-				level.Info(logger).Log("msg", "Updated Pantheon cluster configuration.")
-			case <-cancelConsumer:
-				return nil
-			}
-		}
-	}, func(err error) {
-		close(cancelConsumer)
-	})
-
-	return nil
-}
-
 // startTSDBAndUpload starts the multi-TSDB and sets up the rungroup to flush the TSDB and reload on hashring change.
 // It also upload blocks to object store, if upload is enabled.
 func startTSDBAndUpload(g *run.Group,
@@ -1028,9 +969,6 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	pantheonFilePath        string
-	pantheonRefreshInterval *model.Duration
-
 	refreshInterval     *model.Duration
 	endpoint            string
 	tenantHeader        string
@@ -1139,11 +1077,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		EnumVar(&rc.hashringsAlgorithm, string(receive.AlgorithmHashmod), string(receive.AlgorithmKetama), string(receive.AlgorithmAlignedKetama))
 
 	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
-		Default("5m"))
-
-	cmd.Flag("receive.pantheon-file", "Path to file that contains the Pantheon cluster configuration. A watcher is initialized to watch changes and update the configuration dynamically.").PlaceHolder("<path>").StringVar(&rc.pantheonFilePath)
-
-	rc.pantheonRefreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.pantheon-file-refresh-interval", "Refresh interval to re-read the Pantheon configuration file. (used as a fallback)").
 		Default("5m"))
 
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)
