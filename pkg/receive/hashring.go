@@ -596,15 +596,41 @@ func (s *shuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashr
 }
 
 // getTenantShard returns or creates a consistent subset of nodes for a tenant.
+// This implementation uses consistent hashing to select nodes, which provides
+// the "consistency" property: adding/removing 1 node from the ring results in
+// at most 1 node change in each tenant's shard.
 func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, error) {
+	baseRing, ok := s.baseRing.(*ketamaHashring)
+	if !ok {
+		return nil, fmt.Errorf("shuffle sharding requires ketama hashring as base ring")
+	}
+
 	nodes := s.Nodes()
 	nodesByAZ := make(map[string][]Endpoint)
-	for _, node := range nodes {
+	nodeIndexByAddr := make(map[string]int) // map address to index in nodes slice
+	for i, node := range nodes {
 		var az = node.AZ
 		if s.shuffleShardingConfig.ZoneAwarenessDisabled {
 			az = ""
 		}
 		nodesByAZ[az] = append(nodesByAZ[az], node)
+		nodeIndexByAddr[node.Address] = i
+	}
+
+	// Build sections by AZ from the base ring
+	sectionsByAZ := make(map[string]sections)
+	for _, sec := range baseRing.sections {
+		endpoint := baseRing.endpoints[sec.endpointIndex]
+		var az = endpoint.AZ
+		if s.shuffleShardingConfig.ZoneAwarenessDisabled {
+			az = ""
+		}
+		sectionsByAZ[az] = append(sectionsByAZ[az], sec)
+	}
+
+	// Sort sections by hash within each AZ
+	for az := range sectionsByAZ {
+		sort.Sort(sectionsByAZ[az])
 	}
 
 	ss := s.getShardSize(tenant)
@@ -616,18 +642,55 @@ func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, e
 	}
 
 	var finalNodes = make([]Endpoint, 0, take*len(nodesByAZ))
-	for az, azNodes := range nodesByAZ {
-		seed := ShuffleShardSeed(tenant, az)
-		r := rand.New(rand.NewSource(seed))
-		r.Shuffle(len(azNodes), func(i, j int) {
-			azNodes[i], azNodes[j] = azNodes[j], azNodes[i]
-		})
 
+	// Process each AZ independently (like Cortex does)
+	for az, azNodes := range nodesByAZ {
 		if take > len(azNodes) {
 			return nil, fmt.Errorf("shard size %d is larger than number of nodes in AZ %s (%d)", ss, az, len(azNodes))
 		}
 
-		finalNodes = append(finalNodes, azNodes[:take]...)
+		azSections := sectionsByAZ[az]
+		if len(azSections) == 0 {
+			continue
+		}
+
+		// Use deterministic seed based on tenant + az
+		seed := ShuffleShardSeed(tenant, az)
+		r := rand.New(rand.NewSource(seed))
+
+		// Select nodes using consistent hashing (Cortex-style algorithm)
+		// For each node we need to select:
+		// 1. Generate a random position in the token ring
+		// 2. Find the section at that position
+		// 3. Walk the ring to find an instance we haven't selected yet
+		selected := make(map[uint64]struct{}) // track selected endpoint indices
+
+		for i := 0; i < take; i++ {
+			// Generate a random position in the token ring
+			randomPos := r.Uint64()
+
+			// Find the section at or after this position
+			startIdx := sort.Search(len(azSections), func(idx int) bool {
+				return azSections[idx].hash >= randomPos
+			})
+			if startIdx == len(azSections) {
+				startIdx = 0 // wrap around
+			}
+
+			// Walk the ring to find a unique instance
+			for j := 0; j < len(azSections); j++ {
+				idx := (startIdx + j) % len(azSections)
+				sec := azSections[idx]
+
+				if _, ok := selected[sec.endpointIndex]; ok {
+					continue // already selected this instance
+				}
+
+				selected[sec.endpointIndex] = struct{}{}
+				finalNodes = append(finalNodes, baseRing.endpoints[sec.endpointIndex])
+				break
+			}
+		}
 	}
 
 	return newKetamaHashring(finalNodes, SectionsPerNode, s.replicationFactor)
