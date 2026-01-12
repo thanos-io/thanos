@@ -245,7 +245,7 @@ func TestRetentionProgressCalculate(t *testing.T) {
 		keys[ind] = meta.Thanos.GroupKey()
 	}
 
-	ps := NewRetentionProgressCalculator(reg, nil)
+	ps := NewRetentionProgressCalculator(reg, nil, "test-tenant")
 
 	for _, tcase := range []struct {
 		testName string
@@ -367,7 +367,7 @@ func TestCompactProgressCalculate(t *testing.T) {
 		keys[ind] = meta.Thanos.GroupKey()
 	}
 
-	ps := NewCompactionProgressCalculator(reg, planner)
+	ps := NewCompactionProgressCalculator(reg, planner, "test-tenant")
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for compact progress tests"})
@@ -466,7 +466,7 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 		keys[ind] = meta.Thanos.GroupKey()
 	}
 
-	ds := NewDownsampleProgressCalculator(reg)
+	ds := NewDownsampleProgressCalculator(reg, "test-tenant")
 
 	var bkt objstore.Bucket
 	temp := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_group", Help: "this is a test metric for downsample progress tests"})

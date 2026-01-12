@@ -4,6 +4,7 @@
 package compact
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/thanos-io/objstore"
 )
@@ -772,5 +774,62 @@ func TestSetupTenantPartitioning_InvalidConfig(t *testing.T) {
 	_, err := SetupTenantPartitioning(ctx, bkt, logger, "/nonexistent/config.json", "v1/raw/", 3)
 	if err == nil {
 		t.Error("expected error for nonexistent config file, got nil")
+	}
+}
+
+func TestSetupTenantPartitioning_NoDuplicates(t *testing.T) {
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+	bkt := objstore.NewInMemBucket()
+
+	// Create tenant weights file with "unknown" tenant
+	weightsFile, err := os.CreateTemp("", "tenant_weights_*.json")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(weightsFile.Name())
+
+	weightsData := map[string]int{
+		"unknown":                    100,
+		"eng-monitoring-platform":    200,
+		"eng-compute-lifecycle-team": 150,
+	}
+	weightsJSON, _ := json.Marshal(weightsData)
+	if _, err := weightsFile.Write(weightsJSON); err != nil {
+		t.Fatalf("failed to write weights file: %v", err)
+	}
+	weightsFile.Close()
+
+	// Create bucket structure with tenant directories including "unknown"
+	testutil.Ok(t, bkt.Upload(ctx, "v1/raw/unknown/meta.json", bytes.NewReader([]byte("{}"))))
+	testutil.Ok(t, bkt.Upload(ctx, "v1/raw/eng-monitoring-platform/meta.json", bytes.NewReader([]byte("{}"))))
+	testutil.Ok(t, bkt.Upload(ctx, "v1/raw/eng-compute-lifecycle-team/meta.json", bytes.NewReader([]byte("{}"))))
+	testutil.Ok(t, bkt.Upload(ctx, "v1/raw/discovered-tenant/meta.json", bytes.NewReader([]byte("{}"))))
+
+	// Run tenant partitioning
+	assignments, err := SetupTenantPartitioning(ctx, bkt, logger, weightsFile.Name(), "v1/raw/", 2)
+	testutil.Ok(t, err)
+
+	// Verify no tenant appears more than once across all shards
+	seenTenants := make(map[string]int)
+	for shard, tenants := range assignments {
+		for _, tenant := range tenants {
+			// Verify tenants don't have path prefix (should be just "unknown", not "v1/raw/unknown")
+			if strings.Contains(tenant, "/") {
+				t.Errorf("tenant name %s contains path separator, should be bare tenant name only", tenant)
+			}
+			if count, exists := seenTenants[tenant]; exists {
+				t.Errorf("tenant %s appears multiple times: previously seen and now in shard %d (total count: %d)", tenant, shard, count+1)
+			}
+			seenTenants[tenant]++
+		}
+	}
+
+	// Verify all expected tenants are assigned exactly once
+	expectedTenants := []string{"unknown", "eng-monitoring-platform", "eng-compute-lifecycle-team", "discovered-tenant"}
+	for _, expected := range expectedTenants {
+		if count := seenTenants[expected]; count != 1 {
+			t.Errorf("tenant %s should appear exactly once, but appears %d times", expected, count)
+		}
 	}
 }

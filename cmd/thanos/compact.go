@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -51,6 +52,27 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 	"github.com/thanos-io/thanos/pkg/ui"
 )
+
+// idempotentRegisterer wraps a prometheus.Registerer and ignores duplicate registration errors.
+// This allows running runCompactForTenant multiple times with the same registry without panicking.
+type idempotentRegisterer struct {
+	prometheus.Registerer
+}
+
+func (r *idempotentRegisterer) Register(c prometheus.Collector) error {
+	err := r.Registerer.Register(c)
+	// Ignore duplicate registration errors - expected in multi-tenant mode
+	if _, ok := err.(prometheus.AlreadyRegisteredError); ok {
+		return nil
+	}
+	return err
+}
+
+func (r *idempotentRegisterer) MustRegister(cs ...prometheus.Collector) {
+	for _, c := range cs {
+		_ = r.Register(c) // Ignores duplicates
+	}
+}
 
 var (
 	compactions = compactionSet{
@@ -218,15 +240,15 @@ func runCompact(
 		return err
 	}
 
-	bkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
-	if conf.enableFolderDeletion {
-		bkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, bkt)
-		level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled", "name", bkt.Name())
+	var initialBucketConf client.BucketConfig
+	if err := yaml.Unmarshal(confContentYaml, &initialBucketConf); err != nil {
+		return errors.Wrap(err, "failed to parse initial bucket configuration")
 	}
+
+	tenantPrefixes, isMultiTenant, err := getTenantsForCompactor(ctx, logger, conf, confContentYaml, component)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to get tenants for compactor")
 	}
-	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 	relabelContentYaml, err := conf.selectorRelabelConf.Content()
 	if err != nil {
@@ -238,32 +260,71 @@ func runCompact(
 		return err
 	}
 
+	globalBkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create global bucket")
+	}
+	if conf.enableFolderDeletion {
+		globalBkt, err = block.WrapWithAzDataLakeSdk(logger, confContentYaml, globalBkt)
+		if err != nil {
+			return errors.Wrap(err, "failed to wrap global bucket with Azure SDK")
+		}
+		level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled for global bucket", "name", globalBkt.Name())
+	}
+	globalInsBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(globalBkt, extprom.WrapRegistererWithPrefix("thanos_", reg), globalBkt.Name()))
+
 	// Ensure we close up everything properly.
 	defer func() {
-		if err != nil {
-			runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
+		if rerr != nil {
+			runutil.CloseWithLogOnErr(logger, globalInsBkt, "global bucket client")
 		}
 	}()
 
-	globalBlockLister, err := getBlockLister(logger, &conf, insBkt)
+	globalBlockLister, err := getBlockLister(logger, &conf, globalInsBkt)
 	if err != nil {
 		return errors.Wrap(err, "create global block lister")
 	}
-	globalBaseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, globalBlockLister, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	globalBaseMetaFetcher, err := block.NewBaseFetcher(logger, conf.blockMetaFetchConcurrency, globalInsBkt, globalBlockLister, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create global meta fetcher")
 	}
 
-	api := blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, insBkt)
+	api := blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, globalInsBkt)
 
 	runWebServer(g, ctx, logger, cancel, reg, &conf, component, tracer, progressRegistry, globalBaseMetaFetcher, api, srv)
 
-	err = runCompactForTenant(g, ctx, logger, cancel, reg, insBkt, deleteDelay, conf, relabelConfig, flagsMap, compactMetrics, progressRegistry, downsampleMetrics, globalBaseMetaFetcher)
-	if err != nil {
-		return err
+	for _, tenantPrefix := range tenantPrefixes {
+		bucketConf := &client.BucketConfig{
+			Type:   initialBucketConf.Type,
+			Config: initialBucketConf.Config,
+			Prefix: path.Join(initialBucketConf.Prefix, tenantPrefix),
+		}
+		level.Info(logger).Log("msg", "starting compaction loop for prefix", "prefix", bucketConf.Prefix)
+
+		tenantConfYaml, err := yaml.Marshal(bucketConf)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal tenant bucket configuration")
+		}
+
+		bkt, err := getBucketForTenant(logger, isMultiTenant, tenantConfYaml, component, conf, bucketConf, globalBkt)
+		if err != nil {
+			return errors.Wrap(err, "failed to get bucket for tenant")
+		}
+
+		tenantReg, insBkt, tenantLogger, baseMetaFetcher, err := getTenantResources(logger, isMultiTenant, conf, reg, tenantPrefix, bkt, globalInsBkt, globalBaseMetaFetcher)
+		if err != nil {
+			return errors.Wrap(err, "failed to get tenant resources")
+		}
+
+		err = runCompactForTenant(g, ctx, tenantLogger, cancel, tenantReg, insBkt, deleteDelay, conf, relabelConfig, compactMetrics, progressRegistry, downsampleMetrics, baseMetaFetcher, tenantPrefix, api)
+
+		if err != nil {
+			return err
+		}
+
+		level.Info(tenantLogger).Log("msg", "compact node for tenant finished")
 	}
 
-	level.Info(logger).Log("msg", "starting compact node")
 	statusProber.Ready()
 	return nil
 }
@@ -273,16 +334,17 @@ func runCompactForTenant(
 	ctx context.Context,
 	logger log.Logger,
 	cancel context.CancelFunc,
-	reg *prometheus.Registry,
+	reg prometheus.Registerer,
 	insBkt objstore.InstrumentedBucket,
 	deleteDelay time.Duration,
 	conf compactConfig,
 	relabelConfig []*relabel.Config,
-	flagsMap map[string]string,
 	compactMetrics *compactMetrics,
 	progressRegistry *compact.ProgressRegistry,
 	downsampleMetrics *DownsampleMetrics,
 	baseMetaFetcher *block.BaseFetcher,
+	tenant string,
+	api *blocksAPI.BlocksAPI,
 ) error {
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
@@ -297,10 +359,7 @@ func runCompactForTenant(
 
 	enableVerticalCompaction, dedupReplicaLabels := checkVerticalCompaction(logger, &conf)
 
-	var (
-		api = blocksAPI.NewBlocksAPI(logger, conf.webConf.disableCORS, conf.label, flagsMap, insBkt)
-		sy  *compact.Syncer
-	)
+	var sy *compact.Syncer
 	{
 		filters := []block.MetadataFilter{
 			timePartitionMetaFilter,
@@ -362,10 +421,16 @@ func runCompactForTenant(
 		return errors.Wrap(err, "create compactor")
 	}
 
-	var (
-		compactDir      = path.Join(conf.dataDir, "compact")
+	var compactDir, downsamplingDir string
+	if tenant != "" {
+		// In multi-tenant mode, each tenant gets its own working directory to avoid conflicts
+		compactDir = path.Join(conf.dataDir, "compact", tenant)
+		downsamplingDir = path.Join(conf.dataDir, "downsample", tenant)
+	} else {
+		// Single-tenant mode uses the base directories
+		compactDir = path.Join(conf.dataDir, "compact")
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
-	)
+	}
 
 	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "create working compact directory")
@@ -593,7 +658,7 @@ func runCompactForTenant(
 		cancel()
 	})
 
-	runCleanup(g, ctx, logger, cancel, reg, &conf, progressRegistry, compactMetrics, tsdbPlanner, sy, retentionByResolution, cleanPartialMarked, grouper)
+	runCleanup(g, ctx, logger, cancel, reg, &conf, progressRegistry, compactMetrics, tsdbPlanner, sy, retentionByResolution, cleanPartialMarked, grouper, tenant)
 
 	return nil
 }
@@ -666,7 +731,7 @@ func runCleanup(
 	ctx context.Context,
 	logger log.Logger,
 	cancel context.CancelFunc,
-	reg *prometheus.Registry,
+	reg prometheus.Registerer,
 	conf *compactConfig,
 	progressRegistry *compact.ProgressRegistry,
 	compactMetrics *compactMetrics,
@@ -675,6 +740,7 @@ func runCleanup(
 	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	cleanPartialMarked func(*compact.Progress) error,
 	grouper *compact.DefaultGrouper,
+	tenant string,
 ) {
 	if conf.wait {
 		// Periodically remove partial blocks and blocks marked for deletion
@@ -702,11 +768,11 @@ func runCleanup(
 		// Periodically calculate the progress of compaction, downsampling and retention.
 		if conf.progressCalculateInterval > 0 {
 			g.Add(func() error {
-				ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner)
-				rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution)
+				ps := compact.NewCompactionProgressCalculator(reg, tsdbPlanner, tenant)
+				rs := compact.NewRetentionProgressCalculator(reg, retentionByResolution, tenant)
 				var ds *compact.DownsampleProgressCalculator
 				if !conf.disableDownsampling {
-					ds = compact.NewDownsampleProgressCalculator(reg)
+					ds = compact.NewDownsampleProgressCalculator(reg, tenant)
 				}
 
 				return runutil.Repeat(conf.progressCalculateInterval, ctx.Done(), func() error {
@@ -767,6 +833,123 @@ func runCleanup(
 			})
 		}
 	}
+}
+
+func getTenantsForCompactor(ctx context.Context, logger log.Logger, conf compactConfig, confContentYaml []byte, component component.Component) ([]string, bool, error) {
+	var tenantPrefixes []string
+	var isMultiTenant bool
+
+	if conf.enableTenantPathPrefix {
+		isMultiTenant = true
+
+		hostname := os.Getenv("HOSTNAME")
+		ordinal, err := extractOrdinalFromHostname(hostname)
+		if err != nil {
+			return nil, true, errors.Wrapf(err, "failed to extract ordinal from hostname %s", hostname)
+		}
+
+		totalShards := conf.replicas / conf.replicationFactor
+		if conf.replicas%conf.replicationFactor != 0 || conf.replicationFactor <= 0 {
+			return nil, true, errors.Errorf("replicas %d must be divisible by replication factor %d and total shards must be greater than 0", conf.replicas, conf.replicationFactor)
+		}
+
+		if ordinal >= totalShards {
+			return nil, true, errors.Errorf("ordinal %d is greater than total shards %d", ordinal, totalShards)
+		}
+
+		tenantWeightsPath := conf.tenantWeights.Path()
+		if tenantWeightsPath == "" {
+			return nil, true, errors.New("tenant weights file is not set")
+		}
+
+		discoveryBkt, err := client.NewBucket(logger, confContentYaml, component.String(), nil)
+		if err != nil {
+			return nil, true, errors.Wrapf(err, "failed to create discovery bucket")
+		}
+
+		level.Info(logger).Log("msg", "setting up tenant partitioning", "ordinal", ordinal, "total_shards", totalShards)
+
+		tenantAssignments, err := compact.SetupTenantPartitioning(ctx, discoveryBkt, logger, tenantWeightsPath, conf.commonPathPrefix, totalShards)
+		runutil.CloseWithLogOnErr(logger, discoveryBkt, "discovery bucket")
+		if err != nil {
+			return nil, true, errors.Wrap(err, "failed to setup tenant partitioning")
+		}
+
+		assignedTenants := tenantAssignments[ordinal]
+		if len(assignedTenants) == 0 {
+			level.Warn(logger).Log("msg", "no tenants assigned to this shard", "ordinal", ordinal)
+		}
+
+		// Deduplicate tenants to avoid duplicate metric registration
+		seenTenants := make(map[string]bool)
+		for _, tenant := range assignedTenants {
+			tenantPrefix := path.Join(conf.commonPathPrefix, tenant)
+			if !seenTenants[tenantPrefix] {
+				seenTenants[tenantPrefix] = true
+				tenantPrefixes = append(tenantPrefixes, tenantPrefix)
+			}
+		}
+
+		level.Info(logger).Log("msg", "tenant partitioning setup complete", "tenant_prefixes", strings.Join(tenantPrefixes, ","))
+	} else {
+		isMultiTenant = false
+		tenantPrefixes = []string{""}
+		level.Info(logger).Log("msg", "single tenant mode")
+	}
+	return tenantPrefixes, isMultiTenant, nil
+}
+
+func getBucketForTenant(logger log.Logger, isMultiTenant bool, tenantConfYaml []byte, component component.Component, conf compactConfig, bucketConf *client.BucketConfig, globalBkt objstore.Bucket) (objstore.Bucket, error) {
+	if isMultiTenant {
+		bkt, err := client.NewBucket(logger, tenantConfYaml, component.String(), nil)
+		if conf.enableFolderDeletion {
+			bkt, err = block.WrapWithAzDataLakeSdk(logger, tenantConfYaml, bkt)
+			level.Info(logger).Log("msg", "azdatalake sdk wrapper enabled", "prefix", bucketConf.Prefix, "name", bkt.Name())
+		}
+		return bkt, err
+	}
+	return globalBkt, nil
+}
+
+func getTenantResources(
+	logger log.Logger,
+	isMultiTenant bool,
+	conf compactConfig,
+	reg prometheus.Registerer,
+	tenantPrefix string,
+	bkt objstore.Bucket,
+	globalInsBkt objstore.InstrumentedBucket,
+	globalBaseMetaFetcher *block.BaseFetcher,
+) (prometheus.Registerer, objstore.InstrumentedBucket, log.Logger, *block.BaseFetcher, error) {
+	var tenantReg prometheus.Registerer
+	var insBkt objstore.InstrumentedBucket
+	var tenantLogger log.Logger
+	var baseMetaFetcher *block.BaseFetcher
+
+	if isMultiTenant {
+		// Use idempotent registerer to ignore duplicate metric registrations across tenants.
+		// Components extract tenant from block metadata and use it as a variable label.
+		tenantReg = &idempotentRegisterer{Registerer: reg}
+		tenantLogger = log.With(logger, "tenant", tenantPrefix)
+		// Only wrap with tracing, not metrics (to avoid duplicate bucket metric registration)
+		insBkt = objstoretracing.WrapWithTraces(bkt)
+
+		// Create tenant-scoped block lister and fetcher so each tenant only sees their own blocks
+		tenantBlockLister, err := getBlockLister(tenantLogger, &conf, insBkt)
+		if err != nil {
+			return nil, nil, nil, nil, errors.Wrap(err, "create tenant block lister")
+		}
+		baseMetaFetcher, err = block.NewBaseFetcher(tenantLogger, conf.blockMetaFetchConcurrency, insBkt, tenantBlockLister, conf.dataDir, extprom.WrapRegistererWithPrefix("thanos_", tenantReg))
+		if err != nil {
+			return nil, nil, nil, nil, errors.Wrap(err, "create tenant meta fetcher")
+		}
+	} else {
+		tenantReg = reg
+		tenantLogger = logger
+		insBkt = globalInsBkt
+		baseMetaFetcher = globalBaseMetaFetcher
+	}
+	return tenantReg, insBkt, tenantLogger, baseMetaFetcher, nil
 }
 
 func getBlockLister(logger log.Logger, conf *compactConfig, insBkt objstore.InstrumentedBucketReader) (block.Lister, error) {
@@ -864,6 +1047,11 @@ func getRetentionPolicies(logger log.Logger, conf *compactConfig) (map[compact.R
 	return retentionByResolution, retentionByTenant, nil
 }
 
+func extractOrdinalFromHostname(hostname string) (int, error) {
+	parts := strings.Split(hostname, "-")
+	return strconv.Atoi(parts[len(parts)-1])
+}
+
 type compactConfig struct {
 	haltOnError                                    bool
 	acceptMalformedIndex                           bool
@@ -902,6 +1090,11 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
+	tenantWeights                                  extflag.PathOrContent
+	replicas                                       int
+	replicationFactor                              int
+	commonPathPrefix                               string
+	enableTenantPathPrefix                         bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1017,6 +1210,20 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&cc.disableWeb)
 
 	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+
+	cc.tenantWeights = *extflag.RegisterPathOrContent(cmd, "compact.tenant-weights", "YAML file that contains the tenant weights for tenant partitioning.", extflag.WithEnvSubstitution())
+
+	cmd.Flag("compact.replicas", "Total replicas of the stateful set.").
+		Default("1").IntVar(&cc.replicas)
+
+	cmd.Flag("compact.replication-factor", "Replication factor of the stateful set.").
+		Default("1").IntVar(&cc.replicationFactor)
+
+	cmd.Flag("compact.common-path-prefix", "Common path prefix for tenant discovery when using tenant partitioning. This is the prefix before the tenant name in the object storage path.").
+		Default("v1/raw/").StringVar(&cc.commonPathPrefix)
+
+	cmd.Flag("compact.enable-tenant-path-prefix", "Enable tenant path prefix mode for backward compatibility. When disabled, compactor runs in single-tenant mode.").
+		Default("false").BoolVar(&cc.enableTenantPathPrefix)
 
 	cc.webConf.registerFlag(cmd)
 

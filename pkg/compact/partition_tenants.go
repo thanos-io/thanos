@@ -99,6 +99,7 @@ func discoverTenantsFromBucket(ctx context.Context, bkt objstore.BucketReader, l
 	// Build set of known tenants from tenant weight config
 	for _, tw := range knownTenants {
 		knownTenantSet[tw.TenantName] = true
+		level.Debug(logger).Log("msg", "marking tenant as known", "tenant", tw.TenantName)
 	}
 
 	// List all tenant directories under prefix before tenant
@@ -112,9 +113,11 @@ func discoverTenantsFromBucket(ctx context.Context, bkt objstore.BucketReader, l
 
 		// Skip if already active tenant shown in tenant weight config
 		if knownTenantSet[tenantName] {
+			level.Debug(logger).Log("msg", "skipping known tenant from discovery", "tenant", tenantName)
 			return nil
 		}
 
+		level.Debug(logger).Log("msg", "discovered new tenant", "tenant", tenantName, "full_path", name)
 		discoveredTenants = append(discoveredTenants, tenantName)
 
 		return nil
@@ -144,6 +147,7 @@ func SetupTenantPartitioning(ctx context.Context, bkt objstore.Bucket, logger lo
 
 	// Compute tenant assignments for active tenants
 	tenantAssignments, tenantWeights := computeTenantAssignments(numShards, activeTenants)
+	level.Debug(logger).Log("msg", "computed assignments for active tenants", "count", len(activeTenants))
 
 	// Discover additional tenants from S3
 	discoveredTenants, err := discoverTenantsFromBucket(ctx, bkt, logger, commonPathPrefix, activeTenants)
@@ -154,6 +158,7 @@ func SetupTenantPartitioning(ctx context.Context, bkt objstore.Bucket, logger lo
 	// Assign discovered tenants to pods with hashmod algorithm
 	for _, discoveredTenant := range discoveredTenants {
 		shard := tenantToShard(discoveredTenant, numShards)
+		level.Debug(logger).Log("msg", "assigning discovered tenant", "tenant", discoveredTenant, "shard", shard)
 		tenantAssignments[shard] = append(tenantAssignments[shard], discoveredTenant)
 	}
 

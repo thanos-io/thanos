@@ -615,19 +615,43 @@ type CompactionProgressCalculator struct {
 	*CompactProgressMetrics
 }
 
-// NewCompactProgressCalculator creates a new CompactionProgressCalculator.
-func NewCompactionProgressCalculator(reg prometheus.Registerer, planner Planner) *CompactionProgressCalculator {
+// compactProgressMetricsVec holds the GaugeVec metrics for compaction progress.
+// These are registered once and reused across tenants.
+type compactProgressMetricsVec struct {
+	numberOfCompactionRuns   *prometheus.GaugeVec
+	numberOfCompactionBlocks *prometheus.GaugeVec
+}
+
+var (
+	compactProgressVec     *compactProgressMetricsVec
+	compactProgressVecOnce sync.Once
+)
+
+// getOrCreateCompactProgressVec returns the singleton GaugeVec metrics, creating them if needed.
+func getOrCreateCompactProgressVec(reg prometheus.Registerer) *compactProgressMetricsVec {
+	compactProgressVecOnce.Do(func() {
+		compactProgressVec = &compactProgressMetricsVec{
+			numberOfCompactionRuns: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compactions",
+				Help: "number of compactions to be done",
+			}, []string{"tenant"}),
+			numberOfCompactionBlocks: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_compaction_blocks",
+				Help: "number of blocks planned to be compacted",
+			}, []string{"tenant"}),
+		}
+	})
+	return compactProgressVec
+}
+
+// NewCompactionProgressCalculator creates a new CompactionProgressCalculator.
+func NewCompactionProgressCalculator(reg prometheus.Registerer, planner Planner, tenant string) *CompactionProgressCalculator {
+	vec := getOrCreateCompactProgressVec(reg)
 	return &CompactionProgressCalculator{
 		planner: planner,
 		CompactProgressMetrics: &CompactProgressMetrics{
-			NumberOfCompactionRuns: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-				Name: "thanos_compact_todo_compactions",
-				Help: "number of compactions to be done",
-			}),
-			NumberOfCompactionBlocks: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-				Name: "thanos_compact_todo_compaction_blocks",
-				Help: "number of blocks planned to be compacted",
-			}),
+			NumberOfCompactionRuns:   vec.numberOfCompactionRuns.WithLabelValues(tenant),
+			NumberOfCompactionBlocks: vec.numberOfCompactionBlocks.WithLabelValues(tenant),
 		},
 	}
 }
@@ -697,14 +721,35 @@ type DownsampleProgressCalculator struct {
 	*DownsampleProgressMetrics
 }
 
-// NewDownsampleProgressCalculator creates a new DownsampleProgressCalculator.
-func NewDownsampleProgressCalculator(reg prometheus.Registerer) *DownsampleProgressCalculator {
-	return &DownsampleProgressCalculator{
-		DownsampleProgressMetrics: &DownsampleProgressMetrics{
-			NumberOfBlocksDownsampled: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+// downsampleProgressMetricsVec holds the GaugeVec metrics for downsampling progress.
+type downsampleProgressMetricsVec struct {
+	numberOfBlocksDownsampled *prometheus.GaugeVec
+}
+
+var (
+	downsampleProgressVec     *downsampleProgressMetricsVec
+	downsampleProgressVecOnce sync.Once
+)
+
+// getOrCreateDownsampleProgressVec returns the singleton GaugeVec metrics, creating them if needed.
+func getOrCreateDownsampleProgressVec(reg prometheus.Registerer) *downsampleProgressMetricsVec {
+	downsampleProgressVecOnce.Do(func() {
+		downsampleProgressVec = &downsampleProgressMetricsVec{
+			numberOfBlocksDownsampled: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
 				Name: "thanos_compact_todo_downsample_blocks",
 				Help: "number of blocks to be downsampled",
-			}),
+			}, []string{"tenant"}),
+		}
+	})
+	return downsampleProgressVec
+}
+
+// NewDownsampleProgressCalculator creates a new DownsampleProgressCalculator.
+func NewDownsampleProgressCalculator(reg prometheus.Registerer, tenant string) *DownsampleProgressCalculator {
+	vec := getOrCreateDownsampleProgressVec(reg)
+	return &DownsampleProgressCalculator{
+		DownsampleProgressMetrics: &DownsampleProgressMetrics{
+			NumberOfBlocksDownsampled: vec.numberOfBlocksDownsampled.WithLabelValues(tenant),
 		},
 	}
 }
@@ -793,15 +838,36 @@ type RetentionProgressCalculator struct {
 	retentionByResolution map[ResolutionLevel]time.Duration
 }
 
+// retentionProgressMetricsVec holds the GaugeVec metrics for retention progress.
+type retentionProgressMetricsVec struct {
+	numberOfBlocksToDelete *prometheus.GaugeVec
+}
+
+var (
+	retentionProgressVec     *retentionProgressMetricsVec
+	retentionProgressVecOnce sync.Once
+)
+
+// getOrCreateRetentionProgressVec returns the singleton GaugeVec metrics, creating them if needed.
+func getOrCreateRetentionProgressVec(reg prometheus.Registerer) *retentionProgressMetricsVec {
+	retentionProgressVecOnce.Do(func() {
+		retentionProgressVec = &retentionProgressMetricsVec{
+			numberOfBlocksToDelete: promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+				Name: "thanos_compact_todo_deletion_blocks",
+				Help: "number of blocks that have crossed their retention period",
+			}, []string{"tenant"}),
+		}
+	})
+	return retentionProgressVec
+}
+
 // NewRetentionProgressCalculator creates a new RetentionProgressCalculator.
-func NewRetentionProgressCalculator(reg prometheus.Registerer, retentionByResolution map[ResolutionLevel]time.Duration) *RetentionProgressCalculator {
+func NewRetentionProgressCalculator(reg prometheus.Registerer, retentionByResolution map[ResolutionLevel]time.Duration, tenant string) *RetentionProgressCalculator {
+	vec := getOrCreateRetentionProgressVec(reg)
 	return &RetentionProgressCalculator{
 		retentionByResolution: retentionByResolution,
 		RetentionProgressMetrics: &RetentionProgressMetrics{
-			NumberOfBlocksToDelete: promauto.With(reg).NewGauge(prometheus.GaugeOpts{
-				Name: "thanos_compact_todo_deletion_blocks",
-				Help: "number of blocks that have crossed their retention period",
-			}),
+			NumberOfBlocksToDelete: vec.numberOfBlocksToDelete.WithLabelValues(tenant),
 		},
 	}
 }

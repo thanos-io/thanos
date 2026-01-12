@@ -38,7 +38,7 @@ type OverlappingCompactionLifecycleCallback struct {
 	noDownsampling    prometheus.Counter
 }
 
-func NewOverlappingCompactionLifecycleCallback(reg *prometheus.Registry, logger log.Logger, enabled bool) CompactionLifecycleCallback {
+func NewOverlappingCompactionLifecycleCallback(reg prometheus.Registerer, logger log.Logger, enabled bool) CompactionLifecycleCallback {
 	if enabled {
 		level.Info(logger).Log("msg", "enabled overlapping blocks compaction lifecycle callback")
 		return OverlappingCompactionLifecycleCallback{
