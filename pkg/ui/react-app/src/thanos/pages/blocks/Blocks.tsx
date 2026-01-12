@@ -1,7 +1,7 @@
 import React, { ChangeEvent, FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { Button, Input, InputGroup, InputGroupAddon, UncontrolledAlert, Form } from 'reactstrap';
-import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } from 'use-query-params';
+import { Button, Form, Input, InputGroup, InputGroupAddon, UncontrolledAlert } from 'reactstrap';
+import { BooleanParam, NumberParam, StringParam, useQueryParams, withDefault } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
@@ -10,7 +10,7 @@ import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
 import { BlockFilterCompaction } from './BlockFilterCompaction';
-import { sortBlocks, getBlockByUlid, getFilteredBlockPools } from './helpers';
+import { getBlockByUlid, getFilteredBlockPools, sortBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
 import Checkbox from '../../../components/Checkbox';
@@ -35,49 +35,20 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const [selectedBlock, selectBlock] = useState<Block>();
   const [searchState, setSearchState] = useState<string>('');
 
-  const sixMonthsInMs = 180 * daySeconds * 1000; // 6 months in milliseconds
-  const [enableTimeFiltering, setEnableTimeFiltering] = useState<boolean>(false);
-  const [range, setRange] = useState<number>(sixMonthsInMs);
-  const [localEndTime, setLocalEndTime] = useState<number | null>(Date.now()); // Default to current time
-
   const { blocks, label, err } = data;
 
-  // Use local state for time filtering
-  const endTime = enableTimeFiltering ? localEndTime : null;
-  const onChangeRange = (newRange: number) => setRange(newRange);
-  const onChangeEndTime = (newEndTime: number | null) => setLocalEndTime(newEndTime);
-
-  // Filter blocks by time range when time filtering is enabled
-  const timeFilteredBlocks = useMemo(() => {
-    if (enableTimeFiltering && endTime !== null && range > 0) {
-      const startTime = endTime - range;
-      return blocks.filter((block) => {
-        return !(endTime < block.minTime || startTime > block.maxTime);
-      });
-    }
-    return blocks;
-  }, [blocks, enableTimeFiltering, endTime, range]);
-
   const [gridMinTime, gridMaxTime] = useMemo(() => {
-    if (!err && timeFilteredBlocks.length > 0) {
-      let gridMinTime = timeFilteredBlocks[0].minTime;
-      let gridMaxTime = timeFilteredBlocks[0].maxTime;
-      timeFilteredBlocks.forEach((block) => {
-        if (block.minTime < gridMinTime) {
-          gridMinTime = block.minTime;
-        }
-        if (block.maxTime > gridMaxTime) {
-          gridMaxTime = block.maxTime;
-        }
-      });
-      return [gridMinTime, gridMaxTime];
-    }
-    return [0, 0];
-  }, [timeFilteredBlocks, err]);
+    if (!blocks || blocks.length === 0) return [0, 0];
 
-  // Calculate view time based on time filtering
-  const calculatedViewMinTime = enableTimeFiltering && endTime !== null && range > 0 ? endTime - range : gridMinTime;
-  const calculatedViewMaxTime = enableTimeFiltering && endTime !== null ? endTime : gridMaxTime;
+    let gridMinTime = blocks[0].minTime;
+    let gridMaxTime = blocks[0].maxTime;
+
+    blocks.forEach((block) => {
+      gridMinTime = Math.min(gridMinTime, block.minTime);
+      gridMaxTime = Math.max(gridMaxTime, block.maxTime);
+    });
+    return [gridMinTime, gridMaxTime];
+  }, [blocks]);
 
   const [
     {
@@ -90,17 +61,21 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     },
     setQuery,
   ] = useQueryParams({
-    'min-time': withDefault(NumberParam, calculatedViewMinTime),
-    'max-time': withDefault(NumberParam, calculatedViewMaxTime),
+    'min-time': withDefault(NumberParam, gridMinTime),
+    'max-time': withDefault(NumberParam, gridMaxTime),
     ulid: withDefault(StringParam, ''),
     'find-overlapping': withDefault(BooleanParam, false),
     'filter-compaction': withDefault(BooleanParam, false),
     'compaction-level': withDefault(NumberParam, 0),
   });
 
-  // Use calculated view times when time filtering is enabled
-  const viewMinTime = enableTimeFiltering ? calculatedViewMinTime : queryViewMinTime;
-  const viewMaxTime = enableTimeFiltering ? calculatedViewMaxTime : queryViewMaxTime;
+  const viewMinTime = queryViewMinTime;
+  const viewMaxTime = queryViewMaxTime;
+
+  // Initialize time controls from query parameters
+  const [endTime, setEndTime] = useState<number>(viewMaxTime);
+  const [range, setRange] = useState<number>(rangeSteps[rangeSteps.length - 1]);
+  const [rangeInput, setRangeInput] = useState<string>(formatDuration(rangeSteps[rangeSteps.length - 1]));
 
   const [filterCompaction, setFilterCompaction] = useState<boolean>(filterCompactionParam);
   const [findOverlappingBlocks, setFindOverlappingBlocks] = useState<boolean>(findOverlappingParam);
@@ -108,13 +83,8 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const [compactionLevelInput, setCompactionLevelInput] = useState<string>(compactionLevelParam.toString());
   const [blockSearch, setBlockSearch] = useState<string>(blockSearchParam);
 
-  const rangeRef = React.createRef<HTMLInputElement>();
-
-  const blockPools = useMemo(
-    () => sortBlocks(timeFilteredBlocks, label, findOverlappingBlocks),
-    [timeFilteredBlocks, label, findOverlappingBlocks]
-  );
-  const filteredBlocks = useMemo(() => getBlockByUlid(timeFilteredBlocks, blockSearch), [timeFilteredBlocks, blockSearch]);
+  const blockPools = useMemo(() => sortBlocks(blocks, label, findOverlappingBlocks), [blocks, label, findOverlappingBlocks]);
+  const filteredBlocks = useMemo(() => getBlockByUlid(blocks, blockSearch), [blocks, blockSearch]);
   const filteredBlockPools = useMemo(() => getFilteredBlockPools(blockPools, filteredBlocks), [filteredBlocks, blockPools]);
 
   const { response: flagsRes } = useFetch<FlagMap>(`${pathPrefix}/api/v1/status/flags`);
@@ -125,6 +95,63 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
       'min-time': times[0],
       'max-time': times[1],
     });
+  };
+
+  const handleTimeRangeChange = (times: number[]): void => {
+    const [newMinTime, newMaxTime] = times;
+    const newRange = newMaxTime - newMinTime;
+
+    setEndTime(newMaxTime);
+    setRange(newRange);
+    setRangeInput(formatDuration(newRange));
+
+    // Update the view
+    setViewTime(times);
+  };
+
+  const updateTimeRange = (currentEndTime: number, currentRange: number) => {
+    setViewTime([currentEndTime - currentRange, currentEndTime]);
+  };
+
+  const onChangeRange = (newRange: number) => {
+    setRange(newRange);
+    setRangeInput(formatDuration(newRange));
+    updateTimeRange(endTime, newRange);
+  };
+
+  const onChangeEndTime = (newEndTime: number | null) => {
+    if (newEndTime == null) {
+      newEndTime = gridMaxTime;
+    }
+    // Cap the end time to gridMaxTime
+    const cappedEndTime = Math.min(newEndTime, gridMaxTime);
+    setEndTime(cappedEndTime);
+    updateTimeRange(cappedEndTime, range);
+  };
+
+  const onChangeRangeInput = (rangeText: string): void => {
+    const newRange = parseDuration(rangeText);
+    if (newRange !== null) {
+      onChangeRange(newRange);
+    }
+  };
+
+  const increaseRange = (): void => {
+    for (const step of rangeSteps) {
+      if (range < step) {
+        onChangeRange(step);
+        return;
+      }
+    }
+  };
+
+  const decreaseRange = (): void => {
+    for (const step of rangeSteps.slice().reverse()) {
+      if (range > step) {
+        onChangeRange(step);
+        return;
+      }
+    }
   };
 
   const setBlockSearchInput = (searchState: string): void => {
@@ -162,41 +189,6 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     setCompactionLevelInput(target.value);
   };
 
-  const onChangeRangeInput = (rangeText: string): void => {
-    const newRange = parseDuration(rangeText);
-    if (newRange === null) {
-      onChangeRange(range);
-    } else {
-      onChangeRange(newRange);
-    }
-  };
-
-  const changeRangeInput = (newRange: number): void => {
-    if (rangeRef.current) {
-      rangeRef.current.value = formatDuration(newRange);
-    }
-  };
-
-  const increaseRange = (): void => {
-    for (const step of rangeSteps) {
-      if (range < step) {
-        changeRangeInput(step);
-        onChangeRange(step);
-        return;
-      }
-    }
-  };
-
-  const decreaseRange = (): void => {
-    for (const step of rangeSteps.slice().reverse()) {
-      if (range > step) {
-        changeRangeInput(step);
-        onChangeRange(step);
-        return;
-      }
-    }
-  };
-
   if (err) return <UncontrolledAlert color="danger">{err.toString()}</UncontrolledAlert>;
 
   return (
@@ -209,31 +201,21 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
             defaultValue={blockSearchParam}
           />
           <Form inline className="graph-controls" onSubmit={(e) => e.preventDefault()}>
-            <Checkbox
-              id="enable-time-filtering"
-              onChange={({ target }) => setEnableTimeFiltering(target.checked)}
-              defaultChecked={enableTimeFiltering}
-              wrapperStyles={{ marginBottom: 0 }}
-            >
-              Enable time filtering
-            </Checkbox>
-
             <InputGroup className="range-input" size="sm">
               <InputGroupAddon addonType="prepend">
-                <Button title="Decrease range" onClick={decreaseRange} disabled={!enableTimeFiltering}>
+                <Button title="Decrease range" onClick={decreaseRange}>
                   <FontAwesomeIcon icon={faMinus} fixedWidth />
                 </Button>
               </InputGroupAddon>
 
               <Input
-                defaultValue={formatDuration(range)}
-                innerRef={rangeRef}
-                onBlur={() => onChangeRangeInput(rangeRef.current!.value)}
-                disabled={!enableTimeFiltering}
+                value={rangeInput}
+                onChange={(e) => setRangeInput(e.target.value)}
+                onBlur={(e) => onChangeRangeInput(e.target.value)}
               />
 
               <InputGroupAddon addonType="append">
-                <Button title="Increase range" onClick={increaseRange} disabled={!enableTimeFiltering}>
+                <Button title="Increase range" onClick={increaseRange}>
                   <FontAwesomeIcon icon={faPlus} fixedWidth />
                 </Button>
               </InputGroupAddon>
@@ -298,7 +280,7 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
                 gridMaxTime={gridMaxTime}
                 viewMinTime={viewMinTime}
                 viewMaxTime={viewMaxTime}
-                onChange={setViewTime}
+                onChange={handleTimeRangeChange}
               />
             </div>
             <BlockDetails
