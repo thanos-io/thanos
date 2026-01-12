@@ -46,6 +46,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/logging"
+	"github.com/thanos-io/thanos/pkg/pantheon"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -373,22 +374,18 @@ func runReceive(
 		}
 	}
 
-	// Choose between PantheonV2 unified config or legacy separate configs.
-	if conf.pantheonV2WriterFilePath != "" {
-		level.Debug(logger).Log("msg", "setting up PantheonV2 writer config (unified hashring + pantheon)")
-		{
-			if err := setupPantheonV2WriterConfig(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
-				return err
-			}
+	level.Debug(logger).Log("msg", "setting up hashring")
+	{
+		if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
+			return err
 		}
-	} else {
-		level.Debug(logger).Log("msg", "setting up hashring")
-		{
-			if err := setupHashring(g, logger, reg, conf, hashringChangedChan, webHandler, statusProber, enableIngestion, dbs); err != nil {
-				return err
-			}
-		}
+	}
 
+	level.Debug(logger).Log("msg", "setting up Pantheon config")
+	{
+		if err := setupPantheonConfig(g, logger, reg, conf, webHandler); err != nil {
+			return err
+		}
 	}
 
 	level.Debug(logger).Log("msg", "setting up HTTP server")
@@ -754,86 +751,46 @@ func setupHashring(g *run.Group,
 	return nil
 }
 
-// setupPantheonV2WriterConfig sets up the PantheonV2 writer configuration watcher if provided.
-// This replaces both setupHashring and setupPantheonConfig when using the unified config file.
-func setupPantheonV2WriterConfig(g *run.Group,
+// setupPantheonConfig sets up the Pantheon cluster configuration watcher if provided.
+func setupPantheonConfig(g *run.Group,
 	logger log.Logger,
 	reg *prometheus.Registry,
 	conf *receiveConfig,
-	hashringChangedChan chan struct{},
 	webHandler *receive.Handler,
-	statusProber prober.Probe,
-	enableIngestion bool,
-	dbs *receive.MultiTSDB,
 ) error {
-	if conf.pantheonV2WriterFilePath == "" {
+	if conf.pantheonFilePath == "" {
 		return nil
 	}
 
-	cw, err := receive.NewPantheonV2WriterConfigWatcher(log.With(logger, "component", "pantheonv2-writer-config-watcher"), reg, conf.pantheonV2WriterFilePath, *conf.pantheonV2WriterRefreshInterval)
+	cw, err := receive.NewPantheonConfigWatcher(log.With(logger, "component", "pantheon-config-watcher"), reg, conf.pantheonFilePath, *conf.pantheonRefreshInterval)
 	if err != nil {
-		return errors.Wrap(err, "failed to initialize PantheonV2 writer config watcher")
+		return errors.Wrap(err, "failed to initialize Pantheon config watcher")
 	}
 
-	// Check the PantheonV2 writer configuration before running the watcher.
+	// Check the Pantheon configuration before running the watcher.
 	if err := cw.ValidateConfig(); err != nil {
 		cw.Stop()
-		return errors.Wrap(err, "failed to validate PantheonV2 writer configuration file")
+		return errors.Wrap(err, "failed to validate Pantheon configuration file")
 	}
 
-	updates := make(chan *receive.PantheonV2WriterConfig, 1)
+	updates := make(chan *pantheon.PantheonCluster, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	g.Add(func() error {
-		return receive.PantheonV2WriterConfigFromWatcher(ctx, updates, cw)
+		return receive.PantheonConfigFromWatcher(ctx, updates, cw)
 	}, func(error) {
 		cancel()
 	})
 
 	cancelConsumer := make(chan struct{})
-	algorithm := receive.HashringAlgorithm(conf.hashringsAlgorithm)
 	g.Add(func() error {
-		if enableIngestion {
-			defer close(hashringChangedChan)
-		}
-
 		for {
 			select {
 			case c, ok := <-updates:
 				if !ok {
 					return nil
 				}
-
-				// Update hashring from the config.
-				if len(c.Hashrings) == 0 {
-					webHandler.Hashring(receive.SingleNodeHashring(conf.endpoint))
-					level.Info(logger).Log("msg", "Empty hashring config in PantheonV2 writer config. Set up single node hashring.")
-				} else {
-					h, err := receive.NewMultiHashring(algorithm, conf.replicationFactor, c.Hashrings)
-					if err != nil {
-						return errors.Wrap(err, "unable to create new hashring from PantheonV2 writer config")
-					}
-					webHandler.Hashring(h)
-					level.Info(logger).Log("msg", "Set up hashring from PantheonV2 writer config.")
-				}
-
-				if err := dbs.SetHashringConfig(c.Hashrings); err != nil {
-					return errors.Wrap(err, "failed to set hashring config in MultiTSDB from PantheonV2 writer config")
-				}
-
-				// Update PantheonCluster from the config.
-				if c.PantheonCluster != nil {
-					webHandler.SetPantheonCluster(c.PantheonCluster)
-					level.Info(logger).Log("msg", "Updated Pantheon cluster configuration from PantheonV2 writer config.")
-				}
-
-				// If ingestion is enabled, send a signal to TSDB to flush.
-				if enableIngestion {
-					hashringChangedChan <- struct{}{}
-				} else {
-					// If not, just signal we are ready (this is important during first hashring load)
-					statusProber.Ready()
-				}
-
+				webHandler.SetPantheonCluster(c)
+				level.Info(logger).Log("msg", "Updated Pantheon cluster configuration.")
 			case <-cancelConsumer:
 				return nil
 			}
@@ -1072,8 +1029,8 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	pantheonV2WriterFilePath        string
-	pantheonV2WriterRefreshInterval *model.Duration
+	pantheonFilePath        string
+	pantheonRefreshInterval *model.Duration
 
 	refreshInterval     *model.Duration
 	endpoint            string
@@ -1186,9 +1143,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.refreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.hashrings-file-refresh-interval", "Refresh interval to re-read the hashring configuration file. (used as a fallback)").
 		Default("5m"))
 
-	cmd.Flag("receive.pantheonv2-writer-file", "Path to file that contains the PantheonV2 writer configuration (hashrings + pantheon cluster). A watcher is initialized to watch changes and update the configuration dynamically. Takes precedence over receive.hashrings-file.").PlaceHolder("<path>").StringVar(&rc.pantheonV2WriterFilePath)
+	cmd.Flag("receive.pantheon-file", "Path to file that contains the Pantheon cluster configuration. A watcher is initialized to watch changes and update the configuration dynamically.").PlaceHolder("<path>").StringVar(&rc.pantheonFilePath)
 
-	rc.pantheonV2WriterRefreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.pantheonv2-writer-file-refresh-interval", "Refresh interval to re-read the PantheonV2 writer configuration file. (used as a fallback)").
+	rc.pantheonRefreshInterval = extkingpin.ModelDuration(cmd.Flag("receive.pantheon-file-refresh-interval", "Refresh interval to re-read the Pantheon configuration file. (used as a fallback)").
 		Default("5m"))
 
 	cmd.Flag("receive.local-endpoint", "Endpoint of local receive node. Used to identify the local node in the hashring configuration. If it's empty AND hashring configuration was provided, it means that receive will run in RoutingOnly mode.").StringVar(&rc.endpoint)

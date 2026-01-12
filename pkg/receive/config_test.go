@@ -125,37 +125,34 @@ func TestUnmarshalEndpointSlice(t *testing.T) {
 	}
 }
 
-func TestValidatePantheonV2WriterConfig(t *testing.T) {
+func TestValidatePantheonConfig(t *testing.T) {
 	t.Parallel()
 
-	validConfig := PantheonV2WriterConfig{
-		Hashrings: []HashringConfig{
+	validConfig := pantheon.PantheonClusterVersions{
+		Versions: []pantheon.PantheonCluster{
 			{
-				Endpoints: []Endpoint{{Address: "node1"}},
-			},
-		},
-		PantheonCluster: &pantheon.PantheonCluster{
-			DeletionDate: "",
-			MetricScopes: []pantheon.MetricScope{
-				{
-					ScopeName: "test-scope",
-					Shards:    2,
-				},
-			},
-			DBGroups: []pantheon.DbGroup{
-				{
-					DbGroupName: "test-db-group",
-					Replicas:    3,
-					DbHpa: pantheon.DbHpaConfig{
-						Enabled:     true,
-						MaxReplicas: 10,
-						MinReplicas: 1,
+				DeletionDate: "",
+				MetricScopes: []pantheon.MetricScope{
+					{
+						ScopeName: "test-scope",
+						Shards:    2,
 					},
-					TenantSets: []pantheon.TenantSet{
-						{
-							MetricScopeName:   "test-scope",
-							SpecialGroupNames: []string{},
-							Shards:            []int{0, 1},
+				},
+				DBGroups: []pantheon.DbGroup{
+					{
+						DbGroupName: "test-db-group",
+						Replicas:    3,
+						DbHpa: pantheon.DbHpaConfig{
+							Enabled:     true,
+							MaxReplicas: 10,
+							MinReplicas: 1,
+						},
+						TenantSets: []pantheon.TenantSet{
+							{
+								MetricScopeName:   "test-scope",
+								SpecialGroupNames: []string{},
+								Shards:            []int{0, 1},
+							},
 						},
 					},
 				},
@@ -169,11 +166,9 @@ func TestValidatePantheonV2WriterConfig(t *testing.T) {
 		err  error
 	}{
 		{
-			name: "empty hashrings",
-			cfg: PantheonV2WriterConfig{
-				Hashrings: []HashringConfig{},
-			},
-			err: errors.New("hashrings cannot be empty"),
+			name: "empty config",
+			cfg:  pantheon.PantheonClusterVersions{},
+			err:  errors.New("no versions found"),
 		},
 		{
 			name: "unparsable config",
@@ -186,33 +181,40 @@ func TestValidatePantheonV2WriterConfig(t *testing.T) {
 			err:  nil,
 		},
 		{
-			name: "hashring with no endpoints",
-			cfg: PantheonV2WriterConfig{
-				Hashrings: []HashringConfig{
+			name: "latest version with deletion date",
+			cfg: pantheon.PantheonClusterVersions{
+				Versions: []pantheon.PantheonCluster{
 					{
-						Endpoints: []Endpoint{},
+						DeletionDate: "2024-01-01",
+						MetricScopes: []pantheon.MetricScope{
+							{
+								ScopeName: "test-scope",
+								Shards:    1,
+							},
+						},
+						DBGroups: []pantheon.DbGroup{
+							{
+								DbGroupName: "test-db",
+								Replicas:    1,
+								TenantSets: []pantheon.TenantSet{
+									{
+										MetricScopeName: "test-scope",
+										Shards:          []int{0},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
-			err: errors.New("hashring 0 has no endpoints"),
-		},
-		{
-			name: "valid config without pantheon cluster",
-			cfg: PantheonV2WriterConfig{
-				Hashrings: []HashringConfig{
-					{
-						Endpoints: []Endpoint{{Address: "node1"}},
-					},
-				},
-			},
-			err: nil,
+			err: errors.New("latest version has non-empty deletion date"),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			content, err := json.Marshal(tc.cfg)
 			testutil.Ok(t, err)
 
-			tmpfile, err := os.CreateTemp("", "pantheonv2_writer_configwatcher_test.*.json")
+			tmpfile, err := os.CreateTemp("", "pantheon_configwatcher_test.*.json")
 			testutil.Ok(t, err)
 
 			defer func() {
@@ -225,7 +227,7 @@ func TestValidatePantheonV2WriterConfig(t *testing.T) {
 			err = tmpfile.Close()
 			testutil.Ok(t, err)
 
-			cw, err := NewPantheonV2WriterConfigWatcher(nil, nil, tmpfile.Name(), 1)
+			cw, err := NewPantheonConfigWatcher(nil, nil, tmpfile.Name(), 1)
 			testutil.Ok(t, err)
 			defer cw.Stop()
 
@@ -239,47 +241,61 @@ func TestValidatePantheonV2WriterConfig(t *testing.T) {
 	}
 }
 
-func TestParsePantheonV2WriterConfig(t *testing.T) {
+func TestParsePantheonConfig(t *testing.T) {
 	t.Parallel()
 
-	validConfig := PantheonV2WriterConfig{
-		Hashrings: []HashringConfig{
+	validConfig := pantheon.PantheonClusterVersions{
+		Versions: []pantheon.PantheonCluster{
 			{
-				Hashring: "pantheon-db-a0",
-				Endpoints: []Endpoint{
-					{Address: "node1", AZ: "az-1"},
-					{Address: "node2", AZ: "az-2"},
+				DeletionDate: "",
+				MetricScopes: []pantheon.MetricScope{
+					{
+						ScopeName: "hgcp",
+						Shards:    3,
+						SpecialMetricGroups: []pantheon.SpecialMetricGroup{
+							{
+								GroupName:   "kube-metrics",
+								MetricNames: []string{"container_cpu_usage_seconds_total"},
+							},
+						},
+					},
 				},
-			},
-		},
-		PantheonCluster: &pantheon.PantheonCluster{
-			DeletionDate: "",
-			MetricScopes: []pantheon.MetricScope{
-				{
-					ScopeName: "hgcp",
-					Shards:    3,
-					SpecialMetricGroups: []pantheon.SpecialMetricGroup{
-						{
-							GroupName:   "kube-metrics",
-							MetricNames: []string{"container_cpu_usage_seconds_total"},
+				DBGroups: []pantheon.DbGroup{
+					{
+						DbGroupName: "pantheon-db-a0",
+						Replicas:    5,
+						DbHpa: pantheon.DbHpaConfig{
+							Enabled:     true,
+							MaxReplicas: 15,
+							MinReplicas: 3,
+						},
+						TenantSets: []pantheon.TenantSet{
+							{
+								MetricScopeName:   "hgcp",
+								SpecialGroupNames: []string{"kube-metrics"},
+								Shards:            []int{0, 1, 2},
+							},
 						},
 					},
 				},
 			},
-			DBGroups: []pantheon.DbGroup{
-				{
-					DbGroupName: "pantheon-db-a0",
-					Replicas:    5,
-					DbHpa: pantheon.DbHpaConfig{
-						Enabled:     true,
-						MaxReplicas: 15,
-						MinReplicas: 3,
+			{
+				DeletionDate: "2024-01-01",
+				MetricScopes: []pantheon.MetricScope{
+					{
+						ScopeName: "hgcp",
+						Shards:    2,
 					},
-					TenantSets: []pantheon.TenantSet{
-						{
-							MetricScopeName:   "hgcp",
-							SpecialGroupNames: []string{"kube-metrics"},
-							Shards:            []int{0, 1, 2},
+				},
+				DBGroups: []pantheon.DbGroup{
+					{
+						DbGroupName: "pantheon-db-a0",
+						Replicas:    3,
+						TenantSets: []pantheon.TenantSet{
+							{
+								MetricScopeName: "hgcp",
+								Shards:          []int{0, 1},
+							},
 						},
 					},
 				},
@@ -290,20 +306,19 @@ func TestParsePantheonV2WriterConfig(t *testing.T) {
 	content, err := json.Marshal(validConfig)
 	testutil.Ok(t, err)
 
-	config, err := parsePantheonV2WriterConfig(content)
+	cluster, err := parsePantheonConfig(content)
 	testutil.Ok(t, err)
-	testutil.Assert(t, config != nil, "config should not be nil")
-	testutil.Equals(t, 1, len(config.Hashrings), "should have 1 hashring")
-	testutil.Equals(t, "pantheon-db-a0", config.Hashrings[0].Hashring, "hashring name should match")
-	testutil.Equals(t, 2, len(config.Hashrings[0].Endpoints), "should have 2 endpoints")
-	testutil.Assert(t, config.PantheonCluster != nil, "pantheon cluster should not be nil")
-	testutil.Equals(t, "", config.PantheonCluster.DeletionDate, "cluster should have empty deletion date")
-	testutil.Equals(t, 1, len(config.PantheonCluster.MetricScopes), "should have 1 metric scope")
-	testutil.Equals(t, "hgcp", config.PantheonCluster.MetricScopes[0].ScopeName, "scope name should be hgcp")
-	testutil.Equals(t, 3, config.PantheonCluster.MetricScopes[0].Shards, "should have 3 shards")
+	testutil.Assert(t, cluster != nil, "cluster should not be nil")
+	testutil.Equals(t, "", cluster.DeletionDate, "latest cluster should have empty deletion date")
+	testutil.Equals(t, 1, len(cluster.MetricScopes), "should have 1 metric scope")
+	testutil.Equals(t, "hgcp", cluster.MetricScopes[0].ScopeName, "scope name should be hgcp")
+	testutil.Equals(t, 3, cluster.MetricScopes[0].Shards, "should have 3 shards")
+	testutil.Equals(t, 1, len(cluster.DBGroups), "should have 1 db group")
+	testutil.Equals(t, "pantheon-db-a0", cluster.DBGroups[0].DbGroupName, "db group name should match")
+	testutil.Equals(t, 5, cluster.DBGroups[0].Replicas, "should have 5 replicas")
 }
 
-func TestParsePantheonV2WriterConfigErrors(t *testing.T) {
+func TestParsePantheonConfigErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -319,34 +334,34 @@ func TestParsePantheonV2WriterConfigErrors(t *testing.T) {
 			errMsg:    "unmarshal error",
 		},
 		{
-			name:      "empty hashrings",
-			content:   `{"hashrings": []}`,
+			name:      "empty versions",
+			content:   `{"versions": []}`,
 			expectErr: true,
-			errMsg:    "hashrings cannot be empty",
+			errMsg:    "no versions found",
 		},
 		{
-			name: "hashring with no endpoints",
+			name: "latest version with deletion date",
 			content: `{
-				"hashrings": [{
-					"hashring": "test-hashring",
-					"endpoints": []
+				"versions": [{
+					"deletion_date": "2024-01-01",
+					"metric_scopes": [{"scope_name": "test", "shards": 1}],
+					"db_groups": [{
+						"db_group_name": "test-db",
+						"replicas": 1,
+						"block_duration_minutes": 120,
+						"tenant_sets": [{
+							"metric_scope_name": "test",
+							"shards": [0]
+						}]
+					}]
 				}]
 			}`,
 			expectErr: true,
-			errMsg:    "hashring 0 has no endpoints",
-		},
-		{
-			name: "valid config without pantheon cluster",
-			content: `{
-				"hashrings": [{
-					"endpoints": [{"address": "node1"}]
-				}]
-			}`,
-			expectErr: false,
+			errMsg:    "latest version has non-empty deletion date",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := parsePantheonV2WriterConfig([]byte(tc.content))
+			_, err := parsePantheonConfig([]byte(tc.content))
 			if tc.expectErr {
 				testutil.NotOk(t, err, "expected error for case: "+tc.name)
 			} else {

@@ -121,14 +121,6 @@ func isExactMatcher(m tenantMatcher) bool {
 	return m == TenantMatcherTypeExact || m == ""
 }
 
-// PantheonV2WriterConfig represents a combined configuration containing both
-// hashring configurations and the associated PantheonCluster configuration.
-// This allows both configs to be hot-reloaded together from a single source.
-type PantheonV2WriterConfig struct {
-	Hashrings       []HashringConfig          `json:"hashrings"`
-	PantheonCluster *pantheon.PantheonCluster `json:"pantheon_cluster,omitempty"`
-}
-
 // ConfigWatcher is able to watch a file containing a hashring configuration
 // for updates.
 type ConfigWatcher struct {
@@ -407,10 +399,10 @@ func hashAsMetricValue(data []byte) float64 {
 	return float64(binary.LittleEndian.Uint64(bytes))
 }
 
-// PantheonV2WriterConfigWatcher is able to watch a file containing a combined
-// PantheonV2WriterConfig (hashrings + pantheon cluster) for updates.
-type PantheonV2WriterConfigWatcher struct {
-	ch       chan *PantheonV2WriterConfig
+// PantheonConfigWatcher is able to watch a file containing a Pantheon cluster configuration
+// for updates.
+type PantheonConfigWatcher struct {
+	ch       chan *pantheon.PantheonCluster
 	path     string
 	interval time.Duration
 	logger   log.Logger
@@ -427,8 +419,8 @@ type PantheonV2WriterConfigWatcher struct {
 	lastLoadedConfigHash float64
 }
 
-// NewPantheonV2WriterConfigWatcher creates a new PantheonV2WriterConfigWatcher.
-func NewPantheonV2WriterConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string, interval model.Duration) (*PantheonV2WriterConfigWatcher, error) {
+// NewPantheonConfigWatcher creates a new PantheonConfigWatcher.
+func NewPantheonConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string, interval model.Duration) (*PantheonConfigWatcher, error) {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
@@ -441,48 +433,48 @@ func NewPantheonV2WriterConfigWatcher(logger log.Logger, reg prometheus.Register
 		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
 	}
 
-	c := &PantheonV2WriterConfigWatcher{
-		ch:       make(chan *PantheonV2WriterConfig),
+	c := &PantheonConfigWatcher{
+		ch:       make(chan *pantheon.PantheonCluster),
 		path:     path,
 		interval: time.Duration(interval),
 		logger:   logger,
 		watcher:  watcher,
 		hashGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_pantheonv2_writer_config_hash",
-				Help: "Hash of the currently loaded PantheonV2 writer configuration file.",
+				Name: "thanos_receive_pantheon_config_hash",
+				Help: "Hash of the currently loaded Pantheon configuration file.",
 			}),
 		successGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_pantheonv2_writer_config_last_reload_successful",
-				Help: "Whether the last PantheonV2 writer configuration file reload attempt was successful.",
+				Name: "thanos_receive_pantheon_config_last_reload_successful",
+				Help: "Whether the last Pantheon configuration file reload attempt was successful.",
 			}),
 		lastSuccessTimeGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_pantheonv2_writer_config_last_reload_success_timestamp_seconds",
-				Help: "Timestamp of the last successful PantheonV2 writer configuration file reload.",
+				Name: "thanos_receive_pantheon_config_last_reload_success_timestamp_seconds",
+				Help: "Timestamp of the last successful Pantheon configuration file reload.",
 			}),
 		changesCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_pantheonv2_writer_file_changes_total",
-				Help: "The number of times the PantheonV2 writer configuration file has changed.",
+				Name: "thanos_receive_pantheon_file_changes_total",
+				Help: "The number of times the Pantheon configuration file has changed.",
 			}),
 		errorCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_pantheonv2_writer_file_errors_total",
-				Help: "The number of errors watching the PantheonV2 writer configuration file.",
+				Name: "thanos_receive_pantheon_file_errors_total",
+				Help: "The number of errors watching the Pantheon configuration file.",
 			}),
 		refreshCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_pantheonv2_writer_file_refreshes_total",
-				Help: "The number of refreshes of the PantheonV2 writer configuration file.",
+				Name: "thanos_receive_pantheon_file_refreshes_total",
+				Help: "The number of refreshes of the Pantheon configuration file.",
 			}),
 	}
 	return c, nil
 }
 
-// Run starts the PantheonV2WriterConfigWatcher until the given context is canceled.
-func (cw *PantheonV2WriterConfigWatcher) Run(ctx context.Context) {
+// Run starts the PantheonConfigWatcher until the given context is canceled.
+func (cw *PantheonConfigWatcher) Run(ctx context.Context) {
 	defer cw.Stop()
 
 	cw.refresh(ctx)
@@ -516,20 +508,20 @@ func (cw *PantheonV2WriterConfigWatcher) Run(ctx context.Context) {
 	}
 }
 
-// C returns a chan that gets PantheonV2WriterConfig configuration updates.
-func (cw *PantheonV2WriterConfigWatcher) C() <-chan *PantheonV2WriterConfig {
+// C returns a chan that gets Pantheon cluster configuration updates.
+func (cw *PantheonConfigWatcher) C() <-chan *pantheon.PantheonCluster {
 	return cw.ch
 }
 
 // ValidateConfig returns an error if the configuration that's being watched is not valid.
-func (cw *PantheonV2WriterConfigWatcher) ValidateConfig() error {
-	_, _, err := loadPantheonV2WriterConfig(cw.logger, cw.path)
+func (cw *PantheonConfigWatcher) ValidateConfig() error {
+	_, _, err := loadPantheonConfig(cw.logger, cw.path)
 	return err
 }
 
 // Stop shuts down the config watcher.
-func (cw *PantheonV2WriterConfigWatcher) Stop() {
-	level.Debug(cw.logger).Log("msg", "stopping PantheonV2 writer configuration watcher...", "path", cw.path)
+func (cw *PantheonConfigWatcher) Stop() {
+	level.Debug(cw.logger).Log("msg", "stopping Pantheon configuration watcher...", "path", cw.path)
 
 	done := make(chan struct{})
 	defer close(done)
@@ -549,14 +541,14 @@ func (cw *PantheonV2WriterConfigWatcher) Stop() {
 	}
 
 	close(cw.ch)
-	level.Debug(cw.logger).Log("msg", "PantheonV2 writer configuration watcher stopped")
+	level.Debug(cw.logger).Log("msg", "Pantheon configuration watcher stopped")
 }
 
-// refresh reads the configured file and sends the PantheonV2WriterConfig on the channel.
-func (cw *PantheonV2WriterConfigWatcher) refresh(ctx context.Context) {
+// refresh reads the configured file and sends the Pantheon cluster configuration on the channel.
+func (cw *PantheonConfigWatcher) refresh(ctx context.Context) {
 	cw.refreshCounter.Inc()
 
-	config, cfgHash, err := loadPantheonV2WriterConfig(cw.logger, cw.path)
+	config, cfgHash, err := loadPantheonConfig(cw.logger, cw.path)
 	if err != nil {
 		cw.errorCounter.Inc()
 		level.Error(cw.logger).Log("msg", "failed to load configuration file", "err", err, "path", cw.path)
@@ -576,7 +568,7 @@ func (cw *PantheonV2WriterConfigWatcher) refresh(ctx context.Context) {
 	cw.successGauge.Set(1)
 	cw.lastSuccessTimeGauge.SetToCurrentTime()
 
-	level.Debug(cw.logger).Log("msg", "refreshed PantheonV2 writer config")
+	level.Debug(cw.logger).Log("msg", "refreshed Pantheon config")
 	select {
 	case <-ctx.Done():
 		return
@@ -585,8 +577,7 @@ func (cw *PantheonV2WriterConfigWatcher) refresh(ctx context.Context) {
 	}
 }
 
-// PantheonV2WriterConfigFromWatcher reads from the watcher and forwards updates to the channel.
-func PantheonV2WriterConfigFromWatcher(ctx context.Context, updates chan<- *PantheonV2WriterConfig, cw *PantheonV2WriterConfigWatcher) error {
+func PantheonConfigFromWatcher(ctx context.Context, updates chan<- *pantheon.PantheonCluster, cw *PantheonConfigWatcher) error {
 	defer close(updates)
 	go cw.Run(ctx)
 
@@ -594,7 +585,7 @@ func PantheonV2WriterConfigFromWatcher(ctx context.Context, updates chan<- *Pant
 		select {
 		case cfg, ok := <-cw.C():
 			if !ok {
-				return errors.New("PantheonV2 writer config watcher stopped unexpectedly")
+				return errors.New("Pantheon config watcher stopped unexpectedly")
 			}
 			updates <- cfg
 		case <-ctx.Done():
@@ -603,40 +594,40 @@ func PantheonV2WriterConfigFromWatcher(ctx context.Context, updates chan<- *Pant
 	}
 }
 
-// parsePantheonV2WriterConfig parses the raw configuration content and returns PantheonV2WriterConfig.
-func parsePantheonV2WriterConfig(content []byte) (*PantheonV2WriterConfig, error) {
-	var config PantheonV2WriterConfig
+// parsePantheonConfig parses the raw configuration content and returns the latest PantheonCluster.
+func parsePantheonConfig(content []byte) (*pantheon.PantheonCluster, error) {
+	var config pantheon.PantheonClusterVersions
 	err := json.Unmarshal(content, &config)
 	if err != nil {
 		return nil, err
 	}
 
-	// Validate hashrings.
-	if len(config.Hashrings) == 0 {
-		return nil, errors.New("hashrings cannot be empty")
+	// Validate the configuration.
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
-	for i, hashring := range config.Hashrings {
-		if len(hashring.Endpoints) == 0 {
-			return nil, errors.Errorf("hashring %d has no endpoints", i)
-		}
+	// Return the latest version (Versions[0] with empty DeletionDate).
+	if len(config.Versions) == 0 {
+		return nil, errors.New("no versions found in Pantheon configuration")
 	}
 
-	// Note: PantheonCluster validation is not performed here since the cluster
-	// is generated by the controller from a validated PantheonClusterVersions config.
-	// If additional validation is needed, it should be added to the controller.
+	latestCluster := &config.Versions[0]
+	if latestCluster.DeletionDate != "" {
+		return nil, errors.New("latest version has non-empty deletion date")
+	}
 
-	return &config, nil
+	return latestCluster, nil
 }
 
-// loadPantheonV2WriterConfig loads raw configuration content and returns PantheonV2WriterConfig.
-func loadPantheonV2WriterConfig(logger log.Logger, path string) (*PantheonV2WriterConfig, float64, error) {
+// loadPantheonConfig loads raw configuration content and returns the latest PantheonCluster.
+func loadPantheonConfig(logger log.Logger, path string) (*pantheon.PantheonCluster, float64, error) {
 	cfgContent, err := readFile(logger, path)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to read configuration file")
 	}
 
-	config, err := parsePantheonV2WriterConfig(cfgContent)
+	config, err := parsePantheonConfig(cfgContent)
 	if err != nil {
 		return nil, 0, errors.Wrapf(errParseConfigurationFile, "failed to parse configuration file: %v", err)
 	}
