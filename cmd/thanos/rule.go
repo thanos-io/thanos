@@ -76,6 +76,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -768,9 +769,30 @@ func runRule(
 				}
 				return nil, errors.New("Not ready")
 			}),
+			info.WithStatusInfoFunc(),
 		)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
+
+		// Add Status server for TSDB statistics
+		statusSrv := status.NewServer(
+			component.Rule.String(),
+			status.WithTSDBStatisticsGetter(
+				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+					if !httpProbe.IsReady() {
+						return nil, errors.New("not ready")
+					}
+
+					stats := tsdbDB.Head().Stats(labels.MetricName, limit)
+					// Stateful ruler doesn't have tenancy, so we just mirror request tenantID as a passthrough to return value.
+					result := map[string]tsdb.Stats{
+						tenantID: *stats,
+					}
+					return result, nil
+				}),
+			),
+		)
+		options = append(options, grpcserver.WithServer(status.RegisterStatusServer(statusSrv)))
 	}
 
 	options = append(options, grpcserver.WithServer(
