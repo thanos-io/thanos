@@ -47,7 +47,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/pantheon"
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
-	"go.uber.org/atomic"
 
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/pool"
@@ -86,12 +85,10 @@ var (
 	// errConflict is returned whenever an operation fails due to any conflict-type error.
 	errConflict = errors.New("conflict")
 
-	errBadReplica        = errors.New("request replica exceeds receiver replication factor")
-	errNotReady          = errors.New("target not ready")
-	errUnavailable       = errors.New("target not available")
-	errInternal          = errors.New("internal error")
-	errInvalidPantheon   = errors.New("invalid pantheon request")
-	errMissingMetricName = errors.New("metric name (__name__) not found in time series labels")
+	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
+	errNotReady    = errors.New("target not ready")
+	errUnavailable = errors.New("target not available")
+	errInternal    = errors.New("internal error")
 )
 
 type WriteableStoreAsyncClient interface {
@@ -106,7 +103,6 @@ type Options struct {
 	Registry                *prometheus.Registry
 	TenantHeader            string
 	TenantField             string
-	ScopeHeader             string
 	DefaultTenantID         string
 	ReplicaHeader           string
 	Endpoint                string
@@ -136,7 +132,7 @@ type Handler struct {
 
 	mtx             sync.RWMutex
 	hashring        Hashring
-	pantheonCluster atomic.Pointer[pantheon.PantheonCluster]
+	pantheonCluster *pantheon.PantheonCluster
 	peers           peersContainer
 	receiverMode    ReceiverMode
 
@@ -353,7 +349,10 @@ func (h *Handler) Hashring(hashring Hashring) {
 
 // SetPantheonCluster sets the Pantheon cluster configuration for the handler.
 func (h *Handler) SetPantheonCluster(cluster *pantheon.PantheonCluster) {
-	h.pantheonCluster.Store(cluster)
+	h.mtx.Lock()
+	defer h.mtx.Unlock()
+
+	h.pantheonCluster = cluster
 }
 
 // getSortedStringSliceDiff returns items which are in slice1 but not in slice2.
@@ -546,23 +545,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract scope header for pantheon-based tenant attribution.
-	scopeHTTP := tenancy.GetScopeFromHTTP(r, h.options.ScopeHeader)
-
-	// If pantheon config is set and scope header is missing, reject the request.
-	pantheonConfigSet := h.pantheonCluster.Load() != nil
-
-	if pantheonConfigSet && scopeHTTP == "" {
-		level.Error(h.logger).Log("msg", "scope header is required when pantheon config is set", "scope_header", h.options.ScopeHeader)
-		http.Error(w, fmt.Sprintf("scope header '%s' is required", h.options.ScopeHeader), http.StatusBadRequest)
-		return
-	}
-
 	tLogger := log.With(h.logger, "tenant", tenantHTTP)
-	if scopeHTTP != "" {
-		tLogger = log.With(tLogger, "scope", scopeHTTP)
-		span.SetTag("scope", scopeHTTP)
-	}
 	span.SetTag("tenant", tenantHTTP)
 
 	writeGate := h.Limiter.WriteGate()
@@ -588,11 +571,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestLimiter := h.Limiter.RequestLimiter()
-	// NOTE: When Pantheon-based tenant attribution is enabled, the tenant in the HTTP header
-	// (tenantHTTP) may differ from the final tenant(s) determined per-metric after distribution.
-	// The size/sample limits here are enforced against the HTTP tenant, not the final Pantheon
-	// tenant(s). This is a known limitation - proper accounting would require delaying limit
-	// checks until after per-metric tenant determination, which is more complex.
 	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
 	compressed := bytes.Buffer{}
@@ -662,8 +640,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
 	}
-	// NOTE: Sample limits are checked against tenantHTTP here, before Pantheon tenant attribution.
-	// See comment above regarding limits accounting with Pantheon.
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
 		return
@@ -677,7 +653,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, scopeHTTP, &wreq)
+	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -688,10 +664,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		case errConflict:
 			responseStatusCode = http.StatusConflict
 		case errBadReplica:
-			responseStatusCode = http.StatusBadRequest
-		case errInvalidPantheon:
-			responseStatusCode = http.StatusBadRequest
-		case errMissingMetricName:
 			responseStatusCode = http.StatusBadRequest
 		default:
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
@@ -740,7 +712,7 @@ type requestStats struct {
 
 type tenantRequestStats map[string]requestStats
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP string, scopeHTTP string, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP string, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
 	tLogger := log.With(h.logger, "tenantHTTP", tenantHTTP)
 
 	// This replica value is used to detect cycles in cyclic topologies.
@@ -769,7 +741,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP stri
 	// Forward any time series as necessary. All time series
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
-	return h.forward(ctx, tenantHTTP, scopeHTTP, r, wreq)
+	return h.forward(ctx, tenantHTTP, r, wreq)
 }
 
 // forward accepts a write request, batches its time series by
@@ -780,7 +752,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP stri
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished
 // or the context is canceled.
-func (h *Handler) forward(ctx context.Context, tenantHTTP string, scopeHTTP string, r replica, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
+func (h *Handler) forward(ctx context.Context, tenantHTTP string, r replica, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
@@ -795,7 +767,6 @@ func (h *Handler) forward(ctx context.Context, tenantHTTP string, scopeHTTP stri
 
 	params := remoteWriteParams{
 		tenant:            tenantHTTP,
-		scope:             scopeHTTP,
 		writeRequest:      wreq,
 		replicas:          replicas,
 		alreadyReplicated: r.replicated,
@@ -806,7 +777,6 @@ func (h *Handler) forward(ctx context.Context, tenantHTTP string, scopeHTTP stri
 
 type remoteWriteParams struct {
 	tenant            string
-	scope             string
 	writeRequest      *prompb.WriteRequest
 	replicas          []uint64
 	alreadyReplicated bool
@@ -870,7 +840,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	}
 	requestLogger := log.With(h.logger, logTags...)
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.scope, params.replicas, params.writeRequest.Timeseries)
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return stats, err
@@ -953,7 +923,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 // series that should be written to remote nodes.
 func (h *Handler) distributeTimeseriesToReplicas(
 	tenantHTTP string,
-	scopeHTTP string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
 ) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
@@ -964,24 +933,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	for tsIndex, ts := range timeseries {
 		var tenant = tenantHTTP
 
-		// Priority 1: Pantheon-based tenant override (if config is set and scope is provided).
-		if pc := h.pantheonCluster.Load(); pc != nil && scopeHTTP != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-			metricName := lbls.Get(labels.MetricName)
-			if metricName == "" {
-				return nil, nil, errors.Wrap(errMissingMetricName, errInvalidPantheon.Error())
-			}
-
-			pantheonTenant, err := pantheon.GetTenantFromScope(scopeHTTP, metricName, pc)
-			if err != nil {
-				level.Error(h.logger).Log("msg", "failed to get tenant from pantheon scope", "scope", scopeHTTP, "metric", metricName, "err", err)
-				return nil, nil, errors.Wrap(errInvalidPantheon, err.Error())
-			}
-
-			level.Debug(h.logger).Log("msg", "tenant overridden by pantheon scope", "original_tenant", tenantHTTP, "scope", scopeHTTP, "metric", metricName, "new_tenant", pantheonTenant)
-			tenant = pantheonTenant
-		} else if h.splitTenantLabelName != "" {
-			// Priority 2: Split-tenant-label override (if no pantheon override happened).
+		if h.splitTenantLabelName != "" {
 			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
@@ -1067,7 +1019,7 @@ func (h *Handler) sendWrites(
 func (h *Handler) sendLocalWrite(
 	ctx context.Context,
 	writeDestination endpointReplica,
-	tenant string,
+	tenantHTTP string,
 	trackedSeries trackedSeries,
 	responses chan<- writeResponse,
 ) {
@@ -1076,15 +1028,26 @@ func (h *Handler) sendLocalWrite(
 	span.SetTag("endpoint", writeDestination.endpoint)
 	span.SetTag("replica", writeDestination.replica)
 
-	// The tenant for this trackedSeries was already determined in distributeTimeseriesToReplicas.
-	// We should use that tenant directly, not re-check split-tenant labels here.
-	// The trackedSeries is already grouped by tenant from the distribution phase.
-	err := h.writer.Write(tracingCtx, tenant, trackedSeries.timeSeries)
-	if err != nil {
-		span.SetTag("error", true)
-		span.SetTag("error.msg", err.Error())
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination, tenant)
-		return
+	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
+	for _, ts := range trackedSeries.timeSeries {
+		var tenant = tenantHTTP
+		if h.splitTenantLabelName != "" {
+			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+			if tnt := lbls.Get(h.splitTenantLabelName); tnt != "" {
+				tenant = tnt
+			}
+		}
+		tenantSeriesMapping[tenant] = append(tenantSeriesMapping[tenant], ts)
+	}
+
+	for tenant, series := range tenantSeriesMapping {
+		err := h.writer.Write(tracingCtx, tenant, series)
+		if err != nil {
+			span.SetTag("error", true)
+			span.SetTag("error.msg", err.Error())
+			responses <- newWriteResponse(trackedSeries.seriesIDs, err, writeDestination, tenant)
+			return
+		}
 	}
 	responses <- newWriteResponse(trackedSeries.seriesIDs, nil, writeDestination, "")
 
@@ -1176,8 +1139,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
-	// gRPC calls don't have scope header, so pass empty string.
-	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, "", &prompb.WriteRequest{Timeseries: r.Timeseries})
+	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}

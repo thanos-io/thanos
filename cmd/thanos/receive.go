@@ -310,7 +310,6 @@ func runReceive(
 		Endpoint:                conf.endpoint,
 		TenantHeader:            conf.tenantHeader,
 		TenantField:             conf.tenantField,
-		ScopeHeader:             conf.scopeHeader,
 		DefaultTenantID:         conf.defaultTenantID,
 		ReplicaHeader:           conf.replicaHeader,
 		ReplicationFactor:       conf.replicationFactor,
@@ -1036,7 +1035,6 @@ type receiveConfig struct {
 	endpoint            string
 	tenantHeader        string
 	tenantField         string
-	scopeHeader         string
 	tenantLabelName     string
 	defaultTenantID     string
 	replicaHeader       string
@@ -1153,8 +1151,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.tenant-header", "HTTP header to determine tenant for write requests.").Default(tenancy.DefaultTenantHeader).StringVar(&rc.tenantHeader)
 
 	cmd.Flag("receive.tenant-certificate-field", "Use TLS client's certificate field to determine tenant for write requests. Must be one of "+tenancy.CertificateFieldOrganization+", "+tenancy.CertificateFieldOrganizationalUnit+" or "+tenancy.CertificateFieldCommonName+". This setting will cause the receive.tenant-header flag value to be ignored.").Default("").EnumVar(&rc.tenantField, "", tenancy.CertificateFieldOrganization, tenancy.CertificateFieldOrganizationalUnit, tenancy.CertificateFieldCommonName)
-
-	cmd.Flag("receive.scope-header", "HTTP header to determine scope for write requests. Used for Pantheon-based tenant attribution.").Default(tenancy.DefaultScopeHeader).StringVar(&rc.scopeHeader)
 
 	cmd.Flag("receive.default-tenant-id", "Default tenant ID to use when none is provided via a header.").Default(tenancy.DefaultTenant).StringVar(&rc.defaultTenantID)
 
