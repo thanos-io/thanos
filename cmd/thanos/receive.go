@@ -1089,22 +1089,22 @@ type receiveConfig struct {
 	compression         string
 	replicationProtocol string
 
-	tsdbMinBlockDuration         *model.Duration
-	tsdbMaxBlockDuration         *model.Duration
-	tsdbTooFarInFutureTimeWindow *model.Duration
-	tsdbOutOfOrderTimeWindow     *model.Duration
-	tsdbOutOfOrderCapMax         int64
-	tsdbAllowOverlappingBlocks   bool
-	tsdbMaxExemplars             int64
-	tsdbMaxBytes                 units.Base2Bytes
-	tsdbWriteQueueSize           int64
-	tsdbMemorySnapshotOnShutdown bool
-	tsdbDisableFlushOnShutdown   bool
-	tsdbEnableNativeHistograms   bool
-	tsdbEnableTenantPathPrefix        bool
-	tsdbPathSegmentsBeforeTenant      []string
-	tsdbHeadChunksWriteBufferSize     int
-	tsdbStripeSize                    int
+	tsdbMinBlockDuration          *model.Duration
+	tsdbMaxBlockDuration          *model.Duration
+	tsdbTooFarInFutureTimeWindow  *model.Duration
+	tsdbOutOfOrderTimeWindow      *model.Duration
+	tsdbOutOfOrderCapMax          int64
+	tsdbAllowOverlappingBlocks    bool
+	tsdbMaxExemplars              int64
+	tsdbMaxBytes                  units.Base2Bytes
+	tsdbWriteQueueSize            int64
+	tsdbMemorySnapshotOnShutdown  bool
+	tsdbDisableFlushOnShutdown    bool
+	tsdbEnableNativeHistograms    bool
+	tsdbEnableTenantPathPrefix    bool
+	tsdbPathSegmentsBeforeTenant  []string
+	tsdbHeadChunksWriteBufferSize int
+	tsdbStripeSize                int
 
 	walCompression       bool
 	noLockFile           bool
