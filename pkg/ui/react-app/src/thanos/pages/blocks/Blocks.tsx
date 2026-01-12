@@ -22,7 +22,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
 const daySeconds = 24 * 60 * 60;
 
-const rangeSteps = [1, 7, 30, 180, 360, 720].map((s) => s * daySeconds * 1000);
+const rangeSteps = [1, 7, 30, 180, 360, 720, 1440].map((s) => s * daySeconds * 1000);
 
 export interface BlockListProps {
   blocks: Block[];
@@ -105,7 +105,6 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     setRange(newRange);
     setRangeInput(formatDuration(newRange));
 
-    // Update the view
     setViewTime(times);
   };
 
@@ -123,7 +122,7 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     if (newEndTime == null) {
       newEndTime = gridMaxTime;
     }
-    // Cap the end time to gridMaxTime
+    // Cap the end time to gridMaxTime.
     const cappedEndTime = Math.min(newEndTime, gridMaxTime);
     setEndTime(cappedEndTime);
     updateTimeRange(cappedEndTime, range);
