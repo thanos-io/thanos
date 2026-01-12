@@ -21,8 +21,6 @@ type contextKey int
 const (
 	// DefaultTenantHeader is the default header used to designate the tenant making a request.
 	DefaultTenantHeader = "THANOS-TENANT"
-	// DefaultScopeHeader is the default header used to designate the scope making a request.
-	DefaultScopeHeader = "THANOS-SCOPE"
 	// DefaultTenant is the default value used for when no tenant is passed via the tenant header.
 	DefaultTenant = "default-tenant"
 	// DefaultTenantLabel is the default label-name with which the tenant is announced in stored metrics.
@@ -71,15 +69,6 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 		return "", err
 	}
 	return tenant, nil
-}
-
-// GetScopeFromHTTP extracts the scope from a http.Request object.
-func GetScopeFromHTTP(r *http.Request, scopeHeader string) string {
-	scope := r.Header.Get(scopeHeader)
-	if scope == "" {
-		scope = r.Header.Get(DefaultScopeHeader)
-	}
-	return scope
 }
 
 type roundTripperFunc func(*http.Request) (*http.Response, error)
