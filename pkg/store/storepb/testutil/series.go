@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -295,6 +296,14 @@ func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetHints() != nil {
 		s.HintsSet = append(s.HintsSet, r.GetHints())
+		return nil
+	}
+
+	if r.GetBatch() != nil {
+		batch := *r.GetBatch()
+		s.SeriesSet = slices.Grow(s.SeriesSet, len(batch.Series))
+		s.SeriesSet = append(s.SeriesSet, batch.Series...)
+
 		return nil
 	}
 	// Unsupported field, skip.
