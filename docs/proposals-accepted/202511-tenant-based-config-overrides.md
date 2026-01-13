@@ -61,30 +61,38 @@ compactor:
   concurrency: 4 # --compact.concurrency=4
   delete_delay: 48h # --delete-delay=48h
 
-# tenant-specific configs
-tenant_overrides:
-  default:
+# data-specific configs
+config_overrides:
+  - action: keep
+    regex: "tenant-a"
+    source_labels:
+      - "tenant_id"
     compactor:
       retention:
-        resolution_raw: 180d
-        resolution_5m: 90d
-        resolution_1h: 0d
+        resolution_raw: 90d
 
-  tenants:
-    tenant-a:
-      compactor:
-        retention:
-          resolution_raw: 90d
+  - action: keep
+    regex: "tenant-b"
+    source_labels:
+      - "tenant_id"
+    compactor:
+      retention:
+        resolution_raw: 5d
+        resolution_5m: 10d
+      delete_delay: 12h
 
-    tenant-b:
-      compactor:
-        retention:
-          resolution_raw: 5d
-          resolution_5m: 10d
-        delete_delay: 12h
+  - action: keep
+    regex: "dev-*"
+    source_labels:
+      - "cluster"
+    compactor:
+      retention:
+        resolution_raw: 1d
+        resolution_5m: 5d
+      delete_delay: 12h
 
     # future:
-    #   receive:
+    #   receive: # (obsolete?)
     #     max_series_per_tenant: 
     #     max_ingest_samples_per_second: 
 
@@ -94,10 +102,9 @@ tenant_overrides:
 ```
 
 **Key principles:**
-- `default` defines the baseline configuration for all tenants.
-- Each tenant ID in `tenants` provides overrides for one or more fields.
+- Components `default` configuration block defines the baseline configuration for all tenants.
+- Inside `config_overrides`, required overrides can be specified on a per-label basis using regex matching.
 - Unspecified fields inherit from `default` or the component’s global config.
-- Tenant IDs map to existing tenant identifiers in Thanos block metadata (e.g., `__tenant_id__`).
 
 ### Parameters Potentially Overridable
 
@@ -115,18 +122,18 @@ tenant_overrides:
 ### Runtime Behavior
 
 1. On startup, the component loads the base configuration.
-2. It parses `tenant_overrides` and stores them in memory.
-3. For each tenant operation (e.g., block compaction), the component:
-   - Determines the tenant ID from metadata.
-   - Merges the `default` config with that tenant’s overrides.
+2. It parses `config_overrides` and stores them in memory.
+3. For each operation (e.g., block compaction), the component:
+   - Determines the relevant labels from metadata.
+   - Merges the `default` config with the labels' overrides.
    - Applies the effective configuration.
-4. If no tenant override exists, defaults apply unchanged.
+4. If no override exists, defaults apply unchanged.
 5. Optional: expose applied overrides as metrics/log entries.
 
 ### Example Log Line
 
 ```
-level=info component=compact msg="Applied tenant override" tenant="tenant-a" resolution_raw="90d" concurrency="1"
+level=info component=compact msg="Applied config override" source_labels="cluster" regex="dev-*" resolution_raw="1d" concurrency="1"
 ```
 
 ---
@@ -149,7 +156,7 @@ level=info component=compact msg="Applied tenant override" tenant="tenant-a" res
    - Confirm tenant identification mechanism.
 2. **Implementation (Phase 1 – Compactor)**
    - Extend compactor config struct.
-   - Implement `TenantOverrides` parsing and merging logic.
+   - Implement `ConfigOverrides` parsing and merging logic.
    - Integrate into retention and compaction scheduling.
 3. **Testing**
    - Unit tests for override resolution.
@@ -167,6 +174,4 @@ level=info component=compact msg="Applied tenant override" tenant="tenant-a" res
 
 - Support dynamic override reloads via API or file watcher.
 - Extend to query-level or ingestion-level limits.
-- Add wildcard or regex-based tenant matching (`tenant-*`).
 - Provide observability via `/metrics` and `/config` endpoints.
-- Explore integration with external tenant metadata sources.
