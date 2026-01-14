@@ -51,8 +51,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
-	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
 
@@ -354,22 +354,26 @@ func runSidecar(
 		statusSrv := status.NewServer(
 			component.Sidecar.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
-					// Sidecar proxies TSDB stats from Prometheus HTTP API.
 					ctx, cancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 					defer cancel()
 
-					// Check if tenantID is included in external labels as tenant_id.
-					// If not, return nil as response.
+					// Check if external labels match the provided matchers.
 					extLabels := m.Labels()
-					if tenantID != "" {
-						tenantLabelValue := extLabels.Get(tenancy.DefaultTenantLabel)
-						if tenantLabelValue != tenantID {
-							return nil, nil
+					if len(matchers) > 0 {
+						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+						if err != nil {
+							return nil, errors.Wrap(err, "failed to convert matchers")
+						}
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								// External labels don't match, return empty result.
+								return nil, nil
+							}
 						}
 					}
 
@@ -379,7 +383,7 @@ func runSidecar(
 					}
 
 					result := map[string]tsdb.Stats{
-						tenantID: statsEntry.ToTSDBStats(limit),
+						"": statsEntry.ToTSDBStats(limit),
 					}
 					return result, nil
 				}),

@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -406,18 +407,38 @@ func runReceive(
 		statusSrv := status.NewServer(
 			component.Receive.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
-					var tenantIDs []string
-					if tenantID != "" {
-						tenantIDs = append(tenantIDs, tenantID)
+					var promMatchers []*labels.Matcher
+					if len(matchers) > 0 {
+						var err error
+						promMatchers, err = storepb.MatchersToPromMatchers(matchers...)
+						if err != nil {
+							return nil, errors.Wrap(err, "failed to convert matchers")
+						}
 					}
 
 					stats := map[string]tsdb.Stats{}
-					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+					// Get stats for all tenants and filter based on external labels matching.
+					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel) {
+						extLabels := labels.NewBuilder(lset).Set(conf.tenantLabelName, ts.Tenant).Labels()
+
+						if len(promMatchers) > 0 {
+							matches := true
+							for _, matcher := range promMatchers {
+								if !matcher.Matches(extLabels.Get(matcher.Name)) {
+									matches = false
+									break
+								}
+							}
+							if !matches {
+								continue
+							}
+						}
+
 						stats[ts.Tenant] = *ts.Stats
 					}
 

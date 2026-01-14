@@ -1649,6 +1649,10 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 	span, ctx := tracing.StartSpan(r.Context(), "tsdb_statistics_query_request")
 	defer span.Finish()
 
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}, func() {}
+	}
+
 	ps := storepb.PartialResponseStrategy_ABORT
 	if qapi.enableStatusPartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
@@ -1669,11 +1673,34 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 		limit = 10
 	}
 
+	// Parse user-provided matchers from URL parameters.
+	// This is a Thanos-only parameter, built as a superset of the same Prometheus API.
+	var matchers []storepb.LabelMatcher
+	for _, s := range r.Form[MatcherParam] {
+		ms, err := extpromql.ParseMetricSelector(s)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		parsed, err := storepb.PromMatchersToMatchers(ms...)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		matchers = append(matchers, parsed...)
+	}
+
+	// Append tenant matcher when tenancy is enabled.
 	var tenant string
 	if qapi.enforceTenancy {
 		tenant, err = tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		if tenant != "" {
+			matchers = append(matchers, storepb.LabelMatcher{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  qapi.tenantLabel,
+				Value: tenant,
+			})
 		}
 	}
 
@@ -1681,7 +1708,7 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("limit %d overflows int32", limit)}, func() {}
 	}
 	req := &statuspb.TSDBStatisticsRequest{
-		Tenant:                  tenant,
+		Matchers:                matchers,
 		Limit:                   int32(limit),
 		PartialResponseStrategy: ps,
 	}

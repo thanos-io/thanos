@@ -778,15 +778,29 @@ func runRule(
 		statusSrv := status.NewServer(
 			component.Rule.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
+					// Check if external labels match the provided matchers.
+					extLabels := conf.lset
+					if len(matchers) > 0 {
+						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+						if err != nil {
+							return nil, errors.Wrap(err, "failed to convert matchers")
+						}
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								// External labels don't match, return empty result.
+								return nil, nil
+							}
+						}
+					}
+
 					stats := tsdbDB.Head().Stats(labels.MetricName, limit)
-					// Stateful ruler doesn't have tenancy, so we just mirror request tenantID as a passthrough to return value.
 					result := map[string]tsdb.Stats{
-						tenantID: *stats,
+						"": *stats,
 					}
 					return result, nil
 				}),

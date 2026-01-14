@@ -14,6 +14,7 @@ import (
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -176,6 +177,28 @@ test_metric1{a="4", b="3"} 1`)
 
 			if len(stats.SeriesCountByMetricName) != 1 {
 				return errors.Errorf("expecting 1 metric name in SeriesCountByMetricName, got %d", len(stats.SeriesCountByMetricName))
+			}
+
+			return nil
+		}))
+
+		// Check with matcher filtering by external label receive="receive-1".
+		// This should return statistics only from the first receiver.
+		testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+			matcher := labels.MustNewMatcher(labels.MatchEqual, "receive", r1.Name())
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100, matcher)
+			if err != nil {
+				return err
+			}
+
+			// Only 1 receiver * (10 series for test_metric1 + 2*5 scrape metrics) = 20 series.
+			if stats.HeadStatistics.NumSeries != 20 {
+				return errors.Errorf("expecting 20 series with matcher receive=%s, got %d", r1.Name(), stats.HeadStatistics.NumSeries)
+			}
+
+			// test_metric1 should be the metric with the highest number of series (10 from one receiver).
+			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 10); err != nil {
+				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
 			return nil
@@ -390,6 +413,138 @@ test_metric1{a="4", b="3"} 1`)
 				return nil
 			}))
 		})
+	})
+
+	t.Run("sidecar", func(t *testing.T) {
+		/*
+			The sidecar suite tests TSDB status with Prometheus sidecars.
+
+			 ┌──────────────────┐   ┌──────────────────┐
+			 │ Prom + Sidecar 1 │   │ Prom + Sidecar 2 │
+			 └────────┬─────────┘   └────────┬─────────┘
+			          │                      │
+			         ┌▼──────────────────────▼┐
+			         │         Query          │
+			         └────────────────────────┘
+		*/
+		t.Parallel()
+
+		e, err := e2e.NewDockerEnvironment("sidecar-status")
+		testutil.Ok(t, err)
+		t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+		// Setup endpoints serving static metrics.
+		metrics1 := []byte(`
+# HELP test_metric A test metric
+# TYPE test_metric gauge
+test_metric1{a="1", b="1"} 1
+test_metric1{a="1", b="2"} 1
+test_metric1{a="2", b="1"} 1
+test_metric1{a="2", b="2"} 1
+test_metric1{a="3", b="1"} 1
+test_metric1{a="4", b="1"} 1`)
+		static1 := e2emon.NewStaticMetricsServer(e, "static1", metrics1)
+
+		metrics2 := []byte(`
+# HELP test_metric A test metric
+# TYPE test_metric gauge
+test_metric1{a="3", b="1"} 1
+test_metric1{a="4", b="1"} 1
+test_metric1{a="4", b="2"} 1
+test_metric1{a="4", b="3"} 1`)
+		static2 := e2emon.NewStaticMetricsServer(e, "static2", metrics2)
+
+		testutil.Ok(t, e2e.StartAndWaitReady(static1, static2))
+
+		// Setup Prometheus with sidecars.
+		// prom1 scrapes static1 (6 test_metric1 series + 5 scrape metrics).
+		// prom2 scrapes static2 (4 test_metric1 series + 5 scrape metrics).
+		prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "1",
+			e2ethanos.DefaultPromConfig("prom1", 0, "", "", static1.InternalEndpoint("http")),
+			"", e2ethanos.DefaultPrometheusImage(), "")
+		prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "2",
+			e2ethanos.DefaultPromConfig("prom2", 0, "", "", static2.InternalEndpoint("http")),
+			"", e2ethanos.DefaultPrometheusImage(), "")
+
+		testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
+
+		// Setup Thanos Query.
+		q := e2ethanos.NewQuerierBuilder(e, "query", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).
+			Init()
+		testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		t.Cleanup(cancel)
+
+		logger := log.NewLogfmtLogger(os.Stdout)
+
+		// Test basic TSDB status without matchers.
+		testutil.Ok(t, runutil.RetryWithLog(logger, 5*time.Second, ctx.Done(), func() error {
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100)
+			if err != nil {
+				return err
+			}
+
+			// prom1: 6 test_metric1 + 5 scrape metrics = 11 series.
+			// prom2: 4 test_metric1 + 5 scrape metrics = 9 series.
+			// Total = 20 series.
+			const expectedTotalSeries = 20
+			if err = assertHeadStatistics(stats, expectedTotalSeries); err != nil {
+				return err
+			}
+
+			// test_metric1 should be the metric with the highest number of series (6 + 4 = 10).
+			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 10); err != nil {
+				return errors.Wrap(err, "SeriesCountByMetricName[0]")
+			}
+
+			return nil
+		}))
+
+		// Test with matcher filtering by external label prometheus="prom1".
+		// This should return statistics only from the first sidecar.
+		testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+			matcher := labels.MustNewMatcher(labels.MatchEqual, "prometheus", "prom1")
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100, matcher)
+			if err != nil {
+				return err
+			}
+
+			// prom1: 6 test_metric1 + 5 scrape metrics = 11 series.
+			const expectedProm1Series = 11
+			if stats.HeadStatistics.NumSeries != expectedProm1Series {
+				return errors.Errorf("expecting %d series with matcher prometheus=prom1, got %d", expectedProm1Series, stats.HeadStatistics.NumSeries)
+			}
+
+			// test_metric1 should have 6 series from prom1.
+			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 6); err != nil {
+				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
+			}
+
+			return nil
+		}))
+
+		// Test with matcher filtering by external label prometheus="prom2".
+		testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+			matcher := labels.MustNewMatcher(labels.MatchEqual, "prometheus", "prom2")
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100, matcher)
+			if err != nil {
+				return err
+			}
+
+			// prom2: 4 test_metric1 + 5 scrape metrics = 9 series.
+			const expectedProm2Series = 9
+			if stats.HeadStatistics.NumSeries != expectedProm2Series {
+				return errors.Errorf("expecting %d series with matcher prometheus=prom2, got %d", expectedProm2Series, stats.HeadStatistics.NumSeries)
+			}
+
+			// test_metric1 should have 4 series from prom2.
+			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 4); err != nil {
+				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
+			}
+
+			return nil
+		}))
 	})
 }
 

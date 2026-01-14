@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/thanos/pkg/status/statuspb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -121,15 +122,15 @@ var _ = statuspb.StatusServer(&Server{})
 
 // TSDBStatisticsGetter is an interface to retrieve TSDB statistics.
 type TSDBStatisticsGetter interface {
-	// TSDBStatistics returns the TSDB statistics for the given tenant.
-	// When tenantID is empty, it returns statistics for all tenants.
-	TSDBStatistics(limit int, tenantID string) (map[string]tsdb.Stats, error)
+	// TSDBStatistics returns the TSDB statistics matching the given label matchers against external labels.
+	// When matchers is empty, it returns statistics for all TSDBs.
+	TSDBStatistics(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error)
 }
 
-type TSDBStatisticsGetterFunc func(int, string) (map[string]tsdb.Stats, error)
+type TSDBStatisticsGetterFunc func(int, []storepb.LabelMatcher) (map[string]tsdb.Stats, error)
 
-func (f TSDBStatisticsGetterFunc) TSDBStatistics(limit int, tenantID string) (map[string]tsdb.Stats, error) {
-	return f(limit, tenantID)
+func (f TSDBStatisticsGetterFunc) TSDBStatistics(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
+	return f(limit, matchers)
 }
 
 // NewServer creates a new server instance for the given component
@@ -140,7 +141,7 @@ func NewServer(
 ) *Server {
 	srv := &Server{
 		component: component,
-		tsdbStatisticsGetter: TSDBStatisticsGetterFunc(func(int, string) (map[string]tsdb.Stats, error) {
+		tsdbStatisticsGetter: TSDBStatisticsGetterFunc(func(int, []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 			return nil, errors.New("TSDB statistics not implemented")
 		}),
 	}
@@ -163,7 +164,7 @@ func WithTSDBStatisticsGetter(tsg TSDBStatisticsGetter) func(*Server) {
 
 // TSDBStatistics implements the statuspb.StatusServer interface.
 func (srv *Server) TSDBStatistics(r *statuspb.TSDBStatisticsRequest, s statuspb.Status_TSDBStatisticsServer) error {
-	tsdbStats, err := srv.tsdbStatisticsGetter.TSDBStatistics(int(r.Limit), r.Tenant)
+	tsdbStats, err := srv.tsdbStatisticsGetter.TSDBStatistics(int(r.Limit), r.Matchers)
 	if err != nil {
 		return err
 	}
