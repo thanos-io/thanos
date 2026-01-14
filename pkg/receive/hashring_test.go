@@ -12,6 +12,7 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/stretchr/testify/require"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -198,7 +199,7 @@ func TestHashringGet(t *testing.T) {
 			tenant: "t2",
 		},
 	} {
-		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg)
+		hs, err := NewMultiHashring(AlgorithmHashmod, 3, tc.cfg, prometheus.NewRegistry())
 		require.NoError(t, err)
 
 		h, err := hs.Get(tc.tenant, ts)
@@ -661,12 +662,195 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 		{
 			cfg:           []HashringConfig{{Endpoints: []Endpoint{{Address: "a", AZ: "1"}, {Address: "b", AZ: "2"}}}},
 			replicas:      2,
+			algorithm:     AlgorithmHashmod,
 			expectedError: "Hashmod algorithm does not support AZ aware hashring configuration. Either use Ketama or remove AZ configuration.",
 		},
 	} {
 		t.Run("", func(t *testing.T) {
-			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg)
+			_, err := NewMultiHashring(tt.algorithm, tt.replicas, tt.cfg, prometheus.NewRegistry())
 			require.EqualError(t, err, tt.expectedError)
+		})
+	}
+}
+
+func TestShuffleShardHashring(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		endpoints       []Endpoint
+		tenant          string
+		shuffleShardCfg ShuffleShardingConfig
+		err             string
+		usedNodes       int
+		nodeAddrs       map[string]struct{}
+	}{
+		{
+			usedNodes: 3,
+			name:      "ketama with shuffle sharding",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "tenant-1",
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:   []string{"special-tenant"},
+						ShardSize: 2,
+					},
+				},
+			},
+		},
+		{
+			usedNodes: 3,
+			name:      "ketama with glob tenant override",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "prefix-tenant",
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         3,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+		{
+			name: "big shard size",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-3"},
+				{Address: "node-6", AZ: "az-3"},
+			},
+			tenant: "prefix-tenant",
+			err:    `shard size 20 is larger than number of nodes in AZ`,
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         20,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+		{
+			name: "zone awareness disabled",
+			endpoints: []Endpoint{
+				{Address: "node-1", AZ: "az-1"},
+				{Address: "node-2", AZ: "az-1"},
+				{Address: "node-3", AZ: "az-2"},
+				{Address: "node-4", AZ: "az-2"},
+				{Address: "node-5", AZ: "az-2"},
+				{Address: "node-6", AZ: "az-2"},
+				{Address: "node-7", AZ: "az-3"},
+				{Address: "node-8", AZ: "az-3"},
+			},
+			tenant:    "prefix-tenant",
+			usedNodes: 3,
+			// Note: We don't check specific nodeAddrs here because the consistent
+			// hashing algorithm may select different nodes than the old Fisher-Yates
+			// shuffle. What matters is: (1) exactly 3 nodes are used, and (2) the
+			// selection is stable when scaling (tested in TestShuffleShardHashringStability).
+			shuffleShardCfg: ShuffleShardingConfig{
+				ShardSize:             1,
+				ZoneAwarenessDisabled: true,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						Tenants:           []string{"prefix*"},
+						ShardSize:         3,
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var baseRing Hashring
+			var err error
+
+			baseRing, err = newKetamaHashring(tc.endpoints, SectionsPerNode, 2)
+			require.NoError(t, err)
+
+			// Create the shuffle shard hashring
+			shardRing, err := newShuffleShardHashring(baseRing, tc.shuffleShardCfg, 2, prometheus.NewRegistry(), "test")
+			require.NoError(t, err)
+
+			// Test that the shuffle sharding is consistent
+			usedNodes := make(map[string]struct{})
+
+			// We'll sample multiple times to ensure consistency
+			for i := 0; i < 100; i++ {
+				ts := &prompb.TimeSeries{
+					Labels: []labelpb.ZLabel{
+						{
+							Name:  "iteration",
+							Value: fmt.Sprintf("%d", i),
+						},
+					},
+				}
+
+				h, err := shardRing.GetN(tc.tenant, ts, 0)
+				if tc.err != "" {
+					require.Error(t, err)
+					require.Contains(t, err.Error(), tc.err)
+					return
+				}
+				require.NoError(t, err)
+				usedNodes[h.Address] = struct{}{}
+			}
+
+			require.Len(t, usedNodes, tc.usedNodes)
+			if tc.nodeAddrs != nil {
+				require.Len(t, usedNodes, len(tc.nodeAddrs))
+				require.Equal(t, tc.nodeAddrs, usedNodes)
+			}
+
+			// Test consistency - same tenant should always get same nodes.
+			for trial := 0; trial < 50; trial++ {
+				trialNodes := make(map[string]struct{})
+
+				for i := 0; i < 10+trial; i++ {
+					ts := &prompb.TimeSeries{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "iteration",
+								Value: fmt.Sprintf("%d", i),
+							},
+							{
+								Name:  "trial",
+								Value: fmt.Sprintf("%d", trial),
+							},
+						},
+					}
+
+					h, err := shardRing.GetN(tc.tenant, ts, 0)
+					require.NoError(t, err)
+					trialNodes[h.Address] = struct{}{}
+				}
+
+				// Same tenant should get same set of nodes in every trial
+				require.Equal(t, usedNodes, trialNodes, "Inconsistent node sharding between trials")
+			}
 		})
 	}
 }
@@ -721,4 +905,144 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 	}
 
 	return assignments, nil
+}
+
+// TestShuffleShardHashringStability tests that shuffle sharding is stable when
+// adding/removing nodes. When scaling from N to N+1 nodes, at most 1 node should
+// change in a tenant's shard (the "consistency" property).
+func TestShuffleShardHashringStability(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name           string
+		initialNodes   int
+		scaledNodes    int
+		shardSize      int
+		numTenants     int
+		maxAllowedDiff int // max number of nodes that can change per tenant
+	}{
+		{
+			name:           "scale up 10 to 11, shard size 5",
+			initialNodes:   10,
+			scaledNodes:    11,
+			shardSize:      5,
+			numTenants:     100,
+			maxAllowedDiff: 1, // ideally at most 1 node should change
+		},
+		{
+			name:           "scale up 20 to 21, shard size 5",
+			initialNodes:   20,
+			scaledNodes:    21,
+			shardSize:      5,
+			numTenants:     100,
+			maxAllowedDiff: 1,
+		},
+		{
+			name:           "scale down 11 to 10, shard size 5",
+			initialNodes:   11,
+			scaledNodes:    10,
+			shardSize:      5,
+			numTenants:     100,
+			maxAllowedDiff: 1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create initial endpoints
+			initialEndpoints := make([]Endpoint, tc.initialNodes)
+			for i := 0; i < tc.initialNodes; i++ {
+				initialEndpoints[i] = Endpoint{Address: fmt.Sprintf("node-%d", i)}
+			}
+
+			// Create scaled endpoints
+			scaledEndpoints := make([]Endpoint, tc.scaledNodes)
+			for i := 0; i < tc.scaledNodes; i++ {
+				scaledEndpoints[i] = Endpoint{Address: fmt.Sprintf("node-%d", i)}
+			}
+
+			shuffleShardCfg := ShuffleShardingConfig{
+				ShardSize:             tc.shardSize,
+				ZoneAwarenessDisabled: true,
+			}
+
+			// Create initial hashring
+			initialBaseRing, err := newKetamaHashring(initialEndpoints, SectionsPerNode, 1)
+			require.NoError(t, err)
+			initialShardRing, err := newShuffleShardHashring(initialBaseRing, shuffleShardCfg, 1, prometheus.NewRegistry(), "test-initial")
+			require.NoError(t, err)
+
+			// Create scaled hashring
+			scaledBaseRing, err := newKetamaHashring(scaledEndpoints, SectionsPerNode, 1)
+			require.NoError(t, err)
+			scaledShardRing, err := newShuffleShardHashring(scaledBaseRing, shuffleShardCfg, 1, prometheus.NewRegistry(), "test-scaled")
+			require.NoError(t, err)
+
+			totalDiffs := 0
+			tenantsWithMoreThanOneDiff := 0
+
+			for tenantID := 0; tenantID < tc.numTenants; tenantID++ {
+				tenant := fmt.Sprintf("tenant-%d", tenantID)
+
+				// Get nodes used by this tenant in initial ring
+				initialNodes := getTenantNodes(t, initialShardRing, tenant, tc.shardSize)
+
+				// Get nodes used by this tenant in scaled ring
+				scaledNodes := getTenantNodes(t, scaledShardRing, tenant, tc.shardSize)
+
+				// Count differences
+				added, removed := compareNodeSets(initialNodes, scaledNodes)
+				diff := max(len(added), len(removed))
+				totalDiffs += diff
+
+				if diff > tc.maxAllowedDiff {
+					tenantsWithMoreThanOneDiff++
+				}
+			}
+
+			avgDiff := float64(totalDiffs) / float64(tc.numTenants)
+			t.Logf("Average nodes changed per tenant: %.2f", avgDiff)
+			t.Logf("Tenants with more than %d node change: %d/%d", tc.maxAllowedDiff, tenantsWithMoreThanOneDiff, tc.numTenants)
+
+			// The stability requirement: when adding/removing 1 node,
+			// at most 1 node should change in each tenant's shard.
+			// If this fails, the shuffle sharding is unstable.
+			require.Zero(t, tenantsWithMoreThanOneDiff,
+				"Shuffle sharding is unstable: %d tenants had more than %d node change when scaling from %d to %d nodes",
+				tenantsWithMoreThanOneDiff, tc.maxAllowedDiff, tc.initialNodes, tc.scaledNodes)
+		})
+	}
+}
+
+// getTenantNodes returns the set of nodes used by a tenant's shard.
+func getTenantNodes(t *testing.T, ring *shuffleShardHashring, tenant string, shardSize int) map[string]struct{} {
+	nodes := make(map[string]struct{})
+
+	// Sample many time series to discover all nodes in the shard
+	for i := 0; i < 1000; i++ {
+		ts := &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{
+				{Name: "series", Value: fmt.Sprintf("%d", i)},
+			},
+		}
+		endpoint, err := ring.GetN(tenant, ts, 0)
+		require.NoError(t, err)
+		nodes[endpoint.Address] = struct{}{}
+	}
+
+	require.Len(t, nodes, shardSize, "tenant %s should use exactly %d nodes", tenant, shardSize)
+	return nodes
+}
+
+// compareNodeSets returns the nodes added and removed between two sets.
+func compareNodeSets(before, after map[string]struct{}) (added, removed []string) {
+	for node := range after {
+		if _, ok := before[node]; !ok {
+			added = append(added, node)
+		}
+	}
+	for node := range before {
+		if _, ok := after[node]; !ok {
+			removed = append(removed, node)
+		}
+	}
+	return
 }

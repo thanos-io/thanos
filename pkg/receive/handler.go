@@ -339,6 +339,8 @@ func (h *Handler) Hashring(hashring Hashring) {
 				level.Error(h.logger).Log("msg", "closing gRPC connection failed, we might have leaked a file descriptor", "addr", node, "err", err.Error())
 			}
 		}
+
+		h.hashring.Close()
 	}
 
 	h.hashring = hashring
