@@ -131,7 +131,7 @@ test_metric1{a="4", b="3"} 1`)
 
 			// test_metric1 should be the metric with the highest number of series and
 			// we expect 2*10 because each receiver should report 10 series.
-			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 20); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 20); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -197,7 +197,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (10 from one receiver).
-			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -321,7 +321,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 6 series exposed by static1.
-				if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 6); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -380,7 +380,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 4 series exposed by static2.
-				if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 4); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -494,7 +494,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (6 + 4 = 10).
-			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -517,7 +517,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 6 series from prom1.
-			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 6); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -539,7 +539,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 4 series from prom2.
-			if err = statisticEqual(stats.SeriesCountByMetricName[0], "test_metric1", 4); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -562,14 +562,14 @@ func statisticsContains(stats []statuspb.Statistic, name string, value uint64) e
 	return errors.Errorf("%s: not found", name)
 }
 
-// statisticEqual checks that the given stat matches the (name,value) tuple.
-func statisticEqual(stat statuspb.Statistic, name string, value uint64) error {
-	if stat.Name != name {
-		return errors.Errorf("expecting name %q, got %q", name, stat.Name)
+// testMetricStatisticEqual checks that the given stat matches the (name,value) tuple.
+func testMetricStatisticEqual(stat statuspb.Statistic, value uint64) error {
+	if stat.Name != "test_metric1" {
+		return errors.Errorf("expecting name test_metric1, got %q", stat.Name)
 	}
 
 	if stat.Value != value {
-		return errors.Errorf("expecting value %d for name %q, got %d", value, name, stat.Value)
+		return errors.Errorf("expecting value %d for name test_metric1, got %d", value, stat.Value)
 	}
 
 	return nil
