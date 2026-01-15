@@ -5,6 +5,7 @@ package storecache
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-kit/log"
@@ -86,7 +87,7 @@ func (c *RemoteIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []
 	c.dataSizeBytes.WithLabelValues(CacheTypePostings, tenant).Observe(float64(len(v)))
 	key := CacheKey{blockID.String(), CacheKeyPostings(l), c.compressionScheme}.String()
 	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
-		level.Error(c.logger).Log("msg", "failed to cache postings in memcached", "err", err)
+		level.Error(c.logger).Log("msg", fmt.Sprintf("failed to cache postings in %s", c.memcached.Name()), "err", err)
 	}
 }
 
@@ -139,7 +140,7 @@ func (c *RemoteIndexCache) StoreExpandedPostings(blockID ulid.ULID, keys []*labe
 	key := CacheKey{blockID.String(), CacheKeyExpandedPostings(LabelMatchersToString(keys)), c.compressionScheme}.String()
 
 	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
-		level.Error(c.logger).Log("msg", "failed to cache expanded postings in memcached", "err", err)
+		level.Error(c.logger).Log("msg", fmt.Sprintf("failed to cache expanded postings in %s", c.memcached.Name()), "err", err)
 	}
 }
 
@@ -173,7 +174,7 @@ func (c *RemoteIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, 
 	key := CacheKey{blockID.String(), CacheKeySeries(id), ""}.String()
 
 	if err := c.memcached.SetAsync(key, v, c.ttl); err != nil {
-		level.Error(c.logger).Log("msg", "failed to cache series in memcached", "err", err)
+		level.Error(c.logger).Log("msg", fmt.Sprintf("failed to cache series in %s", c.memcached.Name()), "err", err)
 	}
 }
 

@@ -78,6 +78,9 @@ type RemoteCacheClient interface {
 
 	// Stop client and release underlying resources.
 	Stop()
+
+	// Name identifies the client.
+	Name() string
 }
 
 // MemcachedClient for compatible.
@@ -378,6 +381,10 @@ func newMemcachedClient(
 
 func (c *memcachedClient) Stop() {
 	c.p.Stop()
+}
+
+func (c *memcachedClient) Name() string {
+	return c.name
 }
 
 func (c *memcachedClient) SetAsync(key string, value []byte, ttl time.Duration) error {

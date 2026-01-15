@@ -343,3 +343,7 @@ func (c *mockedMemcachedClient) SetAsync(key string, value []byte, ttl time.Dura
 func (c *mockedMemcachedClient) Stop() {
 	// Nothing to do.
 }
+
+func (c *mockedMemcachedClient) Name() string {
+	return "mock"
+}

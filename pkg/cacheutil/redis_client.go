@@ -144,6 +144,7 @@ func (c *RedisClientConfig) validate() error {
 
 type RedisClient struct {
 	client rueidis.Client
+	name   string
 
 	config RedisClientConfig
 
@@ -226,6 +227,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 
 	c := &RedisClient{
 		client: client,
+		name:   name,
 		config: config,
 		logger: logger,
 		p:      NewAsyncOperationProcessor(config.MaxAsyncBufferSize, config.MaxAsyncConcurrency),
@@ -321,6 +323,11 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 func (c *RedisClient) Stop() {
 	c.p.Stop()
 	c.client.Close()
+}
+
+// Name implement RemoteCacheClient.
+func (c *RedisClient) Name() string {
+	return c.name
 }
 
 // stringToBytes converts string to byte slice (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go).
