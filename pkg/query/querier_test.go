@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
@@ -49,7 +51,7 @@ func TestQueryableCreator_MaxResolution(t *testing.T) {
 	t.Parallel()
 
 	testProxy := &testStoreServer{resps: []*storepb.SeriesResponse{}}
-	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second, dedup.AlgorithmPenalty)
+	queryableCreator := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, 5*time.Second, dedup.AlgorithmPenalty, 1)
 
 	oneHourMillis := int64(1*time.Hour) / int64(time.Millisecond)
 	queryable := queryableCreator(
@@ -97,6 +99,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 		2,
 		timeout,
 		dedup.AlgorithmPenalty,
+		1,
 	)(false,
 		nil,
 		nil,
@@ -402,7 +405,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						g := gate.New(2)
 						mq := &mockedQueryable{
 							Creator: func(mint, maxt int64) storage.Querier {
-								return newQuerier(nil, mint, maxt, dedup.AlgorithmPenalty, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+								return newQuerier(nil, mint, maxt, dedup.AlgorithmPenalty, tcase.replicaLabels, nil, tcase.storeAPI, sc.dedup, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter, 1)
 							},
 						}
 						t.Cleanup(func() {
@@ -798,6 +801,7 @@ func TestQuerier_Select(t *testing.T) {
 					timeout,
 					nil,
 					NoopSeriesStatsReporter,
+					1,
 				)
 				t.Cleanup(func() { testutil.Ok(t, q.Close()) })
 
@@ -848,7 +852,7 @@ func newProxyStore(storeAPIs ...storepb.StoreServer) *store.ProxyStore {
 		}
 		cls[i] = &storetestutil.TestClient{
 			Name:        fmt.Sprintf("%v", i),
-			StoreClient: storepb.ServerAsClient(s),
+			StoreClient: storepb.ServerAsClient(s, atomic.Bool{}),
 			MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 			WithoutReplicaLabelsEnabled: withoutReplicaLabelsEnabled,
 		}
@@ -1077,7 +1081,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 100 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), false, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter, 1)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})
@@ -1147,7 +1151,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 
 		timeout := 5 * time.Second
 		g := gate.New(2)
-		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter)
+		q := newQuerier(logger, realSeriesWithStaleMarkerMint, realSeriesWithStaleMarkerMaxt, dedup.AlgorithmPenalty, []string{"replica"}, nil, newProxyStore(s), true, 0, true, false, g, timeout, nil, NoopSeriesStatsReporter, 1)
 		t.Cleanup(func() {
 			testutil.Ok(t, q.Close())
 		})

@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
@@ -192,7 +194,7 @@ func TestQueryEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
 		remoteEndpointsCreate: emptyRemoteEndpointsCreate,
 		queryCreate:           queryFactory,
 		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
@@ -537,7 +539,7 @@ func TestQueryExplainEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
 		remoteEndpointsCreate: emptyRemoteEndpointsCreate,
 		queryCreate:           queryFactory,
 		defaultEngine:         PromqlEnginePrometheus,
@@ -601,7 +603,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
 		remoteEndpointsCreate: emptyRemoteEndpointsCreate,
 		queryCreate:           queryFactory,
 		defaultEngine:         PromqlEnginePrometheus,
@@ -669,7 +671,7 @@ func TestQueryAnalyzeEndpoints(t *testing.T) {
 func newProxyStoreWithTSDBStore(db store.TSDBReader) *store.ProxyStore {
 	c := &storetestutil.TestClient{
 		Name:        "1",
-		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels())),
+		StoreClient: storepb.ServerAsClient(store.NewTSDBStore(nil, db, component.Query, labels.EmptyLabels()), atomic.Bool{}),
 		MinTime:     math.MinInt64, MaxTime: math.MaxInt64,
 	}
 
@@ -744,7 +746,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
 		remoteEndpointsCreate: emptyRemoteEndpointsCreate,
 		queryCreate:           queryFactory,
 		defaultEngine:         PromqlEnginePrometheus,
@@ -761,7 +763,7 @@ func TestMetadataEndpoints(t *testing.T) {
 		baseAPI: &baseAPI.BaseAPI{
 			Now: func() time.Time { return now },
 		},
-		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty),
+		queryableCreate:          query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
 		remoteEndpointsCreate:    emptyRemoteEndpointsCreate,
 		queryCreate:              queryFactory,
 		defaultEngine:            PromqlEnginePrometheus,
@@ -955,13 +957,13 @@ func TestMetadataEndpoints(t *testing.T) {
 			},
 			response: []string{"a"},
 		},
-		// Bad name parameter.
+		// UTF-8 label name.
 		{
 			endpoint: api.labelValues,
 			params: map[string]string{
-				"name": "not!!!allowed",
+				"name": "http.request.method",
 			},
-			errType: baseAPI.ErrorBadData,
+			response: []string{},
 		},
 		{
 			endpoint: api.series,

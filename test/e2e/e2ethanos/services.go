@@ -165,13 +165,14 @@ func NewPrometheusWithSidecarCustomImage(e e2e.Environment, name, promConfig, we
 	prom := NewPrometheus(e, name, promConfig, webConfig, promImage, enableFeatures...)
 
 	args := map[string]string{
-		"--debug.name":        fmt.Sprintf("sidecar-%v", name),
-		"--grpc-address":      ":9091",
-		"--grpc-grace-period": "0s",
-		"--http-address":      ":8080",
-		"--prometheus.url":    "http://" + prom.InternalEndpoint("http"),
-		"--tsdb.path":         prom.InternalDir(),
-		"--log.level":         "debug",
+		"--debug.name":                     fmt.Sprintf("sidecar-%v", name),
+		"--grpc-address":                   ":9091",
+		"--grpc-grace-period":              "0s",
+		"--http-address":                   ":8080",
+		"--prometheus.url":                 "http://" + prom.InternalEndpoint("http"),
+		"--tsdb.path":                      prom.InternalDir(),
+		"--log.level":                      "debug",
+		"--prometheus.get_config_interval": "1s",
 	}
 	if len(webConfig) > 0 {
 		args["--prometheus.http-client"] = defaultPromHttpConfig()
@@ -268,14 +269,16 @@ type QuerierBuilder struct {
 	externalPrefix string
 	image          string
 
-	storeAddresses          []string
-	proxyStrategy           string
-	disablePartialResponses bool
-	fileSDStoreAddresses    []string
-	envVars                 map[string]string
-	enableFeatures          []string
-	endpoints               []string
-	strictEndpoints         []string
+	storeAddresses           []string
+	proxyStrategy            string
+	disablePartialResponses  bool
+	fileSDStoreAddresses     []string
+	envVars                  map[string]string
+	enableFeatures           []string
+	endpoints                []string
+	strictEndpoints          []string
+	endpointGroups           []string
+	injectEndpointGroupAddrs []string
 
 	engine                                  apiv1.PromqlEngineType
 	queryMode                               string
@@ -283,6 +286,8 @@ type QuerierBuilder struct {
 	enableXFunctions                        bool
 	deduplicationFunc                       string
 	disabledFallback                        bool
+
+	seriesResponseBatchSize string
 
 	replicaLabels []string
 	tracingConfig string
@@ -388,8 +393,23 @@ func (q *QuerierBuilder) WithDisabledFallback() *QuerierBuilder {
 	return q
 }
 
+func (q *QuerierBuilder) WithResponseSeriesBatchSize(seriesResponseBatchSize string) *QuerierBuilder {
+	q.seriesResponseBatchSize = seriesResponseBatchSize
+	return q
+}
+
 func (q *QuerierBuilder) WithDistributedOverlap(overlap bool) *QuerierBuilder {
 	q.queryDistributedWithOverlappingInterval = overlap
+	return q
+}
+
+func (q *QuerierBuilder) WithEndpointGroups(endpointGroups ...string) *QuerierBuilder {
+	q.endpointGroups = endpointGroups
+	return q
+}
+
+func (q *QuerierBuilder) WithInjectEndpointGroupAddrs(fakeAddrs ...string) *QuerierBuilder {
+	q.injectEndpointGroupAddrs = fakeAddrs
 	return q
 }
 
@@ -467,22 +487,37 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.disablePartialResponses {
 		args = append(args, "--no-query.partial-response")
 	}
-	for _, addr := range q.endpoints {
-		args = append(args, "--endpoint="+addr)
+
+	for _, addr := range q.injectEndpointGroupAddrs {
+		args = append(args, "--inject-test-addresses="+addr)
 	}
-	for _, addr := range q.strictEndpoints {
-		args = append(args, "--endpoint-strict="+addr)
-	}
-	if len(q.fileSDStoreAddresses) > 0 {
+
+	if len(q.fileSDStoreAddresses) > 0 || len(q.endpoints) > 0 || len(q.strictEndpoints) > 0 || len(q.endpointGroups) > 0 {
 		if err := os.MkdirAll(q.Dir(), 0750); err != nil {
 			return nil, errors.Wrap(err, "create query dir failed")
 		}
 
-		type EndpointSpec struct{ Address string }
+		type EndpointSpec struct {
+			Address string
+			Strict  bool
+			Group   bool
+		}
 
 		endpoints := make([]EndpointSpec, 0)
 		for _, a := range q.fileSDStoreAddresses {
 			endpoints = append(endpoints, EndpointSpec{Address: a})
+		}
+
+		for _, a := range q.endpoints {
+			endpoints = append(endpoints, EndpointSpec{Address: a})
+		}
+
+		for _, a := range q.strictEndpoints {
+			endpoints = append(endpoints, EndpointSpec{Address: a, Strict: true})
+		}
+
+		for _, a := range q.endpointGroups {
+			endpoints = append(endpoints, EndpointSpec{Address: a, Group: true})
 		}
 
 		endpointSDConfig := struct {
@@ -530,6 +565,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.disabledFallback {
 		args = append(args, "--query.disable-fallback")
 	}
+	if q.seriesResponseBatchSize != "" {
+		args = append(args, "--query.series-response-batch-size="+q.seriesResponseBatchSize)
+	}
 	if q.queryDistributedWithOverlappingInterval {
 		args = append(args, "--query.distributed-with-overlapping-interval")
 	}
@@ -573,6 +611,7 @@ type ReceiveBuilder struct {
 	metaMonitoringQuery   string
 	hashringConfigs       []receive.HashringConfig
 	relabelConfigs        []*relabel.Config
+	artificialDelay       time.Duration
 	replication           int
 	image                 string
 	nativeHistograms      bool
@@ -629,6 +668,11 @@ func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive
 	return r
 }
 
+func (r *ReceiveBuilder) WithArtificialDelay(delay time.Duration) *ReceiveBuilder {
+	r.artificialDelay = delay
+	return r
+}
+
 func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
 	r.tenantSplitLabel = splitLabel
 	return r
@@ -678,6 +722,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.tenantSplitLabel != "" {
 		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
+	}
+
+	if r.artificialDelay > 0 {
+		args["--receive.artificial-max-delay"] = r.artificialDelay.String()
 	}
 
 	if len(r.labels) > 0 {

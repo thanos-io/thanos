@@ -19,16 +19,18 @@ var (
 )
 
 type builder struct {
-	resolveInterval time.Duration
-	provider        *Provider
-	logger          log.Logger
+	resolveInterval     time.Duration
+	provider            *Provider
+	logger              log.Logger
+	injectTestAddresses []string
 }
 
-func RegisterGRPCResolver(logger log.Logger, provider *Provider, interval time.Duration) {
+func RegisterGRPCResolver(logger log.Logger, provider *Provider, interval time.Duration, injectTestAddresses []string) {
 	grpcresolver.Register(&builder{
-		resolveInterval: interval,
-		provider:        provider,
-		logger:          logger,
+		resolveInterval:     interval,
+		provider:            provider,
+		logger:              logger,
+		injectTestAddresses: injectTestAddresses,
 	})
 }
 
@@ -37,13 +39,14 @@ func (b *builder) Scheme() string { return "thanos" }
 func (b *builder) Build(t grpcresolver.Target, cc grpcresolver.ClientConn, _ grpcresolver.BuildOptions) (grpcresolver.Resolver, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &resolver{
-		provider: b.provider,
-		target:   t.Endpoint(),
-		ctx:      ctx,
-		cancel:   cancel,
-		cc:       cc,
-		interval: b.resolveInterval,
-		logger:   b.logger,
+		provider:            b.provider,
+		target:              t.Endpoint(),
+		ctx:                 ctx,
+		cancel:              cancel,
+		cc:                  cc,
+		interval:            b.resolveInterval,
+		logger:              b.logger,
+		injectTestAddresses: b.injectTestAddresses,
 	}
 
 	// perform initial, synchronous resolution to populate the state.
@@ -67,8 +70,9 @@ type resolver struct {
 	cc       grpcresolver.ClientConn
 	interval time.Duration
 
-	wg     sync.WaitGroup
-	logger log.Logger
+	wg                  sync.WaitGroup
+	logger              log.Logger
+	injectTestAddresses []string
 }
 
 func (r *resolver) Close() {
@@ -85,6 +89,9 @@ func (r *resolver) resolve() error {
 }
 
 func (r *resolver) addresses() []string {
+	if len(r.injectTestAddresses) > 0 {
+		return r.injectTestAddresses
+	}
 	return r.provider.AddressesForHost(r.target)
 }
 

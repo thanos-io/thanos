@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
+
 	grpc_opentracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 
 	"github.com/thanos-io/thanos/pkg/losertree"
@@ -302,6 +304,8 @@ type lazyRespSet struct {
 	lastResp             *storepb.SeriesResponse
 
 	shardMatcher *storepb.ShardMatcher
+
+	donec chan struct{}
 }
 
 func (l *lazyRespSet) Empty() bool {
@@ -366,12 +370,13 @@ func (l *lazyRespSet) At() *storepb.SeriesResponse {
 
 func (l *lazyRespSet) Close() {
 	l.bufferedResponsesMtx.Lock()
-	defer l.bufferedResponsesMtx.Unlock()
-
 	l.closeSeries()
 	l.rb.close()
 	l.noMoreData = true
 	l.dataOrFinishEvent.Signal()
+	l.bufferedResponsesMtx.Unlock()
+
+	<-l.donec
 
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
@@ -404,6 +409,8 @@ func newLazyRespSet(
 		initialized:          false,
 		noMoreData:           false,
 		shardMatcher:         shardMatcher,
+
+		donec: make(chan struct{}),
 	}
 	respSet.storeLabels = make(map[string]struct{})
 	for _, ls := range storeLabelSets {
@@ -422,6 +429,8 @@ func newLazyRespSet(
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
 			l.span.Finish()
+
+			close(l.donec)
 		}()
 
 		numResponses := 0
@@ -482,7 +491,23 @@ func newLazyRespSet(
 				seriesStats.Count(resp.GetSeries())
 			}
 
+			if batch := resp.GetBatch(); batch != nil {
+				for _, series := range batch.Series {
+					seriesStats.Count(series)
+				}
+			}
+
 			l.bufferedResponsesMtx.Lock()
+			if batch := resp.GetBatch(); batch != nil {
+				for _, series := range batch.Series {
+					if l.rb.append(storepb.NewSeriesResponse(series)) {
+						l.dataOrFinishEvent.Signal()
+					}
+				}
+				l.bufferedResponsesMtx.Unlock()
+				return true
+			}
+
 			if l.rb.append(resp) {
 				l.dataOrFinishEvent.Signal()
 			}
@@ -734,6 +759,16 @@ func newEagerRespSet(
 				seriesStats.Count(resp.GetSeries())
 			}
 
+			if batch := resp.GetBatch(); batch != nil {
+				l.bufferedResponses = slices.Grow(l.bufferedResponses, len(batch.Series))
+				for _, series := range batch.Series {
+					seriesStats.Count(series)
+					l.bufferedResponses = append(l.bufferedResponses, storepb.NewSeriesResponse(series))
+				}
+
+				return true
+			}
+
 			l.bufferedResponses = append(l.bufferedResponses, resp)
 			return true
 		}
@@ -799,6 +834,7 @@ func (l *eagerRespSet) Close() {
 	if l.closeSeries != nil {
 		l.closeSeries()
 	}
+	l.wg.Wait()
 	l.shardMatcher.Close()
 	_ = l.cl.CloseSend()
 }

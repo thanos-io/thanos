@@ -35,6 +35,11 @@ import (
 )
 
 func TestCompactor_WriteSeries_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
