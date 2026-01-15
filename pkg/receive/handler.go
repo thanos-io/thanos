@@ -31,7 +31,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
-	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -930,14 +929,9 @@ func (h *Handler) distributeTimeseriesToReplicas(
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
 			if tenantLabel != "" {
-				tenant = tenantLabel
-
-				newLabels := labels.NewBuilder(lbls)
-				newLabels.Del(h.splitTenantLabelName)
-
-				ts.Labels = labelpb.ZLabelsFromPromLabels(
-					newLabels.Labels(),
-				)
+				tenant = h.splitTenantLabelName + ":" + tenantLabel
+			} else {
+				tenant = h.options.DefaultTenantID
 			}
 		}
 

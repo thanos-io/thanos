@@ -1874,13 +1874,13 @@ func TestDistributeSeries(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Len(t, remote, 1)
-	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries, 1)
-	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries, 1)
+	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}][tenantIDLabelName+":bar"].timeSeries, 1)
+	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}][tenantIDLabelName+":boo"].timeSeries, 1)
 
-	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries[0].Labels).Len())
-	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries[0].Labels).Len())
+	require.Equal(t, 2, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}][tenantIDLabelName+":bar"].timeSeries[0].Labels).Len())
+	require.Equal(t, 2, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}][tenantIDLabelName+":boo"].timeSeries[0].Labels).Len())
 
-	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
+	require.Equal(t, map[string]struct{}{tenantIDLabelName + ":bar": {}, tenantIDLabelName + ":boo": {}}, hr.seenTenants)
 }
 
 func TestHandlerFlippingHashrings(t *testing.T) {
