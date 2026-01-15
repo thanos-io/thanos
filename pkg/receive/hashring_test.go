@@ -1046,3 +1046,410 @@ func compareNodeSets(before, after map[string]struct{}) (added, removed []string
 	}
 	return
 }
+
+// makeK8sEndpoint creates an endpoint with K8s-style DNS name that has an extractable ordinal.
+func makeK8sEndpoint(podName string, ordinal int, az string) Endpoint {
+	return Endpoint{
+		Address: fmt.Sprintf("%s-%d.svc.test.svc.cluster.local:10901", podName, ordinal),
+		AZ:      az,
+	}
+}
+
+func TestAlignedOrdinalShardingBasic(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 5 ordinals each (15 total endpoints)
+	endpoints := make([]Endpoint, 0, 15)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	// Create aligned ketama base ring with RF=3 (one per AZ)
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	// Create shuffle shard hashring with aligned ordinal sharding enabled
+	cfg := ShuffleShardingConfig{
+		ShardSize:              2, // Select 2 ordinals -> 6 endpoints (2 * 3 AZs)
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-aligned")
+	require.NoError(t, err)
+
+	// Get the tenant shard
+	tenant := "test-tenant"
+	shard, err := shardRing.getTenantShardAligned(tenant)
+	require.NoError(t, err)
+
+	// Verify we got the right number of nodes (2 ordinals * 3 AZs = 6)
+	nodes := shard.Nodes()
+	require.Len(t, nodes, 6, "expected 6 endpoints (2 ordinals * 3 AZs)")
+
+	// Extract ordinals from each AZ and verify they're the same
+	ordinalsByAZ := make(map[string][]int)
+	for _, node := range nodes {
+		ordinalsByAZ[node.AZ] = append(ordinalsByAZ[node.AZ], extractOrdinalFromAddress(t, node.Address))
+	}
+
+	// Verify each AZ has exactly 2 ordinals
+	require.Len(t, ordinalsByAZ, 3, "expected 3 AZs")
+	for az, ordinals := range ordinalsByAZ {
+		require.Len(t, ordinals, 2, "AZ %s should have 2 ordinals", az)
+	}
+
+	// Verify all AZs have the SAME ordinals (the key invariant)
+	var referenceOrdinals []int
+	for _, ordinals := range ordinalsByAZ {
+		if referenceOrdinals == nil {
+			referenceOrdinals = ordinals
+		} else {
+			require.ElementsMatch(t, referenceOrdinals, ordinals,
+				"all AZs should have the same ordinals for aligned ordinal sharding")
+		}
+	}
+
+	t.Logf("Selected ordinals: %v", referenceOrdinals)
+}
+
+func TestAlignedOrdinalShardingConsistency(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 5 ordinals each
+	endpoints := make([]Endpoint, 0, 15)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	cfg := ShuffleShardingConfig{
+		ShardSize:              2,
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-consistency")
+	require.NoError(t, err)
+
+	// Verify same tenant always gets same ordinals across multiple calls
+	tenant := "consistent-tenant"
+	var firstOrdinals []int
+
+	for trial := 0; trial < 10; trial++ {
+		shard, err := shardRing.getTenantShardAligned(tenant)
+		require.NoError(t, err)
+
+		currentOrdinals := extractOrdinalsFromShard(t, shard)
+		if firstOrdinals == nil {
+			firstOrdinals = currentOrdinals
+		} else {
+			require.Equal(t, firstOrdinals, currentOrdinals,
+				"same tenant should always get same ordinals")
+		}
+	}
+}
+
+func TestAlignedOrdinalShardingDifferentTenants(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 10 ordinals each to have enough spread
+	endpoints := make([]Endpoint, 0, 30)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 10; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	cfg := ShuffleShardingConfig{
+		ShardSize:              3, // Select 3 ordinals
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-diff-tenants")
+	require.NoError(t, err)
+
+	// Different tenants should (likely) get different ordinals
+	tenantOrdinals := make(map[string][]int)
+	numTenants := 20
+
+	for i := 0; i < numTenants; i++ {
+		tenant := fmt.Sprintf("tenant-%d", i)
+		shard, err := shardRing.getTenantShardAligned(tenant)
+		require.NoError(t, err)
+		tenantOrdinals[tenant] = extractOrdinalsFromShard(t, shard)
+	}
+
+	// Count unique ordinal sets
+	uniqueSets := make(map[string]int)
+	for _, ordinals := range tenantOrdinals {
+		key := fmt.Sprintf("%v", ordinals)
+		uniqueSets[key]++
+	}
+
+	// With 10 ordinals choosing 3, there are C(10,3)=120 possible combinations
+	// We expect multiple unique sets across 20 tenants
+	t.Logf("Unique ordinal sets: %d out of %d tenants", len(uniqueSets), numTenants)
+	require.Greater(t, len(uniqueSets), 1, "different tenants should get different ordinal sets")
+}
+
+func TestAlignedOrdinalShardingPreservesAlignment(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 5 ordinals each
+	endpoints := make([]Endpoint, 0, 15)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	cfg := ShuffleShardingConfig{
+		ShardSize:              2,
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-preserves")
+	require.NoError(t, err)
+
+	tenant := "alignment-test-tenant"
+
+	// Use GetN to get replicas and verify they're aligned (same ordinal across AZs)
+	for i := 0; i < 100; i++ {
+		ts := &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{
+				{Name: "series", Value: fmt.Sprintf("series-%d", i)},
+			},
+		}
+
+		// Get all 3 replicas (RF=3)
+		var replicas []Endpoint
+		for n := uint64(0); n < 3; n++ {
+			ep, err := shardRing.GetN(tenant, ts, n)
+			require.NoError(t, err)
+			replicas = append(replicas, ep)
+		}
+
+		// Verify all 3 replicas have the same ordinal but different AZs
+		ordinals := make(map[int]struct{})
+		azsSeen := make(map[string]struct{})
+		for _, ep := range replicas {
+			ordinals[extractOrdinalFromAddress(t, ep.Address)] = struct{}{}
+			azsSeen[ep.AZ] = struct{}{}
+		}
+
+		require.Len(t, ordinals, 1, "all replicas should have the same ordinal for series %d", i)
+		require.Len(t, azsSeen, 3, "replicas should span all 3 AZs for series %d", i)
+	}
+}
+
+// TestAlignedOrdinalShardingDataDistribution verifies the key behavior:
+// - With shard_size=2, tenant gets 2 ordinals (e.g., ordinals 1 and 4)
+// - Series are distributed across both ordinals
+// - a-1, b-1, c-1 always receive the same series (aligned replicas for ordinal 1)
+// - a-4, b-4, c-4 always receive the same series (aligned replicas for ordinal 4)
+// - Series assigned to ordinal 1 are different from series assigned to ordinal 4.
+func TestAlignedOrdinalShardingDataDistribution(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 5 ordinals each
+	endpoints := make([]Endpoint, 0, 15)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	cfg := ShuffleShardingConfig{
+		ShardSize:              2, // Select 2 ordinals
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-distribution")
+	require.NoError(t, err)
+
+	tenant := "distribution-test-tenant"
+
+	// First, get the tenant's selected ordinals
+	shard, err := shardRing.getTenantShardAligned(tenant)
+	require.NoError(t, err)
+	selectedOrdinals := extractOrdinalsFromShard(t, shard)
+	require.Len(t, selectedOrdinals, 2, "tenant should have exactly 2 ordinals")
+	t.Logf("Tenant's selected ordinals: %v", selectedOrdinals)
+
+	// Track which series go to which ordinal
+	// Key: ordinal, Value: set of series indices
+	seriesByOrdinal := make(map[int]map[int]struct{})
+	for _, ord := range selectedOrdinals {
+		seriesByOrdinal[ord] = make(map[int]struct{})
+	}
+
+	// Track which endpoints receive which series
+	// Key: endpoint address, Value: set of series indices
+	seriesByEndpoint := make(map[string]map[int]struct{})
+
+	// Generate many series and track their distribution
+	numSeries := 1000
+	for i := 0; i < numSeries; i++ {
+		ts := &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{
+				{Name: "series", Value: fmt.Sprintf("series-%d", i)},
+				{Name: "__name__", Value: "test_metric"},
+			},
+		}
+
+		// Get all 3 replicas
+		var replicas []Endpoint
+		for n := uint64(0); n < 3; n++ {
+			ep, err := shardRing.GetN(tenant, ts, n)
+			require.NoError(t, err)
+			replicas = append(replicas, ep)
+
+			// Track series per endpoint
+			if seriesByEndpoint[ep.Address] == nil {
+				seriesByEndpoint[ep.Address] = make(map[int]struct{})
+			}
+			seriesByEndpoint[ep.Address][i] = struct{}{}
+		}
+
+		// All replicas should have the same ordinal
+		ordinal := extractOrdinalFromAddress(t, replicas[0].Address)
+		for _, ep := range replicas[1:] {
+			epOrdinal := extractOrdinalFromAddress(t, ep.Address)
+			require.Equal(t, ordinal, epOrdinal, "all replicas for series %d should have same ordinal", i)
+		}
+
+		// Track which ordinal this series went to
+		seriesByOrdinal[ordinal][i] = struct{}{}
+	}
+
+	// Verify 1: Series are distributed across BOTH ordinals (not just one)
+	for ord, series := range seriesByOrdinal {
+		t.Logf("Ordinal %d received %d series", ord, len(series))
+		require.Greater(t, len(series), 0, "ordinal %d should receive some series", ord)
+	}
+
+	// Verify 2: Same ordinal across different AZs receives the SAME series
+	// Group endpoints by ordinal
+	endpointsByOrdinal := make(map[int][]string)
+	for addr := range seriesByEndpoint {
+		ord := extractOrdinalFromAddress(t, addr)
+		endpointsByOrdinal[ord] = append(endpointsByOrdinal[ord], addr)
+	}
+
+	for ord, addrs := range endpointsByOrdinal {
+		if len(addrs) < 2 {
+			continue
+		}
+		// All endpoints with the same ordinal should have received the exact same series
+		referenceSeries := seriesByEndpoint[addrs[0]]
+		for _, addr := range addrs[1:] {
+			otherSeries := seriesByEndpoint[addr]
+			require.Equal(t, len(referenceSeries), len(otherSeries),
+				"endpoints with ordinal %d should have same number of series", ord)
+			for seriesIdx := range referenceSeries {
+				_, ok := otherSeries[seriesIdx]
+				require.True(t, ok,
+					"series %d should be on all endpoints with ordinal %d", seriesIdx, ord)
+			}
+		}
+		t.Logf("Verified: All %d endpoints with ordinal %d have identical %d series",
+			len(addrs), ord, len(referenceSeries))
+	}
+
+	// Verify 3: Different ordinals receive DIFFERENT series (no overlap)
+	ordinalList := make([]int, 0, len(seriesByOrdinal))
+	for ord := range seriesByOrdinal {
+		ordinalList = append(ordinalList, ord)
+	}
+	if len(ordinalList) >= 2 {
+		series1 := seriesByOrdinal[ordinalList[0]]
+		series2 := seriesByOrdinal[ordinalList[1]]
+		for seriesIdx := range series1 {
+			_, overlap := series2[seriesIdx]
+			require.False(t, overlap,
+				"series %d should not be on both ordinal %d and ordinal %d",
+				seriesIdx, ordinalList[0], ordinalList[1])
+		}
+		t.Logf("Verified: Ordinals %d and %d have no overlapping series", ordinalList[0], ordinalList[1])
+	}
+}
+
+func TestAlignedOrdinalShardingValidation(t *testing.T) {
+	t.Parallel()
+
+	endpoints := make([]Endpoint, 0, 15)
+	azs := []string{"az-a", "az-b", "az-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, makeK8sEndpoint("pod-"+az, ord, az))
+		}
+	}
+
+	baseRing, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	// Test shard size exceeding available ordinals
+	cfg := ShuffleShardingConfig{
+		ShardSize:              10, // Only 5 ordinals available
+		AlignedOrdinalSharding: true,
+	}
+	shardRing, err := newShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test-validation")
+	require.NoError(t, err)
+
+	_, err = shardRing.getTenantShardAligned("test-tenant")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds available common ordinals")
+}
+
+// Helper function to extract ordinal from K8s-style address.
+func extractOrdinalFromAddress(t *testing.T, address string) int {
+	t.Helper()
+	// Address format: pod-az-N.svc.test.svc.cluster.local:10901
+	parts := strings.Split(address, ".")
+	require.Greater(t, len(parts), 0)
+	podPart := parts[0] // pod-az-N
+	lastDash := strings.LastIndex(podPart, "-")
+	require.Greater(t, lastDash, 0)
+	ordinalStr := podPart[lastDash+1:]
+	var ordinal int
+	_, err := fmt.Sscanf(ordinalStr, "%d", &ordinal)
+	require.NoError(t, err)
+	return ordinal
+}
+
+// Helper function to extract unique ordinals from a shard.
+func extractOrdinalsFromShard(t *testing.T, shard Hashring) []int {
+	t.Helper()
+	nodes := shard.Nodes()
+	ordinalSet := make(map[int]struct{})
+	for _, node := range nodes {
+		ordinalSet[extractOrdinalFromAddress(t, node.Address)] = struct{}{}
+	}
+	ordinals := make([]int, 0, len(ordinalSet))
+	for ord := range ordinalSet {
+		ordinals = append(ordinals, ord)
+	}
+	// Sort for consistent comparison
+	for i := 0; i < len(ordinals); i++ {
+		for j := i + 1; j < len(ordinals); j++ {
+			if ordinals[i] > ordinals[j] {
+				ordinals[i], ordinals[j] = ordinals[j], ordinals[i]
+			}
+		}
+	}
+	return ordinals
+}

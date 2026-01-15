@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/strutil"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
@@ -364,7 +365,9 @@ type shuffleShardHashring struct {
 
 	nodes []Endpoint
 
-	cache *lru.Cache[string, *ketamaHashring]
+	// cache stores tenant-specific subrings. The value is Hashring to support both
+	// *ketamaHashring (regular shuffle sharding) and aligned ketama subrings.
+	cache *lru.Cache[string, Hashring]
 
 	metrics *shuffleShardCacheMetrics
 }
@@ -449,7 +452,7 @@ func newShuffleShardHashring(baseRing Hashring, shuffleShardingConfig ShuffleSha
 	metrics := newShuffleShardCacheMetrics(reg, name)
 	metrics.maxItems.Set(float64(shuffleShardingConfig.CacheSize))
 
-	cache, err := lru.NewWithEvict[string, *ketamaHashring](shuffleShardingConfig.CacheSize, func(key string, value *ketamaHashring) {
+	cache, err := lru.NewWithEvict[string, Hashring](shuffleShardingConfig.CacheSize, func(key string, value Hashring) {
 		metrics.evicted.Inc()
 		metrics.numItems.Dec()
 	})
@@ -580,7 +583,7 @@ func ShuffleShardSeed(identifier, zone string) int64 {
 	return int64(binary.BigEndian.Uint64(checksum))
 }
 
-func (s *shuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashring, error) {
+func (s *shuffleShardHashring) getTenantShardCached(tenant string) (Hashring, error) {
 	s.metrics.requestsTotal.Inc()
 
 	cached, ok := s.cache.Get(tenant)
@@ -589,7 +592,13 @@ func (s *shuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashr
 		return cached, nil
 	}
 
-	h, err := s.getTenantShard(tenant)
+	var h Hashring
+	var err error
+	if s.shuffleShardingConfig.AlignedOrdinalSharding {
+		h, err = s.getTenantShardAligned(tenant)
+	} else {
+		h, err = s.getTenantShard(tenant)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -699,6 +708,251 @@ func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, e
 	}
 
 	return newKetamaHashring(finalNodes, SectionsPerNode, s.replicationFactor)
+}
+
+// ordinalSection represents a section in the ordinal ring for consistent hashing.
+type ordinalSection struct {
+	ordinal int
+	hash    uint64
+}
+
+type ordinalSections []ordinalSection
+
+func (o ordinalSections) Len() int           { return len(o) }
+func (o ordinalSections) Less(i, j int) bool { return o[i].hash < o[j].hash }
+func (o ordinalSections) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
+
+// extractOrdinalStructure extracts the ordinal-to-endpoint mapping per AZ
+// and returns the set of ordinals common to all AZs.
+func extractOrdinalStructure(endpoints []Endpoint) (map[string]map[int]Endpoint, []int, error) {
+	if len(endpoints) == 0 {
+		return nil, nil, errors.New("no endpoints provided")
+	}
+
+	// Group endpoints by AZ and ordinal
+	azOrdinalMap := make(map[string]map[int]Endpoint)
+	for _, ep := range endpoints {
+		ordinal, err := strutil.ExtractPodOrdinal(ep.Address)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "failed to extract ordinal from address %s", ep.Address)
+		}
+		if _, ok := azOrdinalMap[ep.AZ]; !ok {
+			azOrdinalMap[ep.AZ] = make(map[int]Endpoint)
+		}
+		azOrdinalMap[ep.AZ][ordinal] = ep
+	}
+
+	if len(azOrdinalMap) == 0 {
+		return nil, nil, errors.New("no AZs found")
+	}
+
+	// Find common ordinals across all AZs
+	var commonOrdinals []int
+	var firstAZ string
+	for az := range azOrdinalMap {
+		firstAZ = az
+		break
+	}
+
+	for ordinal := range azOrdinalMap[firstAZ] {
+		presentInAll := true
+		for az, ordMap := range azOrdinalMap {
+			if az == firstAZ {
+				continue
+			}
+			if _, ok := ordMap[ordinal]; !ok {
+				presentInAll = false
+				break
+			}
+		}
+		if presentInAll {
+			commonOrdinals = append(commonOrdinals, ordinal)
+		}
+	}
+
+	if len(commonOrdinals) == 0 {
+		return nil, nil, errors.New("no common ordinals found across all AZs")
+	}
+
+	sort.Ints(commonOrdinals)
+	return azOrdinalMap, commonOrdinals, nil
+}
+
+// buildOrdinalRing creates a consistent hash ring of ordinals.
+// Each ordinal gets multiple sections for better distribution.
+func buildOrdinalRing(ordinals []int, sectionsPerOrdinal int) ordinalSections {
+	ring := make(ordinalSections, 0, len(ordinals)*sectionsPerOrdinal)
+	hasher := xxhash.New()
+
+	for _, ordinal := range ordinals {
+		for i := 1; i <= sectionsPerOrdinal; i++ {
+			hasher.Reset()
+			_, _ = hasher.Write([]byte(fmt.Sprintf("ordinal-%d:%d", ordinal, i)))
+			ring = append(ring, ordinalSection{
+				ordinal: ordinal,
+				hash:    hasher.Sum64(),
+			})
+		}
+	}
+
+	sort.Sort(ring)
+	return ring
+}
+
+// selectOrdinalsConsistent selects ordinals using consistent hashing.
+// This provides stability: adding ordinal N only affects tenants that would hash near N.
+func selectOrdinalsConsistent(ring ordinalSections, tenant string, count int) []int {
+	if count >= len(ring) {
+		// Return all unique ordinals if count exceeds ring size
+		seen := make(map[int]struct{})
+		for _, sec := range ring {
+			seen[sec.ordinal] = struct{}{}
+		}
+		result := make([]int, 0, len(seen))
+		for ord := range seen {
+			result = append(result, ord)
+		}
+		sort.Ints(result)
+		return result
+	}
+
+	seed := ShuffleShardSeed(tenant, "") // No AZ suffix for alignment
+	r := rand.New(rand.NewSource(seed))
+
+	selected := make(map[int]struct{})
+	result := make([]int, 0, count)
+
+	for len(result) < count {
+		pos := r.Uint64()
+		idx := sort.Search(len(ring), func(i int) bool {
+			return ring[i].hash >= pos
+		})
+		if idx == len(ring) {
+			idx = 0
+		}
+
+		// Walk ring to find unselected ordinal
+		for j := 0; j < len(ring); j++ {
+			checkIdx := (idx + j) % len(ring)
+			ord := ring[checkIdx].ordinal
+			if _, ok := selected[ord]; !ok {
+				selected[ord] = struct{}{}
+				result = append(result, ord)
+				break
+			}
+		}
+	}
+
+	sort.Ints(result)
+	return result
+}
+
+// getTenantShardAligned returns a tenant shard with aligned ordinals across all AZs.
+// Unlike getTenantShard which selects nodes independently per AZ, this selects
+// ordinals first, then takes the same ordinal from each AZ.
+func (s *shuffleShardHashring) getTenantShardAligned(tenant string) (Hashring, error) {
+	// Extract ordinal structure from all nodes
+	azOrdinalMap, commonOrdinals, err := extractOrdinalStructure(s.nodes)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to extract ordinal structure")
+	}
+
+	// Determine shard size (number of ordinals to select)
+	shardSize := s.getShardSize(tenant)
+	if shardSize > len(commonOrdinals) {
+		return nil, fmt.Errorf("shard size %d exceeds available common ordinals (%d)", shardSize, len(commonOrdinals))
+	}
+
+	// Build ordinal ring for consistent hashing
+	// Use fewer sections per ordinal since we have fewer ordinals than nodes
+	sectionsPerOrdinal := SectionsPerNode
+	ordinalRing := buildOrdinalRing(commonOrdinals, sectionsPerOrdinal)
+
+	// Select ordinals using consistent hashing
+	selectedOrdinals := selectOrdinalsConsistent(ordinalRing, tenant, shardSize)
+
+	// Build endpoint list with same ordinals from each AZ
+	// Sorted AZ order for deterministic endpoint ordering
+	sortedAZs := make([]string, 0, len(azOrdinalMap))
+	for az := range azOrdinalMap {
+		sortedAZs = append(sortedAZs, az)
+	}
+	sort.Strings(sortedAZs)
+
+	// Create aligned ketama subring manually to preserve ordinal alignment
+	// without requiring sequential ordinals starting from 0
+	return newAlignedSubring(azOrdinalMap, sortedAZs, selectedOrdinals, SectionsPerNode, s.replicationFactor)
+}
+
+// newAlignedSubring creates a ketama hashring with aligned replicas from a subset of ordinals.
+// Unlike newAlignedKetamaHashring, this doesn't require ordinals to be sequential from 0.
+// The alignment property: for any section, all replicas have the same ordinal across different AZs.
+func newAlignedSubring(
+	azOrdinalMap map[string]map[int]Endpoint,
+	sortedAZs []string,
+	selectedOrdinals []int,
+	sectionsPerNode int,
+	replicationFactor uint64,
+) (*ketamaHashring, error) {
+	numAZs := len(sortedAZs)
+	numOrdinals := len(selectedOrdinals)
+
+	if uint64(numAZs) != replicationFactor {
+		return nil, fmt.Errorf("number of AZs (%d) must equal replication factor (%d)", numAZs, replicationFactor)
+	}
+
+	// Build flat endpoint list: [AZ0-ord0, AZ0-ord1, ..., AZ1-ord0, AZ1-ord1, ...]
+	// where ordN refers to selectedOrdinals[N], not the actual ordinal value
+	totalEndpoints := numAZs * numOrdinals
+	flatEndpoints := make([]Endpoint, 0, totalEndpoints)
+	for _, az := range sortedAZs {
+		for _, ordinal := range selectedOrdinals {
+			ep, ok := azOrdinalMap[az][ordinal]
+			if !ok {
+				return nil, fmt.Errorf("ordinal %d not found in AZ %s", ordinal, az)
+			}
+			flatEndpoints = append(flatEndpoints, ep)
+		}
+	}
+
+	// Create sections with aligned replicas
+	// For aligned subring, we create sections based on the first AZ's endpoints (primary)
+	// Each section's replicas point to the same "position" (ordinal index) in each AZ
+	hasher := xxhash.New()
+	ringSections := make(sections, 0, numOrdinals*sectionsPerNode)
+
+	for ordinalIdx := 0; ordinalIdx < numOrdinals; ordinalIdx++ {
+		// Primary endpoint is from the first AZ
+		primaryEndpoint := flatEndpoints[ordinalIdx] // AZ0 endpoints are at indices 0..numOrdinals-1
+
+		for sectionIdx := 1; sectionIdx <= sectionsPerNode; sectionIdx++ {
+			hasher.Reset()
+			_, _ = hasher.Write([]byte(primaryEndpoint.Address + ":" + strconv.Itoa(sectionIdx)))
+
+			sec := &section{
+				hash:          hasher.Sum64(),
+				az:            primaryEndpoint.AZ,
+				endpointIndex: uint64(ordinalIdx), // Index within first AZ
+				replicas:      make([]uint64, 0, replicationFactor),
+			}
+
+			// Add replicas: same ordinal index from each AZ
+			for azIdx := 0; azIdx < numAZs; azIdx++ {
+				replicaFlatIndex := azIdx*numOrdinals + ordinalIdx
+				sec.replicas = append(sec.replicas, uint64(replicaFlatIndex))
+			}
+
+			ringSections = append(ringSections, sec)
+		}
+	}
+
+	sort.Sort(ringSections)
+
+	return &ketamaHashring{
+		endpoints:    flatEndpoints,
+		sections:     ringSections,
+		numEndpoints: uint64(totalEndpoints),
+	}, nil
 }
 
 // Get returns the first endpoint for a tenant and time series, respecting the shuffle sharding.
