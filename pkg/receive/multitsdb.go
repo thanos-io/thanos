@@ -435,6 +435,10 @@ func (t *MultiTSDB) Open() error {
 		if !f.IsDir() {
 			continue
 		}
+		// Skip the ext4 filesystem's lost+found directory.
+		if f.Name() == "lost+found" {
+			continue
+		}
 
 		g.Go(func() error {
 			_, err := t.getOrLoadTenant(f.Name(), true)

@@ -1259,3 +1259,36 @@ func TestTenantBucketPrefixInUpload(t *testing.T) {
 		}))
 	}
 }
+
+func TestMultiTSDBSkipsLostAndFound(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create a lost+found directory like ext4 does.
+	lostFoundDir := filepath.Join(dir, "lost+found")
+	testutil.Ok(t, os.MkdirAll(lostFoundDir, 0700))
+
+	m := NewMultiTSDB(
+		dir, log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		metadata.NoneFunc,
+	)
+	defer func() { testutil.Ok(t, m.Close()) }()
+
+	testutil.Ok(t, m.Open())
+
+	// Verify that lost+found was not loaded as a tenant.
+	m.mtx.RLock()
+	_, exists := m.tenants["lost+found"]
+	m.mtx.RUnlock()
+	testutil.Assert(t, !exists, "lost+found should not be loaded as a tenant")
+}
