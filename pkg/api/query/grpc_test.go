@@ -5,6 +5,7 @@ package v1
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/thanos-io/promql-engine/api"
@@ -148,8 +150,9 @@ func TestGRPCQueryAPIErrorHandling(t *testing.T) {
 }
 
 type queryCreatorStub struct {
-	err   error
-	warns annotations.Annotations
+	err    error
+	warns  annotations.Annotations
+	result parser.Value // promql.Vector or promql.Matrix; if set, returned as result value
 }
 
 func (qs queryCreatorStub) makeInstantQuery(
@@ -161,7 +164,7 @@ func (qs queryCreatorStub) makeInstantQuery(
 	opts *engine.QueryOpts,
 	ts time.Time,
 ) (res promql.Query, err error) {
-	return queryStub{err: qs.err, warns: qs.warns}, nil
+	return queryStub{err: qs.err, warns: qs.warns, result: qs.result}, nil
 }
 func (qs queryCreatorStub) makeRangeQuery(
 	ctx context.Context,
@@ -174,19 +177,20 @@ func (qs queryCreatorStub) makeRangeQuery(
 	end time.Time,
 	step time.Duration,
 ) (res promql.Query, err error) {
-	return queryStub{err: qs.err, warns: qs.warns}, nil
+	return queryStub{err: qs.err, warns: qs.warns, result: qs.result}, nil
 }
 
 type queryStub struct {
 	promql.Query
-	err   error
-	warns annotations.Annotations
+	err    error
+	warns  annotations.Annotations
+	result parser.Value // promql.Vector or promql.Matrix
 }
 
 func (q queryStub) Close() {}
 
 func (q queryStub) Exec(context.Context) *promql.Result {
-	return &promql.Result{Err: q.err, Warnings: q.warns}
+	return &promql.Result{Err: q.err, Warnings: q.warns, Value: q.result}
 }
 
 type queryServer struct {
@@ -227,4 +231,137 @@ func (q *queryRangeServer) Send(r *querypb.QueryRangeResponse) error {
 
 func (q *queryRangeServer) Context() context.Context {
 	return q.ctx
+}
+
+// makeVector creates a test promql.Vector with the given number of samples.
+func makeVector(numSamples int) promql.Vector {
+	vector := make(promql.Vector, numSamples)
+	for i := 0; i < numSamples; i++ {
+		vector[i] = promql.Sample{
+			Metric: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "localhost:9090",
+				"job", "test",
+				"series_id", fmt.Sprintf("series_%d", i),
+			),
+			T: 1000,
+			F: float64(i),
+		}
+	}
+	return vector
+}
+
+// makeMatrix creates a test promql.Matrix with the given dimensions.
+func makeMatrix(numSeries, samplesPerSeries int) promql.Matrix {
+	matrix := make(promql.Matrix, numSeries)
+	for i := 0; i < numSeries; i++ {
+		floats := make([]promql.FPoint, samplesPerSeries)
+		for j := 0; j < samplesPerSeries; j++ {
+			floats[j] = promql.FPoint{T: int64(j * 1000), F: float64(j)}
+		}
+		matrix[i] = promql.Series{
+			Metric: labels.FromStrings(
+				"__name__", "test_metric",
+				"instance", "localhost:9090",
+				"job", "test",
+				"series_id", fmt.Sprintf("series_%d", i),
+			),
+			Floats: floats,
+		}
+	}
+	return matrix
+}
+
+func BenchmarkQueryGRPCBatching(b *testing.B) {
+	seriesCounts := []int{100, 1000, 10000}
+	batchSizes := []int64{1, 10, 64, 100}
+
+	for _, seriesCount := range seriesCounts {
+		b.Run(fmt.Sprintf("series=%d", seriesCount), func(b *testing.B) {
+			for _, batchSize := range batchSizes {
+				b.Run(fmt.Sprintf("batch=%d", batchSize), func(b *testing.B) {
+					benchmarkQueryGRPCBatching(b, seriesCount, batchSize)
+				})
+			}
+		})
+	}
+}
+
+func benchmarkQueryGRPCBatching(b *testing.B, seriesCount int, batchSize int64) {
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty, 1)
+	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
+	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
+
+	qc := queryCreatorStub{result: makeVector(seriesCount)}
+	api := NewGRPCAPI(time.Now, nil, queryableCreator, remoteEndpointsCreator, qc, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		srv := newQueryServer(context.Background())
+		request := &querypb.QueryRequest{
+			Query:             "test_metric",
+			TimeoutSeconds:    60,
+			ResponseBatchSize: batchSize,
+		}
+		err := api.Query(request, srv)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkQueryRangeGRPCBatching(b *testing.B) {
+	seriesCounts := []int{100, 1000, 10000}
+	samplesPerSeriesCounts := []int{100, 240}
+	batchSizes := []int64{1, 10, 64, 100}
+
+	for _, seriesCount := range seriesCounts {
+		b.Run(fmt.Sprintf("series=%d", seriesCount), func(b *testing.B) {
+			for _, samplesPerSeries := range samplesPerSeriesCounts {
+				b.Run(fmt.Sprintf("samples=%d", samplesPerSeries), func(b *testing.B) {
+					for _, batchSize := range batchSizes {
+						b.Run(fmt.Sprintf("batch=%d", batchSize), func(b *testing.B) {
+							benchmarkQueryRangeGRPCBatching(b, seriesCount, samplesPerSeries, batchSize)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func benchmarkQueryRangeGRPCBatching(b *testing.B, seriesCount, samplesPerSeries int, batchSize int64) {
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty, 1)
+	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
+	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
+
+	qc := queryCreatorStub{result: makeMatrix(seriesCount, samplesPerSeries)}
+	api := NewGRPCAPI(time.Now, nil, queryableCreator, remoteEndpointsCreator, qc, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		srv := newQueryRangeServer(context.Background())
+		request := &querypb.QueryRangeRequest{
+			Query:             "test_metric",
+			StartTimeSeconds:  0,
+			EndTimeSeconds:    300,
+			IntervalSeconds:   10,
+			TimeoutSeconds:    60,
+			ResponseBatchSize: batchSize,
+		}
+		err := api.QueryRange(request, srv)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
