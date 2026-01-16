@@ -42,7 +42,7 @@ func TestCapNProtoClient_UnresponsiveServerDuringRestart(t *testing.T) {
 				defer c.Close()
 				buf := make([]byte, 1024)
 				for {
-					c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+					_ = c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 					if _, err := c.Read(buf); err != nil {
 						if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 							continue
@@ -83,7 +83,7 @@ func TestCapNProtoClient_UnresponsiveServerDuringRestart(t *testing.T) {
 		&CapNProtoWriterOptions{},
 	))
 	srv := NewCapNProtoServer(workingListener, handler, logger)
-	go srv.ListenAndServe()
+	go func() { _ = srv.ListenAndServe() }()
 	defer srv.Shutdown()
 	time.Sleep(50 * time.Millisecond)
 

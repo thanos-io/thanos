@@ -8,7 +8,6 @@ import (
 	"net"
 	"sync"
 
-	"capnproto.org/go/capnp/v3"
 	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -81,14 +80,12 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 
 	s, err := result.Struct()
 	if err != nil {
-		if numReconnects > 0 && capnp.IsDisconnected(err) {
-			level.Warn(r.logger).Log("msg", "rpc failed, reconnecting")
-			if err := r.Close(); err != nil {
-				return nil, err
-			}
-			numReconnects--
-			return r.writeWithReconnect(ctx, numReconnects, in)
+		if numReconnects > 0 {
+			level.Warn(r.logger).Log("msg", "rpc failed, reconnecting", "err", err)
+			r.Close()
+			return r.writeWithReconnect(ctx, numReconnects-1, in)
 		}
+		r.Close()
 		return nil, errors.Wrap(err, "failed writing to peer")
 	}
 	switch s.Error() {
