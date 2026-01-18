@@ -104,7 +104,6 @@ type ProxyStore struct {
 	tsdbSelector                      *TSDBSelector
 	quorumChunkDedup                  bool
 	enableDedup                       bool
-	matcherConverter                  *storepb.MatcherConverter
 	lazyRetrievalMaxBufferedResponses int
 	blockedMetricPrefixes             *radix.Tree
 	unconditionalBlockedMetrics       map[string]struct{}
@@ -214,13 +213,6 @@ func WithoutDedup() ProxyStoreOption {
 	}
 }
 
-// WithProxyStoreMatcherConverter returns a ProxyStoreOption that enables caching matcher converter for ProxyStore.
-func WithProxyStoreMatcherConverter(mc *storepb.MatcherConverter) ProxyStoreOption {
-	return func(s *ProxyStore) {
-		s.matcherConverter = mc
-	}
-}
-
 // WithBlockedMetricPatterns returns a ProxyStoreOption that sets the blocked metric patterns.
 // Pattern format: "p<pattern>" for prefix match, "e<pattern>" for exact match.
 // Examples: "pkube_", "eup"
@@ -263,6 +255,7 @@ func WithExclusiveExternalLabels(labels []string) ProxyStoreOption {
 		s.exclusiveExternalLabels = labels
 	}
 }
+
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
@@ -375,7 +368,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
 
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -709,7 +702,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	if s.debugLogging {
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -812,7 +805,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherConverter)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

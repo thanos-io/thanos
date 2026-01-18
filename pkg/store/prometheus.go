@@ -125,7 +125,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -488,14 +488,8 @@ func (p *PrometheusStore) startPromRemoteRead(ctx context.Context, q *prompb.Que
 
 // matchesExternalLabels returns false if given matchers are not matching external labels.
 // If true, matchesExternalLabels also returns Prometheus matchers without those matching external labels.
-func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels, mc *storepb.MatcherConverter) (bool, []*labels.Matcher, error) {
-	var tms []*labels.Matcher
-	var err error
-	if mc != nil {
-		tms, err = mc.MatchersToPromMatchers(ms...)
-	} else {
-		tms, err = storepb.MatchersToPromMatchers(ms...)
-	}
+func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labels) (bool, []*labels.Matcher, error) {
+	tms, err := storepb.MatchersToPromMatchers(ms...)
 	if err != nil {
 		return false, nil, err
 	}
@@ -543,7 +537,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 func (p *PrometheusStore) LabelNames(ctx context.Context, r *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -606,7 +600,7 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 
 	extLset := p.externalLabelsFn()
 
-	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, nil)
+	match, matchers, err := matchesExternalLabels(r.Matchers, extLset)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
