@@ -26,6 +26,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
@@ -109,6 +110,7 @@ type ProxyStore struct {
 	unconditionalBlockedMetrics       map[string]struct{}
 	forwardPartialStrategy            bool
 	exclusiveExternalLabels           []string
+	matcherCache                      storecache.MatchersCache
 }
 
 type proxyStoreMetrics struct {
@@ -177,7 +179,7 @@ func RegisterStoreServer(storeSrv storepb.StoreServer, logger log.Logger) func(*
 	}
 }
 
-// BucketStoreOption are functions that configure BucketStore.
+// ProxyStoreOption are functions that configure the ProxyStore.
 type ProxyStoreOption func(s *ProxyStore)
 
 func WithLazyRetrievalMaxBufferedResponsesForProxy(buferSize int) ProxyStoreOption {
@@ -256,6 +258,12 @@ func WithExclusiveExternalLabels(labels []string) ProxyStoreOption {
 	}
 }
 
+// WithMatcherCache sets the matcher cache instance for the proxy.
+func WithMatcherCache(cache storecache.MatchersCache) ProxyStoreOption {
+	return func(s *ProxyStore) {
+		s.matcherCache = cache
+	}
+}
 
 // NewProxyStore returns a new ProxyStore that uses the given clients that implements storeAPI to fan-in all series to the client.
 // Note that there is no deduplication support. Deduplication should be done on the highest level (just before PromQL).
@@ -288,6 +296,7 @@ func NewProxyStore(
 		retrievalStrategy: retrievalStrategy,
 		tsdbSelector:      DefaultSelector,
 		enableDedup:       true,
+		matcherCache:      storecache.NoopMatchersCache,
 	}
 
 	for _, option := range options {
@@ -368,7 +377,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
 
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -702,7 +711,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	if s.debugLogging {
 		reqLogger = log.With(reqLogger, "request", originalRequest.String())
 	}
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -805,7 +814,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		return nil, status.Error(codes.InvalidArgument, "label name parameter cannot be empty")
 	}
 
-	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels)
+	match, matchers, err := matchesExternalLabels(originalRequest.Matchers, s.selectorLabels, s.matcherCache)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}

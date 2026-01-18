@@ -28,11 +28,10 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/wlog"
-	"google.golang.org/grpc"
-
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
+	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -50,6 +49,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/store"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
@@ -241,6 +241,15 @@ func runReceive(
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
 
+	var cache = storecache.NoopMatchersCache
+	if conf.matcherCacheSize > 0 {
+		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
+		if err != nil {
+			return errors.Wrap(err, "failed to create matchers cache")
+		}
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithMatchersCache(cache))
+	}
+
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
 		logger,
@@ -406,6 +415,7 @@ func runReceive(
 		}
 		options := []store.ProxyStoreOption{
 			store.WithProxyStoreDebugLogging(debugLogging),
+			store.WithMatcherCache(cache),
 			store.WithoutDedup(),
 			store.WithLazyRetrievalMaxBufferedResponsesForProxy(conf.lazyRetrievalMaxBufferedResponses),
 		}
@@ -986,6 +996,7 @@ type receiveConfig struct {
 	topMetricsUpdateInterval          time.Duration
 	maxPendingGrpcWriteRequests       int
 	lazyRetrievalMaxBufferedResponses int
+	matcherCacheSize                  int
 
 	featureList     *[]string
 	noUploadTenants *[]string
@@ -1158,6 +1169,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.allowOutOfOrderUpload)
+
+	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
 	rc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 
