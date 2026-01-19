@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	promstats "github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
@@ -180,8 +181,10 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 			}
 		}
 	}
-	if err := server.Send(querypb.NewQueryStatsResponse(extractQueryStats(qry))); err != nil {
-		return err
+	if request.EnableStats {
+		if err := server.Send(querypb.NewQueryStatsResponse(extractQueryStats(qry))); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -333,8 +336,10 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 			return err
 		}
 	}
-	if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
-		return err
+	if request.EnableStats {
+		if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -352,6 +357,16 @@ func extractQueryStats(qry promql.Query) *querypb.QueryStats {
 		}
 		stats.SamplesTotal = analyze.TotalSamples()
 		stats.PeakSamples = analyze.PeakSamples()
+	}
+
+	if s := qry.Stats(); s != nil && s.Timers != nil {
+		timings := promstats.NewQueryStats(s).Builtin().Timings
+		stats.EvalTotalTimeMs = int64(timings.EvalTotalTime * 1000)
+		stats.ResultSortTimeMs = int64(timings.ResultSortTime * 1000)
+		stats.QueryPreparationTimeMs = int64(timings.QueryPreparationTime * 1000)
+		stats.InnerEvalTimeMs = int64(timings.InnerEvalTime * 1000)
+		stats.ExecQueueTimeMs = int64(timings.ExecQueueTime * 1000)
+		stats.ExecTotalTimeMs = int64(timings.ExecTotalTime * 1000)
 	}
 
 	return stats

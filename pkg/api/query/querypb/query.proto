@@ -31,6 +31,12 @@ enum EngineType {
 message QueryStats {
   int64 samples_total = 1;
   int64 peak_samples = 2;
+  int64 eval_total_time_ms = 3;
+  int64 result_sort_time_ms = 4;
+  int64 query_preparation_time_ms = 5;
+  int64 inner_eval_time_ms = 6;
+  int64 exec_queue_time_ms = 7;
+  int64 exec_total_time_ms = 8;
 }
 
 message TimeSeriesBatch {
@@ -61,6 +67,11 @@ message QueryRequest {
   // response_batch_size controls how many TimeSeries are batched per response message.
   // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
   int64 response_batch_size = 15;
+
+  // enable_stats requests the server populate the QueryStats response. When false, the
+  // server skips the work of collecting samples/timing stats. Defaults to false so that
+  // pre-existing clients don't pay the cost of stats they do not consume.
+  bool enable_stats = 16;
 
   reserved 9;
 }
@@ -117,6 +128,11 @@ message QueryRangeRequest {
   // response_batch_size controls how many TimeSeries are batched per response message.
   // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
   int64 response_batch_size = 17;
+
+  // enable_stats requests the server populate the QueryStats response. When false, the
+  // server skips the work of collecting samples/timing stats. Defaults to false so that
+  // pre-existing clients don't pay the cost of stats they do not consume.
+  bool enable_stats = 18;
 
   reserved 11;
 }
