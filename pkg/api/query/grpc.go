@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/storage"
+	promstats "github.com/prometheus/prometheus/util/stats"
 
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
@@ -353,6 +354,14 @@ func extractQueryStats(qry promql.Query) *querypb.QueryStats {
 		stats.SamplesTotal = analyze.TotalSamples()
 		stats.PeakSamples = analyze.PeakSamples()
 	}
+
+	timings := promstats.NewQueryStats(qry.Stats()).Builtin().Timings
+	stats.EvalTotalTimeMs = int64(timings.EvalTotalTime)
+	stats.ResultSortTimeMs = int64(timings.ResultSortTime)
+	stats.QueryPreparationTimeMs = int64(timings.QueryPreparationTime)
+	stats.InnerEvalTimeMs = int64(timings.InnerEvalTime)
+	stats.QueryPreparationTimeMs = int64(timings.QueryPreparationTime)
+	stats.ExecTotalTimeMs = int64(timings.ExecTotalTime)
 
 	return stats
 }

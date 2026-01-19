@@ -31,6 +31,12 @@ enum EngineType {
 message QueryStats {
   int64 samples_total = 1;
   int64 peak_samples = 2;
+  int64 eval_total_time_ms = 3;
+  int64 result_sort_time_ms = 4;
+  int64 query_preparation_time_ms = 5;
+  int64 inner_eval_time_ms = 6;
+  int64 exec_queue_time_ms = 7;
+  int64 exec_total_time_ms = 8;
 }
 
 message TimeSeriesBatch {
