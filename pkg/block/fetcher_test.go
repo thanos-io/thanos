@@ -1476,3 +1476,50 @@ func TestDeletionMarkFilter_HoldsOntoMarks(t *testing.T) {
 
 	testutil.Equals(t, 2, len(f.DeletionMarkBlocks()))
 }
+
+func TestRecursiveLister_MetaJsonOrderIsIrrelevant(t *testing.T) {
+	ctx := context.Background()
+	bkt := objstore.NewInMemBucket()
+
+	blockID := ULID(1)
+
+	// Upload files in the order a bucket impl would return them (alphabetical):
+	// 1. chunks/000001 ("c" < "m")
+	// 2. index ("i" < "m")
+	// 3. meta.json
+	// 4. no-compact-mark.json ("n" > "m") ← This comes AFTER meta.json
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(blockID.String(), "chunks", "000001"), bytes.NewBuffer([]byte("chunks"))))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(blockID.String(), "index"), bytes.NewBuffer([]byte("index"))))
+
+	var meta metadata.Meta
+	meta.Version = 1
+	meta.ULID = blockID
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(blockID.String(), MetaFilename), &buf))
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(blockID.String(), metadata.NoCompactMarkFilename), bytes.NewBuffer([]byte("{}"))))
+
+	// Create a RecursiveLister
+	logger := log.NewNopLogger()
+	insBkt := objstore.WithNoopInstr(bkt)
+	lister := NewRecursiveLister(logger, insBkt)
+
+	// Get active and partial blocks
+	activeBlocksCh := make(chan ActiveBlockFetchData, 10)
+	partialBlocks, err := lister.GetActiveAndPartialBlockIDs(ctx, activeBlocksCh)
+	testutil.Ok(t, err)
+	close(activeBlocksCh)
+
+	// Drain the channel
+	var activeBlocks []ulid.ULID
+	for block := range activeBlocksCh {
+		activeBlocks = append(activeBlocks, block.ULID)
+	}
+
+	testutil.Equals(t, 1, len(activeBlocks))
+	testutil.Equals(t, blockID, activeBlocks[0])
+	isPartial := partialBlocks[blockID]
+	if isPartial {
+		t.Errorf("Block %s has meta.json but was incorrectly marked as partial", blockID)
+	}
+}

@@ -287,6 +287,8 @@ type QuerierBuilder struct {
 	deduplicationFunc                       string
 	disabledFallback                        bool
 
+	seriesResponseBatchSize string
+
 	replicaLabels []string
 	tracingConfig string
 
@@ -388,6 +390,11 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisabledFallback() *QuerierBuilder {
 	q.disabledFallback = true
+	return q
+}
+
+func (q *QuerierBuilder) WithResponseSeriesBatchSize(seriesResponseBatchSize string) *QuerierBuilder {
+	q.seriesResponseBatchSize = seriesResponseBatchSize
 	return q
 }
 
@@ -558,6 +565,9 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	if q.disabledFallback {
 		args = append(args, "--query.disable-fallback")
 	}
+	if q.seriesResponseBatchSize != "" {
+		args = append(args, "--query.series-response-batch-size="+q.seriesResponseBatchSize)
+	}
 	if q.queryDistributedWithOverlappingInterval {
 		args = append(args, "--query.distributed-with-overlapping-interval")
 	}
@@ -601,6 +611,7 @@ type ReceiveBuilder struct {
 	metaMonitoringQuery   string
 	hashringConfigs       []receive.HashringConfig
 	relabelConfigs        []*relabel.Config
+	artificialDelay       time.Duration
 	replication           int
 	image                 string
 	nativeHistograms      bool
@@ -657,6 +668,11 @@ func (r *ReceiveBuilder) WithRouting(replication int, hashringConfigs ...receive
 	return r
 }
 
+func (r *ReceiveBuilder) WithArtificialDelay(delay time.Duration) *ReceiveBuilder {
+	r.artificialDelay = delay
+	return r
+}
+
 func (r *ReceiveBuilder) WithTenantSplitLabel(splitLabel string) *ReceiveBuilder {
 	r.tenantSplitLabel = splitLabel
 	return r
@@ -706,6 +722,10 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.tenantSplitLabel != "" {
 		args["--receive.split-tenant-label-name"] = r.tenantSplitLabel
+	}
+
+	if r.artificialDelay > 0 {
+		args["--receive.artificial-max-delay"] = r.artificialDelay.String()
 	}
 
 	if len(r.labels) > 0 {

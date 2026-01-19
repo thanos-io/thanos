@@ -14,9 +14,13 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 - [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
+- [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
+- [#8480](https://github.com/thanos-io/thanos/pull/8480) Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
 
 ### Added
 
+- [#](https://github.com/thanos-io/thanos/pull/8623): Query: support sending a batch of Series per SeriesResponse with `--query.series-response-batch-size` flag.
+- [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
 
 ### Changed
 
@@ -39,6 +43,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8484](https://github.com/thanos-io/thanos/pull/8484) Query: add `/api/v1/status/tsdb` API endpoint.
 - [#8454](https://github.com/thanos-io/thanos/pull/8454) Compact: ensure we don't mark blocks for deletion again after just deleting them
 - [#8410](https://github.com/thanos-io/thanos/pull/8410) Compact: ignore blocks with deletion mark in partial deletes
+- [#8556](https://github.com/thanos-io/thanos/pull/8556) All Components: add debug logs when enabling GOMEMLIMIT and log the effective memory limit on startup
 
 ### Changed
 

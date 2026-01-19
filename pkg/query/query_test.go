@@ -57,6 +57,11 @@ func (sc *safeClients) append(c store.Client) {
 }
 
 func TestQuerier_Proxy(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
 	files, err := filepath.Glob("testdata/promql/**/*.test")
 	testutil.Ok(t, err)
 	testutil.Equals(t, 10, len(files), "%v", files)
@@ -77,6 +82,7 @@ func TestQuerier_Proxy(t *testing.T) {
 			1000000,
 			5*time.Minute,
 			dedup.AlgorithmPenalty,
+			1,
 		)
 
 		createQueryableFn := func(stores []*testStore) storage.Queryable {
