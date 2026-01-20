@@ -17,17 +17,15 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
-	"go.uber.org/atomic"
-	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-
 	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
+	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	"github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -37,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/shipper"
 	"github.com/thanos-io/thanos/pkg/store"
+	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
@@ -62,11 +61,12 @@ type MultiTSDB struct {
 	hashFunc              metadata.HashFunc
 	hashringConfigs       []HashringConfig
 
+	matcherCache storecache.MatchersCache
+
 	tsdbClients     []store.Client
 	exemplarClients map[string]*exemplars.TSDB
 
 	metricNameFilterEnabled  bool
-	matcherConverter         *storepb.MatcherConverter
 	noUploadTenants          []string // Support both exact matches and prefix patterns (e.g., "tenant1", "prod-*")
 	enableTenantPathPrefix   bool
 	pathSegmentsBeforeTenant []string
@@ -79,13 +79,6 @@ type MultiTSDBOption func(mt *MultiTSDB)
 func WithMetricNameFilterEnabled() MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.metricNameFilterEnabled = true
-	}
-}
-
-// WithMatcherConverter enables caching matcher converter consumed by children TSDB Stores.
-func WithMatcherConverter(mc *storepb.MatcherConverter) MultiTSDBOption {
-	return func(s *MultiTSDB) {
-		s.matcherConverter = mc
 	}
 }
 
@@ -108,6 +101,12 @@ func WithTenantPathPrefix() MultiTSDBOption {
 func WithPathSegmentsBeforeTenant(segments []string) MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.pathSegmentsBeforeTenant = segments
+	}
+}
+
+func WithMatchersCache(cache storecache.MatchersCache) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.matcherCache = cache
 	}
 }
 
@@ -143,6 +142,7 @@ func NewMultiTSDB(
 		bucket:                bucket,
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		hashFunc:              hashFunc,
+		matcherCache:          storecache.NoopMatchersCache,
 	}
 
 	for _, option := range options {
@@ -835,13 +835,12 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.DefaultMetaFilename,
 		)
 	}
-	options := []store.TSDBStoreOption{}
+	var options []store.TSDBStoreOption
 	if t.metricNameFilterEnabled {
 		options = append(options, store.WithCuckooMetricNameStoreFilter())
 	}
-	// Pass matcher converter to children TSDB Stores.
-	if t.matcherConverter != nil {
-		options = append(options, store.WithTSDBStoreMatcherConverter(t.matcherConverter))
+	if t.matcherCache != nil {
+		options = append(options, store.WithMatcherCacheInstance(t.matcherCache))
 	}
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil

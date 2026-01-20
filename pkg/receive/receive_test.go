@@ -8,13 +8,12 @@ import (
 	"time"
 
 	"github.com/go-kit/log"
-	"github.com/stretchr/testify/require"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
-
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
+
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"

@@ -103,6 +103,8 @@ type storeConfig struct {
 	lazyExpandedPostingsEnabled bool
 
 	indexHeaderLazyDownloadStrategy string
+
+	matcherCacheSize int
 }
 
 func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -220,6 +222,8 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").BoolVar(&sc.webConfig.disableCORS)
 
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&sc.label)
+
+	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&sc.matcherCacheSize)
 
 	sc.reqLogConfig = extkingpin.RegisterRequestLoggingFlags(cmd)
 }
@@ -364,6 +368,14 @@ func runStore(
 		return errors.Wrap(err, "create index cache")
 	}
 
+	var matchersCache = storecache.NoopMatchersCache
+	if conf.matcherCacheSize > 0 {
+		matchersCache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
+		if err != nil {
+			return errors.Wrap(err, "failed to create matchers cache")
+		}
+	}
+
 	var blockLister block.Lister
 	switch syncStrategy(conf.blockListStrategy) {
 	case concurrentDiscovery:
@@ -409,6 +421,7 @@ func runStore(
 		}),
 		store.WithRegistry(reg),
 		store.WithIndexCache(indexCache),
+		store.WithMatchersCache(matchersCache),
 		store.WithQueryGate(queriesGate),
 		store.WithChunkPool(chunkPool),
 		store.WithFilterConfig(conf.filterConf),
