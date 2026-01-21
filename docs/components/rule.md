@@ -277,29 +277,29 @@ Flags:
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --[no-]enable-auto-gomemlimit
+      --[no-]enable-auto-gomemlimit  
                                  Enable go runtime to automatically limit memory
                                  consumption.
-      --auto-gomemlimit.ratio=0.9
+      --auto-gomemlimit.ratio=0.9  
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --grpc-address="0.0.0.0:10901"
+      --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -307,16 +307,16 @@ Flags:
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""
+      --grpc-server-tls-client-ca=""  
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version="1.3"  
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
-      --grpc-server-max-connection-age=60m
+      --grpc-server-max-connection-age=60m  
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
@@ -348,7 +348,7 @@ Flags:
       --[no-]web.disable-cors    Whether to disable CORS headers to be set by
                                  Thanos. By default Thanos sets CORS headers to
                                  be allowed by all.
-      --[no-]shipper.upload-compacted
+      --[no-]shipper.upload-compacted  
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
                                  Works only if compaction is disabled on
@@ -360,14 +360,14 @@ Flags:
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
-      --shipper.meta-file-name="thanos.shipper.json"
+      --shipper.meta-file-name="thanos.shipper.json"  
                                  the file to store shipper metadata in
       --query=<query> ...        Addresses of statically configured query
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
                                  query API servers through respective DNS
                                  lookups.
-      --query.config-file=<file-path>
+      --query.config-file=<file-path>  
                                  Path to YAML file that contains query API
                                  servers configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
@@ -380,27 +380,27 @@ Flags:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence over the
                                  '--query' and '--query.sd-files' flags.
-      --query.sd-files=<path> ...
+      --query.sd-files=<path> ...  
                                  Path to file that contains addresses of query
                                  API servers. The path can be a glob pattern
                                  (repeatable).
       --query.sd-interval=5m     Refresh interval to re-read file SD files.
                                  (used as a fallback)
-      --query.sd-dns-interval=30s
+      --query.sd-dns-interval=30s  
                                  Interval between DNS resolutions.
       --query.http-method=POST   HTTP method to use when sending queries.
                                  Possible options: [GET, POST]
       --query.default-step=1s    Default range query step to use. This is
                                  only used in stateless Ruler and alert state
                                  restoration.
-      --alertmanagers.config-file=<file-path>
+      --alertmanagers.config-file=<file-path>  
                                  Path to YAML file that contains alerting
                                  configuration. See format details:
                                  https://thanos.io/tip/components/rule.md/#configuration.
                                  If defined, it takes precedence
                                  over the '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.config=<content>
+      --alertmanagers.config=<content>  
                                  Alternative to 'alertmanagers.config-file'
                                  flag (mutually exclusive). Content
                                  of YAML file that contains alerting
@@ -409,7 +409,7 @@ Flags:
                                  If defined, it takes precedence
                                  over the '--alertmanagers.url' and
                                  '--alertmanagers.send-timeout' flags.
-      --alertmanagers.url=ALERTMANAGERS.URL ...
+      --alertmanagers.url=ALERTMANAGERS.URL ...  
                                  Alertmanager replica URLs to push firing
                                  alerts. Ruler claims success if push to
                                  at least one alertmanager from discovered
@@ -420,41 +420,41 @@ Flags:
                                  lookups. The port defaults to 9093 or the
                                  SRV record's value. The URL path is used as a
                                  prefix for the regular Alertmanager API path.
-      --alertmanagers.send-timeout=10s
+      --alertmanagers.send-timeout=10s  
                                  Timeout for sending alerts to Alertmanager
-      --alertmanagers.sd-dns-interval=30s
+      --alertmanagers.sd-dns-interval=30s  
                                  Interval between DNS resolutions of
                                  Alertmanager hosts.
-      --alert.query-url=ALERT.QUERY-URL
+      --alert.query-url=ALERT.QUERY-URL  
                                  The external Thanos Query URL that would be set
                                  in all alerts 'Source' field
-      --alert.label-drop=ALERT.LABEL-DROP ...
+      --alert.label-drop=ALERT.LABEL-DROP ...  
                                  Labels by name to drop before sending
                                  to alertmanager. This allows alert to be
                                  deduplicated on replica label (repeated).
                                  Similar Prometheus alert relabelling
-      --alert.relabel-config-file=<file-path>
+      --alert.relabel-config-file=<file-path>  
                                  Path to YAML file that contains alert
                                  relabelling configuration.
-      --alert.relabel-config=<content>
+      --alert.relabel-config=<content>  
                                  Alternative to 'alert.relabel-config-file' flag
                                  (mutually exclusive). Content of YAML file that
                                  contains alert relabelling configuration.
-      --alert.query-template="/graph?g0.expr={{.Expr}}&g0.tab=1"
+      --alert.query-template="/graph?g0.expr={{.Expr}}&g0.tab=1"  
                                  Template to use in alerts source field.
                                  Need only include {{.Expr}} parameter
-      --store.limits.request-series=0
+      --store.limits.request-series=0  
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --store.limits.request-samples=0
+      --store.limits.request-samples=0  
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
                                  chunk contains a maximum of 120 samples.
-      --label=<name>="<value>" ...
+      --label=<name>="<value>" ...  
                                  Labels to be applied to all generated metrics
                                  (repeated). Similar to external labels for
                                  Prometheus, used to identify ruler and its
@@ -464,7 +464,7 @@ Flags:
       --[no-]tsdb.no-lockfile    Do not create lockfile in TSDB data directory.
                                  In any case, the lockfiles will be deleted on
                                  next startup.
-      --[no-]tsdb.wal-compression
+      --[no-]tsdb.wal-compression  
                                  Compress the tsdb WAL.
       --data-dir="data/"         data directory
       --rule-file=rules/ ...     Rule files that should be used by rule
@@ -483,19 +483,19 @@ Flags:
                                  "for" state. This is maintained only for alerts
                                  with configured "for" time greater than grace
                                  period.
-      --restore-ignored-label=RESTORE-IGNORED-LABEL ...
+      --restore-ignored-label=RESTORE-IGNORED-LABEL ...  
                                  Label names to be ignored when restoring alerts
                                  from the remote storage. This is only used in
                                  stateless mode.
-      --rule-concurrent-evaluation=1
+      --rule-concurrent-evaluation=1  
                                  How many rules can be evaluated concurrently.
                                  Default is 1.
-      --grpc-query-endpoint=<endpoint> ...
+      --grpc-query-endpoint=<endpoint> ...  
                                  Addresses of Thanos gRPC query API servers
                                  (repeatable). The scheme may be prefixed
                                  with 'dns+' or 'dnssrv+' to detect Thanos API
                                  servers through respective DNS lookups.
-      --[no-]query.enable-x-functions
+      --[no-]query.enable-x-functions  
                                  Whether to enable extended rate functions
                                  (xrate, xincrease and xdelta). Only has effect
                                  when used with Thanos engine.
@@ -516,7 +516,7 @@ Flags:
                                  ruler's TSDB. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
-      --remote-write.config=<content>
+      --remote-write.config=<content>  
                                  Alternative to 'remote-write.config-file'
                                  flag (mutually exclusive). Content
                                  of YAML config for the remote-write
@@ -528,21 +528,21 @@ Flags:
                                  ruler's TSDB. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --request.logging-config-file=<file-path>
+      --request.logging-config-file=<file-path>  
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
                                  of YAML file with request logging

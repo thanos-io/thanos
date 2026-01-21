@@ -208,22 +208,22 @@ Flags:
       --log.level=info         Log filtering level.
       --log.format=logfmt      Log format to use. Possible options: logfmt or
                                json.
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                Path to YAML file with tracing
                                configuration. See format details:
                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                Alternative to 'tracing.config-file' flag
                                (mutually exclusive). Content of YAML file
                                with tracing configuration. See format details:
                                https://thanos.io/tip/thanos/tracing.md/#configuration
-      --[no-]enable-auto-gomemlimit
+      --[no-]enable-auto-gomemlimit  
                                Enable go runtime to automatically limit memory
                                consumption.
-      --auto-gomemlimit.ratio=0.9
+      --auto-gomemlimit.ratio=0.9  
                                The ratio of reserved GOMEMLIMIT memory to the
                                detected maximum container or system memory.
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                Listen host:port for HTTP endpoints.
       --http-grace-period=2m   Time to wait after an interrupt received for HTTP
                                Server.
@@ -233,39 +233,39 @@ Flags:
       --[no-]web.disable-cors  Whether to disable CORS headers to be set by
                                Thanos. By default Thanos sets CORS headers to be
                                allowed by all.
-      --[no-]query-range.align-range-with-step
+      --[no-]query-range.align-range-with-step  
                                Mutate incoming queries to align their start and
                                end with their step for better cache-ability.
                                Note: Grafana dashboards do that by default.
-      --[no-]query-range.request-downsampled
+      --[no-]query-range.request-downsampled  
                                Make additional query for downsampled data in
                                case of empty or incomplete response to range
                                request.
-      --query-range.split-interval=24h
+      --query-range.split-interval=24h  
                                Split query range requests by an interval and
                                execute in parallel, it should be greater than
                                0 when query-range.response-cache-config is
                                configured.
-      --query-range.min-split-interval=0
+      --query-range.min-split-interval=0  
                                Split query range requests above this interval
                                in query-range.horizontal-shards requests of
                                equal range. Using this parameter is not allowed
                                with query-range.split-interval. One should also
                                set query-range.split-min-horizontal-shards to a
                                value greater than 1 to enable splitting.
-      --query-range.max-split-interval=0
+      --query-range.max-split-interval=0  
                                Split query range below this interval in
                                query-range.horizontal-shards. Queries with a
                                range longer than this value will be split in
                                multiple requests of this length.
-      --query-range.horizontal-shards=0
+      --query-range.horizontal-shards=0  
                                Split queries in this many requests when query
                                duration is below query-range.max-split-interval.
-      --query-range.max-retries-per-request=5
+      --query-range.max-retries-per-request=5  
                                Maximum number of retries for a single query
                                range request; beyond this, the downstream error
                                is returned.
-      --[no-]query-frontend.enable-x-functions
+      --[no-]query-frontend.enable-x-functions  
                                Enable experimental x-
                                functions in query-frontend.
                                --no-query-frontend.enable-x-functions for
@@ -277,69 +277,69 @@ Flags:
       --query-range.max-query-length=0
                                Limit the query time range (end - start time) in
                                the query-frontend, 0 disables it.
-      --query-range.max-query-parallelism=14
+      --query-range.max-query-parallelism=14  
                                Maximum number of query range requests will be
                                scheduled in parallel by the Frontend.
-      --query-range.response-cache-max-freshness=1m
+      --query-range.response-cache-max-freshness=1m  
                                Most recent allowed cacheable result for query
                                range requests, to prevent caching very recent
                                results that might still be in flux.
-      --[no-]query-range.partial-response
+      --[no-]query-range.partial-response  
                                Enable partial response for query range requests
                                if no partial_response param is specified.
                                --no-query-range.partial-response for disabling.
-      --query-range.response-cache-config-file=<file-path>
+      --query-range.response-cache-config-file=<file-path>  
                                Path to YAML file that contains response cache
                                configuration.
-      --query-range.response-cache-config=<content>
+      --query-range.response-cache-config=<content>  
                                Alternative to
                                'query-range.response-cache-config-file' flag
                                (mutually exclusive). Content of YAML file that
                                contains response cache configuration.
-      --labels.split-interval=24h
+      --labels.split-interval=24h  
                                Split labels requests by an interval and execute
                                in parallel, it should be greater than 0 when
                                labels.response-cache-config is configured.
-      --labels.max-retries-per-request=5
+      --labels.max-retries-per-request=5  
                                Maximum number of retries for a single
                                label/series API request; beyond this, the
                                downstream error is returned.
-      --labels.max-query-parallelism=14
+      --labels.max-query-parallelism=14  
                                Maximum number of labels requests will be
                                scheduled in parallel by the Frontend.
-      --labels.response-cache-max-freshness=1m
+      --labels.response-cache-max-freshness=1m  
                                Most recent allowed cacheable result for labels
                                requests, to prevent caching very recent results
                                that might still be in flux.
-      --[no-]labels.partial-response
+      --[no-]labels.partial-response  
                                Enable partial response for labels requests
                                if no partial_response param is specified.
                                --no-labels.partial-response for disabling.
-      --labels.default-time-range=24h
+      --labels.default-time-range=24h  
                                The default metadata time range duration for
                                retrieving labels through Labels and Series API
                                when the range parameters are not specified.
-      --labels.response-cache-config-file=<file-path>
+      --labels.response-cache-config-file=<file-path>  
                                Path to YAML file that contains response cache
                                configuration.
-      --labels.response-cache-config=<content>
+      --labels.response-cache-config=<content>  
                                Alternative to
                                'labels.response-cache-config-file' flag
                                (mutually exclusive). Content of YAML file that
                                contains response cache configuration.
-      --cache-compression-type=""
+      --cache-compression-type=""  
                                Use compression in results cache. Supported
                                values are: 'snappy' and ” (disable compression).
-      --query-frontend.downstream-url="http://localhost:9090"
+      --query-frontend.downstream-url="http://localhost:9090"  
                                URL of downstream Prometheus Query compatible
                                API.
-      --query-frontend.downstream-tripper-config-file=<file-path>
+      --query-frontend.downstream-tripper-config-file=<file-path>  
                                Path to YAML file that contains downstream
                                tripper configuration. If your downstream URL
                                is localhost or 127.0.0.1 then it is highly
                                recommended to increase max_idle_conns_per_host
                                to at least 100.
-      --query-frontend.downstream-tripper-config=<content>
+      --query-frontend.downstream-tripper-config=<content>  
                                Alternative to
                                'query-frontend.downstream-tripper-config-file'
                                flag (mutually exclusive). Content of YAML file
@@ -347,16 +347,16 @@ Flags:
                                If your downstream URL is localhost or 127.0.0.1
                                then it is highly recommended to increase
                                max_idle_conns_per_host to at least 100.
-      --[no-]query-frontend.compress-responses
+      --[no-]query-frontend.compress-responses  
                                Compress HTTP responses.
-      --query-frontend.log-queries-longer-than=0
+      --query-frontend.log-queries-longer-than=0  
                                Log queries that are slower than the specified
                                duration. Set to 0 to disable. Set to < 0 to
                                enable on all queries.
-      --[no-]query-frontend.force-query-stats
+      --[no-]query-frontend.force-query-stats  
                                Enables query statistics for all queries and will
                                export statistics as logs and service headers.
-      --query-frontend.org-id-header=<http-header-name> ...
+      --query-frontend.org-id-header=<http-header-name> ...  
                                Deprecation Warning - This flag
                                will be soon deprecated in favor of
                                query-frontend.tenant-header and both flags
@@ -367,25 +367,25 @@ Flags:
                                If multiple headers match the request, the first
                                matching arg specified will take precedence.
                                If no headers match 'anonymous' will be used.
-      --query-frontend.forward-header=<http-header-name> ...
+      --query-frontend.forward-header=<http-header-name> ...  
                                List of headers forwarded by the query-frontend
                                to downstream queriers, default is empty
-      --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS
+      --query-frontend.vertical-shards=QUERY-FRONTEND.VERTICAL-SHARDS  
                                Number of shards to use when
                                distributing shardable PromQL queries.
                                For more details, you can refer to
                                the Vertical query sharding proposal:
                                https://thanos.io/tip/proposals-accepted/202205-vertical-query-sharding.md
-      --query-frontend.slow-query-logs-user-header=<http-header-name>
+      --query-frontend.slow-query-logs-user-header=<http-header-name>  
                                Set the value of the field remote_user in the
                                slow query logs to the value of the given HTTP
                                header. Falls back to reading the user from the
                                basic auth header.
-      --request.logging-config-file=<file-path>
+      --request.logging-config-file=<file-path>  
                                Path to YAML file with request logging
                                configuration. See format details:
                                https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                Alternative to 'request.logging-config-file'
                                flag (mutually exclusive). Content
                                of YAML file with request logging

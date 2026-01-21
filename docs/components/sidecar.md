@@ -103,29 +103,29 @@ Flags:
       --log.level=info           Log filtering level.
       --log.format=logfmt        Log format to use. Possible options: logfmt or
                                  json.
-      --tracing.config-file=<file-path>
+      --tracing.config-file=<file-path>  
                                  Path to YAML file with tracing
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --tracing.config=<content>
+      --tracing.config=<content>  
                                  Alternative to 'tracing.config-file' flag
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --[no-]enable-auto-gomemlimit
+      --[no-]enable-auto-gomemlimit  
                                  Enable go runtime to automatically limit memory
                                  consumption.
-      --auto-gomemlimit.ratio=0.9
+      --auto-gomemlimit.ratio=0.9  
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
-      --http-address="0.0.0.0:10902"
+      --http-address="0.0.0.0:10902"  
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
                                  HTTP Server.
       --http.config=""           [EXPERIMENTAL] Path to the configuration file
                                  that can enable TLS or authentication for all
                                  HTTP endpoints.
-      --grpc-address="0.0.0.0:10901"
+      --grpc-address="0.0.0.0:10901"  
                                  Listen ip:port address for gRPC endpoints
                                  (StoreAPI). Make sure this address is routable
                                  from other components.
@@ -133,36 +133,36 @@ Flags:
                                  disable TLS
       --grpc-server-tls-key=""   TLS Key for the gRPC server, leave blank to
                                  disable TLS
-      --grpc-server-tls-client-ca=""
+      --grpc-server-tls-client-ca=""  
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version="1.3"  
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
-      --grpc-server-max-connection-age=60m
+      --grpc-server-max-connection-age=60m  
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --prometheus.url=http://localhost:9090
+      --prometheus.url=http://localhost:9090  
                                  URL at which to reach Prometheus's API.
                                  For better performance use local network.
-      --prometheus.ready_timeout=10m
+      --prometheus.ready_timeout=10m  
                                  Maximum time to wait for the Prometheus
                                  instance to start up
-      --prometheus.get_config_interval=30s
+      --prometheus.get_config_interval=30s  
                                  How often to get Prometheus config
-      --prometheus.get_config_timeout=30s
+      --prometheus.get_config_timeout=30s  
                                  Timeout for getting Prometheus config
-      --prometheus.http-client-file=<file-path>
+      --prometheus.http-client-file=<file-path>  
                                  Path to YAML file or string with http
                                  client configs. See Format details:
                                  https://thanos.io/tip/components/sidecar.md/#configuration.
-      --prometheus.http-client=<content>
+      --prometheus.http-client=<content>  
                                  Alternative to 'prometheus.http-client-file'
                                  flag (mutually exclusive). Content
                                  of YAML file or string with http
@@ -170,43 +170,43 @@ Flags:
                                  https://thanos.io/tip/components/sidecar.md/#configuration.
       --tsdb.path="./data"       Data directory of TSDB.
       --reloader.config-file=""  Config file watched by the reloader.
-      --reloader.config-envsubst-file=""
+      --reloader.config-envsubst-file=""  
                                  Output file for environment variable
                                  substituted config file.
-      --reloader.rule-dir=RELOADER.RULE-DIR ...
+      --reloader.rule-dir=RELOADER.RULE-DIR ...  
                                  Rule directories for the reloader to refresh
                                  (repeated field).
-      --reloader.watch-interval=3m
+      --reloader.watch-interval=3m  
                                  Controls how often reloader re-reads config and
                                  rules.
-      --reloader.retry-interval=5s
+      --reloader.retry-interval=5s  
                                  Controls how often reloader retries config
                                  reload in case of error.
       --reloader.method=http     Method used to reload the configuration.
-      --reloader.process-name="prometheus"
+      --reloader.process-name="prometheus"  
                                  Executable name used to match the process being
                                  reloaded when using the signal method.
-      --request.logging-config-file=<file-path>
+      --request.logging-config-file=<file-path>  
                                  Path to YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --request.logging-config=<content>
+      --request.logging-config=<content>  
                                  Alternative to 'request.logging-config-file'
                                  flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
-      --objstore.config-file=<file-path>
+      --objstore.config-file=<file-path>  
                                  Path to YAML file that contains object
                                  store configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --objstore.config=<content>
+      --objstore.config=<content>  
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
-      --[no-]shipper.upload-compacted
+      --[no-]shipper.upload-compacted  
                                  If true shipper will try to upload compacted
                                  blocks as well. Useful for migration purposes.
                                  Works only if compaction is disabled on
@@ -218,20 +218,20 @@ Flags:
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
-      --shipper.meta-file-name="thanos.shipper.json"
+      --shipper.meta-file-name="thanos.shipper.json"  
                                  the file to store shipper metadata in
-      --store.limits.request-series=0
+      --store.limits.request-series=0  
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is
                                  exceeded. 0 means no limit.
-      --store.limits.request-samples=0
+      --store.limits.request-samples=0  
                                  The maximum samples allowed for a single
                                  Series request, The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
                                  chunk contains a maximum of 120 samples.
-      --min-time=0000-01-01T00:00:00Z
+      --min-time=0000-01-01T00:00:00Z  
                                  Start of time range limit to serve. Thanos
                                  sidecar will serve only metrics, which happened
                                  later than this value. Option can be a constant
