@@ -578,6 +578,7 @@ config:
   groupcache_group: test_group
   dns_interval: 1s
   timeout: 2s
+  max_size: 250MiB
 ```
 
 In this case, three Thanos Store nodes are running in the same group meaning that they all point to the same remote object storage.
@@ -585,6 +586,7 @@ In this case, three Thanos Store nodes are running in the same group meaning tha
 - `self_url` - our own URL. On each node this will be different. This should be the external IP through which other nodes could access us;
 - `groupcache_group` - the groupcache group's name. All nodes using the same remote object storage configuration should use the same name. It is used in the HTTP requests. If it is different then nodes will not be able to load data from each other.
 - `dns_internal` - how often DNS lookups should be made.
+- `max_size` - maximum size of the hot in-memory cache.
 
 In the `peers` section it is possible to use the prefix form to automatically look up the peers using DNS. For example, you could use `dns+http://store.thanos.consul.svc:8080` to automatically look up healthy nodes from Consul using its DNS interface.
 
