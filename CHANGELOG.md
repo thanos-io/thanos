@@ -15,12 +15,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 - [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
-- [#8480](https://github.com/thanos-io/thanos/pull/8480) Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
+- [#8618](https://github.com/thanos-io/thanos/pull/8618): Query-Frontend: ensure slow query and stats logging on request failures
+- [#8480](https://github.com/thanos-io/thanos/pull/8480): Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
 
 ### Added
 
 - [#](https://github.com/thanos-io/thanos/pull/8623): Query: support sending a batch of Series per SeriesResponse with `--query.series-response-batch-size` flag.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+- [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
 
 ### Changed
 

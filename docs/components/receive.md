@@ -643,6 +643,9 @@ Flags:
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --matcher-cache-size=0     Max number of cached matchers items. Using 0
                                  disables caching.
       --request.logging-config-file=<file-path>
