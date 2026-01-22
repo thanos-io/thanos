@@ -67,9 +67,10 @@ type Endpoint struct {
 	Address          string `json:"address"`
 	CapNProtoAddress string `json:"capnproto_address"`
 	AZ               string `json:"az"`
+	Ordinal          int    `json:"ordinal,omitempty"`
 }
 
-func (e *Endpoint) String() string {
+func (e Endpoint) String() string {
 	return fmt.Sprintf("addr: %s, capnp_addr: %s, az: %s", e.Address, e.CapNProtoAddress, e.AZ)
 }
 
@@ -113,6 +114,7 @@ func (e *Endpoint) unmarshal(data []byte) error {
 	e.Address = configEndpoint.Address
 	e.AZ = configEndpoint.AZ
 	e.CapNProtoAddress = configEndpoint.CapNProtoAddress
+	e.Ordinal = configEndpoint.Ordinal
 	return nil
 }
 

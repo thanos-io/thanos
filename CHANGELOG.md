@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8639](https://github.com/thanos-io/thanos/pull/8639): Receive: add `ketama_static` hashring algorithm with static replica alignment based on ordinals.
 - [#](https://github.com/thanos-io/thanos/pull/8623): Query: support sending a batch of Series per SeriesResponse with `--query.series-response-batch-size` flag.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
 

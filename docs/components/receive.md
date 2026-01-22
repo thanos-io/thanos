@@ -248,6 +248,38 @@ This is only supported for the Ketama algorithm.
 
 **NOTE:** This feature is made available from v0.32 onwards. Receive can still operate with `endpoints` set to an array of IP strings in ketama mode. But to use AZ-aware hashring, you would need to migrate your existing hashring (and surrounding automation) to the new JSON structure mentioned above.
 
+### Ketama Static hashring
+
+The `ketama_static` algorithm extends AZ-aware ketama with **static replica alignment**. Unlike regular ketama where replicas are determined dynamically by walking the hash ring, `ketama_static` uses explicit `ordinal` values to form replica groups: endpoints with the same ordinal across different AZs always replicate together.
+
+This provides predictable replica placement, useful for deployments where you want to know exactly which nodes form replica groups (e.g., pod-0 in zone-a always replicates to pod-0 in zone-b and zone-c).
+
+**Requirements:**
+- The number of AZs must equal the replication factor
+- Each ordinal must exist in all AZs (the algorithm uses the intersection of ordinals across AZs)
+
+Example `hashring.json` for a 6-node cluster with RF=3 across 3 AZs:
+
+```json
+[
+    {
+        "algorithm": "ketama_static",
+        "endpoints": [
+            { "address": "10.0.1.1:10901", "az": "zone-a", "ordinal": 0 },
+            { "address": "10.0.1.2:10901", "az": "zone-a", "ordinal": 1 },
+            { "address": "10.0.2.1:10901", "az": "zone-b", "ordinal": 0 },
+            { "address": "10.0.2.2:10901", "az": "zone-b", "ordinal": 1 },
+            { "address": "10.0.3.1:10901", "az": "zone-c", "ordinal": 0 },
+            { "address": "10.0.3.2:10901", "az": "zone-c", "ordinal": 1 }
+        ]
+    }
+]
+```
+
+With this configuration, a write to any series will be replicated to exactly one endpoint from each AZ, all sharing the same ordinal (e.g., all ordinal-0 endpoints or all ordinal-1 endpoints).
+
+Shuffle sharding is also supported with `ketama_static`. The shard selection operates on ordinals rather than individual endpoints, preserving replica alignment within each tenant's shard.
+
 ## Limits & gates (experimental)
 
 Thanos Receive has some limits and gates that can be configured to control resource usage. Here's the difference between limits and gates:

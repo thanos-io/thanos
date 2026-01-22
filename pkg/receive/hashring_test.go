@@ -6,6 +6,7 @@ package receive
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"testing"
 
@@ -913,4 +914,320 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 	}
 
 	return assignments, nil
+}
+
+func TestKetamaStaticHashring(t *testing.T) {
+	t.Parallel()
+
+	ts := &prompb.TimeSeries{
+		Labels: []labelpb.ZLabel{{Name: "foo", Value: "bar"}},
+	}
+
+	t.Run("valid 3 AZs RF=3", func(t *testing.T) {
+		endpoints := []Endpoint{
+			{Address: "node-a-0", AZ: "zone-a", Ordinal: 0},
+			{Address: "node-a-1", AZ: "zone-a", Ordinal: 1},
+			{Address: "node-b-0", AZ: "zone-b", Ordinal: 0},
+			{Address: "node-b-1", AZ: "zone-b", Ordinal: 1},
+			{Address: "node-c-0", AZ: "zone-c", Ordinal: 0},
+			{Address: "node-c-1", AZ: "zone-c", Ordinal: 1},
+		}
+		ring, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 3)
+		require.NoError(t, err)
+
+		// Get all 3 replicas and verify they have the same ordinal.
+		r0, err := ring.GetN("tenant", ts, 0)
+		require.NoError(t, err)
+		r1, err := ring.GetN("tenant", ts, 1)
+		require.NoError(t, err)
+		r2, err := ring.GetN("tenant", ts, 2)
+		require.NoError(t, err)
+
+		// All replicas should be from different AZs.
+		azs := map[string]struct{}{r0.AZ: {}, r1.AZ: {}, r2.AZ: {}}
+		require.Len(t, azs, 3, "replicas should be from different AZs")
+
+		// All replicas should have the same ordinal.
+		require.Equal(t, r0.Ordinal, r1.Ordinal)
+		require.Equal(t, r1.Ordinal, r2.Ordinal)
+	})
+
+	t.Run("error: AZ count != RF", func(t *testing.T) {
+		endpoints := []Endpoint{
+			{Address: "node-a-0", AZ: "zone-a", Ordinal: 0},
+			{Address: "node-b-0", AZ: "zone-b", Ordinal: 0},
+		}
+		_, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 3)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "number of AZs (2) must equal replication factor (3)")
+	})
+
+	t.Run("error: duplicate ordinal in AZ", func(t *testing.T) {
+		endpoints := []Endpoint{
+			{Address: "node-a-0", AZ: "zone-a", Ordinal: 0},
+			{Address: "node-a-0-dup", AZ: "zone-a", Ordinal: 0},
+			{Address: "node-b-0", AZ: "zone-b", Ordinal: 0},
+		}
+		_, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 2)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "duplicate ordinal 0 in AZ zone-a")
+	})
+
+	t.Run("valid: non-contiguous ordinals starting at 1", func(t *testing.T) {
+		// Ordinals don't need to start at 0, just need to be common across AZs.
+		endpoints := []Endpoint{
+			{Address: "node-a-1", AZ: "zone-a", Ordinal: 1},
+			{Address: "node-b-1", AZ: "zone-b", Ordinal: 1},
+		}
+		ring, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 2)
+		require.NoError(t, err)
+		require.Len(t, ring.Nodes(), 2)
+	})
+
+	t.Run("error: no common ordinals across AZs", func(t *testing.T) {
+		// zone-a has ordinal 1, zone-b has ordinal 2 - no intersection.
+		endpoints := []Endpoint{
+			{Address: "node-a-1", AZ: "zone-a", Ordinal: 1},
+			{Address: "node-b-2", AZ: "zone-b", Ordinal: 2},
+		}
+		_, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 2)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no common ordinals found across all AZs")
+	})
+
+	t.Run("error: empty endpoints", func(t *testing.T) {
+		_, err := newKetamaStaticHashring([]Endpoint{}, SectionsPerNode, 1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no endpoints provided")
+	})
+
+	t.Run("valid: non-contiguous ordinals with gaps", func(t *testing.T) {
+		// Ordinals 1, 3, 5 are common across all AZs (gaps at 0, 2, 4).
+		endpoints := []Endpoint{
+			{Address: "node-a-1", AZ: "zone-a", Ordinal: 1},
+			{Address: "node-a-3", AZ: "zone-a", Ordinal: 3},
+			{Address: "node-a-5", AZ: "zone-a", Ordinal: 5},
+			{Address: "node-b-1", AZ: "zone-b", Ordinal: 1},
+			{Address: "node-b-3", AZ: "zone-b", Ordinal: 3},
+			{Address: "node-b-5", AZ: "zone-b", Ordinal: 5},
+		}
+		ring, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 2)
+		require.NoError(t, err)
+		require.Len(t, ring.Nodes(), 6)
+
+		// Verify replica alignment works with non-contiguous ordinals.
+		ts := &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{{Name: "test", Value: "series"}},
+		}
+
+		ep0, err := ring.GetN("tenant-x", ts, 0)
+		require.NoError(t, err)
+		ep1, err := ring.GetN("tenant-x", ts, 1)
+		require.NoError(t, err)
+
+		// Replicas should have same ordinal across different AZs.
+		require.Equal(t, ep0.Ordinal, ep1.Ordinal)
+		require.NotEqual(t, ep0.AZ, ep1.AZ)
+	})
+
+	t.Run("valid: partial overlap uses intersection", func(t *testing.T) {
+		// zone-a: ordinals 0, 1, 2
+		// zone-b: ordinals 1, 2, 3
+		// Common: 1, 2
+		endpoints := []Endpoint{
+			{Address: "node-a-0", AZ: "zone-a", Ordinal: 0},
+			{Address: "node-a-1", AZ: "zone-a", Ordinal: 1},
+			{Address: "node-a-2", AZ: "zone-a", Ordinal: 2},
+			{Address: "node-b-1", AZ: "zone-b", Ordinal: 1},
+			{Address: "node-b-2", AZ: "zone-b", Ordinal: 2},
+			{Address: "node-b-3", AZ: "zone-b", Ordinal: 3},
+		}
+		ring, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 2)
+		require.NoError(t, err)
+
+		// Should only have 4 endpoints (2 ordinals x 2 AZs).
+		require.Len(t, ring.Nodes(), 4)
+
+		// Verify only common ordinals (1, 2) are included.
+		ordinals := make(map[int]int)
+		for _, ep := range ring.Nodes() {
+			ordinals[ep.Ordinal]++
+		}
+		require.Equal(t, 2, len(ordinals))
+		require.Equal(t, 2, ordinals[1]) // 2 endpoints with ordinal 1
+		require.Equal(t, 2, ordinals[2]) // 2 endpoints with ordinal 2
+	})
+}
+
+func TestKetamaStaticHashringReplicaAlignment(t *testing.T) {
+	t.Parallel()
+
+	// Create a ring with 10 endpoints per AZ.
+	var endpoints []Endpoint
+	for i := 0; i < 10; i++ {
+		endpoints = append(endpoints, Endpoint{Address: fmt.Sprintf("node-a-%d", i), AZ: "zone-a", Ordinal: i})
+		endpoints = append(endpoints, Endpoint{Address: fmt.Sprintf("node-b-%d", i), AZ: "zone-b", Ordinal: i})
+		endpoints = append(endpoints, Endpoint{Address: fmt.Sprintf("node-c-%d", i), AZ: "zone-c", Ordinal: i})
+	}
+
+	ring, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	// Test multiple time series and verify all replicas have same ordinal.
+	for i := 0; i < 100; i++ {
+		ts := &prompb.TimeSeries{
+			Labels: []labelpb.ZLabel{{Name: "series", Value: fmt.Sprintf("test-%d", i)}},
+		}
+
+		r0, err := ring.GetN("tenant", ts, 0)
+		require.NoError(t, err)
+		r1, err := ring.GetN("tenant", ts, 1)
+		require.NoError(t, err)
+		r2, err := ring.GetN("tenant", ts, 2)
+		require.NoError(t, err)
+
+		require.Equal(t, r0.Ordinal, r1.Ordinal, "replica 0 and 1 should have same ordinal")
+		require.Equal(t, r1.Ordinal, r2.Ordinal, "replica 1 and 2 should have same ordinal")
+
+		// Verify all replicas are from different AZs.
+		require.NotEqual(t, r0.AZ, r1.AZ)
+		require.NotEqual(t, r1.AZ, r2.AZ)
+		require.NotEqual(t, r0.AZ, r2.AZ)
+	}
+}
+
+func TestKetamaStaticShuffleSharding(t *testing.T) {
+	t.Parallel()
+
+	// Create 3 AZs with 5 ordinals each (15 total endpoints).
+	var endpoints []Endpoint
+	azs := []string{"zone-a", "zone-b", "zone-c"}
+	for _, az := range azs {
+		for ord := 0; ord < 5; ord++ {
+			endpoints = append(endpoints, Endpoint{
+				Address: fmt.Sprintf("node-%s-%d", az, ord),
+				AZ:      az,
+				Ordinal: ord,
+			})
+		}
+	}
+
+	baseRing, err := newKetamaStaticHashring(endpoints, SectionsPerNode, 3)
+	require.NoError(t, err)
+
+	t.Run("basic shard selection", func(t *testing.T) {
+		// shard_size=6 with 3 AZs -> ceil(6/3)=2 ordinals -> 6 endpoints
+		cfg := ShuffleShardingConfig{
+			ShardSize: 6,
+		}
+		shardRing, err := newAlignedShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test")
+		require.NoError(t, err)
+
+		// Verify nodes count: 2 ordinals * 3 AZs = 6
+		shard, err := shardRing.getTenantShard("tenant1")
+		require.NoError(t, err)
+		require.Len(t, shard.Nodes(), 6)
+
+		// Verify all AZs have the same ordinals.
+		ordinalsByAZ := make(map[string][]int)
+		for _, node := range shard.Nodes() {
+			ordinalsByAZ[node.AZ] = append(ordinalsByAZ[node.AZ], node.Ordinal)
+		}
+		require.Len(t, ordinalsByAZ, 3)
+
+		var refOrdinals []int
+		for _, ordinals := range ordinalsByAZ {
+			sort.Ints(ordinals)
+			if refOrdinals == nil {
+				refOrdinals = ordinals
+			} else {
+				require.Equal(t, refOrdinals, ordinals, "all AZs should have same ordinals")
+			}
+		}
+	})
+
+	t.Run("replica alignment preserved", func(t *testing.T) {
+		// shard_size=6 -> 2 ordinals
+		cfg := ShuffleShardingConfig{ShardSize: 6}
+		shardRing, err := newAlignedShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test")
+		require.NoError(t, err)
+
+		// Test multiple series and verify replicas have same ordinal.
+		for i := 0; i < 50; i++ {
+			ts := &prompb.TimeSeries{
+				Labels: []labelpb.ZLabel{{Name: "series", Value: fmt.Sprintf("s-%d", i)}},
+			}
+
+			r0, err := shardRing.GetN("tenant", ts, 0)
+			require.NoError(t, err)
+			r1, err := shardRing.GetN("tenant", ts, 1)
+			require.NoError(t, err)
+			r2, err := shardRing.GetN("tenant", ts, 2)
+			require.NoError(t, err)
+
+			// All replicas should have same ordinal but different AZs.
+			require.Equal(t, r0.Ordinal, r1.Ordinal)
+			require.Equal(t, r1.Ordinal, r2.Ordinal)
+			require.NotEqual(t, r0.AZ, r1.AZ)
+			require.NotEqual(t, r1.AZ, r2.AZ)
+		}
+	})
+
+	t.Run("tenant consistency", func(t *testing.T) {
+		cfg := ShuffleShardingConfig{ShardSize: 6}
+		shardRing, err := newAlignedShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test")
+		require.NoError(t, err)
+
+		// Same tenant should always get same ordinals.
+		var firstOrdinals []int
+		for i := 0; i < 10; i++ {
+			shard, err := shardRing.getTenantShard("consistent-tenant")
+			require.NoError(t, err)
+
+			ordinals := extractOrdinals(shard.Nodes())
+			if firstOrdinals == nil {
+				firstOrdinals = ordinals
+			} else {
+				require.Equal(t, firstOrdinals, ordinals)
+			}
+		}
+	})
+
+	t.Run("different tenants get different shards", func(t *testing.T) {
+		// shard_size=6 -> 2 ordinals; with 5 ordinals choosing 2, C(5,2)=10 combinations
+		cfg := ShuffleShardingConfig{ShardSize: 6}
+		shardRing, err := newAlignedShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test")
+		require.NoError(t, err)
+
+		// Different tenants should likely get different ordinals.
+		ordinalSets := make(map[string]int)
+		for i := 0; i < 20; i++ {
+			shard, err := shardRing.getTenantShard(fmt.Sprintf("tenant-%d", i))
+			require.NoError(t, err)
+			key := fmt.Sprintf("%v", extractOrdinals(shard.Nodes()))
+			ordinalSets[key]++
+		}
+		require.Greater(t, len(ordinalSets), 1, "different tenants should get different ordinal sets")
+	})
+
+	t.Run("shard size exceeds ordinals", func(t *testing.T) {
+		// shard_size=18 with 3 AZs -> ceil(18/3)=6 ordinals needed, but only 5 available
+		cfg := ShuffleShardingConfig{ShardSize: 18}
+		_, err := newAlignedShuffleShardHashring(baseRing, cfg, 3, prometheus.NewRegistry(), "test")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "requires 6 ordinals but only 5 available")
+	})
+}
+
+func extractOrdinals(nodes []Endpoint) []int {
+	seen := make(map[int]struct{})
+	for _, n := range nodes {
+		seen[n.Ordinal] = struct{}{}
+	}
+	result := make([]int, 0, len(seen))
+	for ord := range seen {
+		result = append(result, ord)
+	}
+	sort.Ints(result)
+	return result
 }
