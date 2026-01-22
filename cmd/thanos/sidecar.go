@@ -426,6 +426,7 @@ func runSidecar(
 				shipper.WithUploadCompacted(conf.shipper.uploadCompacted),
 				shipper.WithAllowOutOfOrderUploads(conf.shipper.allowOutOfOrderUpload),
 				shipper.WithSkipCorruptedBlocks(conf.shipper.skipCorruptedBlocks),
+				shipper.WithUploadConcurrency(conf.shipper.uploadConcurrency),
 			)
 
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {

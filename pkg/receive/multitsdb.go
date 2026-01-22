@@ -66,6 +66,7 @@ type MultiTSDB struct {
 	allowOutOfOrderUpload bool
 	skipCorruptedBlocks   bool
 	hashFunc              metadata.HashFunc
+	uploadConcurrency     int
 	hashringConfigs       []HashringConfig
 
 	matcherCache storecache.MatchersCache
@@ -109,6 +110,12 @@ func WithMatchersCache(cache storecache.MatchersCache) MultiTSDBOption {
 	}
 }
 
+func WithUploadConcurrency(concurrency int) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.uploadConcurrency = concurrency
+	}
+}
+
 // NewMultiTSDB creates new MultiTSDB.
 // NOTE: Passed labels must be sorted lexicographically (alphabetically).
 func NewMultiTSDB(
@@ -143,6 +150,7 @@ func NewMultiTSDB(
 		allowOutOfOrderUpload: allowOutOfOrderUpload,
 		skipCorruptedBlocks:   skipCorruptedBlocks,
 		hashFunc:              hashFunc,
+		uploadConcurrency:     0,
 		matcherCache:          storecache.NoopMatchersCache,
 	}
 
@@ -799,6 +807,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 			shipper.WithLabels(func() labels.Labels { return lset }),
 			shipper.WithAllowOutOfOrderUploads(t.allowOutOfOrderUpload),
 			shipper.WithSkipCorruptedBlocks(t.skipCorruptedBlocks),
+			shipper.WithUploadConcurrency(t.uploadConcurrency),
 		)
 	}
 	var options []store.TSDBStoreOption

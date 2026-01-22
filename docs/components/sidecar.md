@@ -220,6 +220,9 @@ Flags:
                                  Possible values are: "", "SHA256".
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --store.limits.request-series=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is

@@ -1054,6 +1054,9 @@ Flags:
       --[no-]shipper.upload-compacted
                                If true shipper will try to upload compacted
                                blocks as well.
+      --shipper.upload-concurrency=5
+                               Number of goroutines to use when uploading block
+                               files to object storage.
 
 ```
 

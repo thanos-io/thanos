@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#](https://github.com/thanos-io/thanos/pull/8623): Query: support sending a batch of Series per SeriesResponse with `--query.series-response-batch-size` flag.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+- [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
 
 ### Changed
 
