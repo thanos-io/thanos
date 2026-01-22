@@ -225,6 +225,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		10*time.Second,
 		nil,
 		NoopSeriesStatsReporter,
+		1,
 	)
 	testSelect(t, q, expectedSeries)
 }
@@ -296,4 +297,189 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 			testutil.Ok(t, ss.Err())
 		}
 	})
+}
+
+// batchingMockedStoreServer batches series responses before sending.
+type batchingMockedStoreServer struct {
+	storepb.StoreServer
+
+	responses []*storepb.SeriesResponse
+	batchSize int
+}
+
+func (m *batchingMockedStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	var batch []*storepb.Series
+
+	for _, r := range m.responses {
+		series := r.GetSeries()
+		if series == nil {
+			if len(batch) > 0 {
+				resp := storepb.NewBatchResponse(batch)
+				if err := server.Send(resp); err != nil {
+					return err
+				}
+				batch = batch[:0]
+			}
+			if err := server.Send(r); err != nil {
+				return err
+			}
+			continue
+		}
+
+		batch = append(batch, series)
+
+		if len(batch) >= m.batchSize {
+			resp := storepb.NewBatchResponse(batch)
+			if err := server.Send(resp); err != nil {
+				return err
+			}
+			batch = batch[:0]
+		}
+	}
+
+	if len(batch) > 0 {
+		resp := storepb.NewBatchResponse(batch)
+		if err := server.Send(resp); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func BenchmarkGRPCServerBatching(b *testing.B) {
+	seriesCounts := []int{100, 1000, 10000, 100000}
+	samplesPerSeriesCounts := []int{100, 240}
+	batchSizes := []int{1, 10, 100, 1000, 10000}
+	compressors := []string{"snappy"}
+
+	for _, seriesCount := range seriesCounts {
+		b.Run(fmt.Sprintf("series=%v", seriesCount), func(b *testing.B) {
+			for _, samplesPerSeriesCount := range samplesPerSeriesCounts {
+				b.Run(fmt.Sprintf("sample_count_per_series=%v", samplesPerSeriesCount), func(b *testing.B) {
+					for _, batchSize := range batchSizes {
+						b.Run(fmt.Sprintf("batch_size=%v", batchSize), func(b *testing.B) {
+							for _, compressor := range compressors {
+								b.Run(fmt.Sprintf("compressor=%v", compressor), func(b *testing.B) {
+									b.Log("initializing the loop")
+									b.ResetTimer()
+									b.ReportAllocs()
+									benchmarkGRPCServerBatching(b, seriesCount, samplesPerSeriesCount, batchSize, compressor)
+								})
+							}
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func benchmarkGRPCServerBatching(b *testing.B, seriesCount, samplesPerSeries, batchSize int, compressor string) {
+	tmpDir := b.TempDir()
+
+	random := rand.New(rand.NewSource(120))
+	var resps []*storepb.SeriesResponse
+
+	// Use realistic, repetitive labels that simulate real-world Prometheus metrics.
+	head, created := storetestutil.CreateHeadWithSeries(b, 0, storetestutil.HeadGenOptions{
+		TSDBDir:          tmpDir,
+		SamplesPerSeries: samplesPerSeries,
+		Series:           seriesCount,
+		Random:           random,
+		PrependLabels: labels.FromStrings(
+			"a_replica", fmt.Sprintf("%d", 0), // a_ prefix so we keep sorted order.
+			"__name__", "http_requests_total",
+			"cluster", "us-east-1",
+			"instance", "localhost:9090",
+			"job", "prometheus",
+			"namespace", "default",
+			"replica", "0",
+		),
+	})
+	testutil.Ok(b, head.Close())
+	for i := range created {
+		resps = append(resps, storepb.NewSeriesResponse(created[i]))
+	}
+
+	var ss storepb.StoreServer
+	if batchSize == 1 {
+		ss = &mockedStoreServer{responses: resps}
+	} else {
+		ss = &batchingMockedStoreServer{responses: resps, batchSize: batchSize}
+	}
+
+	g := grpcserver.New(
+		log.NewNopLogger(), prometheus.NewRegistry(), opentracing.NoopTracer{}, []grpc_logging.Option{}, []string{}, component.Compact, prober.NewGRPC(),
+		grpcserver.WithServer(store.RegisterStoreServer(ss, log.NewNopLogger())),
+		grpcserver.WithListen("localhost:0"),
+	)
+
+	go func() {
+		err := g.ListenAndServe()
+		if errors.Is(err, grpc.ErrServerStopped) {
+			return
+		}
+		testutil.Ok(b, err)
+	}()
+
+	for g.Address() == "" {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	b.Cleanup(func() {
+		g.Shutdown(nil)
+	})
+
+	gc, err := grpc.NewClient(g.Address(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.UseCompressor(compressor),
+			grpc.MaxCallRecvMsgSize(math.MaxInt32),
+		),
+	)
+	testutil.Ok(b, err)
+	b.Cleanup(func() {
+		testutil.Ok(b, gc.Close())
+	})
+	sc := storepb.NewStoreClient(gc)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for b.Loop() {
+		retS, err := sc.Series(context.Background(), &storepb.SeriesRequest{
+			MinTime: math.MinInt64,
+			MaxTime: math.MaxInt64,
+			Matchers: []storepb.LabelMatcher{
+				{
+					Type:  storepb.LabelMatcher_RE,
+					Name:  model.MetricNameLabel,
+					Value: "a_.*",
+				},
+			},
+		}, grpc.UseCompressor(compressor))
+
+		testutil.Ok(b, err)
+
+		var got int
+
+		for {
+			resp, err := retS.Recv()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				testutil.Ok(b, err)
+			}
+			// Count series from both single series responses and batch responses
+			if series := resp.GetSeries(); series != nil {
+				got++
+			} else if batch := resp.GetBatch(); batch != nil {
+				got += len(batch.Series)
+			}
+		}
+
+		require.Equal(b, len(resps), got)
+	}
+
 }

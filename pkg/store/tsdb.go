@@ -252,7 +252,9 @@ func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) (
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
 	var srv flushableServer
 	if fs, ok := seriesSrv.(flushableServer); !ok {
-		srv = newFlushableServer(seriesSrv, sortingStrategyStore)
+		srv = newFlushableServer(
+			newBatchableServer(seriesSrv, int(r.ResponseBatchSize)),
+			sortingStrategyStore)
 	} else {
 		srv = fs
 	}
