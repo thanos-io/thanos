@@ -960,7 +960,6 @@ func TestShuffleShardHashringStability(t *testing.T) {
 				initialEndpoints[i] = Endpoint{Address: fmt.Sprintf("node-%d", i)}
 			}
 
-			// Create scaled endpoints
 			scaledEndpoints := make([]Endpoint, tc.scaledNodes)
 			for i := 0; i < tc.scaledNodes; i++ {
 				scaledEndpoints[i] = Endpoint{Address: fmt.Sprintf("node-%d", i)}
@@ -971,13 +970,11 @@ func TestShuffleShardHashringStability(t *testing.T) {
 				ZoneAwarenessDisabled: true,
 			}
 
-			// Create initial hashring
 			initialBaseRing, err := newKetamaHashring(initialEndpoints, SectionsPerNode, 1)
 			require.NoError(t, err)
 			initialShardRing, err := newShuffleShardHashring(initialBaseRing, shuffleShardCfg, 1, prometheus.NewRegistry(), "test-initial")
 			require.NoError(t, err)
 
-			// Create scaled hashring
 			scaledBaseRing, err := newKetamaHashring(scaledEndpoints, SectionsPerNode, 1)
 			require.NoError(t, err)
 			scaledShardRing, err := newShuffleShardHashring(scaledBaseRing, shuffleShardCfg, 1, prometheus.NewRegistry(), "test-scaled")
@@ -989,13 +986,8 @@ func TestShuffleShardHashringStability(t *testing.T) {
 			for tenantID := 0; tenantID < tc.numTenants; tenantID++ {
 				tenant := fmt.Sprintf("tenant-%d", tenantID)
 
-				// Get nodes used by this tenant in initial ring
 				initialNodes := getTenantNodes(t, initialShardRing, tenant, tc.shardSize)
-
-				// Get nodes used by this tenant in scaled ring
 				scaledNodes := getTenantNodes(t, scaledShardRing, tenant, tc.shardSize)
-
-				// Count differences
 				added, removed := compareNodeSets(initialNodes, scaledNodes)
 				diff := max(len(added), len(removed))
 				totalDiffs += diff
@@ -1021,9 +1013,9 @@ func TestShuffleShardHashringStability(t *testing.T) {
 
 // getTenantNodes returns the set of nodes used by a tenant's shard.
 func getTenantNodes(t *testing.T, ring *shuffleShardHashring, tenant string, shardSize int) map[string]struct{} {
+	t.Helper()
 	nodes := make(map[string]struct{})
 
-	// Sample many time series to discover all nodes in the shard
 	for i := 0; i < 1000; i++ {
 		ts := &prompb.TimeSeries{
 			Labels: []labelpb.ZLabel{
