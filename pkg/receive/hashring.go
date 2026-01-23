@@ -33,8 +33,9 @@ import (
 type HashringAlgorithm string
 
 const (
-	AlgorithmHashmod HashringAlgorithm = "hashmod"
-	AlgorithmKetama  HashringAlgorithm = "ketama"
+	AlgorithmHashmod      HashringAlgorithm = "hashmod"
+	AlgorithmKetama       HashringAlgorithm = "ketama"
+	AlgorithmKetamaStatic HashringAlgorithm = "ketama_static"
 
 	// SectionsPerNode is the number of sections in the ring assigned to each node
 	// in the ketama hashring. A higher number yields a better series distribution,
@@ -184,6 +185,402 @@ func newKetamaHashring(endpoints []Endpoint, sectionsPerNode int, replicationFac
 
 func (k *ketamaHashring) Nodes() []Endpoint {
 	return k.endpoints
+}
+
+// newKetamaStaticHashring creates a ketama hashring with static replica alignment.
+// Replicas are determined by the ordinal field: endpoints with the same ordinal
+// across different AZs form a replica group. This provides predictable replica
+// placement where, for example, endpoint with ordinal 0 in zone-a always replicates
+// to ordinal 0 in zone-b and zone-c.
+func newKetamaStaticHashring(endpoints []Endpoint, sectionsPerNode int, replicationFactor uint64) (*ketamaHashring, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.New("no endpoints provided")
+	}
+
+	// Group endpoints by AZ and ordinal.
+	azEndpoints := make(map[string]map[int]Endpoint)
+	for _, ep := range endpoints {
+		if _, ok := azEndpoints[ep.AZ]; !ok {
+			azEndpoints[ep.AZ] = make(map[int]Endpoint)
+		}
+		if _, exists := azEndpoints[ep.AZ][ep.Ordinal]; exists {
+			return nil, fmt.Errorf("duplicate ordinal %d in AZ %s", ep.Ordinal, ep.AZ)
+		}
+		azEndpoints[ep.AZ][ep.Ordinal] = ep
+	}
+
+	numAZs := len(azEndpoints)
+	if uint64(numAZs) != replicationFactor {
+		return nil, fmt.Errorf("number of AZs (%d) must equal replication factor (%d) for ketama_static", numAZs, replicationFactor)
+	}
+
+	// Get sorted AZ names.
+	sortedAZs := make([]string, 0, numAZs)
+	for az := range azEndpoints {
+		sortedAZs = append(sortedAZs, az)
+	}
+	sort.Strings(sortedAZs)
+
+	// Find ordinals common to ALL AZs (intersection).
+	var commonOrdinals []int
+	firstAZ := sortedAZs[0]
+	for ordinal := range azEndpoints[firstAZ] {
+		presentInAll := true
+		for _, az := range sortedAZs[1:] {
+			if _, ok := azEndpoints[az][ordinal]; !ok {
+				presentInAll = false
+				break
+			}
+		}
+		if presentInAll {
+			commonOrdinals = append(commonOrdinals, ordinal)
+		}
+	}
+	if len(commonOrdinals) == 0 {
+		return nil, errors.New("no common ordinals found across all AZs")
+	}
+	sort.Ints(commonOrdinals)
+
+	// Build flat endpoint list: all endpoints from AZ0, then AZ1, etc.
+	// Ordered by sorted commonOrdinals within each AZ.
+	numEndpointsPerAZ := len(commonOrdinals)
+	flatEndpoints := make([]Endpoint, 0, numAZs*numEndpointsPerAZ)
+	for _, az := range sortedAZs {
+		for _, ordinal := range commonOrdinals {
+			flatEndpoints = append(flatEndpoints, azEndpoints[az][ordinal])
+		}
+	}
+
+	// Build ring sections using only primary AZ endpoints for hashing.
+	hash := xxhash.New()
+	ringSections := make(sections, 0, numEndpointsPerAZ*sectionsPerNode)
+
+	for ordinalIdx, ordinal := range commonOrdinals {
+		primaryEndpoint := azEndpoints[sortedAZs[0]][ordinal]
+		for i := 1; i <= sectionsPerNode; i++ {
+			hash.Reset()
+			_, _ = hash.Write([]byte(primaryEndpoint.Address + ":" + strconv.Itoa(i)))
+
+			sec := &section{
+				hash:          hash.Sum64(),
+				az:            primaryEndpoint.AZ,
+				endpointIndex: uint64(ordinalIdx),
+				replicas:      make([]uint64, 0, replicationFactor),
+			}
+
+			// Add all endpoints with same ordinal as replicas.
+			// Use ordinalIdx (position in commonOrdinals) not ordinal (actual value)
+			// to correctly index into the flat endpoint array.
+			for azIdx := 0; azIdx < numAZs; azIdx++ {
+				flatIdx := azIdx*numEndpointsPerAZ + ordinalIdx
+				sec.replicas = append(sec.replicas, uint64(flatIdx))
+			}
+			ringSections = append(ringSections, sec)
+		}
+	}
+
+	sort.Sort(ringSections)
+	return &ketamaHashring{
+		endpoints:    flatEndpoints,
+		sections:     ringSections,
+		numEndpoints: uint64(len(flatEndpoints)),
+	}, nil
+}
+
+// alignedShuffleShardHashring wraps a ketama_static hashring and applies shuffle sharding
+// by selecting ordinals (not individual endpoints) per tenant, preserving replica alignment.
+type alignedShuffleShardHashring struct {
+	baseRing *ketamaHashring
+	config   ShuffleShardingConfig
+
+	replicationFactor uint64
+	nodes             []Endpoint
+
+	// commonOrdinals is the set of ordinals common to all AZs.
+	commonOrdinals []int
+	// ordinalRing is a consistent hash ring of ordinals for tenant shard selection.
+	ordinalRing ordinalSections
+	// azOrdinalMap maps AZ -> ordinal -> Endpoint for building tenant subrings.
+	azOrdinalMap map[string]map[int]Endpoint
+	// sortedAZs is the sorted list of AZ names.
+	sortedAZs []string
+
+	cache   *lru.Cache[string, *ketamaHashring]
+	metrics *shuffleShardCacheMetrics
+}
+
+type ordinalSection struct {
+	ordinal int
+	hash    uint64
+}
+
+type ordinalSections []ordinalSection
+
+func (o ordinalSections) Len() int           { return len(o) }
+func (o ordinalSections) Less(i, j int) bool { return o[i].hash < o[j].hash }
+func (o ordinalSections) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
+
+func newAlignedShuffleShardHashring(
+	baseRing *ketamaHashring,
+	config ShuffleShardingConfig,
+	replicationFactor uint64,
+	reg prometheus.Registerer,
+	name string,
+) (*alignedShuffleShardHashring, error) {
+	nodes := baseRing.Nodes()
+
+	// Group endpoints by AZ and ordinal.
+	azOrdinalMap := make(map[string]map[int]Endpoint)
+	for _, ep := range nodes {
+		if _, ok := azOrdinalMap[ep.AZ]; !ok {
+			azOrdinalMap[ep.AZ] = make(map[int]Endpoint)
+		}
+		azOrdinalMap[ep.AZ][ep.Ordinal] = ep
+	}
+
+	// Get sorted AZ names.
+	sortedAZs := make([]string, 0, len(azOrdinalMap))
+	for az := range azOrdinalMap {
+		sortedAZs = append(sortedAZs, az)
+	}
+	sort.Strings(sortedAZs)
+
+	// Find common ordinals across all AZs.
+	var commonOrdinals []int
+	firstAZ := sortedAZs[0]
+	for ordinal := range azOrdinalMap[firstAZ] {
+		presentInAll := true
+		for _, az := range sortedAZs[1:] {
+			if _, ok := azOrdinalMap[az][ordinal]; !ok {
+				presentInAll = false
+				break
+			}
+		}
+		if presentInAll {
+			commonOrdinals = append(commonOrdinals, ordinal)
+		}
+	}
+	sort.Ints(commonOrdinals)
+
+	if len(commonOrdinals) == 0 {
+		return nil, errors.New("no common ordinals found across all AZs")
+	}
+
+	// shard_size represents total endpoints (same semantics as regular ketama).
+	// Convert to number of ordinals: ceil(shard_size / numAZs).
+	numAZs := len(sortedAZs)
+	maxOrdinalsNeeded := int(math.Ceil(float64(config.ShardSize) / float64(numAZs)))
+	if maxOrdinalsNeeded > len(commonOrdinals) {
+		return nil, fmt.Errorf("shard size %d requires %d ordinals but only %d available", config.ShardSize, maxOrdinalsNeeded, len(commonOrdinals))
+	}
+
+	// Build ordinal ring for consistent hashing.
+	ordinalRing := buildOrdinalRing(commonOrdinals, SectionsPerNode)
+
+	const DefaultCacheSize = 100
+	if config.CacheSize <= 0 {
+		config.CacheSize = DefaultCacheSize
+	}
+
+	metrics := newShuffleShardCacheMetrics(reg, name)
+	metrics.maxItems.Set(float64(config.CacheSize))
+
+	cache, err := lru.NewWithEvict[string, *ketamaHashring](config.CacheSize, func(key string, value *ketamaHashring) {
+		metrics.evicted.Inc()
+		metrics.numItems.Dec()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &alignedShuffleShardHashring{
+		baseRing:          baseRing,
+		config:            config,
+		replicationFactor: replicationFactor,
+		nodes:             nodes,
+		commonOrdinals:    commonOrdinals,
+		ordinalRing:       ordinalRing,
+		azOrdinalMap:      azOrdinalMap,
+		sortedAZs:         sortedAZs,
+		cache:             cache,
+		metrics:           metrics,
+	}, nil
+}
+
+func buildOrdinalRing(ordinals []int, sectionsPerOrdinal int) ordinalSections {
+	ring := make(ordinalSections, 0, len(ordinals)*sectionsPerOrdinal)
+	hasher := xxhash.New()
+
+	for _, ordinal := range ordinals {
+		for i := 1; i <= sectionsPerOrdinal; i++ {
+			hasher.Reset()
+			_, _ = hasher.Write([]byte(fmt.Sprintf("ordinal-%d:%d", ordinal, i)))
+			ring = append(ring, ordinalSection{
+				ordinal: ordinal,
+				hash:    hasher.Sum64(),
+			})
+		}
+	}
+
+	sort.Sort(ring)
+	return ring
+}
+
+func (s *alignedShuffleShardHashring) Close() {
+	s.metrics.close()
+}
+
+func (s *alignedShuffleShardHashring) Nodes() []Endpoint {
+	return s.nodes
+}
+
+func (s *alignedShuffleShardHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint64) (Endpoint, error) {
+	shard, err := s.getTenantShardCached(tenant)
+	if err != nil {
+		return Endpoint{}, err
+	}
+	return shard.GetN(tenant, ts, n)
+}
+
+func (s *alignedShuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashring, error) {
+	s.metrics.requestsTotal.Inc()
+
+	if cached, ok := s.cache.Get(tenant); ok {
+		s.metrics.hitsTotal.Inc()
+		return cached, nil
+	}
+
+	shard, err := s.getTenantShard(tenant)
+	if err != nil {
+		return nil, err
+	}
+
+	s.metrics.numItems.Inc()
+	s.cache.Add(tenant, shard)
+	return shard, nil
+}
+
+func (s *alignedShuffleShardHashring) getShardSize(tenant string) int {
+	for _, override := range s.config.Overrides {
+		switch override.TenantMatcherType {
+		case TenantMatcherTypeExact:
+			if slices.Contains(override.Tenants, tenant) {
+				return override.ShardSize
+			}
+		case TenantMatcherGlob:
+			for _, t := range override.Tenants {
+				if matches, err := filepath.Match(t, tenant); err == nil && matches {
+					return override.ShardSize
+				}
+			}
+		}
+	}
+	return s.config.ShardSize
+}
+
+func (s *alignedShuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, error) {
+	shardSize := s.getShardSize(tenant)
+
+	// Convert shard_size (total endpoints) to number of ordinals.
+	// Same semantics as regular ketama: shard_size / numAZs per zone.
+	numOrdinals := int(math.Ceil(float64(shardSize) / float64(len(s.sortedAZs))))
+
+	// Validate that the shard size (possibly from override) doesn't exceed available ordinals.
+	if numOrdinals > len(s.commonOrdinals) {
+		return nil, fmt.Errorf("shard size %d for tenant %q requires %d ordinals but only %d available",
+			shardSize, tenant, numOrdinals, len(s.commonOrdinals))
+	}
+
+	// Select ordinals using consistent hashing.
+	selectedOrdinals := s.selectOrdinals(tenant, numOrdinals)
+
+	// Build aligned subring with selected ordinals.
+	return s.buildAlignedSubring(selectedOrdinals)
+}
+
+func (s *alignedShuffleShardHashring) selectOrdinals(tenant string, count int) []int {
+	seed := ShuffleShardSeed(tenant, "")
+	r := rand.New(rand.NewSource(seed))
+
+	selected := make(map[int]struct{})
+	result := make([]int, 0, count)
+
+	for len(result) < count && len(result) < len(s.ordinalRing) {
+		pos := r.Uint64()
+		idx := sort.Search(len(s.ordinalRing), func(i int) bool {
+			return s.ordinalRing[i].hash >= pos
+		})
+		if idx == len(s.ordinalRing) {
+			idx = 0
+		}
+
+		// Walk ring to find unselected ordinal.
+		for j := 0; j < len(s.ordinalRing); j++ {
+			checkIdx := (idx + j) % len(s.ordinalRing)
+			ord := s.ordinalRing[checkIdx].ordinal
+			if _, ok := selected[ord]; !ok {
+				selected[ord] = struct{}{}
+				result = append(result, ord)
+				break
+			}
+		}
+	}
+
+	sort.Ints(result)
+	return result
+}
+
+func (s *alignedShuffleShardHashring) buildAlignedSubring(selectedOrdinals []int) (*ketamaHashring, error) {
+	numAZs := len(s.sortedAZs)
+	numOrdinals := len(selectedOrdinals)
+
+	// Build flat endpoint list: [AZ0-ord0, AZ0-ord1, ..., AZ1-ord0, AZ1-ord1, ...]
+	flatEndpoints := make([]Endpoint, 0, numAZs*numOrdinals)
+	for _, az := range s.sortedAZs {
+		for _, ordinal := range selectedOrdinals {
+			ep, ok := s.azOrdinalMap[az][ordinal]
+			if !ok {
+				return nil, fmt.Errorf("ordinal %d not found in AZ %s", ordinal, az)
+			}
+			flatEndpoints = append(flatEndpoints, ep)
+		}
+	}
+
+	// Create sections with aligned replicas.
+	hasher := xxhash.New()
+	ringSections := make(sections, 0, numOrdinals*SectionsPerNode)
+
+	for ordinalIdx := 0; ordinalIdx < numOrdinals; ordinalIdx++ {
+		primaryEndpoint := flatEndpoints[ordinalIdx]
+
+		for sectionIdx := 1; sectionIdx <= SectionsPerNode; sectionIdx++ {
+			hasher.Reset()
+			_, _ = hasher.Write([]byte(primaryEndpoint.Address + ":" + strconv.Itoa(sectionIdx)))
+
+			sec := &section{
+				hash:          hasher.Sum64(),
+				az:            primaryEndpoint.AZ,
+				endpointIndex: uint64(ordinalIdx),
+				replicas:      make([]uint64, 0, s.replicationFactor),
+			}
+
+			// Add replicas: same ordinal index from each AZ.
+			for azIdx := 0; azIdx < numAZs; azIdx++ {
+				replicaFlatIndex := azIdx*numOrdinals + ordinalIdx
+				sec.replicas = append(sec.replicas, uint64(replicaFlatIndex))
+			}
+
+			ringSections = append(ringSections, sec)
+		}
+	}
+
+	sort.Sort(ringSections)
+
+	return &ketamaHashring{
+		endpoints:    flatEndpoints,
+		sections:     ringSections,
+		numEndpoints: uint64(len(flatEndpoints)),
+	}, nil
 }
 
 func sizeOfLeastOccupiedAZ(azSpread map[string]int64) int64 {
@@ -702,6 +1099,15 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 				return nil, fmt.Errorf("shard size %d is larger than number of nodes in hashring %s (%d)", shuffleShardingConfig.ShardSize, hashring, len(endpoints))
 			}
 			return newShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
+		}
+		return ringImpl, nil
+	case AlgorithmKetamaStatic:
+		ringImpl, err := newKetamaStaticHashring(endpoints, SectionsPerNode, replicationFactor)
+		if err != nil {
+			return nil, err
+		}
+		if shuffleShardingConfig.ShardSize > 0 {
+			return newAlignedShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
 		}
 		return ringImpl, nil
 	default:
