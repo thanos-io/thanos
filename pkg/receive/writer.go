@@ -124,9 +124,6 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 			errorTracker.addSampleError(err, tLogger, lset, s.Timestamp, s.Value)
 		}
 
-		b := labels.ScratchBuilder{}
-		b.Labels()
-
 		for _, hp := range t.Histograms {
 			var (
 				h  *histogram.Histogram
