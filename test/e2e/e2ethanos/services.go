@@ -826,6 +826,7 @@ type RulerBuilder struct {
 	forGracePeriod       string
 	restoreIgnoredLabels []string
 	nativeHistograms     bool
+	remoteWriteStateful  bool
 }
 
 // NewRulerBuilder is a Ruler future that allows extra configuration before initialization.
@@ -878,6 +879,11 @@ func (r *RulerBuilder) WithRestoreIgnoredLabels(labels ...string) *RulerBuilder 
 
 func (r *RulerBuilder) WithNativeHistograms() *RulerBuilder {
 	r.nativeHistograms = true
+	return r
+}
+
+func (r *RulerBuilder) WithStatefulRemoteWrite() *RulerBuilder {
+	r.remoteWriteStateful = true
 	return r
 }
 
@@ -950,6 +956,10 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []clientconfig.
 
 	if r.nativeHistograms {
 		ruleArgs["--tsdb.enable-native-histograms"] = ""
+	}
+
+	if r.remoteWriteStateful {
+		ruleArgs["--remote-write.stateful"] = ""
 	}
 
 	args := e2e.BuildArgs(ruleArgs)
