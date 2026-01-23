@@ -485,7 +485,7 @@ func runRule(
 
 		slogger := logutil.GoKitLogToSlog(logger)
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-		remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
+		remoteStore = remote.NewStorage(slogger, reg, func() (int64, error) {
 			return 0, nil
 		}, conf.dataDir, 1*time.Minute, &readyScrapeManager{})
 		if err := remoteStore.ApplyConfig(&config.Config{
