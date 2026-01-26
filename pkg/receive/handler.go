@@ -516,7 +516,7 @@ func secondsSinceFirstSample(toMS int64, ts prompb.TimeSeries) float64 {
 
 func isPreAgged(ts prompb.TimeSeries) bool {
 	for _, l := range ts.Labels {
-		if l.Name == labelPreAgg && l.Value == "true" {
+		if l.Name == labelPreAgg && (l.Value == "true" || strings.HasPrefix(l.Value, "v")) {
 			return true
 		}
 	}
