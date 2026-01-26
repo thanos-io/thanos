@@ -595,8 +595,14 @@ func (s *shuffleShardHashring) getTenantShardCached(tenant string) (*ketamaHashr
 	return h, nil
 }
 
-// getTenantShard returns or creates a consistent subset of nodes for a tenant.
+// getTenantShard returns a consistent subset of nodes for a tenant using
+// Cortex-style consistent hashing.
 func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, error) {
+	baseRing, ok := s.baseRing.(*ketamaHashring)
+	if !ok {
+		return nil, fmt.Errorf("shuffle sharding requires ketama hashring as base ring")
+	}
+
 	nodes := s.Nodes()
 	nodesByAZ := make(map[string][]Endpoint)
 	for _, node := range nodes {
@@ -605,6 +611,20 @@ func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, e
 			az = ""
 		}
 		nodesByAZ[az] = append(nodesByAZ[az], node)
+	}
+
+	sectionsByAZ := make(map[string]sections)
+	for _, sec := range baseRing.sections {
+		endpoint := baseRing.endpoints[sec.endpointIndex]
+		var az = endpoint.AZ
+		if s.shuffleShardingConfig.ZoneAwarenessDisabled {
+			az = ""
+		}
+		sectionsByAZ[az] = append(sectionsByAZ[az], sec)
+	}
+
+	for az := range sectionsByAZ {
+		sort.Sort(sectionsByAZ[az])
 	}
 
 	ss := s.getShardSize(tenant)
@@ -616,18 +636,44 @@ func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, e
 	}
 
 	var finalNodes = make([]Endpoint, 0, take*len(nodesByAZ))
-	for az, azNodes := range nodesByAZ {
-		seed := ShuffleShardSeed(tenant, az)
-		r := rand.New(rand.NewSource(seed))
-		r.Shuffle(len(azNodes), func(i, j int) {
-			azNodes[i], azNodes[j] = azNodes[j], azNodes[i]
-		})
 
+	for az, azNodes := range nodesByAZ {
 		if take > len(azNodes) {
 			return nil, fmt.Errorf("shard size %d is larger than number of nodes in AZ %s (%d)", ss, az, len(azNodes))
 		}
 
-		finalNodes = append(finalNodes, azNodes[:take]...)
+		azSections := sectionsByAZ[az]
+		if len(azSections) == 0 {
+			continue
+		}
+
+		seed := ShuffleShardSeed(tenant, az)
+		r := rand.New(rand.NewSource(seed))
+
+		selected := make(map[uint64]struct{})
+
+		for i := 0; i < take; i++ {
+			randomPos := r.Uint64()
+			startIdx := sort.Search(len(azSections), func(idx int) bool {
+				return azSections[idx].hash >= randomPos
+			})
+			if startIdx == len(azSections) {
+				startIdx = 0
+			}
+
+			for j := range len(azSections) {
+				idx := (startIdx + j) % len(azSections)
+				sec := azSections[idx]
+
+				if _, ok := selected[sec.endpointIndex]; ok {
+					continue
+				}
+
+				selected[sec.endpointIndex] = struct{}{}
+				finalNodes = append(finalNodes, baseRing.endpoints[sec.endpointIndex])
+				break
+			}
+		}
 	}
 
 	return newKetamaHashring(finalNodes, SectionsPerNode, s.replicationFactor)
