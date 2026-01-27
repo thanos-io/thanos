@@ -340,7 +340,6 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	)
 
 	for _, spec := range e.endpointSpecs() {
-
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
 			wg.Add(1)
 			go func(spec *GRPCEndpointSpec) {
@@ -620,12 +619,8 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 
 	statuses := make([]EndpointStatus, 0, len(e.endpoints))
 	for _, v := range e.endpoints {
-		v.mtx.RLock()
-		defer v.mtx.RUnlock()
-
-		status := v.status
-		if status != nil {
-			statuses = append(statuses, *status)
+		if status, ok := v.Status(); ok {
+			statuses = append(statuses, status)
 		}
 	}
 
@@ -780,6 +775,16 @@ func (er *endpointRef) HasStatusAPI() bool {
 	defer er.mtx.RUnlock()
 
 	return er.metadata != nil && er.metadata.Status != nil
+}
+
+func (er *endpointRef) Status() (EndpointStatus, bool) {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.status == nil {
+		return EndpointStatus{}, false
+	}
+	return *er.status, true
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {

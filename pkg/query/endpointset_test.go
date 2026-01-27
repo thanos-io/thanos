@@ -1670,6 +1670,42 @@ func TestDeadlockLocking(t *testing.T) {
 	testutil.Ok(t, g.Wait())
 }
 
+func TestUpdateVsGetEndpointStatusDeadlock(t *testing.T) {
+	t.Parallel()
+
+	endpoints, err := startTestEndpoints(makeInfoResponses(10))
+	testutil.Ok(t, err)
+	defer endpoints.Close()
+
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	defer endpointSet.Close()
+
+	endpointSet.Update(context.Background())
+	testutil.Equals(t, 10, len(endpointSet.GetEndpointStatus()))
+
+	g := &errgroup.Group{}
+	deadline := time.Now().Add(3 * time.Second)
+
+	for range 3 {
+		g.Go(func() error {
+			for !time.Now().After(deadline) {
+				_ = endpointSet.GetEndpointStatus()
+			}
+			return nil
+		})
+	}
+
+	g.Go(func() error {
+		for !time.Now().After(deadline) {
+			endpointSet.Update(context.Background())
+		}
+		return nil
+	})
+
+	testutil.Ok(t, g.Wait())
+}
+
 func TestEndpointSet_WaitForFirstUpdate(t *testing.T) {
 	t.Parallel()
 
