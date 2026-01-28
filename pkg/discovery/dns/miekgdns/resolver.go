@@ -68,6 +68,69 @@ func (r *Resolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, e
 	return r.lookupIPAddr(host, 1, 8)
 }
 
+func (r *Resolver) LookupIPAddrDualStack(ctx context.Context, host string) ([]net.IPAddr, error) {
+	return r.lookupIPAddrDualStack(ctx, host, 1, 8)
+}
+
+func (r *Resolver) lookupIPAddrDualStack(ctx context.Context, host string, currIteration, maxIterations int) ([]net.IPAddr, error) {
+	if currIteration > maxIterations {
+		return nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
+	}
+
+	seen := make(map[string]struct{})
+	var result []net.IPAddr
+
+	for _, qtype := range []uint16{dns.TypeAAAA, dns.TypeA} {
+		select {
+		case <-ctx.Done():
+			if len(result) > 0 {
+				return result, nil
+			}
+			return nil, ctx.Err()
+		default:
+		}
+
+		response, err := r.lookupWithSearchPath(host, dns.Type(qtype))
+		if err != nil {
+			continue
+		}
+
+		for _, record := range response.Answer {
+			switch addr := record.(type) {
+			case *dns.A:
+				ipStr := addr.A.String()
+				if _, ok := seen[ipStr]; !ok {
+					seen[ipStr] = struct{}{}
+					result = append(result, net.IPAddr{IP: addr.A})
+				}
+			case *dns.AAAA:
+				ipStr := addr.AAAA.String()
+				if _, ok := seen[ipStr]; !ok {
+					seen[ipStr] = struct{}{}
+					result = append(result, net.IPAddr{IP: addr.AAAA})
+				}
+			case *dns.CNAME:
+				addrs, err := r.lookupIPAddrDualStack(ctx, addr.Target, currIteration+1, maxIterations)
+				if err != nil {
+					continue
+				}
+				for _, a := range addrs {
+					ipStr := a.IP.String()
+					if _, ok := seen[ipStr]; !ok {
+						seen[ipStr] = struct{}{}
+						result = append(result, a)
+					}
+				}
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		return nil, ErrNoSuchHost
+	}
+	return result, nil
+}
+
 func (r *Resolver) lookupIPAddr(host string, currIteration, maxIterations int) ([]net.IPAddr, error) {
 	// We want to protect from infinite loops when resolving DNS records recursively.
 	if currIteration > maxIterations {
