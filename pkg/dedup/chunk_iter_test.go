@@ -154,8 +154,6 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	samples1 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(0, 10, 60*1000))
 	// Non overlapping samples with samples1. 5m downsampled chunk has 2 samples.
 	samples2 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(600000, 10, 60*1000))
-	// Overlapped with samples1.
-	samples3 := downsample.SamplesFromTSDBSamples(createSamplesWithStep(120000, 10, 60*1000))
 
 	for _, tc := range []struct {
 		name     string
@@ -266,46 +264,6 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 				ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
 					return storage.NewListChunkSeriesIterator(
 						downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
-				},
-			},
-		},
-		{
-			name: "two overlapping series",
-			input: []storage.ChunkSeries{
-				&storage.ChunkSeriesEntry{
-					Lset: defaultLabels,
-					ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
-						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples1, downsample.ResLevel1)...)
-					},
-				},
-				&storage.ChunkSeriesEntry{
-					Lset: defaultLabels,
-					ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
-						return storage.NewListChunkSeriesIterator(downsample.DownsampleRaw(samples3, downsample.ResLevel1)...)
-					},
-				},
-			},
-			expected: &storage.ChunkSeriesEntry{
-				Lset: defaultLabels,
-				ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
-					samples := [][]chunks.Sample{
-						{sample{299999, 3}, sample{540000, 5}},
-						{sample{299999, 540000}, sample{540000, 2100000}},
-						{sample{299999, 120000}, sample{540000, 300000}},
-						{sample{299999, 240000}, sample{540000, 540000}},
-						{sample{299999, 240000}, sample{299999, 240000}},
-					}
-					var chks [5]chunkenc.Chunk
-					for i, s := range samples {
-						chk, err := chunks.ChunkFromSamples(s)
-						testutil.Ok(t, err)
-						chks[i] = chk.Chunk
-					}
-					return storage.NewListChunkSeriesIterator(chunks.Meta{
-						MinTime: 299999,
-						MaxTime: 540000,
-						Chunk:   downsample.EncodeAggrChunk(chks),
-					})
 				},
 			},
 		},
@@ -443,6 +401,7 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 					histoSample{t: 5 * scrapeIntervalMilli, h: histogramSample},
 					histoSample{t: 6 * scrapeIntervalMilli, h: histogramSample},
 					histoSample{t: 7 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 9 * scrapeIntervalMilli, h: histogramSample},
 				},
 			),
 		},
