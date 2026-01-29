@@ -469,17 +469,18 @@ func (s *BucketStore) validate() error {
 
 type noopCache struct{}
 
-func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte, string) {}
+func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte, string, time.Duration) {}
 func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label, tenant string) (map[labels.Label][]byte, []labels.Label) {
 	return map[labels.Label][]byte{}, keys
 }
 
-func (noopCache) StoreExpandedPostings(_ ulid.ULID, _ []*labels.Matcher, _ []byte, tenant string) {}
+func (noopCache) StoreExpandedPostings(_ ulid.ULID, _ []*labels.Matcher, _ []byte, tenant string, _ time.Duration) {
+}
 func (noopCache) FetchExpandedPostings(_ context.Context, _ ulid.ULID, _ []*labels.Matcher, tenant string) ([]byte, bool) {
 	return []byte{}, false
 }
 
-func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte, string) {}
+func (noopCache) StoreSeries(ulid.ULID, storage.SeriesRef, []byte, string, time.Duration) {}
 func (noopCache) FetchMultiSeries(_ context.Context, _ ulid.ULID, ids []storage.SeriesRef, tenant string) (map[storage.SeriesRef][]byte, []storage.SeriesRef) {
 	return map[storage.SeriesRef][]byte{}, ids
 }
@@ -3136,7 +3137,7 @@ func (r *bucketIndexReader) storeExpandedPostingsToCache(ms []*labels.Matcher, p
 	r.stats.CachedPostingsCompressionTimeSum += compressionDuration
 	r.stats.CachedPostingsCompressedSizeSum += units.Base2Bytes(compressedSize)
 	r.stats.CachedPostingsOriginalSizeSum += units.Base2Bytes(length * 4) // Estimate the posting list size.
-	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache, tenant)
+	r.block.indexCache.StoreExpandedPostings(r.block.meta.ULID, ms, dataToCache, tenant, storecache.CacheTTL(r.block.meta))
 }
 
 var bufioReaderPool = sync.Pool{
@@ -3275,7 +3276,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 				stats.CachedPostingsCompressionTimeSum += time.Since(startCompression)
 				stats.add(PostingsTouched, 1, len(diffVarintPostings))
 
-				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache, tenant)
+				r.block.indexCache.StorePostings(r.block.meta.ULID, keys[keyID], dataToCache, tenant, storecache.CacheTTL(r.block.meta))
 			}
 
 			stats.PostingsFetchDurationSum += time.Since(begin)
@@ -3463,7 +3464,7 @@ func (r *bucketIndexReader) loadSeries(ctx context.Context, ids []storage.Series
 		r.loadedSeries[id] = c
 		r.loadedSeriesMtx.Unlock()
 
-		r.block.indexCache.StoreSeries(r.block.meta.ULID, id, c, tenant)
+		r.block.indexCache.StoreSeries(r.block.meta.ULID, id, c, tenant, storecache.CacheTTL(r.block.meta))
 	}
 	return nil
 }
