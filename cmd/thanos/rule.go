@@ -99,7 +99,8 @@ type ruleConfig struct {
 	alertQueryURL          *url.URL
 	alertRelabelConfigYAML []byte
 
-	rwConfig *extflag.PathOrContent
+	rwConfig            *extflag.PathOrContent
+	remoteWriteStateful bool
 
 	resendDelay        time.Duration
 	evalInterval       time.Duration
@@ -177,7 +178,9 @@ func registerRule(app *extkingpin.App) {
 		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
 		Default("false").BoolVar(&conf.tsdbEnableNativeHistograms)
 
-	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB, unless --remote-write.stateful is provided. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
+
+	cmd.Flag("remote-write.stateful", "If enabled, ruler runs with its own TSDB even if remote-write.config is provided. This allows ruler to still be queryable to restore the alerts firing state.").Default("false").BoolVar(&conf.remoteWriteStateful)
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
 
@@ -224,7 +227,7 @@ func registerRule(app *extkingpin.App) {
 			return err
 		}
 
-		if len(conf.query.sdFiles) == 0 && len(conf.query.addrs) == 0 && len(conf.queryConfigYAML) == 0 && len(conf.grpcQueryEndpoints) == 0 {
+		if len(conf.query.sdFiles) == 0 && len(conf.query.addrs) == 0 && len(conf.queryConfigYAML) == 0 && len(conf.grpcQueryEndpoints) == 0 && !conf.remoteWriteStateful {
 			return errors.New("no query configuration parameter was given")
 		}
 		if (len(conf.query.sdFiles) != 0 || len(conf.query.addrs) != 0 || len(conf.grpcQueryEndpoints) != 0) && len(conf.queryConfigYAML) != 0 {
@@ -471,6 +474,7 @@ func runRule(
 		return err
 	}
 
+	var remoteStore *remote.Storage
 	if len(rwCfgYAML) > 0 {
 		var rwCfg struct {
 			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
@@ -481,7 +485,7 @@ func runRule(
 
 		slogger := logutil.GoKitLogToSlog(logger)
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-		remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
+		remoteStore = remote.NewStorage(slogger, reg, func() (int64, error) {
 			return 0, nil
 		}, conf.dataDir, 1*time.Minute, &readyScrapeManager{})
 		if err := remoteStore.ApplyConfig(&config.Config{
@@ -493,10 +497,31 @@ func runRule(
 			return errors.Wrap(err, "applying config to remote storage")
 		}
 
+	}
+
+	if len(rwCfgYAML) > 0 && !conf.remoteWriteStateful {
+		slogger := logutil.GoKitLogToSlog(logger)
 		agentDB, err = agent.Open(slogger, reg, remoteStore, conf.dataDir, agentOpts)
 		if err != nil {
 			return errors.Wrap(err, "start remote write agent db")
 		}
+
+		{
+			done := make(chan struct{})
+			g.Add(func() error {
+				<-done
+				if err := agentDB.Close(); err != nil {
+					return errors.Wrap(err, "close agent DB")
+				}
+				if err := remoteStore.Close(); err != nil {
+					return errors.Wrap(err, "close remote storage")
+				}
+				return nil
+			}, func(error) {
+				close(done)
+			})
+		}
+
 		fanoutStore := storage.NewFanout(slogger, agentDB, remoteStore)
 		appendable = fanoutStore
 		// Use a separate queryable to restore the ALERTS firing states.
@@ -518,12 +543,25 @@ func runRule(
 			done := make(chan struct{})
 			g.Add(func() error {
 				<-done
-				return tsdbDB.Close()
+				if err := tsdbDB.Close(); err != nil {
+					return err
+				}
+				if remoteStore != nil {
+					return remoteStore.Close()
+				}
+				return nil
 			}, func(error) {
 				close(done)
 			})
 		}
-		appendable = tsdbDB
+
+		if remoteStore != nil {
+			slogger := logutil.GoKitLogToSlog(logger)
+			fanoutStore := storage.NewFanout(slogger, tsdbDB, remoteStore)
+			appendable = fanoutStore
+		} else {
+			appendable = tsdbDB
+		}
 		queryable = tsdbDB
 	}
 
@@ -653,7 +691,7 @@ func runRule(
 			reg,
 			conf.dataDir,
 			managerOpts,
-			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
+			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams, tsdbDB != nil && len(queryClients) == 0 && grpcEndpointSet == nil),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -924,11 +962,15 @@ func queryFuncCreator(
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
 	doNotAddThanosParams bool,
+	preferLocal bool,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
 	// back or the context get canceled.
 	return func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
+		if preferLocal {
+			return nil
+		}
 		var spanID string
 
 		switch partialResponseStrategy {

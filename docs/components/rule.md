@@ -261,6 +261,39 @@ You can pass this in file using `--remote-write.config-file=` or inline it using
 1. `metadata_config` is not supported in this mode and will be ignored if provided in the remote write configuration.
 2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.
 
+## Stateful Ruler with Remote Write
+
+By default, providing `--remote-write.config` enables stateless mode where the ruler doesn't store data in its TSDB. However, there are use cases where you want to:
+- Run ruler in stateful mode (with TSDB) for better queryability and alert state restoration
+- Still remote write a subset of metrics to an external system (e.g., for long-term storage or federation)
+
+This is supported via the `--remote-write.stateful` flag. When enabled, ruler will:
+1. Store all rule evaluation results in its local TSDB (just like normal stateful mode)
+2. Simultaneously remote write metrics to configured remote write endpoints
+3. Expose the Store API for querying its TSDB data
+4. Allow the ruler to be queryable for alert state restoration
+
+**Example:**
+
+```bash
+thanos rule \
+    --data-dir                  "/path/to/data" \
+    --eval-interval             "30s" \
+    --rule-file                 "/path/to/rules/*.rules.yaml" \
+    --alert.query-url           "http://0.0.0.0:9090" \
+    --alertmanagers.url         "http://alert.thanos.io" \
+    --objstore.config-file      "bucket.yml" \
+    --label                     'monitor_cluster="cluster1"' \
+    --label                     'replica="A"' \
+    --remote-write.config-file  'rw-config.yaml' \
+    --remote-write.stateful
+```
+
+**NOTE:**
+- In stateful remote write mode, you typically don't need to specify `--query` flags since ruler can query its own TSDB
+- The ruler will expose Store API and can be used as a store by Thanos Query
+- This addresses use cases where you want recording rules in stateful mode while also sending metrics to an external system (see [#6469](https://github.com/thanos-io/thanos/issues/6469))
+
 ## Flags
 
 ```$ mdox-exec="thanos rule --help"
@@ -516,7 +549,8 @@ Flags:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
                                  This automatically enables stateless mode
                                  for ruler and no series will be stored in the
-                                 ruler's TSDB. If an empty config (or file) is
+                                 ruler's TSDB, unless --remote-write.stateful
+                                 is provided. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
       --remote-write.config=<content>
@@ -528,9 +562,15 @@ Flags:
                                  https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write).
                                  This automatically enables stateless mode
                                  for ruler and no series will be stored in the
-                                 ruler's TSDB. If an empty config (or file) is
+                                 ruler's TSDB, unless --remote-write.stateful
+                                 is provided. If an empty config (or file) is
                                  provided, the flag is ignored and ruler is run
                                  with its own TSDB.
+      --[no-]remote-write.stateful
+                                 If enabled, ruler runs with its own TSDB even
+                                 if remote-write.config is provided. This allows
+                                 ruler to still be queryable to restore the
+                                 alerts firing state.
       --objstore.config-file=<file-path>
                                  Path to YAML file that contains object
                                  store configuration. See format details:

@@ -755,6 +755,107 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	})
 }
 
+// TestRule_CanRemoteWriteDataInStatefulMode checks that Thanos Ruler can be run in stateful mode
+// with remote write enabled, allowing both TSDB storage and remote writing simultaneously.
+// This addresses issue #6469 where users want to use recording rules in stateful mode
+// while also remote writing a subset of metrics to an external system.
+func TestRule_CanRemoteWriteDataInStatefulMode(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("rule-stateful-rw")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+	rulesSubDir := "rules"
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+
+	// Create recording rule that generates metrics
+	createRuleFile(t, filepath.Join(rulesPath, "rules-0.yaml"), testRuleRecordAbsentMetric)
+
+	am := e2ethanos.NewAlertmanager(e, "1")
+	testutil.Ok(t, e2e.StartAndWaitReady(am))
+
+	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
+	rwURL := urlParse(t, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")))
+
+	// Create a querier that can query from both ruler and receiver
+	qRecv := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(qRecv))
+
+	// Initialize ruler in STATEFUL mode WITH remote write
+	r := rFuture.WithAlertManagerConfig([]alert.AlertmanagerConfig{
+		{
+			EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+				StaticAddresses: []string{
+					am.InternalEndpoint("http"),
+				},
+				Scheme: "http",
+			},
+			Timeout:    amTimeout,
+			APIVersion: alert.APIv1,
+		},
+	}).WithStatefulRemoteWrite().InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), nil, []*config.RemoteWriteConfig{
+		{URL: &common_cfg.URL{URL: rwURL}, Name: "thanos-receiver"},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	// Create a second querier that queries both ruler TSDB and receiver
+	qBoth := e2ethanos.NewQuerierBuilder(e, "2", r.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(qBoth))
+
+	// Wait until remote write samples are written to receiver successfully.
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"prometheus_remote_storage_samples_total"}, e2emon.WaitMissingMetrics()))
+
+	testRecordedSamples := func() string { return "test_absent_metric" }
+
+	t.Run("can fetch samples from ruler's TSDB", func(t *testing.T) {
+		// Query ruler directly - it should have the data in its TSDB
+		queryAndAssertSeries(t, ctx, r.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__": "test_absent_metric",
+				"job":      "thanos-receive",
+				"replica":  "1",
+			},
+		})
+	})
+
+	t.Run("can fetch remote-written samples from receiver", func(t *testing.T) {
+		// Query receiver through querier - it should also have the remote written data
+		queryAndAssertSeries(t, ctx, qRecv.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
+			Deduplicate: false,
+		}, []model.Metric{
+			{
+				"__name__":  "test_absent_metric",
+				"job":       "thanos-receive",
+				"receive":   model.LabelValue(receiver.Name()),
+				"replica":   "1",
+				"tenant_id": "default-tenant",
+			},
+		})
+	})
+
+	t.Run("querier can deduplicate samples from both ruler and receiver", func(t *testing.T) {
+		// Query through querier that sees both ruler and receiver
+		// Should deduplicate to single series
+		queryAndAssertSeries(t, ctx, qBoth.Endpoint("http"), testRecordedSamples, time.Now, promclient.QueryOptions{
+			Deduplicate: true,
+		}, []model.Metric{
+			{
+				"__name__": "test_absent_metric",
+				"job":      "thanos-receive",
+			},
+		})
+	})
+}
+
 func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	t.Parallel()
 
