@@ -858,6 +858,9 @@ func (c DefaultBlockDeletableChecker) CanDelete(_ *Group, _ ulid.ULID) bool {
 type CompactionLifecycleCallback interface {
 	PreCompactionCallback(ctx context.Context, logger log.Logger, group *Group, toCompactBlocks []*metadata.Meta) error
 	PostCompactionCallback(ctx context.Context, logger log.Logger, group *Group, blockID ulid.ULID) error
+	// This callback takes in the context cancel in order to fast fail the ongoing compaction
+	// if there is a change in the compaction plan
+	CompactionListenerCallback(ctx context.Context, ctxCancel context.CancelFunc, extensions any)
 	GetBlockPopulator(ctx context.Context, logger log.Logger, group *Group) (tsdb.BlockPopulator, error)
 }
 
@@ -886,6 +889,9 @@ func (c DefaultCompactionLifecycleCallback) PostCompactionCallback(_ context.Con
 	return nil
 }
 
+func (c DefaultCompactionLifecycleCallback) CompactionListenerCallback(ctx context.Context, ctxCancel context.CancelFunc, extensions any) {
+}
+
 func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context, _ log.Logger, _ *Group) (tsdb.BlockPopulator, error) {
 	return tsdb.DefaultBlockPopulator{}, nil
 }
@@ -910,7 +916,7 @@ type Compactor interface {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
 	subDir := filepath.Join(dir, cg.Key())
@@ -947,7 +953,7 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 
 	errChan := make(chan error, 1)
 	err := tracing.DoInSpanWithErr(ctx, "compaction_group", func(ctx context.Context) (err error) {
-		shouldRerun, compIDs, err = cg.compact(ctx, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
+		shouldRerun, compIDs, err = cg.compact(ctx, cancel, subDir, planner, comp, blockDeletableChecker, compactionLifecycleCallback, errChan)
 		return err
 	}, opentracing.Tags{"group.key": cg.Key()})
 	errChan <- err
@@ -1163,7 +1169,7 @@ func RepairIssue347(ctx context.Context, logger log.Logger, bkt objstore.Bucket,
 	return nil
 }
 
-func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
+func (cg *Group) compact(ctx context.Context, cancel context.CancelFunc, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback, errChan chan error) (bool, []ulid.ULID, error) {
 	cg.mtx.Lock()
 	defer cg.mtx.Unlock()
 
@@ -1205,6 +1211,8 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 	begin = time.Now()
 	g, errCtx := errgroup.WithContext(ctx)
 	g.SetLimit(cg.compactBlocksFetchConcurrency)
+
+	compactionLifecycleCallback.CompactionListenerCallback(ctx, cancel, cg.extensions)
 
 	toCompactDirs := make([]string, 0, len(toCompact))
 	for _, m := range toCompact {
@@ -1510,7 +1518,9 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		for i := 0; i < c.concurrency; i++ {
 			wg.Go(func() {
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					groupCtx, groupCtxCancel := context.WithCancel(ctx)
+					shouldRerunGroup, _, err := g.Compact(groupCtx, groupCtxCancel, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					groupCtxCancel()
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
