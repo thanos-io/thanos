@@ -422,13 +422,12 @@ func runRule(
 			logger,
 			reg,
 			tracer,
-			false,
-			false,
-			"",
-			"",
-			"",
-			"",
 		)
+		if err != nil {
+			return err
+		}
+
+		tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "")
 		if err != nil {
 			return err
 		}
@@ -452,6 +451,8 @@ func runRule(
 			5*time.Second,
 			conf.evalInterval,
 			dialOpts,
+			tlsDialOpts,
+			"", // no global compression
 			[]string{},
 		)
 		if err != nil {

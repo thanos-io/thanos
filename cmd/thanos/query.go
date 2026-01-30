@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -272,6 +273,11 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
+		globalTLSOpt, err := extgrpc.StoreClientTLSCredentials(logger, grpcClientConfig.secure, grpcClientConfig.skipVerify, grpcClientConfig.cert, grpcClientConfig.key, grpcClientConfig.caCert, grpcClientConfig.serverName)
+		if err != nil {
+			return err
+		}
+
 		if *promqlQueryMode != string(apiv1.PromqlQueryModeLocal) {
 			level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
 			*defaultEngine = string(apiv1.PromqlEngineThanos)
@@ -296,6 +302,8 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*endpointInfoTimeout),
 			time.Duration(*queryTimeout),
 			dialOpts,
+			globalTLSOpt,
+			grpcClientConfig.compression, // global grpc tls compression.
 			*injectTestAddresses,
 			*queryConnMetricLabels...,
 		)
