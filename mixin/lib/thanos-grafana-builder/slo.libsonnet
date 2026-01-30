@@ -5,7 +5,7 @@ local utils = import '../utils.libsonnet';
     local aggregatedLabels = std.split(dimensions, ',');
     local dimensionsTemplate = std.join(' ', ['{{%s}}' % std.stripChars(label, ' ') for label in aggregatedLabels]);
 
-    $.panel(title, description) +
+    $.timeseriesPanel(title, description) +
     $.queryPanel(
       'histogram_quantile(%.2f, sum by (%s) (rate(%s[$interval])))' % [quantile, utils.joinLabels(aggregatedLabels + ['le']), selector],
       dimensionsTemplate + ' P' + quantile * 100
