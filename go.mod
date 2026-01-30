@@ -2,6 +2,11 @@ module github.com/thanos-io/thanos
 
 go 1.25.0
 
+// TODO(Aleksandr Krivoshchekov):
+//     Remove this replacement, once https://github.com/thanos-io/promql-engine/pull/680
+//     is mergeed.
+replace github.com/thanos-io/promql-engine => github.com/SuperPaintman/promql-engine v0.0.0-20260121063704-e975db89c0cb
+
 require (
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.1
 	cloud.google.com/go/trace v1.11.6

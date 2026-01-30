@@ -2694,6 +2694,8 @@ github.com/Microsoft/go-winio v0.6.2/go.mod h1:yd8OoFMLzJbo9gZq8j5qaps8bJ9aShtEA
 github.com/QcloudApi/qcloud_sign_golang v0.0.0-20141224014652-e4130a326409/go.mod h1:1pk82RBxDY/JZnPQrtqHlUFfCctgdorsd9M06fMynOM=
 github.com/Shopify/sarama v1.19.0/go.mod h1:FVkBWblsNy7DGZRfXLU0O9RCGt5g3g3yEuWXgklEdEo=
 github.com/Shopify/toxiproxy v2.1.4+incompatible/go.mod h1:OXgGpZ6Cli1/URJOF1DMxUHB2q5Ap20/P/eIdh4G0pI=
+github.com/SuperPaintman/promql-engine v0.0.0-20260121063704-e975db89c0cb h1:6i47w6PVgcp9Xjy0icT6fD2CW3uBZ02hjqty3XzJ+EM=
+github.com/SuperPaintman/promql-engine v0.0.0-20260121063704-e975db89c0cb/go.mod h1:MOFN0M1nDMcWZg1t4iF39sOard/K4SWgO/HHSODeDIc=
 github.com/VictoriaMetrics/easyproto v0.1.4 h1:r8cNvo8o6sR4QShBXQd1bKw/VVLSQma/V2KhTBPf+Sc=
 github.com/VictoriaMetrics/easyproto v0.1.4/go.mod h1:QlGlzaJnDfFd8Lk6Ci/fuLxfTo3/GThPs2KH23mv710=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
@@ -3882,8 +3884,6 @@ github.com/thanos-community/grpc-go v0.0.0-20251106112228-b9020406f781 h1:e9c72L
 github.com/thanos-community/grpc-go v0.0.0-20251106112228-b9020406f781/go.mod h1:YnIHHmJ2ND31zdEiJmIw5W6dtr05o2clL82wnWwFnn0=
 github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488 h1:khBsQLLRoF1KzXgTlwFZa6mC32bwYUUAu/AeP49V7UM=
 github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488/go.mod h1:uDHLkMKOGDAnlN75EAz8VrRzob1+VbgYSuUleatWuF0=
-github.com/thanos-io/promql-engine v0.0.0-20250731151205-1a520ea6a26d h1:H5CxwuNI53LrXnR4FPY6TkmMY10fEk/NAYdiEFdkyic=
-github.com/thanos-io/promql-engine v0.0.0-20250731151205-1a520ea6a26d/go.mod h1:MOFN0M1nDMcWZg1t4iF39sOard/K4SWgO/HHSODeDIc=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab/go.mod h1:eheTFp954zcWZXCU8d0AT76ftsQOTo4DTqkN/h3k1MY=
 github.com/tidwall/gjson v1.14.2/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
