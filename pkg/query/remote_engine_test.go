@@ -24,6 +24,49 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
+func TestRemoteEndpoints_Engines_Cache(t *testing.T) {
+	t.Parallel()
+
+	getClients := func() []Client {
+		return []Client{
+			NewClient(nil, "testclient1", nil),
+			NewClient(nil, "testclient2", nil),
+			NewClient(nil, "testclient3", nil),
+		}
+	}
+	wantEngines := len(getClients())
+	endpoints := NewRemoteEndpoints(log.NewNopLogger(), func() []Client {
+		return getClients()
+	}, Opts{})
+
+	engines1 := endpoints.Engines()
+	testutil.Equals(t, wantEngines, len(engines1))
+
+	// Compute lazy fields.
+	for _, e := range engines1 {
+		e.MaxT()
+		e.MinT()
+		e.LabelSets()
+		e.PartitionLabelSets()
+	}
+
+	// Changes in getClients() should not affect subsequent endpoints.Engines()
+	// calls.
+	getClients = func() []Client {
+		return []Client{}
+	}
+
+	engines2 := endpoints.Engines()
+	testutil.Equals(t, wantEngines, len(engines2))
+
+	// endpoints.Engines() should return exactly the same slice.
+	testutil.Equals(t, len(engines1), len(engines2))
+	testutil.Equals(t, cap(engines1), cap(engines2))
+	for i := range len(engines1) {
+		testutil.Equals(t, engines1[i], engines2[i])
+	}
+}
+
 func TestRemoteEngine_Warnings(t *testing.T) {
 	t.Parallel()
 
