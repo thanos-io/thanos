@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8630](https://github.com/thanos-io/thanos/pull/8630): Receive: *breaking :warning:* shuffle sharding now uses consistent hashing for stability on scale. Existing tenant-to-node assignments will change on upgrade.
 - [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
+- [#8653](https://github.com/thanos-io/thanos/pull/8653): Query: prepare `remoteEndpoints` for remote engine pruning
 
 ## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 27
 

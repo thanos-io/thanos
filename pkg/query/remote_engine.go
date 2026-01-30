@@ -109,7 +109,12 @@ func NewRemoteEndpoints(logger log.Logger, getClients func() []Client, opts Opts
 	}
 }
 
-func (r remoteEndpoints) Engines() []api.RemoteEngine {
+func (r remoteEndpoints) Engines(mint, maxt int64) []api.RemoteEngine {
+	// TODO(Aleksandr Krivoshchekov):
+	//     Use mint and maxt to prune TSDBInfos.
+	//     It's safe to ignore these params for now, and return all available
+	//     engines.
+
 	clients := r.getClients()
 	engines := make([]api.RemoteEngine, len(clients))
 	for i := range clients {
