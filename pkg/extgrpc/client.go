@@ -41,7 +41,7 @@ func (n *nonPoolingCodec) Name() string {
 var nopPool = mem.NopBufferPool{}
 
 func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
-	gmsg, ok := v.(gogoMsg)
+	gmsg, ok := v.(GogoMsg)
 	if !ok {
 		return n.CodecV2.Unmarshal(data, v)
 	}
@@ -52,14 +52,14 @@ func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
 	return gmsg.Unmarshal(buf.ReadOnlyData())
 }
 
-type gogoMsg interface {
+type GogoMsg interface {
 	Size() int
 	MarshalToSizedBuffer([]byte) (int, error)
 	Unmarshal([]byte) error
 }
 
 func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
-	gmsg, ok := v.(gogoMsg)
+	gmsg, ok := v.(GogoMsg)
 	if !ok {
 		return c.CodecV2.Marshal(v)
 	}
