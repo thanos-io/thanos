@@ -79,6 +79,9 @@ type MultiTSDB struct {
 	headExpandedPostingsCacheSize  uint64
 	blockExpandedPostingsCacheSize uint64
 
+	compactionDelayInterval time.Duration
+	tenantCounter           atomic.Uint64
+
 	initSingleFlight singleflight.Group
 }
 
@@ -101,6 +104,12 @@ func WithHeadExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 func WithBlockExpandedPostingsCacheSize(size uint64) MultiTSDBOption {
 	return func(s *MultiTSDB) {
 		s.blockExpandedPostingsCacheSize = size
+	}
+}
+
+func WithCompactionDelayInterval(interval time.Duration) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.compactionDelayInterval = interval
 	}
 }
 
@@ -760,8 +769,18 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
-	opts.EnableDelayedCompaction = true
-	opts.CompactionDelayMaxPercent = tsdb.DefaultCompactionDelayMaxPercent
+	if t.compactionDelayInterval > 0 {
+		index := t.tenantCounter.Add(1) - 1
+		chunkRange := time.Duration(t.tsdbOpts.MinBlockDuration) * time.Millisecond
+		delay := time.Duration(index) * t.compactionDelayInterval
+		if chunkRange > 0 {
+			delay = delay % chunkRange
+		}
+		opts.CompactionDelay = delay
+	} else {
+		opts.EnableDelayedCompaction = true
+		opts.CompactionDelayMaxPercent = tsdb.DefaultCompactionDelayMaxPercent
+	}
 
 	opts.BlockChunkQuerierFunc = func(b tsdb.BlockReader, mint, maxt int64) (storage.ChunkQuerier, error) {
 		if expandedPostingsCache != nil {

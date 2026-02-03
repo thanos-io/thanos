@@ -147,6 +147,9 @@ func runReceive(
 		receive.WithHeadExpandedPostingsCacheSize(conf.headExpandedPostingsCacheSize),
 		receive.WithBlockExpandedPostingsCacheSize(conf.compactedBlocksExpandedPostingsCacheSize),
 	}
+	if *conf.compactionDelayInterval > 0 {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithCompactionDelayInterval(time.Duration(*conf.compactionDelayInterval)))
+	}
 	for _, feature := range *conf.featureList {
 		if feature == metricNamesFilter {
 			multiTSDBOptions = append(multiTSDBOptions, receive.WithMetricNameFilterEnabled())
@@ -937,6 +940,7 @@ type receiveConfig struct {
 
 	headExpandedPostingsCacheSize            uint64
 	compactedBlocksExpandedPostingsCacheSize uint64
+	compactionDelayInterval                  *model.Duration
 	otlpEnableTargetInfo                     bool
 	otlpResourceAttributes                   []string
 }
@@ -1055,6 +1059,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("tsdb.head.expanded-postings-cache-size", "[EXPERIMENTAL] If non-zero, enables expanded postings cache for the head block.").Default("0").Uint64Var(&rc.headExpandedPostingsCacheSize)
 	cmd.Flag("tsdb.block.expanded-postings-cache-size", "[EXPERIMENTAL] If non-zero, enables expanded postings cache for compacted blocks.").Default("0").Uint64Var(&rc.compactedBlocksExpandedPostingsCacheSize)
+
+	rc.compactionDelayInterval = extkingpin.ModelDuration(cmd.Flag("receive.compaction-delay-interval",
+		"Interval for staggering head compaction across tenants. "+
+			"Tenant N gets delay of N*interval (mod block duration). "+
+			"0 uses random delay (default).").
+		Default("0s"))
 
 	cmd.Flag("tsdb.max-exemplars",
 		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+
