@@ -336,7 +336,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
-			if !(r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
+			if !r.PartialResponseDisabled && r.PartialResponseStrategy != storepb.PartialResponseStrategy_ABORT {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
