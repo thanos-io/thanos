@@ -336,7 +336,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
-			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			if !(r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
@@ -419,6 +419,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
 	r := &storepb.LabelNamesRequest{
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		Start:                   originalRequest.Start,
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
@@ -445,7 +446,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 			resp, err := st.LabelNames(spanCtx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
-				if r.PartialResponseDisabled {
+				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 					return err
 				}
 
@@ -522,6 +523,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	r := &storepb.LabelValuesRequest{
 		Label:                   originalRequest.Label,
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		Start:                   originalRequest.Start,
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
@@ -549,7 +551,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 			resp, err := st.LabelValues(spanCtx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", st)
-				if r.PartialResponseDisabled {
+				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 					return err
 				}
 
