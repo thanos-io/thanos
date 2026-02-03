@@ -1381,12 +1381,12 @@ func TestProxyStore_Series_RequestParamsProxied(t *testing.T) {
 		MinTime:                 1,
 		MaxTime:                 300,
 		Matchers:                []storepb.LabelMatcher{{Name: "ext", Value: "1", Type: storepb.LabelMatcher_EQ}},
+		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+		MaxResolutionWindow:     1234,
 		Aggregates: []storepb.Aggr{
 			storepb.Aggr_COUNTER,
 			storepb.Aggr_COUNT,
 		},
-		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
-		MaxResolutionWindow:     1234,
 	}
 	testutil.Ok(t, q.Series(req, s))
 
