@@ -507,8 +507,8 @@ Flags:
                                  (enables promql experimental functions for
                                  ruler)
       --[no-]tsdb.enable-native-histograms
-                                 [EXPERIMENTAL] Enables the ingestion of native
-                                 histograms.
+                                 Native histograms are always enabled. This flag
+                                 is a noop and kept for backward compatibility.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

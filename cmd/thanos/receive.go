@@ -100,7 +100,6 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
-			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -1072,7 +1071,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
 
 	cmd.Flag("tsdb.enable-native-histograms",
-		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
+		"Native histograms are always enabled. This flag is a noop and kept for backward compatibility.").
 		Default("false").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("writer.intern",
