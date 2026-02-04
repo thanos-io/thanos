@@ -764,6 +764,10 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	// retention of the whole request buffer via zero-copy label references.
 	for i := range wreq.Timeseries {
 		labelpb.ReAllocZLabelsStrings(&wreq.Timeseries[i].Labels, h.writer.opts.Intern)
+		// Also detach exemplar labels from the pooled buffer.
+		for j := range wreq.Timeseries[i].Exemplars {
+			labelpb.ReAllocZLabelsStrings(&wreq.Timeseries[i].Exemplars[j].Labels, h.writer.opts.Intern)
+		}
 	}
 
 	responseStatusCode := http.StatusOK
