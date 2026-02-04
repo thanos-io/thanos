@@ -1079,6 +1079,28 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
 
+	// Fast path for IngestorOnly mode: write directly to local TSDB.
+	// This skips distributeTimeseriesToReplicas and sendLocalWrite since
+	// the Router already determined this data belongs to this node.
+	if h.receiverMode == IngestorOnly {
+		err := h.writer.Write(ctx, r.Tenant, r.Timeseries)
+		if err != nil {
+			level.Debug(h.logger).Log("msg", "failed to write to local TSDB", "err", err)
+		}
+		switch cause := errors.Cause(err); cause {
+		case nil:
+			return &storepb.WriteResponse{}, nil
+		default:
+			if isNotReady(cause) {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
+			if isConflict(cause) {
+				return nil, status.Error(codes.AlreadyExists, err.Error())
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
+
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)

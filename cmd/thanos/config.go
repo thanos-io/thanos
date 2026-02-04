@@ -203,6 +203,7 @@ type shipperConfig struct {
 	skipCorruptedBlocks   bool
 	hashFunc              string
 	metaFileName          string
+	uploadConcurrency     int
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -225,6 +226,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
 	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
+	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("0").IntVar(&sc.uploadConcurrency)
 	return sc
 }
 

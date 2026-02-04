@@ -872,6 +872,7 @@ func runRule(
 			shipper.WithLabels(func() labels.Labels { return conf.lset }),
 			shipper.WithAllowOutOfOrderUploads(conf.shipper.allowOutOfOrderUpload),
 			shipper.WithSkipCorruptedBlocks(conf.shipper.skipCorruptedBlocks),
+			shipper.WithUploadConcurrency(conf.shipper.uploadConcurrency),
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())
