@@ -87,7 +87,76 @@ var (
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
 	errInternal    = errors.New("internal error")
+
+	// Used internally to abort reads when the limiter is exceeded mid-stream.
+	errRequestTooLarge = errors.New("write request too large")
+
+	// Default / max capacities for pooled buffers. These caps prevent "pool ballooning"
+	// where a single large request permanently inflates process RSS.
+	defaultCompressedBufCap   = 32 * 1024
+	defaultDecompressedBufCap = 128 * 1024
+	maxPooledCompressedCap    = 1 << 20 // 1MB
+	maxPooledDecompressedCap  = 4 << 20 // 4MB
+	copyBufSize               = 32 * 1024
+
+	// Buffer/message pools to reduce allocations in receive hot path.
+	compressedBufPool = sync.Pool{
+		New: func() interface{} {
+			return bytes.NewBuffer(make([]byte, 0, defaultCompressedBufCap))
+		},
+	}
+	decompressedBufPool = sync.Pool{
+		New: func() interface{} {
+			b := make([]byte, 0, defaultDecompressedBufCap)
+			return &b
+		},
+	}
+	writeRequestPool = sync.Pool{
+		New: func() interface{} {
+			return &prompb.WriteRequest{}
+		},
+	}
+	copyBufPool = sync.Pool{
+		New: func() interface{} {
+			b := make([]byte, copyBufSize)
+			return &b
+		},
+	}
 )
+
+type sizeLimiter interface {
+	AllowSizeBytes(string, int64) bool
+}
+
+// limitedBufferWriter writes to a buffer but aborts if the tenant exceeds the limiter.
+// This protects the server when Content-Length is missing or incorrect.
+type limitedBufferWriter struct {
+	b       *bytes.Buffer
+	limiter sizeLimiter
+	tenant  string
+	seen    int64
+}
+
+func (w *limitedBufferWriter) Write(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+	w.seen += int64(len(p))
+	if !w.limiter.AllowSizeBytes(w.tenant, w.seen) {
+		return 0, errRequestTooLarge
+	}
+	return w.b.Write(p)
+}
+
+// zlabelsGet avoids ZLabels -> PromLabels conversion in hot paths.
+func zlabelsGet(lbls []labelpb.ZLabel, name string) (string, bool) {
+	for _, l := range lbls {
+		if l.Name == name {
+			return l.Value, true
+		}
+	}
+	return "", false
+}
 
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
@@ -442,6 +511,18 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 	return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName, tenantID), nil
 }
 
+// tenantKeyForDistribution matches distributeTimeseriesToReplicas semantics exactly.
+func (h *Handler) tenantKeyForDistribution(tenantHTTP string, ts prompb.TimeSeries) string {
+	tenant := tenantHTTP
+	if h.splitTenantLabelName == "" {
+		return tenant
+	}
+	if v, ok := zlabelsGet(ts.Labels, h.splitTenantLabelName); ok && v != "" {
+		return h.splitTenantLabelName + ":" + v
+	}
+	return h.options.DefaultTenantID
+}
+
 // Close stops the Handler.
 func (h *Handler) Close() {
 	_ = h.peers.Close()
@@ -562,40 +643,75 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestLimiter := h.Limiter.RequestLimiter()
-	// io.ReadAll dynamically adjust the byte slice for read data, starting from 512B.
+	// io.ReadAll dynamically adjusts the byte slice for read data, starting from 512B.
 	// Since this is receive hot path, grow upfront saving allocations and CPU time.
-	compressed := bytes.Buffer{}
+	compressed := compressedBufPool.Get().(*bytes.Buffer)
+	defer func() {
+		// Avoid pooling huge buffers forever.
+		if compressed.Cap() <= maxPooledCompressedCap {
+			compressed.Reset()
+			compressedBufPool.Put(compressed)
+		}
+	}()
+
 	if r.ContentLength >= 0 {
 		if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
-			http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+			http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
 			return
 		}
 		compressed.Grow(int(r.ContentLength))
 	} else {
 		compressed.Grow(512)
 	}
-	_, err = io.Copy(&compressed, r.Body)
+
+	// Enforce size limits even when Content-Length is missing or wrong.
+	lw := &limitedBufferWriter{
+		b:       compressed,
+		limiter: requestLimiter,
+		tenant:  tenantHTTP,
+	}
+	copyBuf := copyBufPool.Get().(*[]byte)
+	defer copyBufPool.Put(copyBuf)
+	_, err = io.CopyBuffer(lw, r.Body, *copyBuf)
 	if err != nil {
+		if err == errRequestTooLarge {
+			http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, errors.Wrap(err, "read compressed request body").Error(), http.StatusInternalServerError)
 		return
 	}
-	reqBuf, err := s2.Decode(nil, compressed.Bytes())
+
+	// Decode into a pooled buffer to avoid allocs. (cap-guarded on return)
+	reqBuf := decompressedBufPool.Get().(*[]byte)
+	defer func() {
+		if cap(*reqBuf) <= maxPooledDecompressedCap {
+			*reqBuf = (*reqBuf)[:0]
+			decompressedBufPool.Put(reqBuf)
+		}
+	}()
+	*reqBuf, err = s2.Decode((*reqBuf)[:0], compressed.Bytes())
 	if err != nil {
 		level.Error(tLogger).Log("msg", "snappy decode error", "err", err)
 		http.Error(w, errors.Wrap(err, "snappy decode error").Error(), http.StatusBadRequest)
 		return
 	}
 
-	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(reqBuf))) {
-		http.Error(w, "write request too large", http.StatusRequestEntityTooLarge)
+	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(*reqBuf))) {
+		http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
 		return
 	}
 
 	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
 	// from the whole request. Ensure that we always copy those when we want to
 	// store them for longer time.
-	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+	wreq := writeRequestPool.Get().(*prompb.WriteRequest)
+	wreq.Reset()
+	defer func() {
+		wreq.Reset()
+		writeRequestPool.Put(wreq)
+	}()
+	if err := proto.Unmarshal(*reqBuf, wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -637,14 +753,21 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(&wreq)
+	h.relabel(wreq)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
+	// Deep copy all label strings to detach them from pooled decode buffer.
+	// Required for correctness when pooled buffers are reused and for preventing
+	// retention of the whole request buffer via zero-copy label references.
+	for i := range wreq.Timeseries {
+		labelpb.ReAllocZLabelsStrings(&wreq.Timeseries[i].Labels, h.writer.opts.Intern)
+	}
+
 	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
+	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, wreq)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -839,6 +962,13 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 
 	stats = h.gatherWriteStats(len(params.replicas), localWrites, remoteWrites)
 
+	// Precompute seriesID -> tenantKey used by distributeTimeseriesToReplicas so we can
+	// attribute errorSeries correctly even when the responses channel closes.
+	seriesTenantKey := make([]string, len(params.writeRequest.Timeseries))
+	for i, ts := range params.writeRequest.Timeseries {
+		seriesTenantKey[i] = h.tenantKeyForDistribution(params.tenant, ts)
+	}
+
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
 	// asynchronously and with this capacity we will never block on writing to the channel.
 	maxBufferedResponses := len(localWrites)
@@ -880,11 +1010,16 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 			return stats, ctx.Err()
 		case resp, hasMore := <-responses:
 			if !hasMore {
-				for _, seriesErr := range seriesErrs {
+				for i, seriesErr := range seriesErrs {
+					// Count only the series that actually saw at least one error.
+					if len(seriesErr.errs) > 0 && i < len(seriesTenantKey) {
+						tk := seriesTenantKey[i]
+						if st, ok := stats[tk]; ok {
+							st.errorSeries++
+							stats[tk] = st
+						}
+					}
 					writeErrors.Add(seriesErr)
-				}
-				if stat, ok := stats[resp.tenant]; ok {
-					stat.errorSeries += len(seriesErrs)
 				}
 				return stats, writeErrors.ErrOrNil()
 			}
@@ -922,18 +1057,7 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	remoteWrites := make(map[endpointReplica]map[string]trackedSeries)
 	localWrites := make(map[endpointReplica]map[string]trackedSeries)
 	for tsIndex, ts := range timeseries {
-		var tenant = tenantHTTP
-
-		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-
-			tenantLabel := lbls.Get(h.splitTenantLabelName)
-			if tenantLabel != "" {
-				tenant = h.splitTenantLabelName + ":" + tenantLabel
-			} else {
-				tenant = h.options.DefaultTenantID
-			}
-		}
+		tenant := h.tenantKeyForDistribution(tenantHTTP, ts)
 
 		for _, rn := range replicas {
 			endpoint, err := h.hashring.GetN(tenant, &ts, rn)
@@ -947,12 +1071,8 @@ func (h *Handler) distributeTimeseriesToReplicas(
 			}
 			writeableSeries, ok := writeDestination[endpointReplica]
 			if !ok {
-				writeDestination[endpointReplica] = map[string]trackedSeries{
-					tenant: {
-						seriesIDs:  make([]int, 0),
-						timeSeries: make([]prompb.TimeSeries, 0),
-					},
-				}
+				writeableSeries = make(map[string]trackedSeries, 1)
+				writeDestination[endpointReplica] = writeableSeries
 			}
 			tenantSeries := writeableSeries[tenant]
 
@@ -1018,8 +1138,7 @@ func (h *Handler) sendLocalWrite(
 	for _, ts := range trackedSeries.timeSeries {
 		var tenant = tenantHTTP
 		if h.splitTenantLabelName != "" {
-			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-			if tnt := lbls.Get(h.splitTenantLabelName); tnt != "" {
+			if tnt, ok := zlabelsGet(ts.Labels, h.splitTenantLabelName); ok && tnt != "" {
 				tenant = tnt
 			}
 		}

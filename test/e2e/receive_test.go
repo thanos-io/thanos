@@ -1052,8 +1052,8 @@ func TestReceiveExtractsTenant(t *testing.T) {
 				Timeseries: []prompb.TimeSeries{
 					{
 						Labels: []prompb.Label{
-							{Name: tenantLabelName, Value: "tenant-1"},
 							{Name: "aa", Value: "bb"},
+							{Name: tenantLabelName, Value: "tenant-1"},
 						},
 						Samples: []prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
@@ -1072,8 +1072,8 @@ func TestReceiveExtractsTenant(t *testing.T) {
 				Timeseries: []prompb.TimeSeries{
 					{
 						Labels: []prompb.Label{
-							{Name: tenantLabelName, Value: "tenant-2"},
 							{Name: "aa", Value: "bb"},
+							{Name: tenantLabelName, Value: "tenant-2"},
 						},
 						Samples: []prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
@@ -1101,8 +1101,8 @@ func TestReceiveExtractsTenant(t *testing.T) {
 				Timeseries: []prompb.TimeSeries{
 					{
 						Labels: []prompb.Label{
-							{Name: tenantLabelName, Value: "tenant-3"},
 							{Name: "aa", Value: "bb"},
+							{Name: tenantLabelName, Value: "tenant-3"},
 						},
 						Samples: []prompb.Sample{
 							{Value: 1, Timestamp: time.Now().UnixMilli()},
