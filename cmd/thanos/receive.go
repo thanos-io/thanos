@@ -172,6 +172,11 @@ func runReceive(
 		level.Info(logger).Log("msg", "tenant path segments before tenant feature enabled", "segments", path.Join(conf.tsdbPathSegmentsBeforeTenant...))
 	}
 
+	if *conf.compactionDelayInterval > 0 {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithCompactionDelayInterval(time.Duration(*conf.compactionDelayInterval)))
+		level.Info(logger).Log("msg", "deterministic compaction delay enabled", "interval", conf.compactionDelayInterval.String())
+	}
+
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
@@ -1000,6 +1005,8 @@ type receiveConfig struct {
 
 	featureList     *[]string
 	noUploadTenants *[]string
+
+	compactionDelayInterval *model.Duration
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1111,6 +1118,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").BoolVar(&rc.walCompression)
 
 	cmd.Flag("tsdb.no-lockfile", "Do not create lockfile in TSDB data directory. In any case, the lockfiles will be deleted on next startup.").Default("false").BoolVar(&rc.noLockFile)
+
+	rc.compactionDelayInterval = extkingpin.ModelDuration(cmd.Flag("receive.compaction-delay-interval",
+		"Interval for staggering head compaction across tenants. "+
+			"Tenant N gets delay of N*interval (mod block duration). "+
+			"0 uses random delay (default).").
+		Default("0s"))
 
 	cmd.Flag("tsdb.max-exemplars",
 		"Enables support for ingesting exemplars and sets the maximum number of exemplars that will be stored per tenant."+

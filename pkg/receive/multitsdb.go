@@ -18,6 +18,7 @@ import (
 	"github.com/oklog/ulid"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -70,6 +71,10 @@ type MultiTSDB struct {
 	noUploadTenants          []string // Support both exact matches and prefix patterns (e.g., "tenant1", "prod-*")
 	enableTenantPathPrefix   bool
 	pathSegmentsBeforeTenant []string
+
+	compactionDelayInterval time.Duration
+	tenantCounter           atomic.Uint64
+	compactionDelayGauge    *prometheus.GaugeVec
 }
 
 // MultiTSDBOption is a functional option for MultiTSDB.
@@ -110,6 +115,14 @@ func WithMatchersCache(cache storecache.MatchersCache) MultiTSDBOption {
 	}
 }
 
+// WithCompactionDelayInterval sets the interval for staggering head compaction across tenants.
+// Tenant N gets delay of N*interval (mod block duration).
+func WithCompactionDelayInterval(interval time.Duration) MultiTSDBOption {
+	return func(s *MultiTSDB) {
+		s.compactionDelayInterval = interval
+	}
+}
+
 // NewMultiTSDB creates new MultiTSDB.
 // NOTE: Passed labels must be sorted lexicographically (alphabetically).
 func NewMultiTSDB(
@@ -147,6 +160,16 @@ func NewMultiTSDB(
 
 	for _, option := range options {
 		option(mt)
+	}
+
+	if mt.compactionDelayInterval > 0 {
+		mt.compactionDelayGauge = promauto.With(reg).NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_tsdb_compaction_delay_seconds",
+				Help: "Configured compaction delay for each tenant's TSDB in seconds.",
+			},
+			[]string{"tenant"},
+		)
 	}
 
 	return mt
@@ -792,7 +815,19 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	level.Info(logger).Log("msg", "opening TSDB")
 	opts := *t.tsdbOpts
 	opts.BlocksToDelete = tenant.blocksToDelete
-	opts.EnableDelayedCompaction = true
+	if t.compactionDelayInterval > 0 {
+		index := t.tenantCounter.Add(1) - 1
+		chunkRange := time.Duration(t.tsdbOpts.MinBlockDuration) * time.Millisecond
+		delay := time.Duration(index) * t.compactionDelayInterval
+		if chunkRange > 0 {
+			delay = delay % chunkRange
+		}
+		opts.CompactionDelay = delay
+		level.Info(logger).Log("msg", "using deterministic compaction delay", "tenant", tenantID, "delay", delay)
+		t.compactionDelayGauge.WithLabelValues(tenantID).Set(delay.Seconds())
+	} else {
+		opts.EnableDelayedCompaction = true
+	}
 	tenant.blocksToDeleteFn = tsdb.DefaultBlocksToDelete
 
 	// NOTE(GiedriusS): always set to false to properly handle OOO samples - OOO samples are written into the WBL

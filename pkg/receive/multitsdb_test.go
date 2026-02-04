@@ -1278,3 +1278,31 @@ func TestMultiTSDBSkipsLostAndFound(t *testing.T) {
 	m.mtx.RUnlock()
 	testutil.Assert(t, !exists, "lost+found should not be loaded as a tenant")
 }
+
+func TestMultiTSDBCompactionDelayInterval(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	interval := time.Minute
+
+	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+		RetentionDuration: (6 * time.Hour).Milliseconds(),
+	}, labels.FromStrings("replica", "test"), "tenant_id", nil, false, metadata.NoneFunc,
+		WithCompactionDelayInterval(interval))
+	t.Cleanup(func() {
+		testutil.Ok(t, m.Close())
+	})
+
+	testutil.Ok(t, m.Open())
+
+	// Create multiple tenants and verify counter increments.
+	tenants := []string{"tenant-a", "tenant-b", "tenant-c"}
+	for _, tenant := range tenants {
+		testutil.Ok(t, appendSample(m, tenant, time.Now()))
+	}
+
+	// Verify all tenants were created and counter was incremented.
+	testutil.Equals(t, uint64(len(tenants)), m.tenantCounter.Load())
+}
