@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	prommodel "github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/thanos-io/objstore"
@@ -1173,6 +1174,11 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	var relabelConfig []*relabel.Config
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
+	}
+	for _, cfg := range relabelConfig {
+		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
+			return nil, errors.Wrap(err, "validate relabel config")
+		}
 	}
 
 	if supportedActions != nil {

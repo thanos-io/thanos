@@ -1035,8 +1035,7 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (any, []error, *api.ApiError,
 	ctx := r.Context()
 	name := route.Param(ctx, "name")
 
-	label := model.LabelName(name)
-	if !label.IsValid() {
+	if !model.UTF8Validation.IsValidLabelName(name) {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}, func() {}
 	}
 

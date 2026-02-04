@@ -17,6 +17,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
 	"github.com/prometheus/prometheus/rules"
@@ -263,7 +264,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	set[g.group.Name] = struct{}{}
 
 	for i, r := range g.group.Rules {
-		for _, node := range r.Validate(rulefmt.RuleNode{}) {
+		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation) {
 			var ruleName string
 			if r.Alert != "" {
 				ruleName = r.Alert

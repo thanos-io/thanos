@@ -28,7 +28,7 @@ func (c *PrometheusConverter) addGaugeNumberDataPoints(ctx context.Context, data
 		}
 
 		pt := dataPoints.At(x)
-		labels := createAttributes(
+		labels, err := createAttributes(
 			resource,
 			pt.Attributes(),
 			settings,
@@ -37,6 +37,9 @@ func (c *PrometheusConverter) addGaugeNumberDataPoints(ctx context.Context, data
 			model.MetricNameLabel,
 			name,
 		)
+		if err != nil {
+			return err
+		}
 		sample := &prompb.Sample{
 			// convert ns to ms
 			Timestamp: convertTimeStamp(pt.Timestamp()),
@@ -64,7 +67,7 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 		}
 
 		pt := dataPoints.At(x)
-		lbls := createAttributes(
+		lbls, err := createAttributes(
 			resource,
 			pt.Attributes(),
 			settings,
@@ -73,6 +76,9 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 			model.MetricNameLabel,
 			name,
 		)
+		if err != nil {
+			return err
+		}
 		sample := &prompb.Sample{
 			// convert ns to ms
 			Timestamp: convertTimeStamp(pt.Timestamp()),

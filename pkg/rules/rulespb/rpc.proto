@@ -91,18 +91,17 @@ message Rule {
 
 /// AlertState represents state of the alert. Has to match 1:1 Prometheus AlertState:
 //
+// StateUnknown is the state of an alert that has not yet been evaluated.
 // StateInactive is the state of an alert that is neither firing nor pending.
-//StateInactive AlertState = iota
 // StatePending is the state of an alert that has been active for less than
 // the configured threshold duration.
-//StatePending
 // StateFiring is the state of an alert that has been active for longer than
 // the configured threshold duration.
-//StateFiring
 enum AlertState {
-    INACTIVE            = 0;
-    PENDING             = 1;
-    FIRING              = 2;
+    UNKNOWN             = 0;
+    INACTIVE            = 1;
+    PENDING             = 2;
+    FIRING              = 3;
 }
 
 message AlertInstance {

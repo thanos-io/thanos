@@ -338,9 +338,11 @@ func (h *histogramAggregator) reset() {
 	h.sum = nil
 }
 
-func mustHistogramOp(_ *histogram.FloatHistogram, err error) {
+func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 	// NOTE(GiedriusS): this can only happen with custom
 	// boundaries. We do not support them yet.
+	// The two boolean return values are for NHCB (Native Histogram Custom Buckets)
+	// which we don't support yet, so we ignore them.
 	if err != nil {
 		panic(fmt.Sprintf("unexpected error: %v", err))
 	}
@@ -367,7 +369,8 @@ func (h *histogramAggregator) add(s sample) {
 			mustHistogramOp(h.counter.Add(fh))
 		} else {
 			// Add delta with previous value to the counter.
-			deltaFh, err := fh.Copy().Sub(h.previous)
+			// TODO: support NHCB.
+			deltaFh, _, _, err := fh.Copy().Sub(h.previous)
 			if err != nil {
 				// TODO(GiedriusS): support native histograms with custom buckets.
 				// This can only happen with custom buckets.

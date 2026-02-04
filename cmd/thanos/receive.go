@@ -74,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
-		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
+		if !model.UTF8Validation.IsValidLabelName(conf.tenantLabelName) {
 			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
 		if lset.Len() == 0 {
@@ -100,7 +100,6 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
-			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -1074,8 +1073,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
 
 	cmd.Flag("tsdb.enable-native-histograms",
-		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
-		Default("false").BoolVar(&rc.tsdbEnableNativeHistograms)
+		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
+		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").

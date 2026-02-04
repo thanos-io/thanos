@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cespare/xxhash/v2"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -108,7 +109,7 @@ var seps = []byte{'\xff'}
 // if logOnOverwrite is true, the overwrite is logged. Resulting label names are sanitized.
 // If settings.PromoteResourceAttributes is not empty, it's a set of resource attributes that should be promoted to labels.
 func createAttributes(resource pcommon.Resource, attributes pcommon.Map, settings Settings,
-	ignoreAttrs []string, logOnOverwrite bool, extras ...string) []labelpb.ZLabel {
+	ignoreAttrs []string, logOnOverwrite bool, extras ...string) ([]labelpb.ZLabel, error) {
 	resourceAttrs := resource.Attributes()
 	serviceName, haveServiceName := resourceAttrs.Get(conventions.AttributeServiceName)
 	instance, haveInstanceID := resourceAttrs.Get(conventions.AttributeServiceInstanceID)
@@ -145,13 +146,15 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 	})
 	sort.Stable(ByLabelName(labels))
 
-	labelNamer := prometheustranslator.LabelNamer{}
+	labelNamer := prometheustranslator.LabelNamer{
+		UTF8Allowed: settings.AllowUTF8,
+	}
 	// map ensures no duplicate label names.
 	l := make(map[string]string, maxLabelCount)
 	for _, label := range labels {
-		finalKey := label.Name
-		if !settings.AllowUTF8 {
-			finalKey = labelNamer.Build(finalKey)
+		finalKey, err := labelNamer.Build(label.Name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid label name: %q", label.Name)
 		}
 		if existingValue, alreadyExists := l[finalKey]; alreadyExists {
 			l[finalKey] = existingValue + ";" + label.Value
@@ -161,9 +164,9 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 	}
 
 	for _, lbl := range promotedAttrs {
-		normalized := lbl.Name
-		if !settings.AllowUTF8 {
-			normalized = labelNamer.Build(normalized)
+		normalized, err := labelNamer.Build(lbl.Name)
+		if err != nil {
+			return nil, errors.Wrapf(err, "invalid promoted resource attribute name: %q", lbl.Name)
 		}
 		if _, exists := l[normalized]; !exists {
 			l[normalized] = lbl.Value
@@ -202,8 +205,12 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 			log.Println("label " + name + " is overwritten. Check if Prometheus reserved labels are used.")
 		}
 		// internal labels should be maintained
-		if !settings.AllowUTF8 && len(name) <= 4 && name[:2] != "__" && name[len(name)-2:] != "__" {
-			name = labelNamer.Build(name)
+		if len(name) <= 4 && name[:2] != "__" && name[len(name)-2:] != "__" {
+			var err error
+			name, err = labelNamer.Build(name)
+			if err != nil {
+				return nil, errors.Wrapf(err, "invalid extra label name: %q", name)
+			}
 		}
 		l[name] = extras[i+1]
 	}
@@ -213,7 +220,7 @@ func createAttributes(resource pcommon.Resource, attributes pcommon.Map, setting
 		labels = append(labels, labelpb.ZLabel{Name: k, Value: v})
 	}
 
-	return labels
+	return labels, nil
 }
 
 // isValidAggregationTemporality checks whether an OTel metric has a valid
@@ -249,7 +256,10 @@ func (c *PrometheusConverter) addHistogramDataPoints(ctx context.Context, dataPo
 
 		pt := dataPoints.At(x)
 		timestamp := convertTimeStamp(pt.Timestamp())
-		baseLabels := createAttributes(resource, pt.Attributes(), settings, nil, false)
+		baseLabels, err := createAttributes(resource, pt.Attributes(), settings, nil, false)
+		if err != nil {
+			return err
+		}
 
 		// If the sum is unset, it indicates the _sum metric point should be
 		// omitted
@@ -449,7 +459,10 @@ func (c *PrometheusConverter) addSummaryDataPoints(ctx context.Context, dataPoin
 
 		pt := dataPoints.At(x)
 		timestamp := convertTimeStamp(pt.Timestamp())
-		baseLabels := createAttributes(resource, pt.Attributes(), settings, nil, false)
+		baseLabels, err := createAttributes(resource, pt.Attributes(), settings, nil, false)
+		if err != nil {
+			return err
+		}
 
 		// treat sum as a sample in an individual TimeSeries
 		sum := &prompb.Sample{
@@ -602,7 +615,10 @@ func addResourceTargetInfo(resource pcommon.Resource, settings Settings, timesta
 		// Do not pass identifying attributes as ignoreAttrs below.
 		identifyingAttrs = nil
 	}
-	labels := createAttributes(resource, attributes, settings, identifyingAttrs, false, model.MetricNameLabel, name)
+	labels, err := createAttributes(resource, attributes, settings, identifyingAttrs, false, model.MetricNameLabel, name)
+	if err != nil {
+		return
+	}
 	haveIdentifier := false
 	for _, l := range labels {
 		if l.Name == model.JobLabel || l.Name == model.InstanceLabel {
