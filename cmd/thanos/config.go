@@ -70,6 +70,7 @@ type grpcClientConfig struct {
 	cert, key, caCert string
 	serverName        string
 	compression       string
+	minTLSVersion     string
 }
 
 func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
@@ -81,7 +82,9 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
 	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
-
+	cmd.Flag("grpc-client-tls-min-version",
+		"TLS supported minimum version for gRPC client. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
+		Default("1.3").StringVar(&gc.minTLSVersion)
 	return gc
 }
 

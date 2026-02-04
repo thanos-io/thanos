@@ -293,7 +293,7 @@ Further, note that there are no authentication mechanisms in Thanos, so anyone c
 
 ### Per-Endpoint TLS Configuration
 
-Configuring per-endpoint TLS:
+Configuring per-endpoint TLS: 
 
 Example file in YAML:
 
@@ -310,6 +310,7 @@ endpoints:
       server_name: "<str>"
       compression: "<str>"  # "none" or "snappy"
 ```
+Reference https://pkg.go.dev/crypto/tls#Config for Configuring the fields
 
 When `enabled` is true, TLS is configured to make use of certs path provided for the endpoint. If no path/invalid path is provided, global TLS configuration is used as a fallback. If `enabled` is false, cleartext is used.
 
@@ -392,9 +393,11 @@ Flags:
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
       --grpc-client-server-name=""
+                                 TLS supported minimum version for gRPC client. If no version is specified, it'll default to 1.3. Allowed values: ["1.0", "1.1", "1.2", "1.3"]
                                  Server name to verify the hostname on
                                  the returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --grpc-client-tls-min-version=""
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows

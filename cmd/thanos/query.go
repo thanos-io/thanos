@@ -273,9 +273,18 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
-		globalTLSOpt, err := extgrpc.StoreClientTLSCredentials(logger, grpcClientConfig.secure, grpcClientConfig.skipVerify, grpcClientConfig.cert, grpcClientConfig.key, grpcClientConfig.caCert, grpcClientConfig.serverName)
+		globalTLSOpt, err := extgrpc.StoreClientTLSCredentials(logger, grpcClientConfig.secure, grpcClientConfig.skipVerify, grpcClientConfig.cert, grpcClientConfig.key, grpcClientConfig.caCert, grpcClientConfig.serverName, grpcClientConfig.minTLSVersion)
 		if err != nil {
 			return err
+		}
+
+		globalTLSConfig := &tlsConfig{
+			Enabled:                  &grpcClientConfig.secure,
+			InsecureSkipVerification: &grpcClientConfig.skipVerify,
+			CertFile:                 &grpcClientConfig.cert,
+			KeyFile:                  &grpcClientConfig.key,
+			CAFile:                   &grpcClientConfig.caCert,
+			MinVersion:               &grpcClientConfig.minTLSVersion,
 		}
 
 		if *promqlQueryMode != string(apiv1.PromqlQueryModeLocal) {
@@ -302,6 +311,7 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*endpointInfoTimeout),
 			time.Duration(*queryTimeout),
 			dialOpts,
+			globalTLSConfig,
 			globalTLSOpt,
 			grpcClientConfig.compression, // global grpc tls compression.
 			*injectTestAddresses,

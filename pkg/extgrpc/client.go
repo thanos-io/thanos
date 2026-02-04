@@ -140,14 +140,14 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 
 }
 
-func StoreClientTLSCredentials(logger log.Logger, secure, skipVerify bool, cert, key, caCert, serverName string) (grpc.DialOption, error) {
+func StoreClientTLSCredentials(logger log.Logger, secure, skipVerify bool, cert, key, caCert, serverName, minTLSVersion string) (grpc.DialOption, error) {
 	if !secure {
 		return grpc.WithTransportCredentials(insecure.NewCredentials()), nil
 	}
 
 	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName, skipVerify)
+	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName, skipVerify, minTLSVersion)
 	if err != nil {
 		return nil, err
 	}

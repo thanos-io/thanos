@@ -168,7 +168,8 @@ func runReceive(
 		return err
 	}
 
-	tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, conf.rwClientSecure, conf.rwClientSkipVerify, conf.rwClientCert, conf.rwClientKey, conf.rwClientServerCA, conf.rwClientServerName)
+	// TODO(naman): pass min TLS version from config.
+	tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, conf.rwClientSecure, conf.rwClientSkipVerify, conf.rwClientCert, conf.rwClientKey, conf.rwClientServerCA, conf.rwClientServerName, "")
 	if err != nil {
 		return err
 	}
