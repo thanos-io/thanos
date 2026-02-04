@@ -125,14 +125,14 @@ func TestReaders(t *testing.T) {
 					testutil.Equals(t, 1, br.version)
 					testutil.Equals(t, 2, br.indexVersion)
 					testutil.Equals(t, &BinaryTOC{Symbols: headerLen, PostingsOffsetTable: 114}, br.toc)
-					testutil.Equals(t, int64(905), br.indexLastPostingEnd)
+					testutil.Equals(t, int64(744), br.indexLastPostingEnd)
 					testutil.Equals(t, 8, br.symbols.Size())
 					testutil.Equals(t, 0, len(br.postingsV1))
 					testutil.Equals(t, 3, len(br.nameSymbols))
 					testutil.Equals(t, map[string]*postingValueOffsets{
 						"": {
 							offsets:       []postingOffset{{value: "", tableOff: 4}},
-							lastValOffset: 576,
+							lastValOffset: 460,
 						},
 						"a": {
 							offsets: []postingOffset{
@@ -142,21 +142,21 @@ func TestReaders(t *testing.T) {
 								{value: "7", tableOff: 75},
 								{value: "9", tableOff: 89},
 							},
-							lastValOffset: 776,
+							lastValOffset: 660,
 						},
 						"cluster": {
 							offsets: []postingOffset{
 								{value: "a-eu-west-1", tableOff: 96},
 								{value: "c-eu-west-1", tableOff: 142},
 							},
-							lastValOffset: 824,
+							lastValOffset: 708,
 						},
 						"longer-string": {
 							offsets: []postingOffset{
 								{value: "1", tableOff: 165},
 								{value: "2", tableOff: 184},
 							},
-							lastValOffset: 901,
+							lastValOffset: 740,
 						},
 					}, br.postings)
 

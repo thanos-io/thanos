@@ -74,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
-		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
+		if !model.UTF8Validation.IsValidLabelName(conf.tenantLabelName) {
 			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
 		if lset.Len() == 0 {

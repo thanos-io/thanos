@@ -1397,11 +1397,12 @@ func TestRelabel(t *testing.T) {
 			name: "has relabel configs but no relabelling applied",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"zoo"},
-					TargetLabel:  "bar",
-					Regex:        relabel.MustNewRegexp("bar"),
-					Action:       relabel.Replace,
-					Replacement:  "baz",
+					SourceLabels:         model.LabelNames{"zoo"},
+					TargetLabel:          "bar",
+					Regex:                relabel.MustNewRegexp("bar"),
+					Action:               relabel.Replace,
+					Replacement:          "baz",
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1453,16 +1454,18 @@ func TestRelabel(t *testing.T) {
 			name: "relabel rewrite existing labels",
 			relabel: []*relabel.Config{
 				{
-					TargetLabel: "foo",
-					Action:      relabel.Replace,
-					Regex:       relabel.MustNewRegexp(""),
-					Replacement: "test",
+					TargetLabel:          "foo",
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp(""),
+					Replacement:          "test",
+					NameValidationScheme: model.UTF8Validation,
 				},
 				{
-					TargetLabel: "__name__",
-					Action:      relabel.Replace,
-					Regex:       relabel.MustNewRegexp(""),
-					Replacement: "foo",
+					TargetLabel:          "__name__",
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp(""),
+					Replacement:          "foo",
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1514,8 +1517,9 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops label",
 			relabel: []*relabel.Config{
 				{
-					Action: relabel.LabelDrop,
-					Regex:  relabel.MustNewRegexp("foo"),
+					Action:               relabel.LabelDrop,
+					Regex:                relabel.MustNewRegexp("foo"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1563,9 +1567,10 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops time series",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"foo"},
-					Action:       relabel.Drop,
-					Regex:        relabel.MustNewRegexp("bar"),
+					SourceLabels:         model.LabelNames{"foo"},
+					Action:               relabel.Drop,
+					Regex:                relabel.MustNewRegexp("bar"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1598,8 +1603,9 @@ func TestRelabel(t *testing.T) {
 			name: "relabel rewrite existing exemplar series labels",
 			relabel: []*relabel.Config{
 				{
-					Action: relabel.LabelDrop,
-					Regex:  relabel.MustNewRegexp("foo"),
+					Action:               relabel.LabelDrop,
+					Regex:                relabel.MustNewRegexp("foo"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1659,9 +1665,10 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops exemplars",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"foo"},
-					Action:       relabel.Drop,
-					Regex:        relabel.MustNewRegexp("bar"),
+					SourceLabels:         model.LabelNames{"foo"},
+					Action:               relabel.Drop,
+					Regex:                relabel.MustNewRegexp("bar"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{

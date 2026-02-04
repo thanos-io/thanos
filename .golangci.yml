@@ -46,6 +46,9 @@ linters:
       - linters:
           - unused
         text: ruleAndAssert
+      - linters:
+          - staticcheck
+        text: 'labels.MetricName is deprecated: .*'  
     paths:
       - vendor
       - internal/cortex
