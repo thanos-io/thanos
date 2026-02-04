@@ -626,6 +626,10 @@ Flags:
       --tsdb.block.expanded-postings-cache-size=0
                                  [EXPERIMENTAL] If non-zero, enables expanded
                                  postings cache for compacted blocks.
+      --receive.compaction-delay-interval=0s
+                                 Interval for staggering head compaction across
+                                 tenants. Tenant N gets delay of N*interval (mod
+                                 block duration). 0 uses random delay (default).
       --tsdb.max-exemplars=0     Enables support for ingesting exemplars and
                                  sets the maximum number of exemplars that will
                                  be stored per tenant. In case the exemplar
