@@ -187,9 +187,9 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	var tlsConfig *tls.Config
 	if config.TLSEnabled {
 		userTLSConfig := config.TLSConfig
-
+		// TODO(naman): pass min TLS version from config.
 		tlsClientConfig, err := thanos_tls.NewClientConfig(logger, userTLSConfig.CertFile, userTLSConfig.KeyFile,
-			userTLSConfig.CAFile, userTLSConfig.ServerName, userTLSConfig.InsecureSkipVerify)
+			userTLSConfig.CAFile, userTLSConfig.ServerName, userTLSConfig.InsecureSkipVerify, "")
 
 		if err != nil {
 			return nil, err

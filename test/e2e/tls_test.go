@@ -73,7 +73,8 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
 
 	// Setup the connection and the client.
-	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+	// TODO(naman): pass min TLS version from config.
+	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "")
 	testutil.Ok(t, err)
 	conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
 	testutil.Ok(t, err)
