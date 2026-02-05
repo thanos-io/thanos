@@ -35,10 +35,13 @@ func newJournaldLogger() *journaldLogger {
 // Log implements log.Logger. It maps "level" field to journald priority,
 // "msg" to MESSAGE, and other fields to THANOS_<KEY> structured fields.
 // It ensures all field keys are valid journald field names.
+// If no "msg" is provided, falls back to "err" value for MESSAGE to comply
+// with journald specification requiring a non-empty MESSAGE field.
 func (l *journaldLogger) Log(keyvals ...interface{}) error {
 	var (
 		lvl     string
 		msg     string
+		errVal  string
 		vars    = make(map[string]string)
 		varsLen = len(keyvals)
 	)
@@ -58,8 +61,21 @@ func (l *journaldLogger) Log(keyvals ...interface{}) error {
 			lvl = fmt.Sprintf("%v", val)
 		case "msg":
 			msg = fmt.Sprintf("%v", val)
+		case "err":
+			errVal = fmt.Sprintf("%v", val)
+			vars[toJournalField(key)] = errVal
 		default:
 			vars[toJournalField(key)] = fmt.Sprintf("%v", val)
+		}
+	}
+
+	// Ensure MESSAGE field is not empty per journald spec.
+	// Use error value as fallback if no explicit message is provided.
+	if msg == "" {
+		if errVal != "" {
+			msg = errVal
+		} else {
+			msg = "(no message)"
 		}
 	}
 
