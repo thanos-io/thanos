@@ -238,7 +238,7 @@ func newTestHandlerHashring(
 		closers = make([]func() error, 0)
 
 		ag         = addrGen{}
-		logger     = logging.NewLogger("debug", "logfmt", "receive_test")
+		logger, _  = logging.NewLogger("debug", "logfmt", "receive_test")
 		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
 	for i := range appendables {
