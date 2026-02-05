@@ -314,7 +314,9 @@ endpoints:
       compression: "<str>"           # --grpc-compression "none" or "snappy"
 ```
 
-Just like with CLI flags, it is possible to set a cert, key and CA without actually enabling TLS. This is not considered an error. Make sure to explicitly set `enabled: true` if TLS is desired for an endpoint.
+#### Note
+
+If you provide TLS-specific fields (`cert_file`, `key_file`, `ca_file`, or `insecure_skip_verify`) without explicitly setting `enabled`, Thanos will **automatically infer `enabled: true`**. To disable TLS, set `enabled: false`. If you provide no TLS configuration at all (no `client_config`), the endpoint will inherit all settings from the global flags.
 
 There is no support for per-endpoint TLS overrides for endpoints supplied by DNS service discovery or static CLI options.
 

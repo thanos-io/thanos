@@ -87,7 +87,14 @@ func (cfg *clientConfig) UseGlobalTLSOpts() bool {
 		cfg.TLSConfig.KeyFile == nil &&
 		cfg.TLSConfig.CAFile == nil &&
 		cfg.ServerName == "" &&
-		cfg.TLSConfig.MinVersion == nil
+		cfg.TLSConfig.MinVersion == nil &&
+		cfg.TLSConfig.InsecureSkipVerification == nil
+}
+
+// hasTLSConfig returns true if user specified any TLS-specific configuration.
+// This is it set TLS even if 'enabled' is not explicitly set.
+func (tc *tlsConfig) hasTLSConfig() bool {
+	return tc.CertFile != nil || tc.KeyFile != nil || tc.CAFile != nil || tc.InsecureSkipVerification != nil
 }
 
 // applyDefaults sets default values for nil pointer fields.
@@ -95,7 +102,12 @@ func (cfg *clientConfig) UseGlobalTLSOpts() bool {
 // Call this only after UseGlobalTLSOpts() check, otherwise that check will always return false.
 func (tc *tlsConfig) applyDefaults(fallback *tlsConfig) {
 	if tc.Enabled == nil {
-		if fallback != nil && fallback.Enabled != nil {
+		// If user provided any TLS config (cert/key/CA/insecure_skip_verify),
+		// we assume they want TLS enabled rather than using global's enabled value
+		if tc.hasTLSConfig() {
+			defaultVal := true
+			tc.Enabled = &defaultVal
+		} else if fallback != nil && fallback.Enabled != nil {
 			tc.Enabled = fallback.Enabled
 		} else {
 			defaultVal := false
