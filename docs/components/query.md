@@ -293,7 +293,7 @@ Further, note that there are no authentication mechanisms in Thanos, so anyone c
 
 ### Per-Endpoint TLS Configuration
 
-TLS may be overridden on a per-endpoint basis when configuring endpoints using file-based service discovery.  This makes it possible to use TLS for some endpoints but not others, to use different TLS trust domains for different endpoints, and so on.
+TLS may be overridden on a per-endpoint basis when configuring endpoints using file-based service discovery. This makes it possible to use TLS for some endpoints but not others, to use different TLS trust domains for different endpoints, and so on.
 
 Each entry in the per-endpoint `client_config` overrides the corresponding settings from the global configuration provided by [CLI options](#flags). To explicitly unset a global setting for one endpoint, set it to the empty string in the per-endpoint configuration. To inherit it, omit the setting key entirely. Each setting is independent, so it is possible to (e.g.) override the per-endpoint client cert and key while inheriting the globally-configured CA cert.
 
@@ -399,13 +399,16 @@ Flags:
       --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
                                  servers
       --grpc-client-server-name=""
-                                 TLS supported minimum version for gRPC client. If no version is specified, it'll default to 1.3. Allowed values: ["1.0", "1.1", "1.2", "1.3"]
                                  Server name to verify the hostname on
                                  the returned gRPC certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
-      --grpc-client-tls-min-version=""
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
+      --grpc-client-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC client.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.
