@@ -6,13 +6,15 @@ package logging
 import (
 	"os"
 
+	"github.com/coreos/go-systemd/v22/journal"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 )
 
 const (
-	LogFormatLogfmt = "logfmt"
-	LogFormatJSON   = "json"
+	LogFormatLogfmt   = "logfmt"
+	LogFormatJSON     = "json"
+	LogFormatJournald = "journald"
 )
 
 type LevelLogger struct {
@@ -27,8 +29,9 @@ type LevelLogger struct {
 // be validated before passed to this function.
 func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 	var (
-		logger log.Logger
-		lvl    level.Option
+		logger           log.Logger
+		lvl              level.Option
+		fallbackToLogfmt bool
 	)
 
 	switch logLevel {
@@ -47,8 +50,15 @@ func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 	}
 
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	if logFormat == LogFormatJSON {
+	switch logFormat {
+	case LogFormatJSON:
 		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+	case LogFormatJournald:
+		if journal.Enabled() {
+			logger = newJournaldLogger()
+		} else {
+			fallbackToLogfmt = true
+		}
 	}
 
 	// Sort the logger chain to avoid expensive log.Valuer evaluation for disallowed level.
@@ -58,6 +68,10 @@ func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 
 	if debugName != "" {
 		logger = log.With(logger, "name", debugName)
+	}
+
+	if fallbackToLogfmt {
+		level.Warn(logger).Log("msg", "journald format requested but not available, falling back to logfmt")
 	}
 
 	return LevelLogger{
