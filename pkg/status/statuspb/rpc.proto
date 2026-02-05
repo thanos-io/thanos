@@ -29,7 +29,7 @@ service Status {
 }
 
 message TSDBStatisticsRequest {
-  string tenant = 1;
+  repeated thanos.LabelMatcher matchers = 1 [(gogoproto.nullable) = false];
   int32 limit = 2;
   PartialResponseStrategy partial_response_strategy = 3;
 }
