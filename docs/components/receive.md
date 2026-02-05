@@ -635,8 +635,10 @@ Flags:
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
       --[no-]tsdb.enable-native-histograms
-                                 [EXPERIMENTAL] Enables the ingestion of native
-                                 histograms.
+                                 (Deprecated) Enables the ingestion of native
+                                 histograms. This flag is a no-op now and will
+                                 be removed in the future. Native histogram
+                                 ingestion is always enabled.
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not

@@ -432,13 +432,12 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 	logger := log.NewNopLogger()
 
 	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-		MinBlockDuration:       (2 * time.Hour).Milliseconds(),
-		MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
-		RetentionDuration:      (6 * time.Hour).Milliseconds(),
-		NoLockfile:             true,
-		MaxExemplars:           maxExemplars,
-		EnableExemplarStorage:  true,
-		EnableNativeHistograms: true,
+		MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+		RetentionDuration:     (6 * time.Hour).Milliseconds(),
+		NoLockfile:            true,
+		MaxExemplars:          maxExemplars,
+		EnableExemplarStorage: true,
 	},
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
@@ -498,13 +497,12 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	logger := log.NewNopLogger()
 
 	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
-		MinBlockDuration:       (2 * time.Hour).Milliseconds(),
-		MaxBlockDuration:       (2 * time.Hour).Milliseconds(),
-		RetentionDuration:      (6 * time.Hour).Milliseconds(),
-		NoLockfile:             true,
-		MaxExemplars:           0,
-		EnableExemplarStorage:  true,
-		EnableNativeHistograms: generateHistograms,
+		MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+		RetentionDuration:     (6 * time.Hour).Milliseconds(),
+		NoLockfile:            true,
+		MaxExemplars:          0,
+		EnableExemplarStorage: true,
 	},
 		labels.FromStrings("replica", "01"),
 		"tenant_id",

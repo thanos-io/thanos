@@ -2773,7 +2773,7 @@ func expectedFloatHistogramsSum(floatHistograms []*histogram.FloatHistogram, fro
 	adjustedFloatHistograms := counterResetAdjustFloatHistograms(floatHistograms)
 	sum := adjustedFloatHistograms[fromIndex]
 	for _, s := range adjustedFloatHistograms[fromIndex+1:] {
-		_, err := sum.Add(s)
+		_, _, _, err := sum.Add(s)
 		if err != nil {
 			panic(err)
 		}
@@ -2792,7 +2792,7 @@ func sumHistograms(floatHistograms []*histogram.FloatHistogram) *histogram.Float
 	var res = floatHistograms[0].Copy()
 
 	for _, h := range floatHistograms[1:] {
-		added, err := res.Add(h)
+		added, _, _, err := res.Add(h)
 		if err != nil {
 			panic(err)
 		}
@@ -2810,17 +2810,18 @@ func counterResetAdjustFloatHistograms(floatHistograms []*histogram.FloatHistogr
 		if i == 0 {
 			counter = fh.Copy()
 		} else {
+			// TODO: handle NHCB properly.
 			if fh.DetectReset(previous) {
-				_, err := counter.Add(fh)
+				_, _, _, err := counter.Add(fh)
 				if err != nil {
 					panic(err)
 				}
 			} else {
-				s, err := fh.Copy().Sub(previous)
+				s, _, _, err := fh.Copy().Sub(previous)
 				if err != nil {
 					panic(err)
 				}
-				_, err = counter.Add(s)
+				_, _, _, err = counter.Add(s)
 				if err != nil {
 					panic(err)
 				}
