@@ -293,26 +293,32 @@ Further, note that there are no authentication mechanisms in Thanos, so anyone c
 
 ### Per-Endpoint TLS Configuration
 
-Configuring per-endpoint TLS: 
+TLS may be overridden on a per-endpoint basis when configuring endpoints using file-based service discovery.  This makes it possible to use TLS for some endpoints but not others, to use different TLS trust domains for different endpoints, and so on.
 
-Example file in YAML:
+Each entry in the per-endpoint `client_config` overrides the corresponding settings from the global configuration provided by [CLI options](#flags). To explicitly unset a global setting for one endpoint, set it to the empty string in the per-endpoint configuration. To inherit it, omit the setting key entirely. Each setting is independent, so it is possible to (e.g.) override the per-endpoint client cert and key while inheriting the globally-configured CA cert.
+
+Example file service-discovery config file in YAML, showing the corresponding [global flag](#flags) for each per-endpoint option as a comment:
 
 ```yaml
 endpoints:
   - address: "<endpoint-address>"
     client_config:
       tls_config:
-        enabled: <bool>
-        insecure_skip_verify: <bool>
-        cert_file: "<path>"
-        key_file: "<path>"
-        ca_file: "<path>"
-      server_name: "<str>"
-      compression: "<str>"  # "none" or "snappy"
+        enabled: <bool>              # --[no-]grpc-client-tls-secure
+        insecure_skip_verify: <bool> # --[no-]grpc-client-tls-skip-verify
+        cert_file: "<path>"          # --grpc-client-tls-cert
+        key_file: "<path>"           # --grpc-client-tls-key
+        ca_file: "<path>"            # --grpc-client-tls-ca
+        min_version: "<str>"         # --grpc-server-tls-min-version
+      server_name: "<str>"           # --grpc-client-server-name
+      compression: "<str>"           # --grpc-compression "none" or "snappy"
 ```
-Reference https://pkg.go.dev/crypto/tls#Config for Configuring the fields
 
-When `enabled` is true, TLS is configured to make use of certs path provided for the endpoint. If no path/invalid path is provided, global TLS configuration is used as a fallback. If `enabled` is false, cleartext is used.
+Just like with CLI flags, it is possible to set a cert, key and CA without actually enabling TLS. This is not considered an error. Make sure to explicitly set `enabled: true` if TLS is desired for an endpoint.
+
+There is no support for per-endpoint TLS overrides for endpoints supplied by DNS service discovery or static CLI options.
+
+See also https://pkg.go.dev/crypto/tls#Config for lower-level field details.
 
 In order to make use of global TLS config, don't provide any `client_config`:
 
