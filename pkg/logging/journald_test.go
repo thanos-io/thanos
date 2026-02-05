@@ -118,9 +118,9 @@ func TestJournaldLogger_FieldExtraction(t *testing.T) {
 			expectedLevel: journal.PriWarning,
 		},
 		{
-			name:          "empty message",
+			name:          "empty message gets fallback",
 			keyvals:       []interface{}{"level", "info", "msg", ""},
-			expectedMsg:   "",
+			expectedMsg:   "(no message)",
 			expectedVars:  map[string]string{},
 			expectedLevel: journal.PriInfo,
 		},
@@ -130,6 +130,34 @@ func TestJournaldLogger_FieldExtraction(t *testing.T) {
 			expectedMsg:   "debug info",
 			expectedVars:  map[string]string{},
 			expectedLevel: journal.PriDebug,
+		},
+		{
+			name:          "error field with message",
+			keyvals:       []interface{}{"level", "error", "msg", "operation failed", "err", "connection timeout"},
+			expectedMsg:   "operation failed",
+			expectedVars:  map[string]string{"THANOS_ERR": "connection timeout"},
+			expectedLevel: journal.PriErr,
+		},
+		{
+			name:          "error field without message",
+			keyvals:       []interface{}{"level", "error", "err", "connection refused"},
+			expectedMsg:   "connection refused",
+			expectedVars:  map[string]string{"THANOS_ERR": "connection refused"},
+			expectedLevel: journal.PriErr,
+		},
+		{
+			name:          "error with caller and component",
+			keyvals:       []interface{}{"level", "error", "err", "TSDB not ready", "caller", "handler.go:637", "component", "receive-handler"},
+			expectedMsg:   "TSDB not ready",
+			expectedVars:  map[string]string{"THANOS_ERR": "TSDB not ready", "THANOS_CALLER": "handler.go:637", "THANOS_COMPONENT": "receive-handler"},
+			expectedLevel: journal.PriErr,
+		},
+		{
+			name:          "no message and no error - fallback",
+			keyvals:       []interface{}{"level", "info", "component", "test"},
+			expectedMsg:   "(no message)",
+			expectedVars:  map[string]string{"THANOS_COMPONENT": "test"},
+			expectedLevel: journal.PriInfo,
 		},
 	}
 
