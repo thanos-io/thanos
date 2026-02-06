@@ -46,8 +46,8 @@ func main() {
 	debugName := app.Flag("debug.name", "Name to add as prefix to log lines.").Hidden().String()
 	logLevel := app.Flag("log.level", "Log filtering level.").
 		Default("info").Enum("error", "warn", "info", "debug")
-	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt or json.").
-		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON)
+	logFormat := app.Flag("log.format", "Log format to use. Possible options: logfmt, json or journald.").
+		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON, logging.LogFormatJournald)
 	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
 
 	goMemLimitConf := goMemLimitConfig{}
