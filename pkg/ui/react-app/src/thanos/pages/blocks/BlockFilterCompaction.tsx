@@ -1,7 +1,6 @@
 import React, { FC, ChangeEvent } from 'react';
 import Checkbox from '../../../components/Checkbox';
 import { Input } from 'reactstrap';
-import styles from './blocks.module.css';
 
 interface BlockFilterCompactionProps {
   id: string;
@@ -19,16 +18,23 @@ export const BlockFilterCompaction: FC<BlockFilterCompactionProps> = ({
   defaultValue,
 }) => {
   return (
-    <div className={styles.blockFilter} style={{ marginLeft: '24px' }}>
-      <Checkbox style={{ marginRight: '4px' }} id={id} defaultChecked={defaultChecked} onChange={onChangeCheckbox} />
-      <p style={{ marginRight: '4px' }}>Filter by compaction level</p>
+    <>
+      <Checkbox
+        id={id}
+        defaultChecked={defaultChecked}
+        onChange={onChangeCheckbox}
+        wrapperStyles={{ marginBottom: 0, display: 'inline-flex', alignItems: 'center' }}
+      >
+        Filter by compaction level
+      </Checkbox>
       <Input
         type="number"
-        style={{ width: '80px', marginBottom: '1rem' }}
+        style={{ width: '80px', marginLeft: '10px' }}
         onChange={onChangeInput}
         defaultValue={defaultValue}
         min={0}
+        bsSize="sm"
       />
-    </div>
+    </>
   );
 };
