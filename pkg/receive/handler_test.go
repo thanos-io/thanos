@@ -2055,3 +2055,94 @@ func startIngestor(logger log.Logger, serverAddress string, delay time.Duration)
 	}()
 	return srv
 }
+
+// TestDistributionMapPooling verifies that distribution maps are properly
+// pooled and reused to reduce allocations.
+func TestDistributionMapPooling(t *testing.T) {
+	// Get initial pool counts by draining and refilling
+	initialRemote := endpointReplicaMapPool.Get().(*map[endpointReplica]map[string]trackedSeries)
+	initialLocal := endpointReplicaMapPool.Get().(*map[endpointReplica]map[string]trackedSeries)
+	endpointReplicaMapPool.Put(initialRemote)
+	endpointReplicaMapPool.Put(initialLocal)
+
+	// Create test data
+	localWrites := make(map[endpointReplica]map[string]trackedSeries)
+	remoteWrites := make(map[endpointReplica]map[string]trackedSeries)
+
+	// Add some data
+	ep1 := endpointReplica{endpoint: Endpoint{Address: "test1"}, replica: 0}
+	ep2 := endpointReplica{endpoint: Endpoint{Address: "test2"}, replica: 1}
+
+	tenantMap1 := make(map[string]trackedSeries)
+	tenantMap1["tenant1"] = trackedSeries{
+		seriesIDs:  []int{0, 1},
+		timeSeries: []prompb.TimeSeries{{}, {}},
+	}
+	localWrites[ep1] = tenantMap1
+
+	tenantMap2 := make(map[string]trackedSeries)
+	tenantMap2["tenant2"] = trackedSeries{
+		seriesIDs:  []int{2, 3},
+		timeSeries: []prompb.TimeSeries{{}, {}},
+	}
+	remoteWrites[ep2] = tenantMap2
+
+	// Verify maps have data
+	if len(localWrites) != 1 || len(remoteWrites) != 1 {
+		t.Fatalf("Expected maps to have data, got local=%d, remote=%d", len(localWrites), len(remoteWrites))
+	}
+
+	// Return maps to pool
+	returnDistributionMapsToPool(localWrites, remoteWrites)
+
+	// Verify maps were cleared
+	if len(localWrites) != 0 || len(remoteWrites) != 0 {
+		t.Errorf("Expected maps to be cleared after returning to pool, got local=%d, remote=%d", len(localWrites), len(remoteWrites))
+	}
+
+	// Get maps from pool again and verify they're empty
+	reusedRemote := endpointReplicaMapPool.Get().(*map[endpointReplica]map[string]trackedSeries)
+	reusedLocal := endpointReplicaMapPool.Get().(*map[endpointReplica]map[string]trackedSeries)
+
+	if len(*reusedRemote) != 0 || len(*reusedLocal) != 0 {
+		t.Errorf("Expected reused maps to be empty, got remote=%d, local=%d", len(*reusedRemote), len(*reusedLocal))
+	}
+
+	// Clean up
+	endpointReplicaMapPool.Put(reusedRemote)
+	endpointReplicaMapPool.Put(reusedLocal)
+}
+
+// TestClearMapFunctions verifies the map clearing helpers work correctly
+func TestClearMapFunctions(t *testing.T) {
+	// Test clearEndpointReplicaMap
+	outerMap := make(map[endpointReplica]map[string]trackedSeries)
+	outerMap[endpointReplica{endpoint: Endpoint{Address: "test"}, replica: 0}] = make(map[string]trackedSeries)
+	
+	if !clearEndpointReplicaMap(&outerMap) {
+		t.Error("Expected small map to be poolable")
+	}
+	if len(outerMap) != 0 {
+		t.Errorf("Expected map to be cleared, got len=%d", len(outerMap))
+	}
+
+	// Test with oversized map
+	largeMap := make(map[endpointReplica]map[string]trackedSeries)
+	for i := 0; i <= maxPooledDistributionMapSize; i++ {
+		largeMap[endpointReplica{endpoint: Endpoint{Address: "test"}, replica: uint64(i)}] = make(map[string]trackedSeries)
+	}
+	if clearEndpointReplicaMap(&largeMap) {
+		t.Error("Expected large map to not be poolable")
+	}
+
+	// Test clearTenantSeriesMap
+	innerMap := make(map[string]trackedSeries)
+	innerMap["tenant1"] = trackedSeries{}
+	
+	if !clearTenantSeriesMap(&innerMap) {
+		t.Error("Expected small map to be poolable")
+	}
+	if len(innerMap) != 0 {
+		t.Errorf("Expected map to be cleared, got len=%d", len(innerMap))
+	}
+}
