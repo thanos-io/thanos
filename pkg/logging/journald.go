@@ -47,7 +47,7 @@ func (l *journaldLogger) Log(keyvals ...interface{}) error {
 	)
 
 	for i := 0; i < varsLen; i += 2 {
-		key := fmt.Sprintf("%v", keyvals[i])
+		key := toString(keyvals[i])
 		var val interface{}
 		if i+1 < varsLen {
 			val = keyvals[i+1]
@@ -58,14 +58,14 @@ func (l *journaldLogger) Log(keyvals ...interface{}) error {
 
 		switch key {
 		case "level":
-			lvl = fmt.Sprintf("%v", val)
+			lvl = toString(val)
 		case "msg":
-			msg = fmt.Sprintf("%v", val)
+			msg = toString(val)
 		case "err":
-			errVal = fmt.Sprintf("%v", val)
+			errVal = toString(val)
 			vars[toJournalField(key)] = errVal
 		default:
-			vars[toJournalField(key)] = fmt.Sprintf("%v", val)
+			vars[toJournalField(key)] = toString(val)
 		}
 	}
 
@@ -92,12 +92,33 @@ func (l *journaldLogger) Log(keyvals ...interface{}) error {
 	return l.writer.Send(msg, priority, vars)
 }
 
+func toString(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case error:
+		return val.Error()
+	case fmt.Stringer:
+		return val.String()
+	default:
+		return fmt.Sprintf("%v", val)
+	}
+}
+
 func toJournalField(key string) string {
-	key = strings.ToUpper(key)
-	return "THANOS_" + strings.Map(func(r rune) rune {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			return r
+	var b strings.Builder
+	b.Grow(len(key) + 7) // Pre-allocate: "THANOS_" + key
+	b.WriteString("THANOS_")
+
+	for _, r := range key {
+		if r >= 'a' && r <= 'z' {
+			b.WriteRune(r - 32) // Convert to uppercase
+		} else if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
 		}
-		return '_'
-	}, key)
+	}
+
+	return b.String()
 }
