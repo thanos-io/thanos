@@ -6,6 +6,7 @@ package dns
 import (
 	"context"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -24,6 +25,8 @@ const (
 	SRV = QType("dnssrv")
 	// SRVNoA qtype performs SRV lookup without any A/AAAA lookup for each SRV result.
 	SRVNoA = QType("dnssrvnoa")
+	// ADualStack qtype performs both A and AAAA lookup, returning all addresses.
+	ADualStack = QType("dnsdualstack")
 )
 
 type Resolver interface {
@@ -36,6 +39,7 @@ type Resolver interface {
 
 type ipLookupResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+	LookupIPAddrDualStack(ctx context.Context, host string) ([]net.IPAddr, error)
 	LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error)
 	IsNotFound(err error) bool
 }
@@ -127,6 +131,37 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 				res = append(res, appendScheme(scheme, net.JoinHostPort(resIP.String(), resPort)))
 			}
 		}
+	case ADualStack:
+		if port == "" {
+			return nil, errors.Errorf("missing port in address given for dnsdualstack lookup: %v", name)
+		}
+		ips, err := s.resolver.LookupIPAddrDualStack(ctx, host)
+		if err != nil {
+			if !s.resolver.IsNotFound(err) {
+				return nil, errors.Wrapf(err, "lookup IP addresses (dual-stack) %q", host)
+			}
+			if ips == nil {
+				level.Error(s.logger).Log("msg", "failed to lookup IP addresses (dual-stack)", "host", host, "err", err)
+			}
+		}
+		sort.Slice(ips, func(i, j int) bool {
+			iIs6 := ips[i].IP.To4() == nil
+			jIs6 := ips[j].IP.To4() == nil
+			if iIs6 != jIs6 {
+				return iIs6
+			}
+			return ips[i].IP.String() < ips[j].IP.String()
+		})
+		var ipv4Count, ipv6Count int
+		for _, ip := range ips {
+			if ip.IP.To4() == nil {
+				ipv6Count++
+			} else {
+				ipv4Count++
+			}
+			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
+		}
+		level.Debug(s.logger).Log("msg", "dual-stack DNS lookup", "host", host, "ipv6_count", ipv6Count, "ipv4_count", ipv4Count)
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
 	}
