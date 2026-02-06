@@ -38,6 +38,15 @@ const (
 	storeFilterUpdateInterval = 15 * time.Second
 )
 
+// labelBuilderPool is a pool of label builders to reduce heap allocations
+// in the hot path of Series() processing. Reusing builders significantly
+// reduces GC pressure when processing thousands of series.
+var labelBuilderPool = sync.Pool{
+	New: func() interface{} {
+		return labels.NewBuilder(labels.EmptyLabels())
+	},
+}
+
 type TSDBReader interface {
 	storage.ChunkQueryable
 	StartTime() (int64, error)
@@ -299,11 +308,25 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	}
 	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
+	// Get label builder from pool to reduce allocations in the series loop.
+	// This is critical for performance when processing many series.
+	builder := labelBuilderPool.Get().(*labels.Builder)
+	defer labelBuilderPool.Put(builder)
+
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
 
-		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
+		// Build complete labelset by removing unwanted labels and extending with external labels.
+		// Reuse builder instead of calling rmLabels + ExtendSortedLabels to avoid allocations.
+		builder.Reset(series.Labels())
+		for k := range extLsetToRemove {
+			builder.Del(k)
+		}
+		finalExtLset.Range(func(l labels.Label) {
+			builder.Set(l.Name, l.Value)
+		})
+		completeLabelset := builder.Labels()
 		if !shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
