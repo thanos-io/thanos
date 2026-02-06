@@ -206,8 +206,8 @@ Flags:
                                and --help-man).
       --[no-]version           Show application version.
       --log.level=info         Log filtering level.
-      --log.format=logfmt      Log format to use. Possible options: logfmt or
-                               json.
+      --log.format=logfmt      Log format to use. Possible options: logfmt,
+                               json or journald.
       --tracing.config-file=<file-path>
                                Path to YAML file with tracing
                                configuration. See format details:
