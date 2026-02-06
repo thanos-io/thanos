@@ -26,13 +26,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
-
-// defaultResponseBatchSize is the default number of timeseries to batch per gRPC response message.
-// This value provides a good balance between reducing per-message overhead and keeping message sizes reasonable.
-const defaultResponseBatchSize = 64
 
 type RemoteEndpointsCreator func(
 	replicaLabels []string,
@@ -352,7 +349,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			ReplicaLabels:         r.opts.ReplicaLabels,
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
-			ResponseBatchSize:     defaultResponseBatchSize,
+			ResponseBatchSize:     store.DefaultResponseBatchSize,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -431,7 +428,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		ReplicaLabels:         r.opts.ReplicaLabels,
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
-		ResponseBatchSize:     defaultResponseBatchSize,
+		ResponseBatchSize:     store.DefaultResponseBatchSize,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
