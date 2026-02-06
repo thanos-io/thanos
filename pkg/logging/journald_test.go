@@ -16,6 +16,12 @@ import (
 )
 
 func TestNewLogger_JournaldFallback(t *testing.T) {
+	// Skip test if journald is actually available (e.g., on Ubuntu with systemd).
+	// This test is specifically for checking the fallback behavior when journald is NOT available.
+	if journal.Enabled() {
+		t.Skip("journald is enabled on this system, skipping fallback test")
+	}
+
 	// Capture stderr
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
