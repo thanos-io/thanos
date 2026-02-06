@@ -470,8 +470,14 @@ func (s *BucketStore) validate() error {
 type noopCache struct{}
 
 func (noopCache) StorePostings(ulid.ULID, labels.Label, []byte, string) {}
-func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label, tenant string) (map[labels.Label][]byte, []labels.Label) {
-	return map[labels.Label][]byte{}, keys
+func (noopCache) FetchMultiPostings(_ context.Context, _ ulid.ULID, keys []labels.Label, tenant string) ([][]byte, []uint64) {
+	hits := make([][]byte, len(keys))
+	misses := make([]uint64, len(keys))
+	for i := range keys {
+		misses[i] = uint64(i)
+	}
+
+	return hits, misses
 }
 
 func (noopCache) StoreExpandedPostings(_ ulid.ULID, _ []*labels.Matcher, _ []byte, tenant string) {}
@@ -3178,7 +3184,7 @@ func (r *bucketIndexReader) fetchPostings(ctx context.Context, keys []labels.Lab
 			}
 		}
 		// Get postings for the given key from cache first.
-		if b, ok := fromCache[key]; ok {
+		if b := fromCache[ix]; b != nil {
 			r.stats.add(PostingsTouched, 1, len(b))
 
 			l, closer, err := r.decodeCachedPostings(b)
