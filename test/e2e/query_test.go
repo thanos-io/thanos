@@ -2572,3 +2572,47 @@ func TestChainDeduplication(t *testing.T) {
 		},
 	)
 }
+
+func TestSidecarUTF8Labels(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("sidecar-utf8")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	promCfg := e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promCfg, "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	endpoints := []string{
+		sidecar.InternalEndpoint("grpc"),
+	}
+	querier := e2ethanos.
+		NewQuerierBuilder(e, "1", endpoints...).
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(querier))
+
+	now := time.Now()
+	ctx := context.Background()
+	m := model.Sample{
+		Metric: map[model.LabelName]model.LabelValue{
+			"__name__": "🔥",
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Minute).UnixNano()),
+	}
+	testutil.Ok(t, synthesizeSamples(ctx, prom, []model.Sample{m}))
+
+	retv := instantQuery(t, context.Background(), querier.Endpoint("http"), func() string {
+		return `{"🔥"}`
+	}, func() time.Time { return now.Add(time.Minute) }, promclient.QueryOptions{Deduplicate: true}, 1)
+
+	testutil.Equals(t, model.Vector{&model.Sample{
+		Metric: model.Metric{
+			"__name__":   "🔥",
+			"prometheus": "prom",
+		},
+		Value:     model.SampleValue(2),
+		Timestamp: model.TimeFromUnixNano(now.Add(time.Minute).UnixNano()),
+	}}, retv)
+}
