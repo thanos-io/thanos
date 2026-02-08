@@ -22,6 +22,7 @@ type mockHostnameResolver struct {
 	resultSRVs         map[string][]*net.SRV
 	err                error
 	dualStackErr       error
+	notFoundErr        bool
 }
 
 func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
@@ -38,7 +39,6 @@ func (m mockHostnameResolver) LookupIPAddrDualStack(ctx context.Context, host st
 	if m.resultDualStackIPs != nil {
 		return m.resultDualStackIPs[host], nil
 	}
-	// Fall back to regular IPs if dual-stack not configured.
 	return m.resultIPs[host], nil
 }
 
@@ -50,7 +50,7 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 }
 
 func (m mockHostnameResolver) IsNotFound(err error) bool {
-	return false
+	return m.notFoundErr
 }
 
 type DNSSDTest struct {
@@ -372,25 +372,37 @@ func TestDnsSD_ResolveDualStack_Errors(t *testing.T) {
 }
 
 func TestDnsSD_ResolveDualStack_DNSError(t *testing.T) {
-	// Test with a proper *net.DNSError.
 	notFoundErr := &net.DNSError{
 		Err:        "no such host",
 		Name:       "test.mycompany.com",
 		IsNotFound: true,
 	}
 
-	ctx := context.TODO()
-	resolver := &mockHostnameResolver{
-		dualStackErr: notFoundErr,
-	}
-	dnsSD := dnsSD{resolver, log.NewNopLogger()}
+	t.Run("not-found error is logged but returns empty results", func(t *testing.T) {
+		ctx := context.TODO()
+		resolver := &mockHostnameResolver{
+			dualStackErr: notFoundErr,
+			notFoundErr:  true,
+		}
+		dnsSD := dnsSD{resolver, log.NewNopLogger()}
 
-	result, err := dnsSD.Resolve(ctx, "test.mycompany.com:8080", ADualStack)
+		result, err := dnsSD.Resolve(ctx, "test.mycompany.com:8080", ADualStack)
 
-	// DNS not found errors should still propagate.
-	testutil.NotOk(t, err)
-	testutil.Equals(t, 0, len(result))
+		testutil.Ok(t, err)
+		testutil.Equals(t, 0, len(result))
+	})
 
-	// Verify it's wrapped with context.
-	testutil.Assert(t, err != nil, "expected error")
+	t.Run("non-not-found DNS error propagates", func(t *testing.T) {
+		ctx := context.TODO()
+		resolver := &mockHostnameResolver{
+			dualStackErr: notFoundErr,
+			notFoundErr:  false,
+		}
+		dnsSD := dnsSD{resolver, log.NewNopLogger()}
+
+		result, err := dnsSD.Resolve(ctx, "test.mycompany.com:8080", ADualStack)
+
+		testutil.NotOk(t, err)
+		testutil.Equals(t, 0, len(result))
+	})
 }
