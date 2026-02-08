@@ -6,7 +6,6 @@ package dns
 import (
 	"context"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -40,7 +39,7 @@ type Resolver interface {
 
 type ipLookupResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
-	LookupIPAddrDualStack(ctx context.Context, host string) ([]net.IPAddr, error)
+	LookupIPAddrByNetwork(ctx context.Context, network, host string) ([]net.IPAddr, error)
 	LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error)
 	IsNotFound(err error) bool
 }
@@ -136,33 +135,30 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 		if port == "" {
 			return nil, errors.Errorf("missing port in address given for dnsdualstack lookup: %v", name)
 		}
-		ips, err := s.resolver.LookupIPAddrDualStack(ctx, host)
-		if err != nil {
-			if !s.resolver.IsNotFound(err) {
-				return nil, errors.Wrapf(err, "lookup IP addresses (dual-stack) %q", host)
+		var ips []net.IPAddr
+		var lastErr error
+
+		for _, network := range []string{"ip6", "ip4"} {
+			addrs, err := s.resolver.LookupIPAddrByNetwork(ctx, network, host)
+			if err != nil {
+				if !s.resolver.IsNotFound(err) {
+					lastErr = err
+				}
+				continue
 			}
-			if ips == nil {
-				level.Error(s.logger).Log("msg", "failed to lookup IP addresses (dual-stack)", "host", host, "err", err)
-			}
+			ips = append(ips, addrs...)
 		}
-		sort.Slice(ips, func(i, j int) bool {
-			iIs6 := ips[i].IP.To4() == nil
-			jIs6 := ips[j].IP.To4() == nil
-			if iIs6 != jIs6 {
-				return iIs6
-			}
-			return ips[i].IP.String() < ips[j].IP.String()
-		})
-		var ipv4Count, ipv6Count int
+
+		if len(ips) == 0 && lastErr != nil {
+			return nil, errors.Wrapf(lastErr, "lookup IP addresses (dual-stack) %q", host)
+		}
+
 		for _, ip := range ips {
-			if ip.IP.To4() == nil {
-				ipv6Count++
-			} else {
-				ipv4Count++
-			}
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
 		}
-		level.Debug(s.logger).Log("msg", "dual-stack DNS lookup", "host", host, "ipv6_count", ipv6Count, "ipv4_count", ipv4Count)
+		if len(ips) == 0 {
+			level.Error(s.logger).Log("msg", "failed to lookup IP addresses (dual-stack)", "host", host)
+		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
 	}
