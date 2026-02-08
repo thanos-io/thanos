@@ -10,6 +10,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+var errNoSuchHost = &net.DNSError{
+	Err:        "no such host",
+	IsNotFound: true,
+}
+
 // Resolver is a wrapper for net.Resolver.
 type Resolver struct {
 	*net.Resolver
@@ -22,9 +27,6 @@ func (r *Resolver) LookupIPAddrDualStack(ctx context.Context, host string) ([]ne
 	for _, network := range []string{"ip6", "ip4"} {
 		select {
 		case <-ctx.Done():
-			if len(result) > 0 {
-				return result, nil
-			}
 			return nil, ctx.Err()
 		default:
 		}
@@ -44,11 +46,7 @@ func (r *Resolver) LookupIPAddrDualStack(ctx context.Context, host string) ([]ne
 	}
 
 	if len(result) == 0 {
-		return nil, &net.DNSError{
-			Err:        "no such host",
-			Name:       host,
-			IsNotFound: true,
-		}
+		return nil, errNoSuchHost
 	}
 	return result, nil
 }
