@@ -68,60 +68,48 @@ func (r *Resolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, e
 	return r.lookupIPAddr(host, 1, 8)
 }
 
-func (r *Resolver) LookupIPAddrDualStack(ctx context.Context, host string) ([]net.IPAddr, error) {
-	return r.lookupIPAddrDualStack(ctx, host, 1, 8)
+func (r *Resolver) LookupIPAddrByNetwork(ctx context.Context, network, host string) ([]net.IPAddr, error) {
+	var qtype uint16
+	switch network {
+	case "ip6":
+		qtype = dns.TypeAAAA
+	case "ip4":
+		qtype = dns.TypeA
+	default:
+		return nil, errors.Errorf("unsupported network %q", network)
+	}
+	return r.lookupIPAddrByNetwork(ctx, host, qtype, 1, 8)
 }
 
-func (r *Resolver) lookupIPAddrDualStack(ctx context.Context, host string, currIteration, maxIterations int) ([]net.IPAddr, error) {
+func (r *Resolver) lookupIPAddrByNetwork(ctx context.Context, host string, qtype uint16, currIteration, maxIterations int) ([]net.IPAddr, error) {
 	if currIteration > maxIterations {
 		return nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
 	}
 
-	seen := make(map[string]struct{})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	response, err := r.lookupWithSearchPath(host, dns.Type(qtype))
+	if err != nil {
+		return nil, err
+	}
+
 	var result []net.IPAddr
-
-	for _, qtype := range []uint16{dns.TypeAAAA, dns.TypeA} {
-		select {
-		case <-ctx.Done():
-			if len(result) > 0 {
-				return result, nil
+	for _, record := range response.Answer {
+		switch addr := record.(type) {
+		case *dns.A:
+			result = append(result, net.IPAddr{IP: addr.A})
+		case *dns.AAAA:
+			result = append(result, net.IPAddr{IP: addr.AAAA})
+		case *dns.CNAME:
+			addrs, err := r.lookupIPAddrByNetwork(ctx, addr.Target, qtype, currIteration+1, maxIterations)
+			if err != nil {
+				continue
 			}
-			return nil, ctx.Err()
-		default:
-		}
-
-		response, err := r.lookupWithSearchPath(host, dns.Type(qtype))
-		if err != nil {
-			continue
-		}
-
-		for _, record := range response.Answer {
-			switch addr := record.(type) {
-			case *dns.A:
-				ipStr := addr.A.String()
-				if _, ok := seen[ipStr]; !ok {
-					seen[ipStr] = struct{}{}
-					result = append(result, net.IPAddr{IP: addr.A})
-				}
-			case *dns.AAAA:
-				ipStr := addr.AAAA.String()
-				if _, ok := seen[ipStr]; !ok {
-					seen[ipStr] = struct{}{}
-					result = append(result, net.IPAddr{IP: addr.AAAA})
-				}
-			case *dns.CNAME:
-				addrs, err := r.lookupIPAddrDualStack(ctx, addr.Target, currIteration+1, maxIterations)
-				if err != nil {
-					continue
-				}
-				for _, a := range addrs {
-					ipStr := a.IP.String()
-					if _, ok := seen[ipStr]; !ok {
-						seen[ipStr] = struct{}{}
-						result = append(result, a)
-					}
-				}
-			}
+			result = append(result, addrs...)
 		}
 	}
 
