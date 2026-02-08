@@ -40,9 +40,8 @@ func TestSnappy(t *testing.T) {
 			r, err := c.Decompress(&buf)
 			require.NoError(t, err)
 
-			wt := r.(io.WriterTo)
 			var out bytes.Buffer
-			_, err = wt.WriteTo(&out)
+			_, err = io.Copy(&out, r)
 			require.NoError(t, err)
 			assert.Equal(t, test.input, out.String())
 		})

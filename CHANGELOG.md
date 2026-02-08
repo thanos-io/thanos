@@ -10,6 +10,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
+
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
 
 ### Fixed
@@ -22,7 +24,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
-- [#](https://github.com/thanos-io/thanos/pull/8623): Query: support sending a batch of Series per SeriesResponse with `--query.series-response-batch-size` flag.
+- [#](https://github.com/thanos-io/thanos/pull/8623): Query: Enable batching of Series per SeriesResponse.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
 - [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
 

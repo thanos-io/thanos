@@ -26,14 +26,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
-	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	grpc_tracing "github.com/thanos-io/thanos/pkg/tracing/tracing_middleware"
 )
-
-// defaultResponseBatchSize is the default number of timeseries to batch per gRPC response message.
-// This value provides a good balance between reducing per-message overhead and keeping message sizes reasonable.
-const defaultResponseBatchSize = 64
 
 type RemoteEndpointsCreator func(
 	replicaLabels []string,
@@ -121,15 +117,14 @@ func (r remoteEndpoints) Engines() []api.RemoteEngine {
 type remoteEngine struct {
 	opts   Opts
 	logger log.Logger
-
 	client Client
 
-	mintOnce      sync.Once
-	mint          int64
-	maxtOnce      sync.Once
-	maxt          int64
-	labelSetsOnce sync.Once
-	labelSets     []labels.Labels
+	initOnce sync.Once
+
+	mint               int64
+	maxt               int64
+	labelSets          []labels.Labels
+	partitionLabelSets []labels.Labels
 }
 
 func NewRemoteEngine(logger log.Logger, queryClient Client, opts Opts) *remoteEngine {
@@ -140,100 +135,109 @@ func NewRemoteEngine(logger log.Logger, queryClient Client, opts Opts) *remoteEn
 	}
 }
 
-// MinT returns the minimum timestamp that is safe to query in the remote engine.
-// In order to calculate it, we find the highest min time for each label set, and we return
-// the lowest of those values.
-// Calculating the MinT this way makes remote queries resilient to cases where one tsdb replica would delete
-// a block due to retention before other replicas did the same.
-// See https://github.com/thanos-io/promql-engine/issues/187.
-func (r *remoteEngine) MinT() int64 {
+func (r *remoteEngine) init() {
+	r.initOnce.Do(func() {
+		replicaLabelSet := make(map[string]struct{})
+		for _, lbl := range r.opts.ReplicaLabels {
+			replicaLabelSet[lbl] = struct{}{}
+		}
+		partitionLabelsSet := make(map[string]struct{})
+		for _, lbl := range r.opts.PartitionLabels {
+			partitionLabelsSet[lbl] = struct{}{}
+		}
 
-	r.mintOnce.Do(func() {
+		// strip out replica labels and scopes the remaining labels
+		// onto the partition labels if they are set.
+
+		// partitionLabelSets are used to compute how to push down, they are the minimum set of labels
+		// that form a partition of the remote engines.
+		// labelSets are all labelsets of the remote engine, they are used for fan-out pruning on labels
+		// that dont meaningfully contribute to the partitioning but are still useful.
 		var (
 			hashBuf               = make([]byte, 0, 128)
 			highestMintByLabelSet = make(map[uint64]int64)
+
+			labelSetsBuilder          labels.ScratchBuilder
+			partitionLabelSetsBuilder labels.ScratchBuilder
+
+			labelSets          = make([]labels.Labels, 0, len(r.client.tsdbInfos))
+			partitionLabelSets = make([]labels.Labels, 0, len(r.client.tsdbInfos))
 		)
-		for _, lset := range r.adjustedInfos() {
-			key, _ := labelpb.ZLabelsToPromLabels(lset.Labels.Labels).HashWithoutLabels(hashBuf)
+		for _, info := range r.client.tsdbInfos {
+			labelSetsBuilder.Reset()
+			partitionLabelSetsBuilder.Reset()
+			for _, lbl := range info.Labels.Labels {
+				if _, ok := replicaLabelSet[lbl.Name]; ok {
+					continue
+				}
+				labelSetsBuilder.Add(lbl.Name, lbl.Value)
+				if _, ok := partitionLabelsSet[lbl.Name]; !ok && len(partitionLabelsSet) > 0 {
+					continue
+				}
+				partitionLabelSetsBuilder.Add(lbl.Name, lbl.Value)
+			}
+
+			partitionLabelSet := partitionLabelSetsBuilder.Labels()
+			labelSet := labelSetsBuilder.Labels()
+			labelSets = append(labelSets, labelSet)
+			partitionLabelSets = append(partitionLabelSets, partitionLabelSet)
+
+			key, _ := partitionLabelSet.HashWithoutLabels(hashBuf)
 			lsetMinT, ok := highestMintByLabelSet[key]
 			if !ok {
-				highestMintByLabelSet[key] = lset.MinTime
+				highestMintByLabelSet[key] = info.MinTime
 				continue
 			}
 			// If we are querying with overlapping intervals, we want to find the first available timestamp
 			// otherwise we want to find the last available timestamp.
-			if r.opts.QueryDistributedWithOverlappingInterval && lset.MinTime < lsetMinT {
-				highestMintByLabelSet[key] = lset.MinTime
-			} else if !r.opts.QueryDistributedWithOverlappingInterval && lset.MinTime > lsetMinT {
-				highestMintByLabelSet[key] = lset.MinTime
+			if r.opts.QueryDistributedWithOverlappingInterval && info.MinTime < lsetMinT {
+				highestMintByLabelSet[key] = info.MinTime
+			} else if !r.opts.QueryDistributedWithOverlappingInterval && info.MinTime > lsetMinT {
+				highestMintByLabelSet[key] = info.MinTime
 			}
 		}
-		var mint int64 = math.MaxInt64
+
+		// mint is the minimum timestamp that is safe to query in the remote engine.
+		// In order to calculate it, we find the highest min time for each label set, and we return
+		// the lowest of those values.
+		// Calculating the MinT this way makes remote queries resilient to cases where one tsdb replica would delete
+		// a block due to retention before other replicas did the same.
+		// See https://github.com/thanos-io/promql-engine/issues/187.
+		var (
+			mint = int64(math.MaxInt64)
+			maxt = r.client.tsdbInfos.MaxT()
+		)
 		for _, m := range highestMintByLabelSet {
 			if m < mint {
 				mint = m
 			}
 		}
-		r.mint = mint
-	})
 
+		r.mint = mint
+		r.maxt = maxt
+		r.labelSets = labelSets
+		r.partitionLabelSets = partitionLabelSets
+	})
+}
+
+func (r *remoteEngine) MinT() int64 {
+	r.init()
 	return r.mint
 }
 
 func (r *remoteEngine) MaxT() int64 {
-	r.maxtOnce.Do(func() {
-		r.maxt = r.client.tsdbInfos.MaxT()
-	})
+	r.init()
 	return r.maxt
 }
 
-func (r *remoteEngine) PartitionLabelSets() []labels.Labels {
-	r.labelSetsOnce.Do(func() {
-		r.labelSets = r.adjustedInfos().LabelSets()
-	})
-	return r.labelSets
-}
-
 func (r *remoteEngine) LabelSets() []labels.Labels {
-	r.labelSetsOnce.Do(func() {
-		r.labelSets = r.adjustedInfos().LabelSets()
-	})
+	r.init()
 	return r.labelSets
 }
 
-// adjustedInfos strips out replica labels and scopes the remaining labels
-// onto the partition labels if they are set.
-func (r *remoteEngine) adjustedInfos() infopb.TSDBInfos {
-	replicaLabelSet := make(map[string]struct{})
-	for _, lbl := range r.opts.ReplicaLabels {
-		replicaLabelSet[lbl] = struct{}{}
-	}
-	partitionLabelsSet := make(map[string]struct{})
-	for _, lbl := range r.opts.PartitionLabels {
-		partitionLabelsSet[lbl] = struct{}{}
-	}
-
-	// Strip replica labels from the result.
-	infos := make(infopb.TSDBInfos, 0, len(r.client.tsdbInfos))
-	var builder labels.ScratchBuilder
-	for _, info := range r.client.tsdbInfos {
-		builder.Reset()
-		for _, lbl := range info.Labels.Labels {
-			if _, ok := replicaLabelSet[lbl.Name]; ok {
-				continue
-			}
-			if _, ok := partitionLabelsSet[lbl.Name]; !ok && len(partitionLabelsSet) > 0 {
-				continue
-			}
-			builder.Add(lbl.Name, lbl.Value)
-		}
-		infos = append(infos, infopb.NewTSDBInfo(
-			info.MinTime,
-			info.MaxTime,
-			labelpb.ZLabelsFromPromLabels(builder.Labels())),
-		)
-	}
-	return infos
+func (r *remoteEngine) PartitionLabelSets() []labels.Labels {
+	r.init()
+	return r.partitionLabelSets
 }
 
 func (r *remoteEngine) NewRangeQuery(_ context.Context, _ promql.QueryOpts, plan api.RemoteQuery, start, end time.Time, interval time.Duration) (promql.Query, error) {
@@ -345,7 +349,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			ReplicaLabels:         r.opts.ReplicaLabels,
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
-			ResponseBatchSize:     defaultResponseBatchSize,
+			ResponseBatchSize:     store.DefaultResponseBatchSize,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -424,7 +428,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		ReplicaLabels:         r.opts.ReplicaLabels,
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
-		ResponseBatchSize:     defaultResponseBatchSize,
+		ResponseBatchSize:     store.DefaultResponseBatchSize,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
