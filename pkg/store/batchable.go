@@ -66,3 +66,7 @@ func (b *batchableServer) Send(response *storepb.SeriesResponse) error {
 
 	return nil
 }
+
+// DefaultResponseBatchSize is the default number of timeseries to batch per gRPC response message.
+// This value provides a good balance between reducing per-message overhead and keeping message sizes reasonable.
+const DefaultResponseBatchSize = 64

@@ -212,9 +212,6 @@ func registerQuery(app *extkingpin.App) {
 	lazyRetrievalMaxBufferedResponses := cmd.Flag("query.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").Hidden().Int()
 
-	seriesResponseBatchSize := cmd.Flag("query.series-response-batch-size", "How many Series can be batched in one gRPC message.").
-		Default("1").Hidden().Int()
-
 	var storeRateLimits store.SeriesSelectLimits
 	storeRateLimits.RegisterFlags(cmd)
 
@@ -362,7 +359,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantLabel,
 			*queryDistributedWithOverlappingInterval,
 			*lazyRetrievalMaxBufferedResponses,
-			*seriesResponseBatchSize,
+			store.DefaultResponseBatchSize,
 		)
 	})
 }

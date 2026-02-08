@@ -287,8 +287,6 @@ type QuerierBuilder struct {
 	deduplicationFunc                       string
 	disabledFallback                        bool
 
-	seriesResponseBatchSize string
-
 	replicaLabels []string
 	tracingConfig string
 
@@ -390,11 +388,6 @@ func (q *QuerierBuilder) WithQueryMode(mode string) *QuerierBuilder {
 
 func (q *QuerierBuilder) WithDisabledFallback() *QuerierBuilder {
 	q.disabledFallback = true
-	return q
-}
-
-func (q *QuerierBuilder) WithResponseSeriesBatchSize(seriesResponseBatchSize string) *QuerierBuilder {
-	q.seriesResponseBatchSize = seriesResponseBatchSize
 	return q
 }
 
@@ -564,9 +557,6 @@ func (q *QuerierBuilder) collectArgs() ([]string, error) {
 	}
 	if q.disabledFallback {
 		args = append(args, "--query.disable-fallback")
-	}
-	if q.seriesResponseBatchSize != "" {
-		args = append(args, "--query.series-response-batch-size="+q.seriesResponseBatchSize)
 	}
 	if q.queryDistributedWithOverlappingInterval {
 		args = append(args, "--query.distributed-with-overlapping-interval")
