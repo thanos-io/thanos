@@ -20,7 +20,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Removed
 
-## [v0.41.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.41) - 2026 02 09
+## [v0.41.0](https://github.com/thanos-io/thanos/tree/release-0.41) - 2026 02 09
 
 ### Fixed
 
