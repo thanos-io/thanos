@@ -14,6 +14,16 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+### Added
+
+### Changed
+
+### Removed
+
+## [v0.41.0 - <in progress>](https://github.com/thanos-io/thanos/tree/release-0.41) - 2026 02 09
+
+### Fixed
+
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 - [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
