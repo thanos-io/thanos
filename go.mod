@@ -94,7 +94,7 @@ require (
 	golang.org/x/sync v0.19.0
 	golang.org/x/text v0.33.0
 	golang.org/x/time v0.13.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.76.0
 	google.golang.org/grpc/examples v0.0.0-20250407062114-b368379ef8f6
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v2 v2.4.0
@@ -322,6 +322,8 @@ replace (
 	github.com/sercand/kuberesolver/v4 => github.com/sercand/kuberesolver/v5 v5.1.1
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
+
+	google.golang.org/grpc => github.com/thanos-community/grpc-go v0.0.0-20251106112228-b9020406f781
 
 	// Overriding to use latest commit.
 	gopkg.in/alecthomas/kingpin.v2 => github.com/alecthomas/kingpin v1.3.8-0.20210301060133-17f40c25f497
