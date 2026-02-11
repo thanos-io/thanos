@@ -117,7 +117,7 @@ require (
 )
 
 require (
-	github.com/VictoriaMetrics/easyproto v0.1.4
+	github.com/VictoriaMetrics/easyproto v1.1.3
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/otlptranslator v1.0.0
