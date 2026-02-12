@@ -51,10 +51,12 @@ export GOBIN
 # Promu is using this exact variable name, do not rename.
 PREFIX  ?= $(GOBIN)
 
-GO111MODULE       ?= on
-export GO111MODULE
-GOPROXY           ?= https://proxy.golang.org
-export GOPROXY
+GOPROXY=https://athens.cfdata.org,direct
+GONOSUMDB=code.cfops.it,github.com/cloudflare,go.cfdata.org
+GOEXPERIMENT=greenteagc
+GOPRIVATE=
+GOAMD64 := v3
+GOARM64 := v8.2
 
 GOTEST_OPTS ?= -failfast -timeout 10m -v
 BIN_DIR ?= $(shell pwd)/tmp/bin
@@ -149,7 +151,7 @@ react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 build: ## Builds Thanos binary using `promu`.
 build: check-git deps $(PROMU)
 	@echo ">> building Thanos binary in $(PREFIX)"
-	@$(PROMU) build -v --prefix $(PREFIX)
+	@CGO_ENABLED=1 GOPROXY=$(GOPROXY) GONOSUMDB=$(GONOSUMDB) GOPRIVATE=$(GOPRIVATE) GOEXPERIMENT=$(GOEXPERIMENT) GOAMD64="$(GOAMD64)" GOARM64="$(GOARM64)" $(PROMU) build -v --prefix $(PREFIX)
 
 GIT_BRANCH=$(shell $(GIT) rev-parse --abbrev-ref HEAD)
 .PHONY: crossbuild

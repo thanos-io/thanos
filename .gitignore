@@ -27,6 +27,7 @@ benchmarks/
 /.build
 /.release
 /.tarballs
+/dist
 
 /.idea
 /*.iml

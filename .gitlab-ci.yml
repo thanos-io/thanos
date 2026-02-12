@@ -1,0 +1,43 @@
+stages:
+  - build
+  - package
+  - publish
+
+include:
+  - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
+    inputs:
+      jobPrefix: "go-amd64"
+      golangVersion: "1.25"
+      runOnBranches: "cf-release-.*"
+      GOLANG_MAKE_TARGET: "build"
+      GOLANG_MAKE_ARGS: "PREFIX=output"
+      runner: "linux-x86-8cpu-16gb"
+
+  - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/build-push-image@~latest
+    inputs:
+      runOnMR: true
+      runOnBranches: "cf-release-.*"
+
+  - component: $CI_SERVER_FQDN/cloudflare/ci/nfpm/package@~latest
+    inputs:
+      jobPrefix: "package-amd64"
+      stage: package
+      runOnMR: true
+      runOnBranches: "cf-release-.*"
+      needs:
+        - go-amd64-make
+      artifactDir: "dist"
+      PKG_VERSION_FILE: "VERSION"
+      PKG_ARCH: "amd64"
+
+  - component: $CI_SERVER_FQDN/cloudflare/ci/apt-register/register@~latest
+    inputs:
+      jobPrefix: "apt-amd64"
+      stage: publish
+      needs:
+        - package-amd64-nfpm
+      runOnBranches: "cf-release-.*"
+      inputDirectory: "dist"
+      FLAVOR: "trixie"
+      SERIES: "stable"
+      COMPONENT: "common"
