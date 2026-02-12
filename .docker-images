@@ -1,0 +1,4 @@
+images:
+  - name: thanos
+    dockerfile: cloudflare/thanos.dockerfile
+    context: .

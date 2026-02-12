@@ -1,0 +1,17 @@
+# yaml-language-server: https://nfpm.goreleaser.com/static/schema.json
+name: "thanos"
+arch: "${PKG_ARCH}"
+platform: "linux"
+version: "${PKG_VERSION}"
+release: "1"
+section: "default"
+priority: "extra"
+maintainer: "Observability <obs@cloudflare.com>"
+description: |
+  The thanos monitoring system.
+homepage: "https://github.com/thanos-io/thanos"
+license: "Apache-2.0"
+
+contents:
+  - src: "output/thanos"
+    dst: "/usr/bin/thanos"
