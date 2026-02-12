@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -208,39 +209,109 @@ type ActiveBlockFetchData struct {
 	ulid.ULID
 }
 
+type blockFiles struct {
+	files        []string
+	lastModified time.Time
+}
+
 func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activeBlocks chan<- ActiveBlockFetchData) (partialBlocks map[ulid.ULID]bool, err error) {
-	partialBlocks = make(map[ulid.ULID]bool)
+	filesForBlock := make(map[ulid.ULID]*blockFiles)
 
 	err = f.bkt.IterWithAttributes(ctx, "", func(attrs objstore.IterObjectAttributes) error {
 		name := attrs.Name
 
 		parts := strings.Split(name, "/")
-		dir, file := parts[0], parts[len(parts)-1]
-		id, ok := IsBlockDir(dir)
+		id, ok := IsBlockDir(parts[0])
 		if !ok {
 			return nil
 		}
-		if _, ok := partialBlocks[id]; !ok {
-			partialBlocks[id] = true
-		}
-		if !IsBlockMetaFile(file) {
-			return nil
-		}
 
-		lastModified, _ := attrs.LastModified()
-		partialBlocks[id] = false
+		file := strings.TrimPrefix(name, parts[0]+"/")
+		bf, exists := filesForBlock[id]
+		if !exists {
+			bf = &blockFiles{}
+			filesForBlock[id] = bf
+		}
+		bf.files = append(bf.files, file)
+
+		if IsBlockMetaFile(parts[len(parts)-1]) {
+			lastModified, _ := attrs.LastModified()
+			bf.lastModified = lastModified
+		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case activeBlocks <- ActiveBlockFetchData{
-			ULID:         id,
-			lastModified: lastModified,
-		}:
+		default:
 		}
 		return nil
 	}, objstore.WithUpdatedAt(), objstore.WithRecursiveIter())
-	return partialBlocks, err
+	if err != nil {
+		return nil, err
+	}
+
+	partialBlocks = make(map[ulid.ULID]bool)
+	for id, bf := range filesForBlock {
+		if err := sanityCheckFilesForBlock(bf.files); err != nil {
+			level.Warn(f.logger).Log("msg", "block failed sanity check, marking as partial", "block", id, "reason", err)
+			partialBlocks[id] = true
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case activeBlocks <- ActiveBlockFetchData{
+			ULID:         id,
+			lastModified: bf.lastModified,
+		}:
+		}
+	}
+
+	return partialBlocks, nil
+}
+
+// sanityCheckFilesForBlock validates that a block directory contains the expected
+// files: meta.json, index, and a contiguous set of chunk files (chunks/000001, chunks/000002, etc.).
+func sanityCheckFilesForBlock(files []string) error {
+	var (
+		numChunkFiles     int
+		highestChunkFile  int
+		hasIndex, hasMeta bool
+	)
+
+	for _, f := range files {
+		if f == "meta.json" {
+			hasMeta = true
+		}
+		if f == "index" {
+			hasIndex = true
+		}
+		dir, name := path.Split(f)
+		if dir == "chunks/" {
+			numChunkFiles++
+			idx, err := strconv.Atoi(name)
+			if err != nil {
+				return errors.Wrap(err, "unexpected chunk file name")
+			}
+			if idx > highestChunkFile {
+				highestChunkFile = idx
+			}
+		}
+	}
+
+	if !hasMeta {
+		return errors.New("no meta.json in block")
+	}
+	if !hasIndex {
+		return errors.New("no index file in block")
+	}
+	if numChunkFiles == 0 {
+		return errors.New("no chunk files in block")
+	}
+	if numChunkFiles != highestChunkFile {
+		return errors.New("incomplete chunk files in block")
+	}
+	return nil
 }
 
 // ConcurrentLister lists block IDs by doing a top level iteration of the bucket
