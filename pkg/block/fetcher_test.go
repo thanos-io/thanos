@@ -120,14 +120,20 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
 
 					meta.ULID = ULID(2)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
 
 					meta.ULID = ULID(3)
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -164,7 +170,10 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 			{
 				name: "corrupted meta.json",
 				do: func(_ func()) {
-					testutil.Ok(t, bkt.Upload(ctx, path.Join(ULID(5).String(), MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					ulid5 := ULID(5).String()
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid5, MetaFilename), bytes.NewBuffer([]byte("{ not a json"))))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid5, "index"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(ulid5, "chunks", "000001"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
@@ -243,11 +252,88 @@ func TestMetaFetcher_Fetch(t *testing.T) {
 					var buf bytes.Buffer
 					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
 					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
 				},
 
 				expectedMetas:         ULIDs(1, 2, 3),
 				expectedCorruptedMeta: ULIDs(5),
 				expectedNoMeta:        ULIDs(4),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "partial: incomplete chunks (recursive lister)",
+				do: func(cleanCache func()) {
+					cleanCache()
+
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(8)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+					// Upload chunk 1 and chunk 5 but not 2,3,4 — incomplete.
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000005"), bytes.NewReader(nil)))
+				},
+				fetcher:            recursiveFetcher,
+				baseFetcher:        recursiveBaseFetcher,
+				expectedSyncs:      3,
+				expectedCacheBusts: 1,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "partial: no index (recursive lister)",
+				do: func(cleanCache func()) {
+					cleanCache()
+
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(9)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "chunks", "000001"), bytes.NewReader(nil)))
+				},
+				fetcher:            recursiveFetcher,
+				baseFetcher:        recursiveBaseFetcher,
+				expectedSyncs:      4,
+				expectedCacheBusts: 1,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8, 9),
+				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
+			},
+			{
+				name: "partial: no chunks (recursive lister)",
+				do: func(cleanCache func()) {
+					cleanCache()
+
+					var meta metadata.Meta
+					meta.Version = 1
+					meta.ULID = ULID(10)
+
+					var buf bytes.Buffer
+					testutil.Ok(t, json.NewEncoder(&buf).Encode(&meta))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), metadata.MetaFilename), &buf))
+					testutil.Ok(t, bkt.Upload(ctx, path.Join(meta.ULID.String(), "index"), bytes.NewReader(nil)))
+				},
+				fetcher:            recursiveFetcher,
+				baseFetcher:        recursiveBaseFetcher,
+				expectedSyncs:      5,
+				expectedCacheBusts: 1,
+
+				expectedMetas:         ULIDs(1, 2, 3),
+				expectedCorruptedMeta: ULIDs(5),
+				expectedNoMeta:        ULIDs(4, 8, 9, 10),
 				expectedMetaErr:       errors.New("incomplete view: unexpected meta file: 00000000070000000000000000/meta.json version: 20"),
 			},
 		} {
