@@ -516,13 +516,13 @@ func (s *promMetadata) UpdateLabels(ctx context.Context) error {
 }
 
 func (s *promMetadata) UpdateTimestamps(ctx context.Context) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
 	mint, err := s.client.LowestTimestamp(ctx, s.promURL)
 	if err != nil {
 		return err
 	}
+
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 
 	s.mint = max(s.limitMinTime.PrometheusTimestamp(), mint)
 	s.maxt = math.MaxInt64
