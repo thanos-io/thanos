@@ -721,7 +721,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			for _, ts := range tc.wreq.Timeseries {
 				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
 				for j, a := range tc.appendables {
-					if withConsistencyDelay {
+					if withConsistencyDelay && tc.status == http.StatusOK {
 						var expected int
 						n := a.appender.(*fakeAppender).Get(lset)
 						got := uint64(len(n))
@@ -742,6 +742,12 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
 							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
+							// When the write fails, early failure quorum return may cancel
+							// in-flight remote writes before they reach the appender, so
+							// we can only guarantee at least one write landed.
+							if tc.status != http.StatusOK {
 								expectedMin = len(ts.Samples)
 							}
 						}
