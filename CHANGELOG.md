@@ -15,6 +15,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 ### Fixed
 
 ### Added
+- [#8234](https://github.com/thanos-io/thanos/pull/8234) ruler: Add flag to configure the queue for pending Alertmanager notifications
 
 ### Changed
 
