@@ -162,6 +162,14 @@ func (f *fakeAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labe
 	panic("not implemented")
 }
 
+func (f *fakeAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+func (f *fakeAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
 func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
 	return storage.SeriesRef(hash), l
 }
