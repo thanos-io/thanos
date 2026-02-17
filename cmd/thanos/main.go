@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"syscall"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -32,6 +33,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing/client"
 )
 
+// Use lower GOGC if it isn't set yet.
+// It is recommended increasing GOGC if go_memstats_gc_cpu_fraction exceeds 0.05 for extended periods of time.
+const DefaultGOGC = 75
+
 func main() {
 	// We use mmaped resources in most of the components so hardcode PanicOnFault to true. This allows us to recover (if we can e.g if queries
 	// are temporarily accessing unmapped memory).
@@ -40,6 +45,21 @@ func main() {
 	if os.Getenv("DEBUG") != "" {
 		runtime.SetMutexProfileFraction(10)
 		runtime.SetBlockProfileRate(10)
+	}
+
+	if v := os.Getenv("GOGC"); v != "" {
+		if v == "off" {
+			debug.SetGCPercent(-1)
+		} else {
+			n, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				n = 100
+			}
+			debug.SetGCPercent(int(n))
+		}
+	} else {
+		debug.SetGCPercent(DefaultGOGC)
+		os.Setenv("GOGC", strconv.Itoa(DefaultGOGC))
 	}
 
 	app := extkingpin.NewApp(kingpin.New(filepath.Base(os.Args[0]), "A block storage based long-term storage for Prometheus.").Version(version.Print("thanos")))
