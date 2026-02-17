@@ -1,0 +1,50 @@
+name: Syncing Tags
+
+on:
+  release:
+    types:
+      - published
+      
+permissions: 
+  contents: write
+  pull-requests: write
+
+jobs:
+  testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      
+      - name: Finding SHA with latest Tag
+        run: |
+          LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1))
+          COMMIT_SHA=$(git rev-list -n 1 $LATEST_TAG)
+          echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
+          echo "COMMIT_SHA=$COMMIT_SHA" >> $GITHUB_ENV
+      
+      - name: Finding Branch with SHA
+        run: |
+          RELEASE_BRANCH=$(git branch -r --contains ${{ env.COMMIT_SHA }} | head -1 | xargs)
+          BRANCH_NAME=${RELEASE_BRANCH#origin/}
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Create PR if changes exist
+        run: |
+          git fetch origin "${{ env.BRANCH_NAME }}"
+          
+          if git diff --quiet main origin/${{ env.BRANCH_NAME }}; then
+            echo "No changes between branches. Skipping PR."
+          else
+            echo "Changes found. Creating PR..."
+            gh pr create \
+              --title "Sync ${{ env.BRANCH_NAME }} into main - Release ${{ env.LATEST_TAG }}" \
+              --body "syncing branch '${{ env.BRANCH_NAME }}' (release ${{ env.LATEST_TAG }}) into 'main'." \
+              --head "${{ env.BRANCH_NAME }}" \
+              --base "main" || echo "PR might already exist"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
