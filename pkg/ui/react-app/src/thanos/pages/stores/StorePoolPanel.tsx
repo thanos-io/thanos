@@ -36,6 +36,14 @@ export const storeTimeRangeMsg = (validMin: boolean, validMax: boolean): string 
   return '';
 };
 
+export const getColorTimeRangeMsg = (validMin: boolean, validMax: boolean): string => {
+  if (!validMin || !validMax) {
+    return 'yellow';
+  }
+
+  return validMin && validMax ? 'green' : 'red';
+};
+
 export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) => {
   const [{ expanded }, setOptions] = useLocalStorage(`store-pool-${title}-expanded`, { expanded: true });
 
@@ -72,10 +80,18 @@ export const StorePoolPanel: FC<StorePoolPanelProps> = ({ title, storePool }) =>
                   <td data-testid="storeLabels">
                     <StoreLabels labelSets={labelSets} />
                   </td>
-                  <td data-testid="minTime" title={storeTimeRangeMsg(validMinTime, validMaxTime)}>
+                  <td
+                    data-testid="minTime"
+                    title={storeTimeRangeMsg(validMinTime, validMaxTime)}
+                    style={{ color: getColorTimeRangeMsg(validMinTime, validMaxTime) }}
+                  >
                     {validMinTime ? formatTime(minTime) : <FontAwesomeIcon icon={faMinus} />}
                   </td>
-                  <td data-testid="maxTime" title={storeTimeRangeMsg(validMinTime, validMaxTime)}>
+                  <td
+                    data-testid="maxTime"
+                    title={storeTimeRangeMsg(validMinTime, validMaxTime)}
+                    style={{ color: getColorTimeRangeMsg(validMinTime, validMaxTime) }}
+                  >
                     {validMaxTime ? formatTime(maxTime) : <FontAwesomeIcon icon={faMinus} />}
                   </td>
                   <td data-testid="lastCheck">
