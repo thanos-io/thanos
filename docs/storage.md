@@ -88,7 +88,7 @@ config:
       cert_file: ""
       key_file: ""
       server_name: ""
-      insecure_skip_verify: false
+    insecure_skip_verify: false
     disable_compression: false
   trace:
     enable: false
