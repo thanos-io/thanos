@@ -44,13 +44,14 @@ func isCounter(f string) bool {
 // We cannot do this in dedup.SeriesSet as it iterates over samples already.
 // TODO(bwplotka): Remove when we move to per chunk deduplication code.
 // We expect non-duplicated series with sorted chunks by min time (possibly overlapped).
-func NewOverlapSplit(set storepb.SeriesSet) storepb.SeriesSet {
-	return &overlapSplitSet{set: set, ok: true}
+func NewOverlapSplit(set storepb.SeriesSet, hint string) storepb.SeriesSet {
+	return &overlapSplitSet{set: set, ok: true, hint: hint}
 }
 
 type overlapSplitSet struct {
-	ok  bool
-	set storepb.SeriesSet
+	ok   bool
+	set  storepb.SeriesSet
+	hint string
 
 	currLabels labels.Labels
 	currI      int
@@ -89,13 +90,44 @@ chunksLoop:
 		currMinTime := chunks[i].MinTime
 		for ri := range o.replicas {
 			if len(o.replicas[ri]) == 0 || o.replicas[ri][len(o.replicas[ri])-1].MaxTime < currMinTime {
-				o.replicas[ri] = append(o.replicas[ri], chunks[i])
+				//Approach 1, Just comment below line to not pick sample causing issue
+				//o.replicas[ri] = append(o.replicas[ri], chunks[i])
+
+				//Approach 2, whenever lower timestamps has higher values don't pick it if it is a counter metric, not filtering it is causing incorrect/
+				//higher values over rate/increase functions which is causing false alerts
+				if len(o.replicas[ri]) != 0 && (o.hint == "increase" || o.hint == "rate" || o.hint == "irate" || o.hint == "resets") {
+
+					chk, _ := chunkenc.FromData(chunkenc.EncXOR, o.replicas[ri][len(o.replicas[ri])-1].Raw.Data)
+					chk2, _ := chunkenc.FromData(chunkenc.EncXOR, chunks[i].Raw.Data)
+					samples := expandChunk(chk.Iterator(nil))
+					samples2 := expandChunk(chk2.Iterator(nil))
+
+					if samples[len(samples)-1].t < samples2[len(samples2)-1].t && samples[len(samples)-1].v < samples2[len(samples2)-1].v {
+						o.replicas[ri] = append(o.replicas[ri], chunks[i])
+					}
+				} else {
+					o.replicas[ri] = append(o.replicas[ri], chunks[i])
+				}
+
 				continue chunksLoop
 			}
 		}
 		o.replicas = append(o.replicas, []storepb.AggrChunk{chunks[i]}) // Not found, add to a new "fake" series.
 	}
 	return true
+}
+
+type dupSample struct {
+	t int64
+	v float64
+}
+
+func expandChunk(cit chunkenc.Iterator) (res []dupSample) {
+	for cit.Next() != chunkenc.ValNone {
+		t, v := cit.At()
+		res = append(res, dupSample{t, v})
+	}
+	return res
 }
 
 func (o *overlapSplitSet) At() (labels.Labels, []storepb.AggrChunk) {
