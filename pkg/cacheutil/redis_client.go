@@ -204,7 +204,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		InitAddress:       strings.Split(config.Addr, ","),
 		ShuffleInit:       true,
 		Username:          config.Username,
-		Password:          config.Password,
+		Password:          config.Password.String(),
 		SelectDB:          config.DB,
 		CacheSizeEachConn: int(config.CacheSize),
 		Dialer:            net.Dialer{Timeout: config.DialTimeout},
