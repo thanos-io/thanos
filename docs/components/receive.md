@@ -677,3 +677,27 @@ Flags:
                                  the lazy retrieval strategy is enabled.
 
 ```
+
+## Metrics
+
+### List of Metrics Exported By Receiver
+
+| Metric Name                                                 | Type      | Description                                                                                                              |
+|-------------------------------------------------------------|-----------|--------------------------------------------------------------------------------------------------------------------------|
+| thanos_receive_multi_db_updates_attempted_total             | counter   | Number of Multi DB attempted reloads with flush and potential upload due to hashring changes.                            |
+| thanos_receive_multi_db_updates_completed_total             | counter   | Number of Multi DB completed reloads with flush and potential upload due to hashring changes.                            |
+| thanos_receive_config_hash                                  | gauge     | Hash of the currently loaded hashring configuration file.                                                                |
+| thanos_receive_config_last_reload_successful                | gauge     | Whether the last hashring configuration file reload attempt was successful.                                              |
+| thanos_receive_config_last_reload_success_timestamp_seconds | gauge     | Timestamp of the last successful hashring configuration file reload.                                                     |
+| thanos_receive_hashrings_file_changes_total                 | counter   | The number of times the hashrings configuration file has changed.                                                        |
+| thanos_receive_hashrings_file_errors_total                  | counter   | The number of errors watching the hashrings configuration file.                                                          |
+| thanos_receive_hashrings_file_refreshes_total               | counter   | The number of refreshes of the hashrings configuration file.                                                             |
+| thanos_receive_hashring_nodes                               | gauge     | The number of nodes per hashring.                                                                                        |
+| thanos_receive_hashring_tenants                             | gauge     | The number of tenants per hashring.                                                                                      |
+| thanos_receive_forward_delay_seconds                        | histogram | The delay between the time the request was received and the time it was forwarded to a worker.                           |
+| thanos_receive_forward_requests_total                       | counter   | The number of forward requests.                                                                                          |
+| thanos_receive_replications_total                           | counter   | The number of replication operations done by the receiver. The success of replication is fulfilled when a quorum is met. |
+| thanos_receive_replication_factor                           | gauge     | The number of times to replicate incoming write requests.                                                                |
+| thanos_receive_head_series_limit                            | gauge     | The configured limit for active (head) series of tenants.                                                                |
+| thanos_receive_head_series_limited_requests_total           | counter   | The total number of remote write requests that have been dropped due to active series limiting.                          |
+| thanos_receive_metamonitoring_failed_queries_total          | counter   | The total number of meta-monitoring queries that failed while limiting.                                                  |
