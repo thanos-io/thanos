@@ -58,3 +58,17 @@ func TestAggrChunk(t *testing.T) {
 	}
 	testutil.Equals(t, input, res)
 }
+
+func TestAggrChunk_TrailingNilAggregate(t *testing.T) {
+	var chks [5]chunkenc.Chunk
+
+	chks[AggrCount] = chunkenc.NewXORChunk()
+	a, err := chks[AggrCount].Appender()
+	testutil.Ok(t, err)
+	a.Append(100, 1)
+
+	// Keep AggrCounter (the last aggregate) nil. It should decode as missing aggregate.
+	ac := EncodeAggrChunk(chks)
+	_, err = ac.Get(AggrCounter)
+	testutil.Equals(t, ErrAggrNotExist, err)
+}
