@@ -49,6 +49,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 ### Fixed
 
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
+- [#8432](https://github.com/thanos-io/thanos/pull/8432) docs: fix alerts group label
 - [#8486](https://github.com/thanos-io/thanos/pull/8486) Receive: fix exemplar label corruption from Cap'n Proto memory references
 - [#8499](https://github.com/thanos-io/thanos/pull/8499) Query: support UTF-8 label names for the `/api/v1/label/:name/values` API.
 - [#8374](https://github.com/thanos-io/thanos/pull/8374) query: fix panic when accessing annotations concurrently
