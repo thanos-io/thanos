@@ -276,3 +276,25 @@ transport_config:
   disable_compression: false
   tls_handshake_timeout: 0
 ```
+
+## Metrics
+
+### List of Metrics Exported By Sidecar
+
+| Metric Name                                                   | Type    | Description                                                              |
+|---------------------------------------------------------------|---------|--------------------------------------------------------------------------|
+| thanos_shipper_upload_compacted_done                          | gauge   | If 1 it means shipper uploaded all compacted blocks from the filesystem. |
+| thanos_shipper_dir_sync_failures_total                        | counter | Total number of failed dir syncs.                                        |
+| thanos_shipper_dir_syncs_total                                | counter | Total number of dir syncs.                                               |
+| thanos_shipper_upload_failures_total                          | counter | Total number of block upload failures.                                   |
+| thanos_shipper_uploads_total                                  | counter | Total number of uploaded blocks.                                         |
+| thanos_sidecar_prometheus_up                                  | gauge   | Boolean indicator whether the sidecar can reach its Prometheus peer.     |
+| thanos_sidecar_reloader_config_apply_operations               | counter | Total number of config apply operations.                                 |
+| thanos_sidecar_reloader_config_apply_operations_failed        | counter | Total number of config apply operations that failed.                     |
+| thanos_sidecar_reloader_last_reload_success_timestamp_seconds | gauge   | Timestamp of the last successful reload.                                 |
+| thanos_sidecar_reloader_last_reload_successful                | gauge   | Whether the last reload attempt was successful.                          |
+| thanos_sidecar_reloader_reloads                               | counter | Total number of reload requests.                                         |
+| thanos_sidecar_reloader_reloads_failed                        | counter | Total number of reload requests that failed.                             |
+| thanos_sidecar_reloader_watch_errors                          | counter | Total number of errors received by the reloader from the watcher.        |
+| thanos_sidecar_reloader_watch_events                          | counter | Total number of events received by the reloader from the watcher.        |
+| thanos_sidecar_reloader_watches                               | gauge   | Number of resources watched by the reloader.                             |
