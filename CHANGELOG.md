@@ -48,6 +48,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8393](https://github.com/thanos-io/thanos/pull/8393) Tests: fix flaky TestCompactWithStoreGateway by adding proper readiness checks
 - [#8334](https://github.com/thanos-io/thanos/pull/8334) Query: wait for initial endpoint discovery before becoming ready
 - [#8486](https://github.com/thanos-io/thanos/pull/8486) Receive: fix exemplar label corruption from Cap'n Proto memory references
 - [#8499](https://github.com/thanos-io/thanos/pull/8499) Query: support UTF-8 label names for the `/api/v1/label/:name/values` API.
