@@ -45,6 +45,7 @@ import (
 type sample struct {
 	t int64
 	v float64
+	h *histogram.Histogram
 }
 
 func TestQueryableCreator_MaxResolution(t *testing.T) {
@@ -82,12 +83,12 @@ func TestQuerier_DownsampledData(t *testing.T) {
 
 	testProxy := &testStoreServer{
 		resps: []*storepb.SeriesResponse{
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{99, 1}, {199, 5}}),                   // Downsampled chunk from Store.
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{99, 3}, {199, 8}}),                  // Downsampled chunk from Store.
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{99, 5}, {199, 15}}),                // Downsampled chunk from Store.
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{99, 123}, {199, 15}}),        // Downsampled chunk from Store.
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar.
-			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{22, 5}, {44, 8}, {199, 15}}), // Raw chunk from Sidecar.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "a", "aaa", "bbb"), []sample{{t: 99, v: 1}, {t: 199, v: 5}}),                         // Downsampled chunk from Store.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "b", "bbbb", "eee"), []sample{{t: 99, v: 3}, {t: 199, v: 8}}),                        // Downsampled chunk from Store.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "qwe", "wqeqw"), []sample{{t: 99, v: 5}, {t: 199, v: 15}}),                      // Downsampled chunk from Store.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "c", "htgtreytr", "vbnbv"), []sample{{t: 99, v: 123}, {t: 199, v: 15}}),              // Downsampled chunk from Store.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwewq"), []sample{{t: 22, v: 5}, {t: 44, v: 8}, {t: 199, v: 15}}), // Raw chunk from Sidecar.
+			storeSeriesResponse(t, labels.FromStrings("__name__", "a", "zzz", "d", "asdsad", "qweqwebb"), []sample{{t: 22, v: 5}, {t: 44, v: 8}, {t: 199, v: 15}}), // Raw chunk from Sidecar.
 		},
 	}
 
@@ -458,12 +459,12 @@ func TestQuerier_Select(t *testing.T) {
 			storeEndpoints: []storepb.StoreServer{
 				&testStoreServer{
 					resps: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{0, 0}, {2, 1}, {3, 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{t: 0, v: 0}, {t: 2, v: 1}, {t: 3, v: 2}}),
 						storepb.NewWarnSeriesResponse(errors.New("partial error")),
-						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{5, 5}, {6, 66}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{100, 1}, {300, 3}, {400, 4}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "a"), []sample{{t: 5, v: 5}, {t: 6, v: 66}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "b"), []sample{{t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}}, []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "c"), []sample{{t: 100, v: 1}, {t: 300, v: 3}, {t: 400, v: 4}}),
 					},
 				},
 			},
@@ -478,21 +479,21 @@ func TestQuerier_Select(t *testing.T) {
 			expected: []series{
 				{
 					lset:    labels.FromStrings("a", "a"),
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 66}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 3, v: 2}, {t: 5, v: 5}, {t: 6, v: 66}, {t: 7, v: 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "b"),
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
+					samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}},
 				},
 				{
 					lset:    labels.FromStrings("a", "c"),
-					samples: []sample{{100, 1}, {300, 3}},
+					samples: []sample{{t: 100, v: 1}, {t: 300, v: 3}},
 				},
 			},
 			expectedAfterDedup: []series{{
 				lset: labels.EmptyLabels(),
 				// We don't expect correctness here, it's just random non-replica data.
-				samples: []sample{{1, 1}, {2, 2}, {3, 3}, {5, 5}, {6, 6}, {7, 7}},
+				samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 			}},
 			expectedWarning: "partial error",
 		},
@@ -646,18 +647,18 @@ func TestQuerier_Select(t *testing.T) {
 			storeEndpoints: []storepb.StoreServer{
 				&testStoreServer{
 					resps: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{100, 1}, {300, 3}, {400, 4}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{5, 5}, {7, 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{t: 0, v: 0}, {t: 2, v: 1}, {t: 3, v: 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}}, []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{t: 100, v: 1}, {t: 300, v: 3}, {t: 400, v: 4}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 5, v: 5}, {t: 7, v: 7}}),
 					},
 				},
 				&testStoreServer{
 					resps: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{2, 1}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "x", "2"), []sample{{10, 10}, {30, 30}, {40, 40}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 2, v: 1}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "x", "2"), []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}}),
 					},
 				},
 			},
@@ -668,36 +669,36 @@ func TestQuerier_Select(t *testing.T) {
 			expected: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "r", "1", "w", "1"),
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 3, v: 2}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "1", "x", "1"),
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}, {100, 1}, {300, 3}},
+					samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}, {t: 100, v: 1}, {t: 300, v: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "2", "w", "1"),
-					samples: []sample{{2, 1}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "2", "x", "2"),
-					samples: []sample{{10, 10}, {30, 30}, {40, 40}},
+					samples: []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}},
 				},
 			},
 			expectedAfterDedup: []series{
 				{
 					lset: labels.FromStrings("a", "1", "w", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 3, v: 2}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {100, 1}, {300, 3}},
+					samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 100, v: 1}, {t: 300, v: 3}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "2"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{10, 10}, {30, 30}, {40, 40}},
+					samples: []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}},
 				},
 			},
 		},
@@ -706,25 +707,25 @@ func TestQuerier_Select(t *testing.T) {
 			storeEndpoints: []storepb.StoreServer{
 				&testStoreServer{
 					resps: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{100, 1}, {300, 3}, {400, 4}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{5, 5}, {7, 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{t: 0, v: 0}, {t: 2, v: 1}, {t: 3, v: 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "w", "1"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}}, []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "1", "x", "1"), []sample{{t: 100, v: 1}, {t: 300, v: 3}, {t: 400, v: 4}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 5, v: 5}, {t: 7, v: 7}}),
 					},
 					respsWithoutReplicaLabels: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{5, 5}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{0, 0}, {2, 1}, {3, 2}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{2, 2}, {3, 3}, {4, 4}}, []sample{{1, 1}, {2, 2}, {3, 3}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{100, 1}, {300, 3}, {400, 4}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{t: 5, v: 5}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{t: 0, v: 0}, {t: 2, v: 1}, {t: 3, v: 2}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "w", "1"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}}, []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "x", "1"), []sample{{t: 100, v: 1}, {t: 300, v: 3}, {t: 400, v: 4}}),
 					},
 				},
 				&testStoreServer{
 					resps: []*storepb.SeriesResponse{
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{2, 1}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{5, 5}, {6, 6}, {7, 7}}),
-						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "x", "2"), []sample{{10, 10}, {30, 30}, {40, 40}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 2, v: 1}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "w", "1"), []sample{{t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}}),
+						storeSeriesResponse(t, labels.FromStrings("a", "1", "r", "2", "x", "2"), []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}}),
 					},
 				},
 			},
@@ -735,36 +736,36 @@ func TestQuerier_Select(t *testing.T) {
 			expected: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "r", "1", "w", "1"),
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 3, v: 2}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "1", "x", "1"),
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {4, 4}, {100, 1}, {300, 3}},
+					samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}, {t: 100, v: 1}, {t: 300, v: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "2", "w", "1"),
-					samples: []sample{{2, 1}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "r", "2", "x", "2"),
-					samples: []sample{{10, 10}, {30, 30}, {40, 40}},
+					samples: []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}},
 				},
 			},
 			expectedAfterDedup: []series{
 				{
 					lset: labels.FromStrings("a", "1", "w", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{2, 1}, {3, 2}, {5, 5}, {6, 6}, {7, 7}},
+					samples: []sample{{t: 2, v: 1}, {t: 3, v: 2}, {t: 5, v: 5}, {t: 6, v: 6}, {t: 7, v: 7}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "1"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{1, 1}, {2, 2}, {3, 3}, {100, 1}, {300, 3}},
+					samples: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 100, v: 1}, {t: 300, v: 3}},
 				},
 				{
 					lset: labels.FromStrings("a", "1", "x", "2"),
 					// We don't expect correctness here, it's just random non-replica data.
-					samples: []sample{{10, 10}, {30, 30}, {40, 40}},
+					samples: []sample{{t: 10, v: 10}, {t: 30, v: 30}, {t: 40, v: 40}},
 				},
 			},
 		},
@@ -1023,11 +1024,13 @@ func (s *mockedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 		return s.samples[n].t >= t
 	})
 
-	if s.cur < len(s.samples) {
-		return chunkenc.ValFloat
+	if s.cur >= len(s.samples) {
+		return chunkenc.ValNone
 	}
-
-	return chunkenc.ValNone
+	if s.samples[s.cur].h != nil {
+		return chunkenc.ValHistogram
+	}
+	return chunkenc.ValFloat
 }
 
 func (s *mockedSeriesIterator) At() (t int64, v float64) {
@@ -1037,7 +1040,8 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 
 // TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
-	panic("not implemented")
+	sample := s.samples[s.cur]
+	return sample.t, sample.h
 }
 
 func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
@@ -1050,11 +1054,13 @@ func (s *mockedSeriesIterator) AtT() int64 {
 
 func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 	s.cur++
-	if s.cur < len(s.samples) {
-		return chunkenc.ValFloat
+	if s.cur >= len(s.samples) {
+		return chunkenc.ValNone
 	}
-
-	return chunkenc.ValNone
+	if s.samples[s.cur].h != nil {
+		return chunkenc.ValHistogram
+	}
+	return chunkenc.ValFloat
 }
 
 func (s *mockedSeriesIterator) Err() error { return nil }
@@ -1210,14 +1216,20 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 const hackyStaleMarker = float64(-99999999)
 
 func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
-	for it.Next() != chunkenc.ValNone {
-		t, v := it.At()
-		// Nan != Nan, so substitute for another value.
-		// This is required for testutil.Equals to work deterministically.
-		if math.IsNaN(v) {
-			v = hackyStaleMarker
+	for valType := it.Next(); valType != chunkenc.ValNone; valType = it.Next() {
+		switch valType {
+		case chunkenc.ValFloat:
+			t, v := it.At()
+			// Nan != Nan, so substitute for another value.
+			// This is required for testutil.Equals to work deterministically.
+			if math.IsNaN(v) {
+				v = hackyStaleMarker
+			}
+			res = append(res, sample{t: t, v: v})
+		case chunkenc.ValHistogram:
+			t, h := it.AtHistogram(nil)
+			res = append(res, sample{t: t, h: h})
 		}
-		res = append(res, sample{t, v})
 	}
 	testutil.Ok(t, it.Err())
 	return res
