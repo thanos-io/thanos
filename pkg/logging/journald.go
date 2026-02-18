@@ -6,16 +6,15 @@ package logging
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/coreos/go-systemd/v22/journal"
 )
 
-// journalWriter is an interface for sending logs to systemd journal.
 type journalWriter interface {
 	Send(message string, priority journal.Priority, vars map[string]string) error
 }
 
-// systemdJournalWriter is the actual implementation that writes to systemd journal.
 type systemdJournalWriter struct{}
 
 func (s *systemdJournalWriter) Send(message string, priority journal.Priority, vars map[string]string) error {
@@ -27,7 +26,6 @@ type journaldLogger struct {
 	writer journalWriter
 }
 
-// newJournaldLogger creates a new journald logger that writes to systemd journal.
 func newJournaldLogger() *journaldLogger {
 	return &journaldLogger{writer: &systemdJournalWriter{}}
 }
@@ -107,18 +105,16 @@ func toString(v interface{}) string {
 
 func toJournalField(key string) string {
 	var b strings.Builder
-	b.Grow(len(key) + 7) // Pre-allocate: "THANOS_" + key
+	b.Grow(len(key) + 7)
 	b.WriteString("THANOS_")
 
-	for _, r := range key {
-		if r >= 'a' && r <= 'z' {
-			b.WriteRune(r - 32) // Convert to uppercase
-		} else if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune('_')
+	mapped := strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
 		}
-	}
+		return '_'
+	}, key)
 
+	b.WriteString(strings.ToUpper(mapped))
 	return b.String()
 }

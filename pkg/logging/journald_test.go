@@ -45,7 +45,6 @@ func TestToJournalField(t *testing.T) {
 	}
 }
 
-// mockJournalWriter is a mock implementation for testing journaldLogger.
 type mockJournalWriter struct {
 	messages   []string
 	priorities []journal.Priority
@@ -72,7 +71,7 @@ func TestJournaldLogger_PriorityMapping(t *testing.T) {
 		{"warn", journal.PriWarning},
 		{"info", journal.PriInfo},
 		{"debug", journal.PriDebug},
-		{"unknown", journal.PriInfo}, // default
+		{"unknown", journal.PriInfo},
 	}
 
 	for _, tc := range tests {
