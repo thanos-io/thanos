@@ -3,7 +3,7 @@ adopters:
 - name: Aiven
   url: https://aiven.io
   logo: aivenlogo.png
-- name: Exoscale
+- name: Exoscale Cloud
   url: https://www.exoscale.com
   logo: exoscale.png
 - name: Infinite Devices
