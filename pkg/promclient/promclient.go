@@ -228,17 +228,25 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 	// - prometheus/common: adding unmarshalJSON to modelDuration
 	// - prometheus/prometheus: flags should return proper JSON (not bool in string).
 	parsableFlags := struct {
-		TSDBPath           string        `json:"storage.tsdb.path"`
-		TSDBRetention      modelDuration `json:"storage.tsdb.retention"`
-		TSDBMinTime        modelDuration `json:"storage.tsdb.min-block-duration"`
-		TSDBMaxTime        modelDuration `json:"storage.tsdb.max-block-duration"`
-		TSDBDelayCompact   string        `json:"storage.tsdb.delay-compact-file.path"`
-		WebEnableAdminAPI  modelBool     `json:"web.enable-admin-api"`
-		WebEnableLifecycle modelBool     `json:"web.enable-lifecycle"`
+		TSDBPath                 string        `json:"storage.tsdb.path"`
+		TSDBRetention            modelDuration `json:"storage.tsdb.retention"`
+		TSDBMinTime              modelDuration `json:"storage.tsdb.min-block-duration"`
+		TSDBMaxTime              modelDuration `json:"storage.tsdb.max-block-duration"`
+		TSDBDelayCompact         string        `json:"storage.tsdb.delay-compact-file.path"`
+		TSDBDelayCompactCFCompat string        `json:"storage.tsdb.thanos-shipper-meta-file-name"`
+		WebEnableAdminAPI        modelBool     `json:"web.enable-admin-api"`
+		WebEnableLifecycle       modelBool     `json:"web.enable-lifecycle"`
 	}{}
 
 	if err := json.Unmarshal(b, &parsableFlags); err != nil {
 		return err
+	}
+
+	// Prefer the upstream flag name, fall back to the CF Prometheus build flag name
+	// for backwards/forwards compatibility.
+	delayCompact := parsableFlags.TSDBDelayCompact
+	if delayCompact == "" {
+		delayCompact = parsableFlags.TSDBDelayCompactCFCompat
 	}
 
 	*f = Flags{
@@ -246,7 +254,7 @@ func (f *Flags) UnmarshalJSON(b []byte) error {
 		TSDBRetention:      model.Duration(parsableFlags.TSDBRetention),
 		TSDBMinTime:        model.Duration(parsableFlags.TSDBMinTime),
 		TSDBMaxTime:        model.Duration(parsableFlags.TSDBMaxTime),
-		TSDBDelayCompact:   parsableFlags.TSDBDelayCompact,
+		TSDBDelayCompact:   delayCompact,
 		WebEnableAdminAPI:  bool(parsableFlags.WebEnableAdminAPI),
 		WebEnableLifecycle: bool(parsableFlags.WebEnableLifecycle),
 	}
