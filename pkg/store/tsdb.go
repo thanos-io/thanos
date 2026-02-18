@@ -60,6 +60,12 @@ func WithMatcherCacheInstance(cache storecache.MatchersCache) TSDBStoreOption {
 	}
 }
 
+func WithSeriesResortingDisabled() TSDBStoreOption {
+	return func(s *TSDBStore) {
+		s.disableSeriesResorting = true
+	}
+}
+
 // TSDBStore implements the store API against a local TSDB instance.
 // It attaches the provided external labels to all results. It only responds with raw data
 // and does not support downsampling.
@@ -74,6 +80,7 @@ type TSDBStore struct {
 	extLset                labels.Labels
 	startStoreFilterUpdate bool
 	storeFilter            filter.StoreFilter
+	disableSeriesResorting bool
 	mtx                    sync.RWMutex
 	close                  func()
 	storepb.UnimplementedStoreServer
@@ -251,7 +258,11 @@ func (s *TSDBStore) SeriesLocal(ctx context.Context, r *storepb.SeriesRequest) (
 func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
 	var srv flushableServer
 	if fs, ok := seriesSrv.(flushableServer); !ok {
-		srv = newFlushableServer(seriesSrv, sortingStrategyStore)
+		strategy := sortingStrategyStore
+		if s.disableSeriesResorting {
+			strategy = sortingStrategyNone
+		}
+		srv = newFlushableServer(seriesSrv, strategy)
 	} else {
 		srv = fs
 	}

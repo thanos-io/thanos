@@ -172,6 +172,11 @@ func runReceive(
 		level.Info(logger).Log("msg", "tenant path segments before tenant feature enabled", "segments", path.Join(conf.tsdbPathSegmentsBeforeTenant...))
 	}
 
+	if conf.storeDisableSeriesResorting {
+		multiTSDBOptions = append(multiTSDBOptions, receive.WithSeriesResortingDisabled())
+		level.Info(logger).Log("msg", "series resorting disabled for TSDB store queries")
+	}
+
 	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
@@ -985,9 +990,10 @@ type receiveConfig struct {
 	relabelConfigPath        *extflag.PathOrContent
 	relabelConfigReloadTimer time.Duration
 
-	writeLimitsConfig       *extflag.PathOrContent
-	storeRateLimits         store.SeriesSelectLimits
-	limitsConfigReloadTimer time.Duration
+	writeLimitsConfig           *extflag.PathOrContent
+	storeDisableSeriesResorting bool
+	storeRateLimits             store.SeriesSelectLimits
+	limitsConfigReloadTimer     time.Duration
 
 	asyncForwardWorkerCount uint
 
@@ -1006,6 +1012,12 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
 	rc.grpcConfig.registerFlag(cmd)
 	rc.storeRateLimits.RegisterFlags(cmd)
+
+	cmd.Flag("store.disable-series-resorting",
+		"If true, series from the local TSDB are streamed directly without buffering and re-sorting. "+
+			"This prevents unbounded memory usage for large queries. "+
+			"Only safe when external labels (--label) do not conflict with labels in scraped metrics.").
+		Default("false").Hidden().BoolVar(&rc.storeDisableSeriesResorting)
 
 	cmd.Flag("remote-write.address", "Address to listen on for remote write requests.").
 		Default("0.0.0.0:19291").StringVar(&rc.rwAddress)
