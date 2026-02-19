@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -189,7 +190,7 @@ func runSidecar(
 					iterCtx, iterCancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
 					defer iterCancel()
 
-					if err := validatePrometheus(iterCtx, m.client, logger, conf.shipper.ignoreBlockSize, conf.shipper.metaFileName, m); err != nil {
+					if err := validatePrometheus(iterCtx, m.client, logger, &conf, m); err != nil {
 						level.Warn(logger).Log(
 							"msg", "failed to validate prometheus flags. Is Prometheus running? Retrying",
 							"err", err,
@@ -444,7 +445,7 @@ func runSidecar(
 	return nil
 }
 
-func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, ignoreBlockSize bool, metaFileName string, m *promMetadata) error {
+func validatePrometheus(ctx context.Context, client *promclient.Client, logger log.Logger, conf *sidecarConfig, m *promMetadata) error {
 	var (
 		flagErr error
 		flags   promclient.Flags
@@ -465,17 +466,20 @@ func validatePrometheus(ctx context.Context, client *promclient.Client, logger l
 		return nil
 	}
 
-	if flags.TSDBDelayCompact != "" && flags.TSDBDelayCompact != metaFileName {
-		return errors.Errorf(
-			"found that Prometheus and Thanos use different paths for tracking block uploads. "+
-				"Prometheus uses --storage.tsdb.delay-compact-file.path=%s while Thanos uses --shipper.meta-file-name=%s, they must both use the same path.",
-			flags.TSDBDelayCompact, metaFileName,
-		)
+	if flags.TSDBDelayCompact != "" {
+		thanosMetaPath := filepath.Join(conf.tsdb.path, conf.shipper.metaFileName)
+		if filepath.Clean(flags.TSDBDelayCompact) != filepath.Clean(thanosMetaPath) {
+			return errors.Errorf(
+				"found that Prometheus and Thanos use different paths for tracking block uploads. "+
+					"Prometheus uses --storage.tsdb.delay-compact-file.path=%s while Thanos will write to %s, they must both use the same path.",
+				flags.TSDBDelayCompact, thanosMetaPath,
+			)
+		}
 	}
 
 	// Check if compaction is disabled.
 	if flags.TSDBMinTime != flags.TSDBMaxTime && flags.TSDBDelayCompact == "" {
-		if !ignoreBlockSize {
+		if !conf.shipper.ignoreBlockSize {
 			return errors.Errorf("found that TSDB Max time is %s and Min time is %s. "+
 				"Compaction needs to be disabled (storage.tsdb.min-block-duration = storage.tsdb.max-block-duration)", flags.TSDBMaxTime, flags.TSDBMinTime)
 		}
