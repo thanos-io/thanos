@@ -40,7 +40,7 @@ type TenantAttributor struct {
 	// Metrics (only registered in verify mode)
 	verifyMode            bool
 	attributionMatches    prometheus.Counter
-	attributionMismatches prometheus.Counter
+	attributionMismatches *prometheus.CounterVec
 }
 
 // NewTenantAttributor creates a new TenantAttributor from a config file.
@@ -86,12 +86,12 @@ func NewTenantAttributorFromContent(
 			Name:      "tenant_attribution_matches_total",
 			Help:      "Total number of time series where attributed tenant matches HTTP header tenant.",
 		})
-		ta.attributionMismatches = promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		ta.attributionMismatches = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Namespace: "thanos",
 			Subsystem: "receive",
 			Name:      "tenant_attribution_mismatches_total",
 			Help:      "Total number of time series where attributed tenant differs from HTTP header tenant.",
-		})
+		}, []string{"http_tenant", "attributed_tenant"})
 	}
 
 	var ruleConfigs []TenantRuleConfig
@@ -153,7 +153,7 @@ func (ta *TenantAttributor) RecordVerification(attributedTenant, httpTenant stri
 		}
 	} else {
 		if ta.attributionMismatches != nil {
-			ta.attributionMismatches.Inc()
+			ta.attributionMismatches.WithLabelValues(httpTenant, attributedTenant).Inc()
 		}
 	}
 }
