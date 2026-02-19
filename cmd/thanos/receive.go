@@ -305,6 +305,28 @@ func runReceive(
 		return errors.Wrap(err, "creating limiter")
 	}
 
+	// Create tenant attributor if config is provided.
+	var tenantAttributor *receive.TenantAttributor
+	if conf.tenantRulesConfig != nil {
+		tenantRulesContent, err := conf.tenantRulesConfig.Content()
+		if err != nil {
+			return errors.Wrap(err, "get content of tenant rules configuration")
+		}
+		if len(tenantRulesContent) > 0 {
+			tenantAttributor, err = receive.NewTenantAttributorFromContent(
+				tenantRulesContent,
+				conf.defaultTenantID,
+				conf.verifyTenantAttribution,
+				reg,
+				log.With(logger, "component", "tenant-attributor"),
+			)
+			if err != nil {
+				return errors.Wrap(err, "creating tenant attributor")
+			}
+			level.Info(logger).Log("msg", "tenant attribution enabled", "verify_mode", conf.verifyTenantAttribution)
+		}
+	}
+
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
 		Writer:                  writer,
 		ListenAddress:           conf.rwAddress,
@@ -327,6 +349,7 @@ func runReceive(
 		Limiter:                 limiter,
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
+		TenantAttributor:        tenantAttributor,
 	})
 
 	{
@@ -1013,6 +1036,9 @@ type receiveConfig struct {
 	noUploadTenants *[]string
 
 	compactionDelayInterval *model.Duration
+
+	tenantRulesConfig       *extflag.PathOrContent
+	verifyTenantAttribution bool
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1215,6 +1241,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.noUploadTenants = cmd.Flag("receive.no-upload-tenants", "Tenant IDs/patterns that should only store data locally (no object store upload). Supports exact matches (e.g., 'tenant1') and prefix patterns (e.g., 'prod-*'). Repeat this flag to specify multiple patterns.").Strings()
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
+
+	rc.tenantRulesConfig = extflag.RegisterPathOrContent(cmd, "receive.tenant-rules", "YAML file that contains tenant attribution rules. Each rule maps label filters to a tenant ID. Rules are evaluated in order, first match wins.", extflag.WithEnvSubstitution())
+	cmd.Flag("receive.verify-tenant-attribution", "When enabled, tenant attribution rules are evaluated but only for verification. The HTTP header tenant is still used for actual routing/storage. Metrics are emitted to compare attributed vs HTTP tenant.").
+		Default("false").BoolVar(&rc.verifyTenantAttribution)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

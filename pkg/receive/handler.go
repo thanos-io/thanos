@@ -186,6 +186,7 @@ type Options struct {
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
 	ReplicationProtocol     ReplicationProtocol
+	TenantAttributor        *TenantAttributor
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -511,8 +512,54 @@ func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]statusap
 	return h.options.TSDBStats.TenantStats(statsLimit, statsByLabelName, tenantID), nil
 }
 
-// tenantKeyForDistribution matches distributeTimeseriesToReplicas semantics exactly.
+// getTenantForStorage returns the tenant to use when writing a time series to TSDB.
+// This is the actual tenant ID used for storage, unlike tenantKeyForDistribution which
+// may include prefixes for hashring distribution purposes.
+func (h *Handler) getTenantForStorage(tenantHTTP string, ts prompb.TimeSeries) string {
+	// If TenantAttributor is configured, the logic is identical to tenantKeyForDistribution.
+	if h.options.TenantAttributor != nil {
+		return h.tenantKeyForDistribution(tenantHTTP, ts)
+	}
+
+	// Legacy behavior: use splitTenantLabelName if configured.
+	tenant := tenantHTTP
+	if h.splitTenantLabelName != "" {
+		if tnt, ok := zlabelsGet(ts.Labels, h.splitTenantLabelName); ok && tnt != "" {
+			tenant = tnt
+		}
+	}
+	return tenant
+}
+
+// tenantKeyForDistribution returns the key to use for hashring distribution.
+// This may differ from the storage tenant (e.g., by including label name prefix).
+//
+// Behavior:
+// - If verify-attribution is true, use the HTTP tenant for actual routing.
+// - If verify-attribution is false and HTTP header is provided (tenant != default), use the HTTP tenant.
+// - If verify-attribution is false and HTTP header is not provided, do attribution from labels.
 func (h *Handler) tenantKeyForDistribution(tenantHTTP string, ts prompb.TimeSeries) string {
+	// If TenantAttributor is configured, use rule-based tenant attribution.
+	if h.options.TenantAttributor != nil {
+		// In verify mode: attribution for metrics only, use HTTP tenant for actual routing.
+		if h.options.TenantAttributor.IsVerifyMode() {
+			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+			attributedTenant := h.options.TenantAttributor.GetTenantFromLabels(lbls)
+			h.options.TenantAttributor.RecordVerification(attributedTenant, tenantHTTP)
+			return tenantHTTP
+		}
+
+		// Non-verify mode: if HTTP header was provided (tenant != default), use it.
+		if tenantHTTP != h.options.DefaultTenantID {
+			return tenantHTTP
+		}
+
+		// No HTTP header provided: do attribution from labels.
+		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+		return h.options.TenantAttributor.GetTenantFromLabels(lbls)
+	}
+
+	// Legacy behavior: use splitTenantLabelName if configured.
 	tenant := tenantHTTP
 	if h.splitTenantLabelName == "" {
 		return tenant
@@ -1140,12 +1187,7 @@ func (h *Handler) sendLocalWrite(
 
 	tenantSeriesMapping := map[string][]prompb.TimeSeries{}
 	for _, ts := range trackedSeries.timeSeries {
-		var tenant = tenantHTTP
-		if h.splitTenantLabelName != "" {
-			if tnt, ok := zlabelsGet(ts.Labels, h.splitTenantLabelName); ok && tnt != "" {
-				tenant = tnt
-			}
-		}
+		tenant := h.getTenantForStorage(tenantHTTP, ts)
 		tenantSeriesMapping[tenant] = append(tenantSeriesMapping[tenant], ts)
 	}
 

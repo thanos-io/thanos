@@ -51,6 +51,27 @@ func NewTenantAttributor(
 	reg prometheus.Registerer,
 	logger log.Logger,
 ) (*TenantAttributor, error) {
+	// Load and parse config file
+	if configPath == "" {
+		return nil, errors.New("tenant rules config path is required")
+	}
+
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading tenant rules config: %w", err)
+	}
+
+	return NewTenantAttributorFromContent(configData, defaultTenant, verifyMode, reg, logger)
+}
+
+// NewTenantAttributorFromContent creates a new TenantAttributor from YAML content.
+func NewTenantAttributorFromContent(
+	configData []byte,
+	defaultTenant string,
+	verifyMode bool,
+	reg prometheus.Registerer,
+	logger log.Logger,
+) (*TenantAttributor, error) {
 	ta := &TenantAttributor{
 		defaultTenant: defaultTenant,
 		logger:        logger,
@@ -71,16 +92,6 @@ func NewTenantAttributor(
 			Name:      "tenant_attribution_mismatches_total",
 			Help:      "Total number of time series where attributed tenant differs from HTTP header tenant.",
 		})
-	}
-
-	// Load and parse config file
-	if configPath == "" {
-		return nil, errors.New("tenant rules config path is required")
-	}
-
-	configData, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading tenant rules config: %w", err)
 	}
 
 	var ruleConfigs []TenantRuleConfig
