@@ -6,7 +6,7 @@ package thanos;
 
 import "store/storepb/types.proto";
 import "gogoproto/gogo.proto";
-import "store/labelpb/types.proto";
+import "store/labelpbv2/types.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "targetspb";
@@ -64,8 +64,8 @@ enum TargetHealth {
 }
 
 message ActiveTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
-    ZLabelSet labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
+    LabelSetV2 discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
+    LabelSetV2 labels = 2 [(gogoproto.jsontag) = "labels", (gogoproto.nullable) = false];
     string scrapePool = 3 [(gogoproto.jsontag) = "scrapePool"];
     string scrapeUrl = 4 [(gogoproto.jsontag) = "scrapeUrl"];
     string globalUrl = 5 [(gogoproto.jsontag) = "globalUrl"];
@@ -76,5 +76,5 @@ message ActiveTarget {
 }
 
 message DroppedTarget {
-    ZLabelSet discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
+    LabelSetV2 discoveredLabels = 1 [(gogoproto.jsontag) = "discoveredLabels", (gogoproto.nullable) = false];
 }
