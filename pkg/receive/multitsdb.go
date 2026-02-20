@@ -784,6 +784,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	// This allows running with compaction enabled (tsdb.min-block-duration != tsdb.max-block-duration)
 	// without risking data loss due to blocks being compacted before upload.
 	opts.BlockCompactionExcludeFunc = func(meta *tsdb.BlockMeta) bool {
+		// Blocks with level > 1 are not uploaded by shipper. We dont want to exclude them from compaction.
+		if meta.Compaction.Level > 1 {
+			return false
+		}
+
 		s := tenant.shipper()
 		if s == nil {
 			return false
