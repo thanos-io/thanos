@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
+	"github.com/alecthomas/units"
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/opentracing/opentracing-go"
@@ -37,6 +38,14 @@ type grpcConfig struct {
 	tlsMinVersion    string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
+
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+	keepaliveMinTime             time.Duration
+
+	initialWindowSize     units.Base2Bytes
+	initialConnWindowSize units.Base2Bytes
 }
 
 func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
@@ -61,6 +70,26 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		"Time to wait after an interrupt received for GRPC Server.").
 		Default("2m").DurationVar(&gc.gracePeriod)
 
+	cmd.Flag("grpc-server-keepalive-time",
+		"After a duration of this time if the server doesn't see any activity it pings the client to see if the transport is still alive.").
+		Default("10s").DurationVar(&gc.keepaliveTime)
+	cmd.Flag("grpc-server-keepalive-timeout",
+		"After having pinged for keepalive check, the server waits for a duration of Timeout and if no activity is seen even after that the connection is closed.").
+		Default("20s").DurationVar(&gc.keepaliveTimeout)
+	cmd.Flag("grpc-server-keepalive-permit-without-stream",
+		"If true, server allows keepalive pings even when there are no active streams (RPCs). If false, and client sends ping when there are no active streams, server will send GOAWAY and close the connection.").
+		Default("true").BoolVar(&gc.keepalivePermitWithoutStream)
+	cmd.Flag("grpc-server-keepalive-min-time",
+		"Minimum amount of time a client should wait before sending a keepalive ping. This is to prevent clients from sending pings too frequently.").
+		Default("5s").DurationVar(&gc.keepaliveMinTime)
+
+	cmd.Flag("grpc-server-initial-window-size",
+		"Initial window size for gRPC streams (per-stream flow control window). Lower values may reduce memory usage at the cost of throughput. Units: B, KB, MB, GB.").
+		Default("4MB").BytesVar(&gc.initialWindowSize)
+	cmd.Flag("grpc-server-initial-conn-window-size",
+		"Initial window size for gRPC connections (per-connection flow control window). Lower values may reduce memory usage at the cost of throughput. Units: B, KB, MB, GB.").
+		Default("4MB").BytesVar(&gc.initialConnWindowSize)
+
 	return gc
 }
 
@@ -70,6 +99,13 @@ type grpcClientConfig struct {
 	cert, key, caCert string
 	serverName        string
 	compression       string
+
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+
+	initialWindowSize     units.Base2Bytes
+	initialConnWindowSize units.Base2Bytes
 }
 
 func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
@@ -82,11 +118,33 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
 	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
 
+	cmd.Flag("grpc-client-keepalive-time",
+		"After a duration of this time if the client doesn't see any activity it pings the server to see if the transport is still alive.").
+		Default("10s").DurationVar(&gc.keepaliveTime)
+	cmd.Flag("grpc-client-keepalive-timeout",
+		"After having pinged for keepalive check, the client waits for a duration of Timeout and if no activity is seen even after that the connection is closed.").
+		Default("5s").DurationVar(&gc.keepaliveTimeout)
+	cmd.Flag("grpc-client-keepalive-permit-without-stream",
+		"If true, client sends keepalive pings even with no active RPCs. If false, when there are no active RPCs, Time and Timeout will be ignored and no keepalive pings will be sent.").
+		Default("true").BoolVar(&gc.keepalivePermitWithoutStream)
+
+	cmd.Flag("grpc-client-initial-window-size",
+		"Initial window size for gRPC streams (per-stream flow control window). Lower values may reduce memory usage at the cost of throughput. Units: B, KB, MB, GB.").
+		Default("4MB").BytesVar(&gc.initialWindowSize)
+	cmd.Flag("grpc-client-initial-conn-window-size",
+		"Initial window size for gRPC connections (per-connection flow control window). Lower values may reduce memory usage at the cost of throughput. Units: B, KB, MB, GB.").
+		Default("4MB").BytesVar(&gc.initialConnWindowSize)
+
 	return gc
 }
 
 func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName)
+	clientOpts := []extgrpc.ClientOption{
+		extgrpc.WithKeepaliveParams(gc.keepaliveTime, gc.keepaliveTimeout, gc.keepalivePermitWithoutStream),
+		extgrpc.WithInitialWindowSize(int32(gc.initialWindowSize), int32(gc.initialConnWindowSize)),
+	}
+
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName, clientOpts...)
 	if err != nil {
 		return nil, errors.Wrapf(err, "building gRPC client")
 	}
