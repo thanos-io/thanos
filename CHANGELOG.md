@@ -34,6 +34,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Added
 
+- [#8651](https://github.com/thanos-io/thanos/pull/8651) Query/Ruler: Add dual-stack DNS resolution with `dnsdualstack+` scheme for resolving both IPv4 and IPv6 addresses with automatic failover via gRPC health checking.
 - [#](https://github.com/thanos-io/thanos/pull/8623): Query: Enable batching of Series per SeriesResponse.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
 - [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
