@@ -41,11 +41,29 @@ type fileContent interface {
 	Path() string
 }
 
+// Maps to crypto/tls.Config fields.
+// See https://pkg.go.dev/crypto/tls#Config
+type tlsConfig struct {
+	Enabled                  *bool   `yaml:"enabled"`
+	InsecureSkipVerification *bool   `yaml:"insecure_skip_verify"`
+	CertFile                 *string `yaml:"cert_file"`
+	KeyFile                  *string `yaml:"key_file"`
+	CAFile                   *string `yaml:"ca_file"`
+	MinVersion               *string `yaml:"min_version"`
+}
+
+type clientConfig struct {
+	TLSConfig   tlsConfig `yaml:"tls_config"`
+	ServerName  string    `yaml:"server_name"`
+	Compression string    `yaml:"compression"`
+}
+
 type endpointSettings struct {
-	Strict        bool   `yaml:"strict"`
-	Group         bool   `yaml:"group"`
-	Address       string `yaml:"address"`
-	ServiceConfig string `yaml:"service_config"`
+	Strict        bool         `yaml:"strict"`
+	Group         bool         `yaml:"group"`
+	Address       string       `yaml:"address"`
+	ServiceConfig string       `yaml:"service_config"`
+	ClientConfig  clientConfig `yaml:"client_config"`
 }
 
 type EndpointConfig struct {
@@ -61,6 +79,91 @@ type endpointConfigProvider struct {
 	endpointGroups       []string
 	strictEndpoints      []string
 	strictEndpointGroups []string
+}
+
+func (cfg *clientConfig) UseGlobalTLSOpts() bool {
+	return cfg.TLSConfig.Enabled == nil &&
+		cfg.TLSConfig.CertFile == nil &&
+		cfg.TLSConfig.KeyFile == nil &&
+		cfg.TLSConfig.CAFile == nil &&
+		cfg.ServerName == "" &&
+		cfg.TLSConfig.MinVersion == nil &&
+		cfg.TLSConfig.InsecureSkipVerification == nil
+}
+
+// hasTLSConfig returns true if user specified any TLS-specific configuration.
+// This is it set TLS even if 'enabled' is not explicitly set.
+func (tc *tlsConfig) hasTLSConfig() bool {
+	return tc.CertFile != nil || tc.KeyFile != nil || tc.CAFile != nil || tc.InsecureSkipVerification != nil
+}
+
+// applyDefaults sets default values for nil pointer fields.
+// If fallback is provided, uses those values before falling back to defaults.
+// Call this only after UseGlobalTLSOpts() check, otherwise that check will always return false.
+func (tc *tlsConfig) applyDefaults(fallback *tlsConfig) {
+	if tc.Enabled == nil {
+		// If user provided any TLS config (cert/key/CA/insecure_skip_verify),
+		// we assume they want TLS enabled rather than using global's enabled value
+		if tc.hasTLSConfig() {
+			defaultVal := true
+			tc.Enabled = &defaultVal
+		} else if fallback != nil && fallback.Enabled != nil {
+			tc.Enabled = fallback.Enabled
+		} else {
+			defaultVal := false
+			tc.Enabled = &defaultVal
+		}
+	}
+	if tc.InsecureSkipVerification == nil {
+		if fallback != nil && fallback.InsecureSkipVerification != nil {
+			tc.InsecureSkipVerification = fallback.InsecureSkipVerification
+		} else {
+			defaultVal := false
+			tc.InsecureSkipVerification = &defaultVal
+		}
+	}
+	if tc.CertFile == nil {
+		if fallback != nil && fallback.CertFile != nil {
+			tc.CertFile = fallback.CertFile
+		} else {
+			defaultVal := ""
+			tc.CertFile = &defaultVal
+		}
+	}
+	if tc.KeyFile == nil {
+		if fallback != nil && fallback.KeyFile != nil {
+			tc.KeyFile = fallback.KeyFile
+		} else {
+			defaultVal := ""
+			tc.KeyFile = &defaultVal
+		}
+	}
+	if tc.CAFile == nil {
+		if fallback != nil && fallback.CAFile != nil {
+			tc.CAFile = fallback.CAFile
+		} else {
+			defaultVal := ""
+			tc.CAFile = &defaultVal
+		}
+	}
+	if tc.MinVersion == nil {
+		if fallback != nil && fallback.MinVersion != nil {
+			tc.MinVersion = fallback.MinVersion
+		} else {
+			defaultVal := "1.3"
+			tc.MinVersion = &defaultVal
+		}
+	}
+}
+
+func (cfg *clientConfig) validateCompression() error {
+	if cfg.Compression == "" {
+		cfg.Compression = "none"
+	}
+	if cfg.Compression != "none" && cfg.Compression != "snappy" {
+		return errors.Newf("invalid compression: %s, must be 'none' or 'snappy'", cfg.Compression)
+	}
+	return nil
 }
 
 func (er *endpointConfigProvider) config() EndpointConfig {
@@ -111,13 +214,17 @@ func (er *endpointConfigProvider) addStaticEndpoints(cfg *EndpointConfig) {
 	}
 }
 
-func validateEndpointConfig(cfg EndpointConfig) error {
-	for _, ecfg := range cfg.Endpoints {
+func validateEndpointConfig(cfg *EndpointConfig) error {
+	for i := range cfg.Endpoints {
+		ecfg := &cfg.Endpoints[i]
 		if dns.IsDynamicNode(ecfg.Address) && ecfg.Strict {
 			return errors.Newf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode.", ecfg.Address)
 		}
 		if !ecfg.Group && len(ecfg.ServiceConfig) != 0 {
 			return errors.Newf("%s service_config is only valid for endpoint groups.", ecfg.Address)
+		}
+		if err := ecfg.ClientConfig.validateCompression(); err != nil {
+			return errors.Wrapf(err, "endpoint %s", ecfg.Address)
 		}
 	}
 	return nil
@@ -148,10 +255,10 @@ func newEndpointConfigProvider(
 		return nil, errors.Wrapf(err, "unable to load config file")
 	}
 	res.addStaticEndpoints(&cfg)
-	res.cfg = cfg
-	if err := validateEndpointConfig(cfg); err != nil {
+	if err := validateEndpointConfig(&cfg); err != nil {
 		return nil, errors.Wrapf(err, "unable to validate endpoints")
 	}
+	res.cfg = cfg
 
 	// only static endpoints
 	if len(configFile.Path()) == 0 {
@@ -169,7 +276,7 @@ func newEndpointConfigProvider(
 			return
 		}
 		res.addStaticEndpoints(&cfg)
-		if err := validateEndpointConfig(cfg); err != nil {
+		if err := validateEndpointConfig(&cfg); err != nil {
 			level.Error(logger).Log("msg", "failed to validate endpoint config", "err", err)
 			return
 		}
@@ -199,6 +306,9 @@ func setupEndpointSet(
 	endpointTimeout time.Duration,
 	queryTimeout time.Duration,
 	dialOpts []grpc.DialOption,
+	globalTLSConfig *tlsConfig,
+	globalTLSOpt grpc.DialOption,
+	globalCompression string,
 	injectTestAddresses []string,
 	queryConnMetricLabels ...string,
 ) (*query.EndpointSet, error) {
@@ -353,16 +463,83 @@ func setupEndpointSet(
 		specs := make([]*query.GRPCEndpointSpec, 0)
 		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {
-			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
+			strict, group, addr, tlsEnabled := ecfg.Strict, ecfg.Group, ecfg.Address, ecfg.ClientConfig.TLSConfig.Enabled
+			var tlsOpt grpc.DialOption
+			useGlobalConfig := ecfg.ClientConfig.UseGlobalTLSOpts()
+			if useGlobalConfig {
+				tlsOpt = globalTLSOpt
+			} else if tlsEnabled == nil {
+				// Merging endpoint config with global config as fallback
+				ecfg.ClientConfig.TLSConfig.applyDefaults(globalTLSConfig)
+
+				if *ecfg.ClientConfig.TLSConfig.Enabled {
+					var err error
+					tlsOpt, err = extgrpc.StoreClientTLSCredentials(
+						logger,
+						*ecfg.ClientConfig.TLSConfig.Enabled,
+						*ecfg.ClientConfig.TLSConfig.InsecureSkipVerification,
+						*ecfg.ClientConfig.TLSConfig.CertFile,
+						*ecfg.ClientConfig.TLSConfig.KeyFile,
+						*ecfg.ClientConfig.TLSConfig.CAFile,
+						ecfg.ClientConfig.ServerName,
+						*ecfg.ClientConfig.TLSConfig.MinVersion,
+					)
+					if err != nil {
+						level.Error(logger).Log("msg", "skipping endpoint due to TLS configuration error", "addr", addr, "err", err)
+						continue
+					}
+				} else {
+					// TLS not enabled after merging, use cleartext
+					tlsOpt, _ = extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "", "")
+				}
+			} else if *tlsEnabled {
+				// applying defaults for missing TLS config values
+				ecfg.ClientConfig.TLSConfig.applyDefaults(nil)
+
+				var err error
+				tlsOpt, err = extgrpc.StoreClientTLSCredentials(
+					logger,
+					*ecfg.ClientConfig.TLSConfig.Enabled,
+					*ecfg.ClientConfig.TLSConfig.InsecureSkipVerification,
+					*ecfg.ClientConfig.TLSConfig.CertFile,
+					*ecfg.ClientConfig.TLSConfig.KeyFile,
+					*ecfg.ClientConfig.TLSConfig.CAFile,
+					ecfg.ClientConfig.ServerName,
+					*ecfg.ClientConfig.TLSConfig.MinVersion,
+				)
+				if err != nil {
+					level.Error(logger).Log("msg", "skipping endpoint due to TLS configuration error", "addr", addr, "err", err)
+					continue
+				}
+			} else {
+				// If tlsEnabled is disabled we will use cleartext
+				tlsOpt, _ = extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "", "")
+			}
+			endpointDialOpts := append(dialOpts, tlsOpt)
+
+			var compression string
+			if useGlobalConfig {
+				compression = globalCompression
+			} else {
+				compression = ecfg.ClientConfig.Compression
+			}
+			if compression != "none" {
+				endpointDialOpts = append(endpointDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(compression)))
+			}
+
 			if group {
-				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
+				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(endpointDialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
 			} else if !dns.IsDynamicNode(addr) {
-				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, dialOpts...))
+				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, endpointDialOpts...))
 			}
 		}
 		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
-			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dialOpts...))
+			dynamicDialOpts := append(dialOpts, globalTLSOpt)
+			if globalCompression != "none" {
+				dynamicDialOpts = append(dynamicDialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(globalCompression)))
+			}
+			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dynamicDialOpts...))
 		}
 		return removeDuplicateEndpointSpecs(specs)
 	}, unhealthyTimeout, endpointTimeout, queryTimeout, queryConnMetricLabels...)
