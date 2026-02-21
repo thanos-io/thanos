@@ -62,6 +62,7 @@ func main() {
 	registerTools(app)
 	registerReceive(app)
 	registerQueryFrontend(app)
+	registerStreamer(app)
 
 	cmd, setup := app.Parse()
 	logger, err := logging.NewLogger(*logLevel, *logFormat, *debugName)
