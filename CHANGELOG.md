@@ -103,6 +103,7 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 - [#8284](https://github.com/thanos-io/thanos/pull/8284) Store: Add `--disable-admin-operations` Flag to Store Gateway
 - [#8245](https://github.com/thanos-io/thanos/pull/8245) Querier/Query-Frontend/Ruler: Add `--enable-feature=promql-experimental-functions` flag option to enable using promQL experimental functions in respective Thanos components
 - [#8259](https://github.com/thanos-io/thanos/pull/8259) Shipper: Add `--shipper.skip-corrupted-blocks` flag to allow `Sync()` to continue upload when finding a corrupted block
+- [#8309](https://github.com/thanos-io/thanos/pull/8309) Tools: add a subcmd "stream_metric" to "thanos tools"
 
 ### Changed
 
