@@ -257,6 +257,22 @@ func TestDelete(t *testing.T) {
 		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b2))
 		testutil.Equals(t, 0, len(bkt.Objects()))
 	}
+	{
+		b3 := ulid.MustNew(3, nil)
+
+		// Upload explicit directory markers.
+		dirName := b3.String() + objstore.DirDelim
+		testutil.Ok(t, bkt.Upload(ctx, dirName, bytes.NewReader([]byte{})))
+
+		chunksDirName := path.Join(b3.String(), ChunksDirname) + objstore.DirDelim
+		testutil.Ok(t, bkt.Upload(ctx, chunksDirName, bytes.NewReader([]byte{})))
+
+		testutil.Equals(t, 2, len(bkt.Objects()))
+
+		// Check if delete also deletes the directory markers.
+		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b3))
+		testutil.Equals(t, 0, len(bkt.Objects()))
+	}
 }
 
 func TestMarkForDeletion(t *testing.T) {
