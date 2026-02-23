@@ -240,6 +240,18 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 		level.Debug(logger).Log("msg", "deleted file", "file", deletionMarkFile, "bucket", bkt.Name())
 	}
 
+	// Some object storages represent directories as explicit empty objects.
+	// We try to delete the directory marker objects themselves after all their contents are removed.
+	chunksDirName := path.Join(id.String(), ChunksDirname) + objstore.DirDelim
+	if err := bkt.Delete(ctx, chunksDirName); err != nil && !bkt.IsObjNotFoundErr(err) {
+		level.Debug(logger).Log("msg", "failed to delete directory marker object", "dir", chunksDirName, "err", err)
+	}
+
+	dirName := id.String() + objstore.DirDelim
+	if err := bkt.Delete(ctx, dirName); err != nil && !bkt.IsObjNotFoundErr(err) {
+		level.Debug(logger).Log("msg", "failed to delete directory marker object", "dir", dirName, "err", err)
+	}
+
 	return nil
 }
 
