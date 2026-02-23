@@ -323,9 +323,19 @@ func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 		return deletable
 	}
 
+	compacted := make(map[ulid.ULID]struct{})
+	for _, b := range blocks {
+		if b.Meta().Compaction.Level > 1 {
+			compacted[b.Meta().ULID] = struct{}{}
+		}
+	}
+
 	uploaded := t.ship.UploadedBlocks()
 	for deletableID := range deletable {
-		if _, ok := uploaded[deletableID]; !ok {
+		if _, ok := uploaded[deletableID]; ok {
+			continue
+		}
+		if _, ok := compacted[deletableID]; !ok {
 			delete(deletable, deletableID)
 		}
 	}
