@@ -40,6 +40,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Changed
 
+- [#8620](https://github.com/thanos-io/thanos/pull/8620): *: Address use of deprecated graph panels
 - [#8630](https://github.com/thanos-io/thanos/pull/8630): Receive: *breaking :warning:* shuffle sharding now uses consistent hashing for stability on scale. Existing tenant-to-node assignments will change on upgrade.
 - [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
 - [#8661](https://github.com/thanos-io/thanos/pull/8661): Upgrade Prometheus to v3.8.0. `tsdb.enable-native-histograms` flag in Receiver and Ruler becomes a no-op and deprecated. Now native histogram ingestion is always enabled.

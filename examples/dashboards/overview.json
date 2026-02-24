@@ -14,24 +14,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of requests against /query for the given time.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 1,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -42,11 +50,15 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/1../",
@@ -69,10 +81,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query\"}[$interval]))",
@@ -82,63 +92,42 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Requests Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests against /query.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 2,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -149,16 +138,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, code) (rate(http_requests_total{handler=\"query\",code=~\"5..\"}[$interval])) / ignoring (code) group_left() sum by (job) (rate(http_requests_total{handler=\"query\"}[$interval]))",
@@ -167,23 +157,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Requests Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -204,25 +182,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests.",
-               "fill": 1,
-               "id": 3,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 3,
                "links": [
                   {
                      "dashboard": "Thanos / Query",
@@ -232,24 +216,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query\"}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -270,22 +252,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Latency 99th Percentile",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -318,24 +289,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of requests against /query_range for the given time range.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 4,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -346,11 +325,15 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/1../",
@@ -373,10 +356,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
@@ -386,63 +367,42 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Requests Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests against /query_range.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 5,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -453,16 +413,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, code) (rate(http_requests_total{handler=\"query_range\",code=~\"5..\"}[$interval])) / ignoring (code) group_left() sum by (job) (rate(http_requests_total{handler=\"query_range\"}[$interval]))",
@@ -471,23 +432,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Requests Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -508,25 +457,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests.",
-               "fill": 1,
-               "id": 6,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 6,
                "links": [
                   {
                      "dashboard": "Thanos / Query",
@@ -536,24 +491,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"query_range\"}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -574,22 +527,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Latency 99th Percentile",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -622,24 +564,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 7,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -650,11 +600,15 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/Aborted/",
@@ -729,10 +683,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
@@ -742,63 +694,42 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC (Unary) Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 8,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -809,16 +740,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / ignoring (grpc_code) group_left() sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
@@ -827,23 +759,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC (Unary) Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -864,25 +784,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers.",
-               "fill": 1,
-               "id": 9,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 9,
                "links": [
                   {
                      "dashboard": "Thanos / Store",
@@ -892,24 +818,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -930,22 +854,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC Latency 99th Percentile",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -978,24 +891,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 10,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1006,11 +927,15 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/Aborted/",
@@ -1085,10 +1010,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
@@ -1098,63 +1021,42 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC (Unary) Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 11,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1165,16 +1067,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",grpc_type=\"unary\"}[$interval])) / ignoring (grpc_code) group_left() sum by (job) (rate(grpc_server_handled_total{grpc_type=\"unary\"}[$interval]))",
@@ -1183,23 +1086,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC (Unary) Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1220,25 +1111,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
-               "fill": 1,
-               "id": 12,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 12,
                "links": [
                   {
                      "dashboard": "Thanos / Sidecar",
@@ -1248,24 +1145,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{grpc_type=\"unary\"}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -1286,22 +1181,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "gRPC (Unary) Latency 99th Percentile",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -1334,24 +1218,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of incoming requests.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 13,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1362,11 +1254,15 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/1../",
@@ -1389,10 +1285,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, handler, code) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
@@ -1402,63 +1296,42 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Incoming Requests Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled incoming requests.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 14,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1469,16 +1342,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, code) (rate(http_requests_total{handler=\"receive\",code=~\"5..\"}[$interval])) / ignoring (code) group_left() sum by (job) (rate(http_requests_total{handler=\"receive\"}[$interval]))",
@@ -1487,23 +1361,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Incoming Requests Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1524,25 +1386,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle incoming requests.",
-               "fill": 1,
-               "id": 15,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 15,
                "links": [
                   {
                      "dashboard": "Thanos / Receive",
@@ -1552,24 +1420,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket{handler=\"receive\"}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -1590,22 +1456,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Incoming Requests Latency 99th Percentile",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -1638,24 +1493,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of alerts that successfully sent to alert manager.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 16,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1666,83 +1529,61 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{alertmanager}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Alert Sent Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of sent alerts.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 17,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1753,16 +1594,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_alert_sender_errors_total{}[$interval])) / sum by (job) (rate(thanos_alert_sender_alerts_sent_total{}[$interval]))",
@@ -1772,23 +1614,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Alert Sent Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1809,25 +1639,31 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to send alerts to alert manager.",
-               "fill": 1,
-               "id": 18,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 18,
                "links": [
                   {
                      "dashboard": "Thanos / Rule",
@@ -1837,24 +1673,22 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.99, sum by (job, le) (rate(thanos_alert_sender_latency_seconds_bucket{}[$interval])))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{job}} P99",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [
@@ -1875,22 +1709,11 @@
                      "yaxis": "left"
                   }
                ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Alert Sent Duration",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -1923,24 +1746,32 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of execution for compactions against blocks that are stored in the bucket.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 19,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -1951,83 +1782,61 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_compact_group_compactions_total{}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "compaction {{job}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Compaction Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of executed compactions against blocks that are stored in the bucket.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 20,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [
                   {
@@ -2038,16 +1847,17 @@
                      "type": "dashboard"
                   }
                ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_compact_group_compactions_failures_total{}[$interval])) / sum by (job) (rate(thanos_compact_group_compactions_total{}[$interval]))",
@@ -2057,23 +1867,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Compaction Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -2115,7 +1913,7 @@
                "value": "default"
             },
             "hide": 0,
-            "label": null,
+            "label": "Data source",
             "name": "datasource",
             "options": [ ],
             "query": "prometheus",

@@ -19,26 +19,26 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('Query Frontend API')
         .addPanel(
-          g.panel('Rate of requests', 'Shows rate of requests against Query Frontend for the given time.') +
+          g.timeseriesPanel('Rate of requests', 'Shows rate of requests against Query Frontend for the given time.') +
           g.httpQpsPanel('http_requests_total', queryFrontendHandlerSelector, thanos.queryFrontend.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Rate of queries', 'Shows rate of queries passing through Query Frontend') +
+          g.timeseriesPanel('Rate of queries', 'Shows rate of queries passing through Query Frontend') +
           g.httpQpsPanel('thanos_query_frontend_queries_total', queryFrontendOpSelector, thanos.queryFrontend.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests against Query Frontend.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests against Query Frontend.') +
           g.httpErrPanel('http_requests_total', queryFrontendHandlerSelector, thanos.queryFrontend.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests in quantiles.') +
           g.latencyPanel('http_request_duration_seconds', queryFrontendHandlerSelector, thanos.queryFrontend.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('Cache Operations')
         .addPanel(
-          g.panel('Requests', 'Show rate of cache requests.') +
+          g.timeseriesPanel('Requests', 'Show rate of cache requests.') +
           g.queryPanel(
             'sum by (%s) (rate(cortex_cache_request_duration_seconds_count{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
@@ -46,7 +46,7 @@ local utils = import '../lib/utils.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Querier cache gets vs misses', 'Show rate of Querier cache gets vs misses.') +
+          g.timeseriesPanel('Querier cache gets vs misses', 'Show rate of Querier cache gets vs misses.') +
           g.queryPanel(
             'sum by (%s) (rate(querier_cache_gets_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             'Cache gets - {{job}} {{tripperware}}',
@@ -58,7 +58,7 @@ local utils = import '../lib/utils.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Cortex fetched keys', 'Shows rate of cortex fetched keys.') +
+          g.timeseriesPanel('Cortex fetched keys', 'Shows rate of cortex fetched keys.') +
           g.queryPanel(
             'sum by (%s) (rate(cortex_cache_fetched_keys_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
@@ -66,7 +66,7 @@ local utils = import '../lib/utils.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Cortex cache hits', 'Shows rate of cortex cache hits.') +
+          g.timeseriesPanel('Cortex cache hits', 'Shows rate of cortex cache hits.') +
           g.queryPanel(
             'sum by (%s) (rate(cortex_cache_hits_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.queryFrontend.dashboard.dimensions, 'tripperware']), thanos.queryFrontend.dashboard.selector],
             '{{job}} {{tripperware}}',
