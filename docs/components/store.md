@@ -164,6 +164,17 @@ Flags:
                                  YAML file that contains object store
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore-parquet.config-file=<file-path>
+                                 Path to YAML file that
+                                 contains object store-parquet
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore-parquet.config=<content>
+                                 Alternative to 'objstore-parquet.config-file'
+                                 flag (mutually exclusive). Content of YAML
+                                 file that contains object store-parquet
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
       --sync-block-duration=15m  Repeat interval for syncing the blocks between
                                  local and remote view.
       --block-discovery-strategy="concurrent"

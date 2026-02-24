@@ -17,12 +17,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/VictoriaMetrics/easyproto"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
@@ -59,7 +59,7 @@ func ULID(i int) ulid.ULID { return ulid.MustNew(uint64(i), nil) }
 func ULIDs(is ...int) []ulid.ULID {
 	ret := []ulid.ULID{}
 	for _, i := range is {
-		ret = append(ret, ulid.MustNew(uint64(i), nil))
+		ret = append(ret, ULID(i))
 	}
 
 	return ret
@@ -1253,160 +1253,6 @@ func Test_ParseRelabelConfig(t *testing.T) {
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
 }
 
-func TestParquetMigratedMetaFilter_Filter(t *testing.T) {
-	logger := log.NewNopLogger()
-	filter := NewParquetMigratedMetaFilter(logger)
-
-	// Simulate what might happen when extensions are loaded from JSON
-	extensions := struct {
-		ParquetMigrated bool `json:"parquet_migrated"`
-	}{
-		ParquetMigrated: true,
-	}
-
-	for _, c := range []struct {
-		name  string
-		metas map[ulid.ULID]*metadata.Meta
-		check func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error)
-	}{
-		{
-			name: "block with other extensions",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(2, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: map[string]any{
-							"other_key": "other_value",
-						},
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Ok(t, err)
-				testutil.Equals(t, 1, len(metas))
-			},
-		},
-		{
-			name: "no extensions",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(1, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: nil,
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Equals(t, 1, len(metas))
-				testutil.Ok(t, err)
-			},
-		},
-		{
-			name: "block with parquet_migrated=false",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(3, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: map[string]any{
-							metadata.ParquetMigratedExtensionKey: false,
-						},
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Equals(t, 1, len(metas))
-				testutil.Ok(t, err)
-			},
-		},
-		{
-			name: "block with parquet_migrated=true",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(4, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: map[string]any{
-							metadata.ParquetMigratedExtensionKey: true,
-						},
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Equals(t, 0, len(metas))
-				testutil.Ok(t, err)
-			},
-		},
-		{
-			name: "mixed blocks with parquet_migrated",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(5, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: map[string]any{
-							metadata.ParquetMigratedExtensionKey: true,
-						},
-					},
-				},
-				ulid.MustNew(6, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: map[string]any{
-							metadata.ParquetMigratedExtensionKey: false,
-						},
-					},
-				},
-				ulid.MustNew(7, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: nil,
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Equals(t, 2, len(metas))
-				testutil.Ok(t, err)
-				testutil.Assert(t, metas[ulid.MustNew(6, nil)] != nil, "Expected block with parquet_migrated=false to remain")
-				testutil.Assert(t, metas[ulid.MustNew(7, nil)] != nil, "Expected block without extensions to remain")
-			},
-		},
-		{
-			name: "block with serialized extensions",
-			metas: map[ulid.ULID]*metadata.Meta{
-				ulid.MustNew(8, nil): {
-					Thanos: metadata.Thanos{
-						Extensions: extensions,
-					},
-				},
-			},
-			check: func(t *testing.T, metas map[ulid.ULID]*metadata.Meta, err error) {
-				testutil.Equals(t, 0, len(metas))
-				testutil.Ok(t, err)
-			},
-		},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			r := prometheus.NewRegistry()
-
-			synced := promauto.With(r).NewGaugeVec(
-				prometheus.GaugeOpts{
-					Name: "test_synced",
-					Help: "Test synced metric",
-				},
-				[]string{"state"},
-			)
-			modified := promauto.With(r).NewGaugeVec(
-				prometheus.GaugeOpts{
-					Name: "test_modified",
-					Help: "Test modified metric",
-				},
-				[]string{"state"},
-			)
-			ctx := context.Background()
-
-			m, err := json.Marshal(c.metas)
-			testutil.Ok(t, err)
-
-			var outmetas map[ulid.ULID]*metadata.Meta
-			testutil.Ok(t, json.Unmarshal(m, &outmetas))
-
-			err = filter.Filter(ctx, outmetas, synced, modified)
-			c.check(t, outmetas, err)
-		})
-	}
-}
-
 func TestDeletionMarkFilter_HoldsOntoMarks(t *testing.T) {
 	ctx := context.Background()
 	bkt := objstore.NewInMemBucket()
@@ -1523,3 +1369,87 @@ func TestRecursiveLister_MetaJsonOrderIsIrrelevant(t *testing.T) {
 		t.Errorf("Block %s has meta.json but was incorrectly marked as partial", blockID)
 	}
 }
+
+func TestIgnoreConvertedBlocksMetaFilter(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	logger := log.NewNopLogger()
+
+	t.Run("filters converted blocks", func(t *testing.T) {
+		bkt := objstore.NewInMemBucket()
+		insBkt := objstore.WithNoopInstr(bkt)
+
+		filter := &IgnoreParquetConvertedBlocksFilter{
+			bkt:         insBkt,
+			concurrency: 2,
+			logger:      logger,
+		}
+
+		metaPbContent := encodeParquetMetadata([]ulid.ULID{ULID(1), ULID(2)})
+
+		testutil.Ok(t, bkt.Upload(ctx, "parquet-block-1/meta.pb", bytes.NewBuffer(metaPbContent)))
+
+		metaPbContent2 := encodeParquetMetadata([]ulid.ULID{ULID(3)})
+		testutil.Ok(t, bkt.Upload(ctx, "another-location/subdir/meta.pb", bytes.NewBuffer(metaPbContent2)))
+
+		input := map[ulid.ULID]*metadata.Meta{
+			ULID(1): {},
+			ULID(2): {},
+			ULID(3): {},
+			ULID(4): {},
+			ULID(5): {},
+		}
+
+		expected := map[ulid.ULID]*metadata.Meta{
+			ULID(4): {},
+			ULID(5): {},
+		}
+
+		m := newTestFetcherMetrics()
+		testutil.Ok(t, filter.Filter(ctx, input, m.Synced, nil))
+
+		testutil.Equals(t, expected, input)
+		testutil.Equals(t, 3.0, promtest.ToFloat64(m.Synced.WithLabelValues("parquet-converted")))
+	})
+
+	t.Run("nil bucket does nothing", func(t *testing.T) {
+		filter := &IgnoreParquetConvertedBlocksFilter{
+			bkt:         nil,
+			concurrency: 2,
+			logger:      logger,
+		}
+
+		input := map[ulid.ULID]*metadata.Meta{
+			ULID(1): {},
+			ULID(2): {},
+			ULID(3): {},
+		}
+
+		expected := map[ulid.ULID]*metadata.Meta{
+			ULID(1): {},
+			ULID(2): {},
+			ULID(3): {},
+		}
+
+		m := newTestFetcherMetrics()
+		testutil.Ok(t, filter.Filter(ctx, input, m.Synced, nil))
+
+		testutil.Equals(t, expected, input)
+		testutil.Equals(t, 0.0, promtest.ToFloat64(m.Synced.WithLabelValues("parquet-converted")))
+	})
+}
+
+func encodeParquetMetadata(convertedBlockIDs []ulid.ULID) []byte {
+	m := mp.Get()
+
+	mm := m.MessageMarshaler()
+	for _, id := range convertedBlockIDs {
+		mm.AppendString(6, id.String())
+	}
+	defer mp.Put(m)
+
+	return m.Marshal(nil)
+}
+
+var mp easyproto.MarshalerPool
