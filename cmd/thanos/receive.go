@@ -420,9 +420,16 @@ func runReceive(
 			),
 		)
 
+		// Use pooled unmarshaling only for IngestorOnly mode where processing is synchronous.
+		// Router and RouterIngestor modes forward data asynchronously, which is unsafe with pooled data.
+		writeableStoreReg := store.RegisterWritableStoreServer(rw)
+		if receiveMode == receive.IngestorOnly {
+			writeableStoreReg = store.RegisterWritableStoreServerPooled(webHandler)
+		}
+
 		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
-			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
+			grpcserver.WithServer(writeableStoreReg),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
 			grpcserver.WithServer(status.RegisterStatusServer(statusSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),

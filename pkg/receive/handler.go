@@ -1137,6 +1137,11 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	}
 }
 
+// RemoteWritePooled implements storepb.WriteableStoreServerPooled.
+func (h *Handler) RemoteWritePooled(ctx context.Context, req *storepb.PooledWriteRequest) (*storepb.WriteResponse, error) {
+	return h.RemoteWrite(ctx, req.WriteRequest)
+}
+
 // relabel relabels the time series labels in the remote write request.
 func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 	if len(h.options.RelabelConfigs) == 0 {
