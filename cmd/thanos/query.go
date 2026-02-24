@@ -639,6 +639,7 @@ func runQuery(
 			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithOnListening(statusProber.Ready),
 		)
 
 		g.Add(func() error {
@@ -658,7 +659,6 @@ func runQuery(
 				level.Info(logger).Log("msg", "initial endpoint discovery completed, marking gRPC as ready")
 			}
 
-			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

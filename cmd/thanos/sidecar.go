@@ -266,7 +266,6 @@ func runSidecar(
 				return errors.New("no external labels configured on Prometheus server, uniquely identifying external labels must be configured; see https://thanos.io/tip/thanos/storage.md#external-labels for details.")
 			}
 			promUp.Set(1)
-			statusProber.Ready()
 
 			close(readyToStartGRPC)
 
@@ -360,6 +359,7 @@ func runSidecar(
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithOnListening(statusProber.Ready),
 		)
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -370,7 +370,6 @@ func runSidecar(
 			case <-readyToStartGRPC:
 			}
 
-			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
 			cancel()

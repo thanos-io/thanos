@@ -558,11 +558,11 @@ func runStore(
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
+			grpcserver.WithOnListening(statusProber.Ready),
 		)
 
 		g.Add(func() error {
 			<-bucketStoreReady
-			statusProber.Ready()
 			return s.ListenAndServe()
 		}, func(err error) {
 			statusProber.NotReady(err)

@@ -36,12 +36,10 @@ func (p *GRPCProbe) NotReady(err error) {
 	p.h.SetServingStatus("", grpc_health.HealthCheckResponse_NOT_SERVING)
 }
 
-// Healthy sets components status to healthy.
-func (p *GRPCProbe) Healthy() {
-	p.h.Resume()
-}
+// Healthy is a no-op for gRPC. The gRPC health check protocol only has
+// SERVING/NOT_SERVING and is controlled solely by Ready/NotReady.
+// Liveness is a Kubernetes HTTP-level concern.
+func (p *GRPCProbe) Healthy() {}
 
-// NotHealthy sets components status to not healthy with given error as a cause.
-func (p *GRPCProbe) NotHealthy(err error) {
-	p.h.Shutdown()
-}
+// NotHealthy is a no-op for gRPC. See Healthy().
+func (p *GRPCProbe) NotHealthy(err error) {}

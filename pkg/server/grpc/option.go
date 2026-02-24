@@ -20,7 +20,8 @@ type options struct {
 
 	tlsConfig *tls.Config
 
-	grpcOpts []grpc.ServerOption
+	grpcOpts    []grpc.ServerOption
+	onListening func()
 }
 
 // Option overrides behavior of Server.
@@ -79,6 +80,14 @@ func WithNetwork(s string) Option {
 func WithTLSConfig(cfg *tls.Config) Option {
 	return optionFunc(func(o *options) {
 		o.tlsConfig = cfg
+	})
+}
+
+// WithOnListening sets a callback that is invoked after the gRPC server
+// successfully calls net.Listen but before it starts serving requests.
+func WithOnListening(f func()) Option {
+	return optionFunc(func(o *options) {
+		o.onListening = f
 	})
 }
 

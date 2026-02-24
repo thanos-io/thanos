@@ -776,10 +776,10 @@ func runRule(
 	options = append(options, grpcserver.WithServer(
 		info.RegisterInfoServer(info.NewInfoServer(component.Rule.String(), infoOptions...)),
 	))
+	options = append(options, grpcserver.WithOnListening(statusProber.Ready))
 	s := grpcserver.New(logger, reg, tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, options...)
 
 	g.Add(func() error {
-		statusProber.Ready()
 		return s.ListenAndServe()
 	}, func(err error) {
 		statusProber.NotReady(err)

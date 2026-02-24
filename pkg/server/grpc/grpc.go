@@ -156,6 +156,9 @@ func (s *Server) ListenAndServe() error {
 	s.listener = l
 
 	level.Info(s.logger).Log("msg", "listening for serving gRPC", "address", s.opts.listen)
+	if s.opts.onListening != nil {
+		s.opts.onListening()
+	}
 	return errors.Wrap(s.srv.Serve(s.listener), "serve gRPC")
 }
 
