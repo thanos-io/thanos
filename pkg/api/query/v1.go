@@ -62,6 +62,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/status/statuspb"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/targets/targetspb"
@@ -244,7 +245,7 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 	r.Get("/stores", instr("stores", qapi.stores))
 
 	r.Get("/alerts", instr("alerts", NewAlertsHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
-	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
+	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy)))
 
 	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
 
@@ -1411,7 +1412,7 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
-func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
+func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool, tenantHeader, defaultTenant, tenantCertField string, enforceTenancy bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
@@ -1425,7 +1426,16 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			groups   *rulespb.RuleGroups
 			warnings annotations.Annotations
 			err      error
+			tenant   string
 		)
+
+		// Extract tenant from request if tenancy enforcement is enabled
+		if enforceTenancy {
+			tenant, err = tenancy.GetTenantFromHTTP(r, tenantHeader, defaultTenant, tenantCertField)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+			}
+		}
 
 		typeParam := r.URL.Query().Get("type")
 		typ, ok := rulespb.RulesRequest_Type_value[strings.ToUpper(typeParam)]
@@ -1455,6 +1465,19 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Errorf("error retrieving rules: %v", err)}, func() {}
 		}
+
+		// Filter rules by tenant if tenancy is enforced
+		if enforceTenancy && tenant != "" && groups != nil {
+			filteredGroups := &rulespb.RuleGroups{}
+			for _, group := range groups.Groups {
+				// Check if this rule group has a tenant label matching the request
+				if groupBelongsToTenant(group, tenant) {
+					filteredGroups.Groups = append(filteredGroups.Groups, group)
+				}
+			}
+			groups = filteredGroups
+		}
+
 		return groups, warnings.AsErrors(), nil, func() {}
 	}
 }
@@ -1729,4 +1752,67 @@ func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
 	}
 
 	return statuspb.ConvertToPrometheusTSDBStat(stats)
+}
+
+// groupBelongsToTenant checks if a rule group belongs to the specified tenant.
+// It checks for the presence of a tenant_id label in any of the rules within the group.
+func groupBelongsToTenant(group *rulespb.RuleGroup, tenant string) bool {
+	if group == nil || group.Rules == nil {
+		return false
+	}
+
+	// Check if any rule in the group has a tenant_id label matching the tenant
+	for _, rule := range group.Rules {
+		if rule == nil {
+			continue
+		}
+
+		// Check both Alert and RecordingRule types
+		var labels *labelpb.ZLabelSet
+		if alert := rule.GetAlert(); alert != nil {
+			labels = &alert.Labels
+		} else if recording := rule.GetRecording(); recording != nil {
+			labels = &recording.Labels
+		}
+
+		if labels != nil {
+			for _, label := range labels.Labels {
+				if label.Name == tenancy.DefaultTenantLabel && label.Value == tenant {
+					return true
+				}
+			}
+		}
+	}
+
+	// If no tenant label is found in any rule, include it in default tenant results
+	if tenant == tenancy.DefaultTenant {
+		hasTenantLabel := false
+		for _, rule := range group.Rules {
+			if rule == nil {
+				continue
+			}
+
+			var labels *labelpb.ZLabelSet
+			if alert := rule.GetAlert(); alert != nil {
+				labels = &alert.Labels
+			} else if recording := rule.GetRecording(); recording != nil {
+				labels = &recording.Labels
+			}
+
+			if labels != nil {
+				for _, label := range labels.Labels {
+					if label.Name == tenancy.DefaultTenantLabel {
+						hasTenantLabel = true
+						break
+					}
+				}
+				if hasTenantLabel {
+					break
+				}
+			}
+		}
+		return !hasTenantLabel
+	}
+
+	return false
 }
