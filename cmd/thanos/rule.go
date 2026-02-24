@@ -76,6 +76,7 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -768,9 +769,44 @@ func runRule(
 				}
 				return nil, errors.New("Not ready")
 			}),
+			info.WithStatusInfoFunc(),
 		)
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, tsdbStore), reg, conf.storeRateLimits)
 		options = append(options, grpcserver.WithServer(store.RegisterStoreServer(storeServer, logger)))
+
+		// Add Status server for TSDB statistics
+		statusSrv := status.NewServer(
+			component.Rule.String(),
+			status.WithTSDBStatisticsGetter(
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
+					if !httpProbe.IsReady() {
+						return nil, errors.New("not ready")
+					}
+
+					// Check if external labels match the provided matchers.
+					extLabels := conf.lset
+					if len(matchers) > 0 {
+						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+						if err != nil {
+							return nil, errors.Wrap(err, "failed to convert matchers")
+						}
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								// External labels don't match, return empty result.
+								return nil, nil
+							}
+						}
+					}
+
+					stats := tsdbDB.Head().Stats(labels.MetricName, limit)
+					result := map[string]tsdb.Stats{
+						"": *stats,
+					}
+					return result, nil
+				}),
+			),
+		)
+		options = append(options, grpcserver.WithServer(status.RegisterStatusServer(statusSrv)))
 	}
 
 	options = append(options, grpcserver.WithServer(
