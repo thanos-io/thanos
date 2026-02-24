@@ -348,7 +348,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 
 	it.useA = ta <= tb
 
-	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
+	// For the series we didn't pick, add a penalty equal to the delta of the last two
 	// samples to the next seek against it.
 	// This ensures that we don't pick a sample too close, which would increase the overall
 	// sample frequency. It also guards against clock drift and inaccuracies during
@@ -359,7 +359,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 
 	if it.useA {
 		if it.lastT != math.MinInt64 {
-			it.penB = 2 * (ta - it.lastT)
+			it.penB = ta - it.lastT
 		} else {
 			it.penB = initialPenalty
 		}
@@ -370,7 +370,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		return it.aval
 	}
 	if it.lastT != math.MinInt64 {
-		it.penA = 2 * (tb - it.lastT)
+		it.penA = tb - it.lastT
 	} else {
 		it.penA = initialPenalty
 	}
