@@ -264,6 +264,7 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Added
 
+- [#7359](https://github.com/thanos-io/thanos/pull/7359) Sidecar: Add HTTP flush endpoint for uploading what's in the head block
 - [#7317](https://github.com/thanos-io/thanos/pull/7317) Tracing: allow specifying resource attributes for the OTLP configuration.
 - [#7367](https://github.com/thanos-io/thanos/pull/7367) Store Gateway: log request ID in request logs.
 - [#7361](https://github.com/thanos-io/thanos/pull/7361) Query: *breaking :warning:* pass query stats from remote execution from server to client. We changed the protobuf of the QueryAPI, if you use `query.mode=distributed` you need to update your client (upper level Queriers) first, before updating leaf Queriers (servers).

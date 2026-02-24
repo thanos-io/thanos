@@ -421,6 +421,13 @@ func (s *Shipper) Sync(ctx context.Context) (uploaded int, err error) {
 	return uploaded, nil
 }
 
+func (s *Shipper) SetDirectoryToSync(dir string) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	s.dir = dir
+}
+
 func (s *Shipper) UploadedBlocks() map[ulid.ULID]struct{} {
 	meta, err := ReadMetaFile(s.metadataFilePath)
 	if err != nil {
