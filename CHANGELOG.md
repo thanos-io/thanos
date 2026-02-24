@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
 
 ### Fixed
+- [#8684](https://github.com/thanos-io/thanos/pull/8684): Fix: EncodeAggrChunk created corrupt block if the last chunk is empty
 
 ### Added
 
