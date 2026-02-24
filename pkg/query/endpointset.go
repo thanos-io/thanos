@@ -530,6 +530,8 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 				addr:        er.addr,
 				metadata:    er.metadata,
 				status:      er.status,
+				mtx:         er.mtx,
+				logger:      er.logger,
 			})
 			er.mtx.RUnlock()
 		}
@@ -649,7 +651,7 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 type endpointRef struct {
 	storepb.StoreClient
 
-	mtx      sync.RWMutex
+	mtx      *sync.RWMutex
 	cc       *grpc.ClientConn
 	addr     string
 	isStrict bool
@@ -675,6 +677,7 @@ func (e *EndpointSet) newEndpointRef(spec *GRPCEndpointSpec) (*endpointRef, erro
 		addr:     spec.Addr(),
 		isStrict: spec.isStrictStatic,
 		cc:       conn,
+		mtx:      &sync.RWMutex{},
 	}, nil
 }
 

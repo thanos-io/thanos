@@ -31,6 +31,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
 - [#8618](https://github.com/thanos-io/thanos/pull/8618): Query-Frontend: ensure slow query and stats logging on request failures
 - [#8480](https://github.com/thanos-io/thanos/pull/8480): Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
+- [#8667](https://github.com/thanos-io/thanos/pull/8667): Query: fix data race in GetStoreClients by making endpointRef mutex a pointer
 
 ### Added
 

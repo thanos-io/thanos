@@ -1565,6 +1565,7 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 			metadata: &endpointMetadata{
 				&infopb.InfoResponse{},
 			},
+			mtx: &sync.RWMutex{},
 		}
 
 		mockEndpointRef.update(time.Now, mockEndpointRef.metadata, tc.InputError)
@@ -1583,6 +1584,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
+		mtx: &sync.RWMutex{},
 	}
 
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, errors.New("test err"))
@@ -1664,6 +1666,7 @@ func TestDeadlockLocking(t *testing.T) {
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
+		mtx: &sync.RWMutex{},
 	}
 
 	g := &errgroup.Group{}
