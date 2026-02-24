@@ -76,9 +76,11 @@ func mergeStatistics(a, b []Statistic, mergeFunc func(uint64, uint64) uint64) []
 		merged[stat.Name] = v
 	}
 
-	return slices.SortedStableFunc(maps.Values(merged), func(a, b Statistic) int {
-		// Descending sort.
-		return cmp.Compare(b.Value, a.Value)
+	return slices.SortedFunc(maps.Values(merged), func(a, b Statistic) int {
+		if c := cmp.Compare(b.Value, a.Value); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Name, b.Name)
 	})
 }
 
