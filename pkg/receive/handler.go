@@ -213,6 +213,10 @@ type Handler struct {
 	writeTimeseriesError *prometheus.HistogramVec
 	writeE2eLatency      *prometheus.HistogramVec
 
+	writeRequestsTotal    *prometheus.CounterVec
+	writeRejectedTotal    *prometheus.CounterVec
+	tenantAttributedTotal *prometheus.CounterVec
+
 	Limiter *Limiter
 }
 
@@ -317,6 +321,30 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Help:      "The end-to-end latency of write requests.",
 				Buckets:   []float64{1, 5, 10, 20, 30, 40, 50, 60, 90, 120, 300, 600, 900, 1200, 1800, 3600},
 			}, []string{"code", "tenant", "rollup"},
+		),
+		writeRequestsTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_requests_total",
+				Help:      "The total number of write requests by tenant and response code.",
+			}, []string{"code", "tenant"},
+		),
+		writeRejectedTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "write_rejected_total",
+				Help:      "The total number of write requests rejected by reason and tenant.",
+			}, []string{"reason", "tenant"},
+		),
+		tenantAttributedTotal: promauto.With(registerer).NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: "thanos",
+				Subsystem: "receive",
+				Name:      "tenant_attributed_total",
+				Help:      "The total number of time series attributed to each tenant by source.",
+			}, []string{"tenant", "source"},
 		),
 	}
 
@@ -546,17 +574,22 @@ func (h *Handler) tenantKeyForDistribution(tenantHTTP string, ts prompb.TimeSeri
 			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
 			attributedTenant := h.options.TenantAttributor.GetTenantFromLabels(lbls)
 			h.options.TenantAttributor.RecordVerification(attributedTenant, tenantHTTP)
+			// Track what tenant would be attributed (for monitoring attribution rules)
+			h.tenantAttributedTotal.WithLabelValues(attributedTenant, "label_rules").Inc()
 			return tenantHTTP
 		}
 
 		// Non-verify mode: if HTTP header was provided (tenant != default), use it.
 		if tenantHTTP != h.options.DefaultTenantID {
+			h.tenantAttributedTotal.WithLabelValues(tenantHTTP, "http_header").Inc()
 			return tenantHTTP
 		}
 
 		// No HTTP header provided: do attribution from labels.
 		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
-		return h.options.TenantAttributor.GetTenantFromLabels(lbls)
+		attributedTenant := h.options.TenantAttributor.GetTenantFromLabels(lbls)
+		h.tenantAttributedTotal.WithLabelValues(attributedTenant, "label_rules").Inc()
+		return attributedTenant
 	}
 
 	// Legacy behavior: use splitTenantLabelName if configured.
@@ -674,6 +707,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	defer writeGate.Done()
 	if err != nil {
 		level.Error(tLogger).Log("err", err, "msg", "internal server error")
+		h.writeRejectedTotal.WithLabelValues("write_gate", tenantHTTP).Inc()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -685,6 +719,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
+		h.writeRejectedTotal.WithLabelValues("head_series_limit", tenantHTTP).Inc()
 		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 		return
 	}
@@ -703,6 +738,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.ContentLength >= 0 {
 		if !requestLimiter.AllowSizeBytes(tenantHTTP, r.ContentLength) {
+			h.writeRejectedTotal.WithLabelValues("request_size", tenantHTTP).Inc()
 			http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -722,6 +758,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	_, err = io.CopyBuffer(lw, r.Body, *copyBuf)
 	if err != nil {
 		if err == errRequestTooLarge {
+			h.writeRejectedTotal.WithLabelValues("request_size", tenantHTTP).Inc()
 			http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
 			return
 		}
@@ -745,6 +782,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !requestLimiter.AllowSizeBytes(tenantHTTP, int64(len(*reqBuf))) {
+		h.writeRejectedTotal.WithLabelValues("request_size", tenantHTTP).Inc()
 		http.Error(w, errRequestTooLarge.Error(), http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -786,6 +824,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
+		h.writeRejectedTotal.WithLabelValues("series_limit", tenantHTTP).Inc()
 		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -795,6 +834,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		totalSamples += len(timeseries.Samples)
 	}
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
+		h.writeRejectedTotal.WithLabelValues("samples_limit", tenantHTTP).Inc()
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -836,6 +876,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, err.Error(), responseStatusCode)
 	}
+
+	// Track write requests by tenant and response code
+	h.writeRequestsTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenantHTTP).Inc()
 
 	for tenant, stats := range tenantStats {
 		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
