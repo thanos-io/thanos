@@ -3575,7 +3575,7 @@ func TestToPostingGroup(t *testing.T) {
 	}
 }
 
-// TestExpandedPostings is a test whether there is a race between multiple ExpandPostings() calls.
+// TestExpandedPostingsRace is a test whether there is a race between multiple ExpandPostings() calls.
 func TestExpandedPostingsRace(t *testing.T) {
 	if testing.
 		Short() {
