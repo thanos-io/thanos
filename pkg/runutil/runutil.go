@@ -12,7 +12,10 @@
 //	err := runutil.Repeat(10*time.Second, stopc, func() error {
 //		// ...
 //	})
-//
+//err := runutil.RepeatWithJitter(30*time.Second, ctx, 0.05, func() error {
+// Your code here
+//})
+
 // Retry starts executing closure function f until no error is returned from f:
 //
 //	err := runutil.Retry(10*time.Second, stopc, func() error {
@@ -50,8 +53,10 @@
 package runutil
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -95,6 +100,32 @@ func Repeat(interval time.Duration, stopc <-chan struct{}, f func() error) error
 		case <-stopc:
 			return nil
 		case <-tick.C:
+		}
+	}
+}
+
+// RepeatWithJitter executes f with a random jitter added to the interval between each execution.
+// It continues until ctx is done or f returns an error.
+// The jitter factor should be between 0 and 1, where 0 means no jitter and 1 means the interval can vary from 0 to 2 times the original interval.
+func RepeatWithJitter(ctx context.Context, interval time.Duration, jitterFactor float64, f func() error) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			if err := f(); err != nil {
+				return err
+			}
+
+			jitter := time.Duration(float64(interval) * jitterFactor)
+
+			jitteredInterval := interval + time.Duration(rand.Float64()*float64(jitter))
+
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(jitteredInterval):
+			}
 		}
 	}
 }
