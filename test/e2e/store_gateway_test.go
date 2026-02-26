@@ -620,6 +620,41 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 		)
 		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(7+2), "thanos_bucket_store_series_blocks_queried"))
 	})
+	t.Run("upload block id6 with utf8 labels", func(t *testing.T) {
+		series := []labels.Labels{labels.FromStrings("a", "1", "🚀", "🔥")}
+		extLset := labels.FromStrings("ext1", "value1", "replica", "1")
+		id6, err := e2eutil.CreateBlockWithBlockDelay(ctx, dir, series, 10, timestamp.FromTime(now), timestamp.FromTime(now.Add(2*time.Hour)), 30*time.Minute, extLset, 0, metadata.NoneFunc, nil)
+		testutil.Ok(t, err)
+		testutil.Ok(t, objstore.UploadDir(ctx, l, bkt, path.Join(dir, id6.String()), id6.String()))
+
+		// Wait for store to sync blocks.
+		// thanos_blocks_meta_synced: 2x loadedMeta 1x labelExcludedMeta 1x TooFreshMeta 1x noMeta.
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(5), "thanos_blocks_meta_synced"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_blocks_meta_sync_failures_total"))
+
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_blocks_loaded"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(2), "thanos_bucket_store_block_drops_total"))
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(0), "thanos_bucket_store_block_load_failures_total"))
+
+		queryAndAssertSeries(t, ctx, q.Endpoint("http"), func() string { return testQuery },
+			time.Now, promclient.QueryOptions{
+				Deduplicate: true,
+			},
+			[]model.Metric{
+				{
+					"a":    "1",
+					"b":    "2",
+					"ext1": "value1",
+				},
+				{
+					"a":    "1",
+					"🚀":    "🔥",
+					"ext1": "value1",
+				},
+			},
+		)
+		testutil.Ok(t, s1.WaitSumMetrics(e2emon.Equals(9+2), "thanos_bucket_store_series_blocks_queried"))
+	})
 }
 
 func TestStoreGatewayMemcachedCache(t *testing.T) {
