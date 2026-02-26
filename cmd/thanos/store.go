@@ -182,7 +182,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("9999-12-31T23:59:59Z").SetValue(&sc.filterConf.MaxTime)
 
 	cmd.Flag("debug.advertise-compatibility-label", "If true, Store Gateway in addition to other labels, will advertise special \"@thanos_compatibility_store_type=store\" label set. This makes store Gateway compatible with Querier before 0.8.0").
-		Hidden().Default("true").BoolVar(&sc.advertiseCompatibilityLabel)
+		Hidden().Default("false").BoolVar(&sc.advertiseCompatibilityLabel)
 
 	sc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
 
