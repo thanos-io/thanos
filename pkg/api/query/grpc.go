@@ -99,9 +99,16 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		query.NoopSeriesStatsReporter,
 	)
 
+	var ts time.Time
+	if request.TimeSeconds == 0 {
+		ts = g.now()
+	} else {
+		ts = time.Unix(request.TimeSeconds, 0)
+	}
 	remoteEndpoints := g.remoteEndpointsCreate(
 		replicaLabels,
 		request.EnablePartialResponse,
+		ts, ts,
 	)
 
 	var qry promql.Query
@@ -222,9 +229,13 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		query.NoopSeriesStatsReporter,
 	)
 
+	start := time.Unix(request.StartTimeSeconds, 0)
+	end := time.Unix(request.EndTimeSeconds, 0)
 	remoteEndpoints := g.remoteEndpointsCreate(
 		replicaLabels,
 		request.EnablePartialResponse,
+		start,
+		end,
 	)
 
 	var qry promql.Query
