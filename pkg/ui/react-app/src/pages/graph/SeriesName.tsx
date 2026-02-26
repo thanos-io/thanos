@@ -27,9 +27,13 @@ const SeriesName: FC<SeriesNameProps> = ({ labels, format }) => {
       }
     }
 
+    if (labels === null) {
+      return <>scalar</>;
+    }
+
     return (
       <div>
-        <span className="legend-metric-name">{labels!.__name__ || ''}</span>
+        <span className="legend-metric-name">{labels.__name__ || ''}</span>
         <span className="legend-label-brace">{'{'}</span>
         {labelNodes}
         <span className="legend-label-brace">{'}'}</span>
@@ -37,16 +41,12 @@ const SeriesName: FC<SeriesNameProps> = ({ labels, format }) => {
     );
   };
 
-  if (labels === null) {
-    return <>scalar</>;
-  }
-
   if (format) {
     return renderFormatted();
   }
   // Return a simple text node. This is much faster to scroll through
   // for longer lists (hundreds of items).
-  return <>{metricToSeriesName(labels!)}</>;
+  return <>{labels ? metricToSeriesName(labels) : null}</>;
 };
 
 export default SeriesName;

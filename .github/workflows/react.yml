@@ -32,5 +32,5 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - run: CI=false make check-react-app
+      - run: make check-react-app
       - run: make react-app-test

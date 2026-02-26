@@ -152,7 +152,7 @@ export const getFilteredBlockPools = (
   filteredBlocks: Block[]
 ): { [source: string]: BlocksPool } => {
   const newblockPools: { [source: string]: BlocksPool } = {};
-  Object.keys(blockPools).map((key: string) => {
+  Object.keys(blockPools).forEach((key: string) => {
     const poolArrayIndex = blockPools[key];
     const poolArray = poolArrayIndex[Object.keys(poolArrayIndex)[0]];
     for (let i = 0; i < filteredBlocks.length; i++) {
