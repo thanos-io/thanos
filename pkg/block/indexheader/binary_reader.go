@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -179,7 +180,10 @@ type chunkedIndexReader struct {
 }
 
 func newChunkedIndexReader(ctx context.Context, bkt objstore.BucketReader, id ulid.ULID) (*chunkedIndexReader, int, error) {
-	indexFilepath := filepath.Join(id.String(), block.IndexFilename)
+	// Use path.Join instead of filepath.Join for object storage compatibility.
+	// Object storage systems (S3, GCS, MinIO) require forward slashes (/) in
+	// object keys, but filepath.Join uses backslashes (\) on Windows.
+	indexFilepath := path.Join(id.String(), block.IndexFilename)
 	attrs, err := bkt.Attributes(ctx, indexFilepath)
 	if err != nil {
 		return nil, 0, errors.Wrapf(err, "get object attributes of %s", indexFilepath)

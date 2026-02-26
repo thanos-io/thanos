@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"path/filepath"
+	"path"
 
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
@@ -328,9 +328,12 @@ PlanLoop:
 			}
 			if indexSize <= 0 {
 				// Get size from bkt instead.
-				attr, err := t.bkt.Attributes(ctx, filepath.Join(p.ULID.String(), block.IndexFilename))
+				// Use path.Join for object storage paths to ensure Windows compatibility.
+				// Object storage systems require forward slashes regardless of OS.
+				indexPath := path.Join(p.ULID.String(), block.IndexFilename)
+				attr, err := t.bkt.Attributes(ctx, indexPath)
 				if err != nil {
-					return nil, errors.Wrapf(err, "get attr of %v", filepath.Join(p.ULID.String(), block.IndexFilename))
+					return nil, errors.Wrapf(err, "get attr of %v", indexPath)
 				}
 				indexSize = attr.Size
 			}
