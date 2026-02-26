@@ -396,6 +396,16 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		), resp.seriesSetStats, nil
 	}
 
+	if q.deduplicationFunc == dedup.AlgorithmChain {
+		return NewChainedPromSeriesSet(
+			newStoreSeriesSet(resp.seriesSet),
+			q.mint,
+			q.maxt,
+			aggrs,
+			warns,
+		), resp.seriesSetStats, nil
+	}
+
 	// TODO(bwplotka): Move to deduplication on chunk level inside promSeriesSet, similar to what we have in dedup.NewDedupChunkMerger().
 	// This however require big refactor, caring about correct AggrChunk to iterator conversion and counter reset apply.
 	// For now we apply simple logic that splits potential overlapping chunks into separate replica series, so we can split the work.
