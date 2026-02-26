@@ -63,6 +63,9 @@ type RedisClientConfig struct {
 	// Addr specifies the addresses of redis server.
 	Addr string `yaml:"addr"`
 
+	// Prefix used for all redis keys (optional).
+	Prefix string `yaml:"prefix"`
+
 	// Use the specified Username to authenticate the current connection
 	// with one of the connections defined in the ACL list when connecting
 	// to a Redis 6.0 instance, or greater, that is using the Redis ACL system.
@@ -256,6 +259,7 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 
 // SetAsync implement RemoteCacheClient.
 func (c *RedisClient) SetAsync(key string, value []byte, ttl time.Duration) error {
+	key = c.addPrefix(key)
 	return c.p.EnqueueAsync(func() {
 		start := time.Now()
 		err := c.setAsyncCircuitBreaker.Execute(func() error {
@@ -278,7 +282,7 @@ func (c *RedisClient) SetMulti(data map[string][]byte, ttl time.Duration) {
 	sets := make(rueidis.Commands, 0, len(data))
 	ittl := int64(ttl.Seconds())
 	for k, v := range data {
-		sets = append(sets, c.client.B().Setex().Key(k).Seconds(ittl).Value(rueidis.BinaryString(v)).Build())
+		sets = append(sets, c.client.B().Setex().Key(c.addPrefix(k)).Seconds(ittl).Value(rueidis.BinaryString(v)).Build())
 	}
 	for _, resp := range c.client.DoMulti(context.Background(), sets...) {
 		if err := resp.Error(); err != nil {
@@ -297,6 +301,14 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	start := time.Now()
 	results := make(map[string][]byte, len(keys))
 
+	prefixedKeys := make([]string, len(keys))
+	prefixToOriginal := make(map[string]string, len(keys))
+	for i, k := range keys {
+		pk := c.addPrefix(k)
+		prefixedKeys[i] = pk
+		prefixToOriginal[pk] = k
+	}
+
 	if c.config.ReadTimeout > 0 {
 		timeoutCtx, cancel := context.WithTimeout(ctx, c.config.ReadTimeout)
 		defer cancel()
@@ -304,13 +316,14 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 	}
 
 	// NOTE(GiedriusS): TTL is the default one in case PTTL fails. 8 hours should be good enough IMHO.
-	resps, err := rueidis.MGetCache(c.client, ctx, 8*time.Hour, keys)
+	resps, err := rueidis.MGetCache(c.client, ctx, 8*time.Hour, prefixedKeys)
 	if err != nil {
 		level.Warn(c.logger).Log("msg", "failed to mget items from redis", "err", err, "items", len(resps))
 	}
 	for key, resp := range resps {
 		if val, err := resp.ToString(); err == nil {
-			results[key] = stringToBytes(val)
+			origKey := prefixToOriginal[key]
+			results[origKey] = stringToBytes(val)
 		}
 	}
 	c.durationGetMulti.Observe(time.Since(start).Seconds())
@@ -321,6 +334,13 @@ func (c *RedisClient) GetMulti(ctx context.Context, keys []string) map[string][]
 func (c *RedisClient) Stop() {
 	c.p.Stop()
 	c.client.Close()
+}
+
+func (c *RedisClient) addPrefix(key string) string {
+	if c.config.Prefix == "" {
+		return key
+	}
+	return c.config.Prefix + key
 }
 
 // stringToBytes converts string to byte slice (copied from vendor/github.com/go-redis/redis/v8/internal/util/unsafe.go).

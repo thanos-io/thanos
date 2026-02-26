@@ -114,6 +114,15 @@ func TestRedisClient(t *testing.T) {
 				return cfg
 			},
 		},
+		{
+			name: "WithPrefix",
+			redisConfig: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = s.Addr()
+				cfg.Prefix = "test-prefix:"
+				return cfg
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
