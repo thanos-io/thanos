@@ -6,6 +6,7 @@ package storecache
 import (
 	"context"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/go-kit/log"
@@ -292,7 +293,7 @@ func copyToKey(l labels.Label) CacheKeyPostings {
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
+func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string, _ time.Duration) {
 	c.commonMetrics.DataSizeBytes.WithLabelValues(CacheTypePostings, tenant).Observe(float64(len(v)))
 	c.set(CacheTypePostings, CacheKey{Block: blockID.String(), Key: copyToKey(l)}, v)
 }
@@ -332,7 +333,7 @@ func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID uli
 }
 
 // StoreExpandedPostings stores expanded postings for a set of label matchers.
-func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string) {
+func (c *InMemoryIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string, _ time.Duration) {
 	c.commonMetrics.DataSizeBytes.WithLabelValues(CacheTypeExpandedPostings, tenant).Observe(float64(len(v)))
 	c.set(CacheTypeExpandedPostings, CacheKey{Block: blockID.String(), Key: CacheKeyExpandedPostings(LabelMatchersToString(matchers))}, v)
 }
@@ -355,7 +356,7 @@ func (c *InMemoryIndexCache) FetchExpandedPostings(ctx context.Context, blockID 
 
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
+func (c *InMemoryIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string, _ time.Duration) {
 	c.commonMetrics.DataSizeBytes.WithLabelValues(CacheTypeSeries, tenant).Observe(float64(len(v)))
 	c.set(CacheTypeSeries, CacheKey{blockID.String(), CacheKeySeries(id), ""}, v)
 }
