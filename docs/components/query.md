@@ -291,6 +291,44 @@ In case of nested Thanos Query components, it's important to note that tenancy e
 
 Further, note that there are no authentication mechanisms in Thanos, so anyone can set an arbitrary tenant in the HTTP header. It is recommended to use a proxy in front of the querier in case an authentication mechanism is needed. The Query UI also includes an option to set an arbitrary tenant, and should therefore not be exposed to end-users if users should not be able to see each others data.
 
+### Per-Endpoint TLS Configuration
+
+TLS may be overridden on a per-endpoint basis when configuring endpoints using file-based service discovery. This makes it possible to use TLS for some endpoints but not others, to use different TLS trust domains for different endpoints, and so on.
+
+Each entry in the per-endpoint `client_config` overrides the corresponding settings from the global configuration provided by [CLI options](#flags). To explicitly unset a global setting for one endpoint, set it to the empty string in the per-endpoint configuration. To inherit it, omit the setting key entirely. Each setting is independent, so it is possible to (e.g.) override the per-endpoint client cert and key while inheriting the globally-configured CA cert.
+
+Example file service-discovery config file in YAML, showing the corresponding [global flag](#flags) for each per-endpoint option as a comment:
+
+```yaml
+endpoints:
+  - address: "<endpoint-address>"
+    client_config:
+      tls_config:
+        enabled: <bool>              # --[no-]grpc-client-tls-secure
+        insecure_skip_verify: <bool> # --[no-]grpc-client-tls-skip-verify
+        cert_file: "<path>"          # --grpc-client-tls-cert
+        key_file: "<path>"           # --grpc-client-tls-key
+        ca_file: "<path>"            # --grpc-client-tls-ca
+        min_version: "<str>"         # --grpc-server-tls-min-version
+      server_name: "<str>"           # --grpc-client-server-name
+      compression: "<str>"           # --grpc-compression "none" or "snappy"
+```
+
+#### Note
+
+If you provide TLS-specific fields (`cert_file`, `key_file`, `ca_file`, or `insecure_skip_verify`) without explicitly setting `enabled`, Thanos will **automatically infer `enabled: true`**. To disable TLS, set `enabled: false`. If you provide no TLS configuration at all (no `client_config`), the endpoint will inherit all settings from the global flags.
+
+There is no support for per-endpoint TLS overrides for endpoints supplied by DNS service discovery or static CLI options.
+
+See also https://pkg.go.dev/crypto/tls#Config for lower-level field details.
+
+In order to make use of global TLS config, don't provide any `client_config`:
+
+```yaml
+endpoints:
+  - address: "<endpoint-address>"
+```
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"
@@ -368,6 +406,11 @@ Flags:
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
+      --grpc-client-tls-min-version="1.3"
+                                 TLS supported minimum version for gRPC client.
+                                 If no version is specified, it'll default to
+                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
+                                 "1.3"]
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.

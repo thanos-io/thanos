@@ -113,7 +113,7 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 }
 
 // NewClientConfig provides new client TLS configuration.
-func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool) (*tls.Config, error) {
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool, minTLSVersion string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
 		caPEM, err := os.ReadFile(filepath.Clean(caCert))
@@ -135,8 +135,21 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		level.Info(logger).Log("msg", "TLS client using system certificate pool")
 	}
 
+	var (
+		mtlsVersion uint16
+		err         error
+	)
+
+	if minTLSVersion != "" {
+		mtlsVersion, err = getTlsVersion(minTLSVersion)
+		if err != nil {
+			return nil, err
+		}
+		level.Info(logger).Log("msg", fmt.Sprintf("setting minimum TLS version to %s", minTLSVersion))
+	}
 	tlsCfg := &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: mtlsVersion,
 	}
 
 	if serverName != "" {
