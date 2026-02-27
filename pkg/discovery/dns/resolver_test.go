@@ -20,6 +20,11 @@ type mockHostnameResolver struct {
 	resultIPs  map[string][]net.IPAddr
 	resultSRVs map[string][]*net.SRV
 	err        error
+
+	// Per-network results for LookupIPAddrByNetwork. Key format: "network:host".
+	resultByNetwork map[string][]net.IPAddr
+	errByNetwork    map[string]error
+	isNotFound      func(error) bool
 }
 
 func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
@@ -29,7 +34,20 @@ func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]
 	return m.resultIPs[host], nil
 }
 
-func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error) {
+func (m mockHostnameResolver) LookupIPAddrByNetwork(_ context.Context, network, host string) ([]net.IPAddr, error) {
+	key := network + ":" + host
+	if m.errByNetwork != nil {
+		if err, ok := m.errByNetwork[key]; ok {
+			return nil, err
+		}
+	}
+	if m.resultByNetwork != nil {
+		return m.resultByNetwork[key], nil
+	}
+	return nil, nil
+}
+
+func (m mockHostnameResolver) LookupSRV(_ context.Context, _, _, name string) (cname string, addrs []*net.SRV, err error) {
 	if m.err != nil {
 		return "", nil, m.err
 	}
@@ -37,6 +55,9 @@ func (m mockHostnameResolver) LookupSRV(ctx context.Context, service, proto, nam
 }
 
 func (m mockHostnameResolver) IsNotFound(err error) bool {
+	if m.isNotFound != nil {
+		return m.isNotFound(err)
+	}
 	return false
 }
 
@@ -202,4 +223,157 @@ func testDnsSd(t *testing.T, tt DNSSDTest) {
 	}
 	sort.Strings(result)
 	testutil.Equals(t, tt.expectedResult, result)
+}
+
+func TestDnsSD_ResolveDualStack(t *testing.T) {
+	ipv6 := net.ParseIP("2001:db8::1")
+	ipv4 := net.ParseIP("192.168.1.1")
+	host := "test.mycompany.com"
+
+	tests := []struct {
+		name           string
+		addr           string
+		resolver       *mockHostnameResolver
+		expectedResult []string
+		expectedErr    error
+	}{
+		{
+			name: "both families resolve",
+			addr: host + ":8080",
+			resolver: &mockHostnameResolver{
+				resultByNetwork: map[string][]net.IPAddr{
+					"ip6:" + host: {{IP: ipv6}},
+					"ip4:" + host: {{IP: ipv4}},
+				},
+			},
+			expectedResult: []string{"[2001:db8::1]:8080", "192.168.1.1:8080"},
+		},
+		{
+			name: "IPv6 only",
+			addr: host + ":8080",
+			resolver: &mockHostnameResolver{
+				resultByNetwork: map[string][]net.IPAddr{
+					"ip6:" + host: {{IP: ipv6}},
+				},
+			},
+			expectedResult: []string{"[2001:db8::1]:8080"},
+		},
+		{
+			name: "IPv4 only",
+			addr: host + ":8080",
+			resolver: &mockHostnameResolver{
+				resultByNetwork: map[string][]net.IPAddr{
+					"ip4:" + host: {{IP: ipv4}},
+				},
+			},
+			expectedResult: []string{"192.168.1.1:8080"},
+		},
+		{
+			name:           "requires port",
+			addr:           host,
+			resolver:       &mockHostnameResolver{},
+			expectedResult: nil,
+			expectedErr:    errors.New("missing port in address given for dnsdualstack lookup: " + host),
+		},
+		{
+			name: "IPv6 fails, IPv4 succeeds",
+			addr: host + ":8080",
+			resolver: &mockHostnameResolver{
+				resultByNetwork: map[string][]net.IPAddr{
+					"ip4:" + host: {{IP: ipv4}},
+				},
+				errByNetwork: map[string]error{
+					"ip6:" + host: errors.New("network unreachable"),
+				},
+			},
+			expectedResult: []string{"192.168.1.1:8080"},
+		},
+		{
+			name: "IPv4 fails, IPv6 succeeds",
+			addr: host + ":8080",
+			resolver: &mockHostnameResolver{
+				resultByNetwork: map[string][]net.IPAddr{
+					"ip6:" + host: {{IP: ipv6}},
+				},
+				errByNetwork: map[string]error{
+					"ip4:" + host: errors.New("network unreachable"),
+				},
+			},
+			expectedResult: []string{"[2001:db8::1]:8080"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.TODO()
+			dnsSD := dnsSD{tt.resolver, log.NewNopLogger()}
+
+			result, err := dnsSD.Resolve(ctx, tt.addr, ADualStack)
+			if tt.expectedErr != nil {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, tt.expectedErr.Error() == err.Error(), "expected error '%v', but got '%v'", tt.expectedErr.Error(), err.Error())
+			} else {
+				testutil.Ok(t, err)
+			}
+			sort.Strings(result)
+			sort.Strings(tt.expectedResult)
+			testutil.Equals(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestDnsSD_ResolveDualStack_Errors(t *testing.T) {
+	host := "test.mycompany.com"
+	addr := host + ":8080"
+
+	t.Run("both families fail propagates error", func(t *testing.T) {
+		resolver := &mockHostnameResolver{
+			errByNetwork: map[string]error{
+				"ip6:" + host: errors.New("network unreachable"),
+				"ip4:" + host: errors.New("network unreachable"),
+			},
+		}
+		dnsSD := dnsSD{resolver, log.NewNopLogger()}
+
+		_, err := dnsSD.Resolve(context.TODO(), addr, ADualStack)
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("not-found on both families returns empty", func(t *testing.T) {
+		notFound := &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+		resolver := &mockHostnameResolver{
+			errByNetwork: map[string]error{
+				"ip6:" + host: notFound,
+				"ip4:" + host: notFound,
+			},
+			isNotFound: func(err error) bool {
+				dnsErr, ok := err.(*net.DNSError)
+				return ok && dnsErr.IsNotFound
+			},
+		}
+		dnsSD := dnsSD{resolver, log.NewNopLogger()}
+
+		result, err := dnsSD.Resolve(context.TODO(), addr, ADualStack)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 0, len(result))
+	})
+
+	t.Run("not-found on one family real error on other propagates", func(t *testing.T) {
+		notFound := &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
+		resolver := &mockHostnameResolver{
+			errByNetwork: map[string]error{
+				"ip6:" + host: notFound,
+				"ip4:" + host: errors.New("server misbehaving"),
+			},
+			isNotFound: func(err error) bool {
+				dnsErr, ok := err.(*net.DNSError)
+				return ok && dnsErr.IsNotFound
+			},
+		}
+		dnsSD := dnsSD{resolver, log.NewNopLogger()}
+
+		_, err := dnsSD.Resolve(context.TODO(), addr, ADualStack)
+		testutil.NotOk(t, err)
+	})
+
 }
