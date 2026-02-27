@@ -6,13 +6,16 @@ package logging
 import (
 	"os"
 
+	"github.com/coreos/go-systemd/v22/journal"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/pkg/errors"
 )
 
 const (
-	LogFormatLogfmt = "logfmt"
-	LogFormatJSON   = "json"
+	LogFormatLogfmt   = "logfmt"
+	LogFormatJSON     = "json"
+	LogFormatJournald = "journald"
 )
 
 type LevelLogger struct {
@@ -25,7 +28,7 @@ type LevelLogger struct {
 // empty, the debug name is also appended as a field to all log lines. Panics
 // if the log level is not error, warn, info or debug. Log level is expected to
 // be validated before passed to this function.
-func NewLogger(logLevel, logFormat, debugName string) log.Logger {
+func NewLogger(logLevel, logFormat, debugName string) (log.Logger, error) {
 	var (
 		logger log.Logger
 		lvl    level.Option
@@ -47,8 +50,15 @@ func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 	}
 
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	if logFormat == LogFormatJSON {
+	switch logFormat {
+	case LogFormatJSON:
 		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+	case LogFormatJournald:
+		if journal.Enabled() {
+			logger = newJournaldLogger()
+		} else {
+			return nil, errors.New("journald log format requested but systemd journal is not available")
+		}
 	}
 
 	// Sort the logger chain to avoid expensive log.Valuer evaluation for disallowed level.
@@ -63,5 +73,5 @@ func NewLogger(logLevel, logFormat, debugName string) log.Logger {
 	return LevelLogger{
 		Logger:   logger,
 		LogLevel: logLevel,
-	}
+	}, nil
 }

@@ -298,7 +298,7 @@ type tenant struct {
 }
 
 func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
-	_, err, _ := m.initSingleFlight.Do(tenantID, func() (interface{}, error) {
+	_, err, _ := m.initSingleFlight.Do(tenantID, func() (any, error) {
 		if t.readyS.Get() != nil {
 			return nil, nil
 		}
@@ -779,6 +779,24 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	// into other ones. This presents a race between compaction and the shipper (if it is configured to upload compacted blocks).
 	// Hence, avoid this situation by disabling overlapping compaction. Vertical compaction must be enabled on the compactor.
 	opts.EnableOverlappingCompaction = false
+
+	// Exclude blocks from compaction that have not yet been uploaded by the shipper.
+	// This allows running with compaction enabled (tsdb.min-block-duration != tsdb.max-block-duration)
+	// without risking data loss due to blocks being compacted before upload.
+	opts.BlockCompactionExcludeFunc = func(meta *tsdb.BlockMeta) bool {
+		// Blocks with level > 1 are not uploaded by shipper. We dont want to exclude them from compaction.
+		if meta.Compaction.Level > 1 {
+			return false
+		}
+
+		s := tenant.shipper()
+		if s == nil {
+			return false
+		}
+		uploaded := s.UploadedBlocks()
+		_, ok := uploaded[meta.ULID]
+		return !ok
+	}
 
 	// We don't do scrapes ourselves so this only gives us a performance penalty.
 	opts.IsolationDisabled = true

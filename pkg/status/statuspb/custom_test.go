@@ -215,11 +215,11 @@ func TestMergeTSDBStatisticsEntry(t *testing.T) {
 						Value: 40,
 					},
 					{
-						Name:  "job",
+						Name:  "instance",
 						Value: 30,
 					},
 					{
-						Name:  "instance",
+						Name:  "job",
 						Value: 30,
 					},
 					{

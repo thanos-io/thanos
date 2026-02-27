@@ -69,6 +69,7 @@ const (
 type storeConfig struct {
 	indexCacheConfigs             extflag.PathOrContent
 	objStoreConfig                extflag.PathOrContent
+	parquetStoreConfig            extflag.PathOrContent
 	dataDir                       string
 	cacheIndexHeader              bool
 	grpcConfig                    grpcConfig
@@ -148,6 +149,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	sc.component = component.Store
 
 	sc.objStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "", true)
+	sc.parquetStoreConfig = *extkingpin.RegisterCommonObjStoreFlags(cmd, "-parquet", false)
 
 	cmd.Flag("sync-block-duration", "Repeat interval for syncing the blocks between local and remote view.").
 		Default("15m").DurationVar(&sc.syncInterval)
@@ -321,6 +323,11 @@ func runStore(
 	if err != nil {
 		return err
 	}
+	parquetBktConfigYaml, err := conf.parquetStoreConfig.Content()
+	if err != nil {
+		return err
+	}
+
 	customBktConfig := exthttp.DefaultCustomBucketConfig()
 	if err := yaml.Unmarshal(confContentYaml, &customBktConfig); err != nil {
 		return errors.Wrap(err, "parsing config YAML file")
@@ -393,16 +400,19 @@ func runStore(
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
 	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
-	filters := []block.MetadataFilter{
-		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
-		block.NewLabelShardedMetaFilter(relabelConfig),
-		block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
-		ignoreDeletionMarkFilter,
-		block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		block.NewParquetMigratedMetaFilter(logger),
+	parquetConvertedBlocksFilter, err := block.NewIgnoreParquetConvertedBlocksFilter(logger, parquetBktConfigYaml, conf.blockMetaFetchConcurrency, extprom.WrapRegistererWithPrefix("thanos_", reg))
+	if err != nil {
+		return errors.Wrap(err, "create parquet converted blocks filter")
 	}
-
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
+		[]block.MetadataFilter{
+			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
+			block.NewLabelShardedMetaFilter(relabelConfig),
+			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+			ignoreDeletionMarkFilter,
+			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
+			parquetConvertedBlocksFilter,
+		})
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}

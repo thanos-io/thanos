@@ -162,6 +162,14 @@ func (f *fakeAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labe
 	panic("not implemented")
 }
 
+func (f *fakeAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+func (f *fakeAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
 func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
 	return storage.SeriesRef(hash), l
 }
@@ -238,7 +246,7 @@ func newTestHandlerHashring(
 		closers = make([]func() error, 0)
 
 		ag         = addrGen{}
-		logger     = logging.NewLogger("debug", "logfmt", "receive_test")
+		logger, _  = logging.NewLogger("debug", "logfmt", "receive_test")
 		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
 	for i := range appendables {
@@ -721,7 +729,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			for _, ts := range tc.wreq.Timeseries {
 				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
 				for j, a := range tc.appendables {
-					if withConsistencyDelay {
+					if withConsistencyDelay && tc.status == http.StatusOK {
 						var expected int
 						n := a.appender.(*fakeAppender).Get(lset)
 						got := uint64(len(n))
@@ -742,6 +750,12 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
 							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
+							// When the write fails, early failure quorum return may cancel
+							// in-flight remote writes before they reach the appender, so
+							// we can only guarantee at least one write landed.
+							if tc.status != http.StatusOK {
 								expectedMin = len(ts.Samples)
 							}
 						}

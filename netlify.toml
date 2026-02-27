@@ -1,22 +1,21 @@
-[Settings]
-
-# All netfliy options should be defined here. UI options should stay empty.
-
+# All netlify options should be defined here. UI options should stay empty.
 [build]
-base = ""
-publish = "website/public"
+  base = ""
+  publish = "website/public"
 
 # Our Makefile builds Hugo, but it's faster if Netlify grabs the correct version on their own
 # via a simple cURL.
-environment = { HUGO_VERSION="v0.101.0" }
+[build.environment]
+  HUGO_VERSION = "v0.101.0"
+  GO_VERSION = "1.25.7"
 
-# NOTE: the sleep at the end is to make sure logs are not truncated on error.
-command = "(env && make web HUGO=$(which hugo)) || (sleep 30; false)"
+[context.production]
+  # NOTE: the sleep at the end is to make sure logs are not truncated on error.
+  command = "(export GOPATH=$HOME/go && env && make web HUGO=$(which hugo)) || (sleep 30; false)"
 
 [context.deploy-preview]
-
-# NOTE: the sleep at the end is to make sure logs are not truncated on error.
-command = "(env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}) || (sleep 30; false)"
+  # NOTE: the sleep at the end is to make sure logs are not truncated on error.
+  command = "(export GOPATH=$HOME/go && env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}) || (sleep 30; false)"
 
 [[headers]]
   for = "/*"
