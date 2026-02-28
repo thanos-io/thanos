@@ -673,6 +673,81 @@ describe('Block Size Stats', () => {
   });
 });
 
+describe('sortBlocks with empty label', () => {
+  const blocksWithLabels = [
+    {
+      compaction: {
+        level: 1,
+        sources: ['01EWZCKPP4K0WYRTZC9RPRM5QK'],
+      },
+      minTime: 1608034200000,
+      maxTime: 1608034500000,
+      stats: {
+        numSamples: 6634538,
+        numSeries: 2334,
+        numChunks: 51057,
+      },
+      thanos: {
+        downsample: {
+          resolution: 0,
+        },
+        labels: {
+          cluster: 'prod-us-east',
+          env: 'production',
+        },
+        source: 'sidecar',
+      },
+      ulid: '01EWZCKPP4K0WYRTZC9RPRM5QK',
+      version: 1,
+    },
+    {
+      compaction: {
+        level: 1,
+        sources: ['01ESK5B1WQB6QEZQ4P0YCQXEC4'],
+      },
+      minTime: 1608034200000,
+      maxTime: 1608034500000,
+      stats: {
+        numSamples: 6634538,
+        numSeries: 2334,
+        numChunks: 51057,
+      },
+      thanos: {
+        downsample: {
+          resolution: 0,
+        },
+        labels: {
+          cluster: 'prod-eu-west',
+          env: 'production',
+        },
+        source: 'sidecar',
+      },
+      ulid: '01ESK5B1WQB6QEZQ4P0YCQXEC4',
+      version: 1,
+    },
+  ];
+
+  it('should use stringified labels as source keys when no label is specified', () => {
+    const sorted = sortBlocks(blocksWithLabels, '', false);
+    const sourceKeys = Object.keys(sorted);
+    // When no label is specified, the full labels should be used as keys
+    expect(sourceKeys).toHaveLength(2);
+    // Keys should contain actual label information, not just numbers
+    expect(sourceKeys.every((key) => key.includes('cluster:'))).toBe(true);
+    expect(sourceKeys.every((key) => key.includes('env:'))).toBe(true);
+  });
+
+  it('should group blocks with same labels together', () => {
+    const blocksWithSameLabels = [
+      { ...blocksWithLabels[0], ulid: '01FIRST' },
+      { ...blocksWithLabels[0], ulid: '02SECOND' },
+    ];
+    const sorted = sortBlocks(blocksWithSameLabels, '', false);
+    // Both blocks have same labels, should be grouped under same key
+    expect(Object.keys(sorted)).toHaveLength(1);
+  });
+});
+
 describe('humanizeBytes', () => {
   it('should return Unknown for undefined', () => {
     expect(humanizeBytes(undefined)).toEqual('Unknown Bytes');
