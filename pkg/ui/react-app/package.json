@@ -55,7 +55,7 @@
     "eject": "react-scripts eject",
     "lint:ci": "eslint --quiet \"src/**/*.{ts,tsx}\"",
     "lint": "eslint --fix \"src/**/*.{ts,tsx}\"",
-    "prettier-format": "prettier 'src/**/*.ts' --write"
+    "prettier-format": "prettier 'src/**/*.{ts,tsx}' --write"
   },
   "prettier": {
     "singleQuote": true,

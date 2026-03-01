@@ -1,7 +1,7 @@
 import React, { ChangeEvent, FC, useMemo, useState } from 'react';
 import { RouteComponentProps } from '@reach/router';
-import { UncontrolledAlert } from 'reactstrap';
-import { useQueryParams, withDefault, NumberParam, StringParam, BooleanParam } from 'use-query-params';
+import { Button, Form, Input, InputGroup, InputGroupAddon, UncontrolledAlert } from 'reactstrap';
+import { BooleanParam, NumberParam, StringParam, useQueryParams, withDefault } from 'use-query-params';
 import { withStatusIndicator } from '../../../components/withStatusIndicator';
 import { useFetch } from '../../../hooks/useFetch';
 import PathPrefixProps from '../../../types/PathPrefixProps';
@@ -10,11 +10,19 @@ import { SourceView } from './SourceView';
 import { BlockDetails } from './BlockDetails';
 import { BlockSearchInput } from './BlockSearchInput';
 import { BlockFilterCompaction } from './BlockFilterCompaction';
-import { sortBlocks, getBlockByUlid, getFilteredBlockPools } from './helpers';
+import { getBlockByUlid, getFilteredBlockPools, sortBlocks } from './helpers';
 import styles from './blocks.module.css';
 import TimeRange from './TimeRange';
 import Checkbox from '../../../components/Checkbox';
 import { FlagMap } from '../../../pages/flags/Flags';
+import TimeInput from '../../../pages/graph/TimeInput';
+import { formatDuration, parseDuration } from '../../../utils';
+import { faMinus, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+
+const daySeconds = 24 * 60 * 60;
+
+const rangeSteps = [1, 7, 30, 180, 360, 720, 1440].map((s) => s * daySeconds * 1000);
 
 export interface BlockListProps {
   blocks: Block[];
@@ -30,26 +38,22 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const { blocks, label, err } = data;
 
   const [gridMinTime, gridMaxTime] = useMemo(() => {
-    if (!err && blocks.length > 0) {
-      let gridMinTime = blocks[0].minTime;
-      let gridMaxTime = blocks[0].maxTime;
-      blocks.forEach((block) => {
-        if (block.minTime < gridMinTime) {
-          gridMinTime = block.minTime;
-        }
-        if (block.maxTime > gridMaxTime) {
-          gridMaxTime = block.maxTime;
-        }
-      });
-      return [gridMinTime, gridMaxTime];
-    }
-    return [0, 0];
-  }, [blocks, err]);
+    if (!blocks || blocks.length === 0) return [0, 0];
+
+    let gridMinTime = blocks[0].minTime;
+    let gridMaxTime = blocks[0].maxTime;
+
+    blocks.forEach((block) => {
+      gridMinTime = Math.min(gridMinTime, block.minTime);
+      gridMaxTime = Math.max(gridMaxTime, block.maxTime);
+    });
+    return [gridMinTime, gridMaxTime];
+  }, [blocks]);
 
   const [
     {
-      'min-time': viewMinTime,
-      'max-time': viewMaxTime,
+      'min-time': queryViewMinTime,
+      'max-time': queryViewMaxTime,
       ulid: blockSearchParam,
       'find-overlapping': findOverlappingParam,
       'filter-compaction': filterCompactionParam,
@@ -64,6 +68,14 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     'filter-compaction': withDefault(BooleanParam, false),
     'compaction-level': withDefault(NumberParam, 0),
   });
+
+  const viewMinTime = queryViewMinTime;
+  const viewMaxTime = queryViewMaxTime;
+
+  // Initialize time controls from query parameters
+  const [endTime, setEndTime] = useState<number>(viewMaxTime);
+  const [range, setRange] = useState<number>(rangeSteps[rangeSteps.length - 1]);
+  const [rangeInput, setRangeInput] = useState<string>(formatDuration(rangeSteps[rangeSteps.length - 1]));
 
   const [filterCompaction, setFilterCompaction] = useState<boolean>(filterCompactionParam);
   const [findOverlappingBlocks, setFindOverlappingBlocks] = useState<boolean>(findOverlappingParam);
@@ -83,6 +95,62 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
       'min-time': times[0],
       'max-time': times[1],
     });
+  };
+
+  const handleTimeRangeChange = (times: number[]): void => {
+    const [newMinTime, newMaxTime] = times;
+    const newRange = newMaxTime - newMinTime;
+
+    setEndTime(newMaxTime);
+    setRange(newRange);
+    setRangeInput(formatDuration(newRange));
+
+    setViewTime(times);
+  };
+
+  const updateTimeRange = (currentEndTime: number, currentRange: number) => {
+    setViewTime([currentEndTime - currentRange, currentEndTime]);
+  };
+
+  const onChangeRange = (newRange: number) => {
+    setRange(newRange);
+    setRangeInput(formatDuration(newRange));
+    updateTimeRange(endTime, newRange);
+  };
+
+  const onChangeEndTime = (newEndTime: number | null) => {
+    if (newEndTime == null) {
+      newEndTime = gridMaxTime;
+    }
+    // Cap the end time to gridMaxTime.
+    const cappedEndTime = Math.min(newEndTime, gridMaxTime);
+    setEndTime(cappedEndTime);
+    updateTimeRange(cappedEndTime, range);
+  };
+
+  const onChangeRangeInput = (rangeText: string): void => {
+    const newRange = parseDuration(rangeText);
+    if (newRange !== null) {
+      onChangeRange(newRange);
+    }
+  };
+
+  const increaseRange = (): void => {
+    for (const step of rangeSteps) {
+      if (range < step) {
+        onChangeRange(step);
+        return;
+      }
+    }
+  };
+
+  const decreaseRange = (): void => {
+    for (const step of rangeSteps.slice().reverse()) {
+      if (range > step) {
+        onChangeRange(step);
+        return;
+      }
+    }
   };
 
   const setBlockSearchInput = (searchState: string): void => {
@@ -131,7 +199,35 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
             onClick={() => setBlockSearchInput(searchState)}
             defaultValue={blockSearchParam}
           />
-          <div className={styles.blockFilter}>
+          <Form inline className="graph-controls" onSubmit={(e) => e.preventDefault()}>
+            <InputGroup className="range-input" size="sm">
+              <InputGroupAddon addonType="prepend">
+                <Button title="Decrease range" onClick={decreaseRange}>
+                  <FontAwesomeIcon icon={faMinus} fixedWidth />
+                </Button>
+              </InputGroupAddon>
+
+              <Input
+                value={rangeInput}
+                onChange={(e) => setRangeInput(e.target.value)}
+                onBlur={(e) => onChangeRangeInput(e.target.value)}
+              />
+
+              <InputGroupAddon addonType="append">
+                <Button title="Increase range" onClick={increaseRange}>
+                  <FontAwesomeIcon icon={faPlus} fixedWidth />
+                </Button>
+              </InputGroupAddon>
+            </InputGroup>
+
+            <TimeInput
+              time={endTime}
+              useLocalTime={true}
+              range={range}
+              placeholder="End time"
+              onChangeTime={onChangeEndTime}
+            />
+
             <Checkbox
               id="find-overlap-block-checkbox"
               onChange={({ target }) => {
@@ -141,9 +237,11 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
                 setFindOverlappingBlocks(target.checked);
               }}
               defaultChecked={findOverlappingBlocks}
+              wrapperStyles={{ marginBottom: 0 }}
             >
               Enable finding overlapping blocks
             </Checkbox>
+
             <BlockFilterCompaction
               id="filter-compaction-checkbox"
               defaultChecked={filterCompaction}
@@ -153,7 +251,7 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
               }}
               defaultValue={compactionLevelInput}
             />
-          </div>
+          </Form>
           <div className={styles.container}>
             <div className={styles.grid}>
               <div className={styles.sources}>
@@ -181,7 +279,7 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
                 gridMaxTime={gridMaxTime}
                 viewMinTime={viewMinTime}
                 viewMaxTime={viewMaxTime}
-                onChange={setViewTime}
+                onChange={handleTimeRangeChange}
               />
             </div>
             <BlockDetails
