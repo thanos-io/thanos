@@ -14,6 +14,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8699](https://github.com/thanos-io/thanos/pull/8699) Compact: Fix panic when downsampling native histograms with custom buckets (NHCB)
+
 ### Added
 
 ### Changed
