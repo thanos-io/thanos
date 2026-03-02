@@ -613,6 +613,7 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, nil
 	}
 
+	abnormalHeadSize := time.UnixMilli(head.MaxTime()).Sub(time.UnixMilli(head.MinTime())) > (time.Hour * 10)
 	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
 	compactThreshold := int64(1.5 * float64(t.tsdbOpts.MaxBlockDuration))
 	if sinceLastAppendMillis <= compactThreshold {
@@ -646,9 +647,27 @@ func (t *MultiTSDB) pruneTSDB(ctx context.Context, logger log.Logger, tenantInst
 		return false, nil
 	}
 
-	level.Info(logger).Log("msg", "Compacting tenant")
+	level.Info(logger).Log(
+		"msg", "Compacting tenant",
+		"abnormalHeadSize", abnormalHeadSize,
+		"compactThreshold", time.Millisecond*time.Duration(compactThreshold),
+		"sinceLastAppend", time.Since(time.UnixMilli(head.MaxTime())),
+		"shouldPrune", sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration,
+		"retentionDuration", time.Millisecond*time.Duration(t.tsdbOpts.RetentionDuration),
+	)
 	if err := t.flushHead(tdb); err != nil {
 		return false, err
+	}
+	if abnormalHeadSize {
+		level.Warn(logger).Log(
+			"msg", "Detected abnormal head size logging post flush stats",
+			"headMin", time.UnixMilli(head.MinTime()),
+			"headMax", time.UnixMilli(head.MaxTime()),
+			"sinceLastAppend", time.Since(time.UnixMilli(head.MaxTime())),
+			"shouldPrune", sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration,
+			"size", head.Size(),
+			"series", head.NumSeries(),
+		)
 	}
 
 	if sinceLastAppendMillis <= t.tsdbOpts.RetentionDuration {
