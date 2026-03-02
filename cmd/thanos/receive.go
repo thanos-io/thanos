@@ -328,28 +328,31 @@ func runReceive(
 	}
 
 	webHandler := receive.NewHandler(log.With(logger, "component", "receive-handler"), &receive.Options{
-		Writer:                  writer,
-		ListenAddress:           conf.rwAddress,
-		Registry:                reg,
-		Endpoint:                conf.endpoint,
-		TenantHeader:            conf.tenantHeader,
-		TenantField:             conf.tenantField,
-		DefaultTenantID:         conf.defaultTenantID,
-		ReplicaHeader:           conf.replicaHeader,
-		ReplicationFactor:       conf.replicationFactor,
-		Relabeller:              relabeller,
-		ReceiverMode:            receiveMode,
-		Tracer:                  tracer,
-		TLSConfig:               rwTLSConfig,
-		SplitTenantLabelName:    conf.splitTenantLabelName,
-		DialOpts:                dialOpts,
-		ForwardTimeout:          time.Duration(*conf.forwardTimeout),
-		MaxBackoff:              time.Duration(*conf.maxBackoff),
-		TSDBStats:               dbs,
-		Limiter:                 limiter,
-		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
-		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
-		TenantAttributor:        tenantAttributor,
+		Writer:                   writer,
+		ListenAddress:            conf.rwAddress,
+		Registry:                 reg,
+		Endpoint:                 conf.endpoint,
+		TenantHeader:             conf.tenantHeader,
+		TenantField:              conf.tenantField,
+		DefaultTenantID:          conf.defaultTenantID,
+		ReplicaHeader:            conf.replicaHeader,
+		ReplicationFactor:        conf.replicationFactor,
+		Relabeller:               relabeller,
+		ReceiverMode:             receiveMode,
+		Tracer:                   tracer,
+		TLSConfig:                rwTLSConfig,
+		SplitTenantLabelName:     conf.splitTenantLabelName,
+		DialOpts:                 dialOpts,
+		ForwardTimeout:           time.Duration(*conf.forwardTimeout),
+		MaxBackoff:               time.Duration(*conf.maxBackoff),
+		TSDBStats:                dbs,
+		Limiter:                  limiter,
+		AsyncForwardWorkerCount:  conf.asyncForwardWorkerCount,
+		ReplicationProtocol:      receive.ReplicationProtocol(conf.replicationProtocol),
+		TenantAttributor:         tenantAttributor,
+		PoolingDisabled:          !conf.poolingEnabled,
+		MaxPooledCompressedCap:   conf.maxPooledCompressedCap,
+		MaxPooledDecompressedCap: conf.maxPooledDecompressedCap,
 	})
 
 	{
@@ -1039,6 +1042,11 @@ type receiveConfig struct {
 
 	tenantRulesConfig       *extflag.PathOrContent
 	verifyTenantAttribution bool
+
+	// Pool configuration for receive-path buffer reuse.
+	poolingEnabled           bool
+	maxPooledCompressedCap   int
+	maxPooledDecompressedCap int
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1245,6 +1253,16 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.tenantRulesConfig = extflag.RegisterPathOrContent(cmd, "receive.tenant-rules", "YAML file that contains tenant attribution rules. Each rule maps label filters to a tenant ID. Rules are evaluated in order, first match wins.", extflag.WithEnvSubstitution())
 	cmd.Flag("receive.verify-tenant-attribution", "When enabled, tenant attribution rules are evaluated but only for verification. The HTTP header tenant is still used for actual routing/storage. Metrics are emitted to compare attributed vs HTTP tenant.").
 		Default("false").BoolVar(&rc.verifyTenantAttribution)
+
+	cmd.Flag("receive.pooling-enabled", "Enable pooling of buffers for receive-path request handling.").
+		Default("false").
+		BoolVar(&rc.poolingEnabled)
+	cmd.Flag("receive.max-pooled-compressed-cap", "Maximum capacity (bytes) of a compressed buffer that will be returned to the pool. Buffers larger than this are discarded to prevent pool ballooning.").
+		Default(fmt.Sprintf("%d", receive.DefaultMaxPooledCompressedCap)).
+		IntVar(&rc.maxPooledCompressedCap)
+	cmd.Flag("receive.max-pooled-decompressed-cap", "Maximum capacity (bytes) of a decompressed buffer that will be returned to the pool. Buffers larger than this are discarded to prevent pool ballooning.").
+		Default(fmt.Sprintf("%d", receive.DefaultMaxPooledDecompressedCap)).
+		IntVar(&rc.maxPooledDecompressedCap)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
