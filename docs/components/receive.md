@@ -493,6 +493,10 @@ Flags:
                                  Server name to verify the hostname
                                  on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --remote-write.client-tls-min-version="1.3"
+                                 TLS version for the gRPC client, leave blank
+                                 to default to TLS 1.3, allow values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
