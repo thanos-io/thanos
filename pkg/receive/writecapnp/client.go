@@ -95,6 +95,7 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 		if resp, release, err = r.write(ctx, in); err == nil {
 			break
 		}
+		release()
 		r.conn.setStateErrorIfGeneration(generation)
 		level.Warn(r.logger).Log("msg", "rpc failed, reconnecting", "err", err.Error())
 	}
