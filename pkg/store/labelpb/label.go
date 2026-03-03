@@ -12,6 +12,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/cespare/xxhash/v2"
@@ -350,10 +351,21 @@ func DeepCopy(lbls []ZLabel) []ZLabel {
 	return ret
 }
 
+var hashBufPool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 1024)
+		return &b
+	},
+}
+
+const maxHashBufPoolCap = 4096
+
 // HashWithPrefix returns a hash for the given prefix and labels.
 func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 	// Use xxhash.Sum64(b) for fast path as it's faster.
-	b := make([]byte, 0, 1024)
+	bp := hashBufPool.Get().(*[]byte)
+	b := (*bp)[:0]
+
 	b = append(b, prefix...)
 	b = append(b, sep[0])
 
@@ -368,6 +380,10 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 				_, _ = h.WriteString(v.Value)
 				_, _ = h.Write(sep)
 			}
+			if cap(b) <= maxHashBufPoolCap {
+				*bp = b
+				hashBufPool.Put(bp)
+			}
 			return h.Sum64()
 		}
 		b = append(b, v.Name...)
@@ -375,7 +391,12 @@ func HashWithPrefix(prefix string, lbls []ZLabel) uint64 {
 		b = append(b, v.Value...)
 		b = append(b, sep[0])
 	}
-	return xxhash.Sum64(b)
+	result := xxhash.Sum64(b)
+	if cap(b) <= maxHashBufPoolCap {
+		*bp = b
+		hashBufPool.Put(bp)
+	}
+	return result
 }
 
 // ValidateLabels validates label names and values (checks for empty

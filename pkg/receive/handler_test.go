@@ -267,7 +267,7 @@ func (g *fakePeersGroup) close(addr Endpoint) error {
 func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (WriteableStoreAsyncClient, error) {
 	c, ok := g.clients[endpoint]
 	if !ok {
-		return nil, fmt.Errorf("client %s not found", endpoint)
+		return nil, fmt.Errorf("client %v not found", endpoint)
 	}
 	return c, nil
 }

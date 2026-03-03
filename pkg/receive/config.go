@@ -67,6 +67,7 @@ type Endpoint struct {
 	Address          string `json:"address"`
 	CapNProtoAddress string `json:"capnproto_address"`
 	AZ               string `json:"az"`
+	Shard            int    `json:"shard"`
 }
 
 func (e *Endpoint) String() string {
@@ -113,6 +114,7 @@ func (e *Endpoint) unmarshal(data []byte) error {
 	e.Address = configEndpoint.Address
 	e.AZ = configEndpoint.AZ
 	e.CapNProtoAddress = configEndpoint.CapNProtoAddress
+	e.Shard = configEndpoint.Shard
 	return nil
 }
 
@@ -140,13 +142,8 @@ type ShuffleShardingConfig struct {
 	CacheSize int `json:"cache_size"`
 	// ZoneAwarenessDisabled disables zone awareness. We still try to spread the load
 	// across the available zones, but we don't try to balance the shards across zones.
-	ZoneAwarenessDisabled bool `json:"zone_awareness_disabled"`
-	// AlignedOrdinalSharding enables aligned ordinal selection for shuffle sharding.
-	// When true and using aligned_ketama algorithm, the same ordinals are selected
-	// across all AZs, preserving strict replica alignment. ShardSize represents the
-	// number of ordinals to select (resulting in ShardSize * numAZs total endpoints).
-	AlignedOrdinalSharding bool                            `json:"aligned_ordinal_sharding"`
-	Overrides              []ShuffleShardingOverrideConfig `json:"overrides,omitempty"`
+	ZoneAwarenessDisabled bool                            `json:"zone_awareness_disabled"`
+	Overrides             []ShuffleShardingOverrideConfig `json:"overrides,omitempty"`
 }
 
 type tenantMatcher string

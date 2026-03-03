@@ -1740,7 +1740,7 @@ func (p *peerGroup) closeUnlocked(endpoint Endpoint) error {
 	p.connections[endpoint].wp.Close()
 	delete(p.connections, endpoint)
 	if err := c.client.Close(); err != nil {
-		return fmt.Errorf("closing connection for %s", endpoint)
+		return fmt.Errorf("closing connection for %v", endpoint)
 	}
 
 	return nil

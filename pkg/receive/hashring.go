@@ -27,8 +27,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
-	"github.com/thanos-io/thanos/pkg/strutil"
-
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
@@ -36,9 +34,9 @@ import (
 type HashringAlgorithm string
 
 const (
-	AlgorithmHashmod       HashringAlgorithm = "hashmod"
-	AlgorithmKetama        HashringAlgorithm = "ketama"
-	AlgorithmAlignedKetama HashringAlgorithm = "aligned_ketama"
+	AlgorithmHashmod    HashringAlgorithm = "hashmod"
+	AlgorithmKetama     HashringAlgorithm = "ketama"
+	AlgorithmRendezvous HashringAlgorithm = "rendezvous"
 
 	// SectionsPerNode is the number of sections in the ring assigned to each node
 	// in the ketama hashring. A higher number yields a better series distribution,
@@ -366,7 +364,7 @@ type shuffleShardHashring struct {
 	nodes []Endpoint
 
 	// cache stores tenant-specific subrings. The value is Hashring to support both
-	// *ketamaHashring (regular shuffle sharding) and aligned ketama subrings.
+	// *ketamaHashring (regular shuffle sharding) and *rendezvousHashring subrings.
 	cache *lru.Cache[string, Hashring]
 
 	metrics *shuffleShardCacheMetrics
@@ -594,9 +592,10 @@ func (s *shuffleShardHashring) getTenantShardCached(tenant string) (Hashring, er
 
 	var h Hashring
 	var err error
-	if s.shuffleShardingConfig.AlignedOrdinalSharding {
-		h, err = s.getTenantShardAligned(tenant)
-	} else {
+	switch s.baseRing.(type) {
+	case *rendezvousHashring:
+		h, err = s.getTenantShardRendezvous(tenant)
+	default:
 		h, err = s.getTenantShard(tenant)
 	}
 	if err != nil {
@@ -710,248 +709,207 @@ func (s *shuffleShardHashring) getTenantShard(tenant string) (*ketamaHashring, e
 	return newKetamaHashring(finalNodes, SectionsPerNode, s.replicationFactor)
 }
 
-// ordinalSection represents a section in the ordinal ring for consistent hashing.
-type ordinalSection struct {
-	ordinal int
-	hash    uint64
+// groupByAZ groups endpoints by Availability Zone and sorts them by shard.
+// It returns a 2D slice where each inner slice represents an AZ (sorted alphabetically)
+// and contains endpoints sorted by shard. All inner slices are truncated to the
+// length of the largest common sequence of shards starting from 0 across all AZs.
+func groupByAZ(endpoints []Endpoint) ([][]Endpoint, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.New("no endpoints provided")
+	}
+
+	// Group endpoints by AZ and then by shard.
+	azEndpoints := make(map[string]map[int]Endpoint)
+	for _, ep := range endpoints {
+		if _, ok := azEndpoints[ep.AZ]; !ok {
+			azEndpoints[ep.AZ] = make(map[int]Endpoint)
+		}
+		if _, exists := azEndpoints[ep.AZ][ep.Shard]; exists {
+			return nil, fmt.Errorf("duplicate endpoint shard %d for address %s in AZ %s", ep.Shard, ep.Address, ep.AZ)
+		}
+		azEndpoints[ep.AZ][ep.Shard] = ep
+	}
+
+	// Get sorted list of AZ names.
+	sortedAZs := make([]string, 0, len(azEndpoints))
+	for az := range azEndpoints {
+		sortedAZs = append(sortedAZs, az)
+	}
+	sort.Strings(sortedAZs)
+
+	// Determine the maximum common shard across all AZs.
+	maxCommonShard := -1
+	for i := 0; ; i++ {
+		presentInAllAZs := true
+		for _, az := range sortedAZs {
+			if _, ok := azEndpoints[az][i]; !ok {
+				presentInAllAZs = false
+				if i == 0 {
+					return nil, fmt.Errorf("AZ %q is missing endpoint with shard 0", az)
+				}
+				break
+			}
+		}
+		if !presentInAllAZs {
+			maxCommonShard = i - 1
+			break
+		}
+	}
+	if maxCommonShard < 0 {
+		return nil, errors.New("no common endpoints with shard 0 found across all AZs")
+	}
+	numAZs := len(sortedAZs)
+	result := make([][]Endpoint, numAZs)
+	for i, az := range sortedAZs {
+		result[i] = make([]Endpoint, 0, maxCommonShard+1)
+		for j := 0; j <= maxCommonShard; j++ {
+			result[i] = append(result[i], azEndpoints[az][j])
+		}
+	}
+	return result, nil
 }
 
-type ordinalSections []ordinalSection
-
-func (o ordinalSections) Len() int           { return len(o) }
-func (o ordinalSections) Less(i, j int) bool { return o[i].hash < o[j].hash }
-func (o ordinalSections) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }
-
-// extractOrdinalStructure extracts the ordinal-to-endpoint mapping per AZ
-// and returns the set of ordinals common to all AZs.
-func extractOrdinalStructure(endpoints []Endpoint) (map[string]map[int]Endpoint, []int, error) {
+// extractShardStructure extracts the shard-to-endpoint mapping per AZ
+// and returns the set of shards common to all AZs.
+func extractShardStructure(endpoints []Endpoint) (map[string]map[int]Endpoint, []int, error) {
 	if len(endpoints) == 0 {
 		return nil, nil, errors.New("no endpoints provided")
 	}
 
-	// Group endpoints by AZ and ordinal
-	azOrdinalMap := make(map[string]map[int]Endpoint)
+	// Group endpoints by AZ and shard
+	azShardMap := make(map[string]map[int]Endpoint)
 	for _, ep := range endpoints {
-		ordinal, err := strutil.ExtractPodOrdinal(ep.Address)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to extract ordinal from address %s", ep.Address)
+		if _, ok := azShardMap[ep.AZ]; !ok {
+			azShardMap[ep.AZ] = make(map[int]Endpoint)
 		}
-		if _, ok := azOrdinalMap[ep.AZ]; !ok {
-			azOrdinalMap[ep.AZ] = make(map[int]Endpoint)
-		}
-		azOrdinalMap[ep.AZ][ordinal] = ep
+		azShardMap[ep.AZ][ep.Shard] = ep
 	}
 
-	if len(azOrdinalMap) == 0 {
+	if len(azShardMap) == 0 {
 		return nil, nil, errors.New("no AZs found")
 	}
 
-	// Find common ordinals across all AZs
-	var commonOrdinals []int
+	// Find common shards across all AZs
+	var commonShards []int
 	var firstAZ string
-	for az := range azOrdinalMap {
+	for az := range azShardMap {
 		firstAZ = az
 		break
 	}
 
-	for ordinal := range azOrdinalMap[firstAZ] {
+	for shard := range azShardMap[firstAZ] {
 		presentInAll := true
-		for az, ordMap := range azOrdinalMap {
+		for az, shardMap := range azShardMap {
 			if az == firstAZ {
 				continue
 			}
-			if _, ok := ordMap[ordinal]; !ok {
+			if _, ok := shardMap[shard]; !ok {
 				presentInAll = false
 				break
 			}
 		}
 		if presentInAll {
-			commonOrdinals = append(commonOrdinals, ordinal)
+			commonShards = append(commonShards, shard)
 		}
 	}
 
-	if len(commonOrdinals) == 0 {
-		return nil, nil, errors.New("no common ordinals found across all AZs")
+	if len(commonShards) == 0 {
+		return nil, nil, errors.New("no common shards found across all AZs")
 	}
 
-	sort.Ints(commonOrdinals)
-	return azOrdinalMap, commonOrdinals, nil
+	sort.Ints(commonShards)
+	return azShardMap, commonShards, nil
 }
 
-// buildOrdinalRing creates a consistent hash ring of ordinals.
-// Each ordinal gets multiple sections for better distribution.
-func buildOrdinalRing(ordinals []int, sectionsPerOrdinal int) ordinalSections {
-	ring := make(ordinalSections, 0, len(ordinals)*sectionsPerOrdinal)
-	hasher := xxhash.New()
-
-	for _, ordinal := range ordinals {
-		for i := 1; i <= sectionsPerOrdinal; i++ {
-			hasher.Reset()
-			_, _ = hasher.Write([]byte(fmt.Sprintf("ordinal-%d:%d", ordinal, i)))
-			ring = append(ring, ordinalSection{
-				ordinal: ordinal,
-				hash:    hasher.Sum64(),
-			})
-		}
-	}
-
-	sort.Sort(ring)
-	return ring
-}
-
-// selectOrdinalsConsistent selects ordinals using consistent hashing.
-// This provides stability: adding ordinal N only affects tenants that would hash near N.
-func selectOrdinalsConsistent(ring ordinalSections, tenant string, count int) []int {
-	if count >= len(ring) {
-		// Return all unique ordinals if count exceeds ring size
-		seen := make(map[int]struct{})
-		for _, sec := range ring {
-			seen[sec.ordinal] = struct{}{}
-		}
-		result := make([]int, 0, len(seen))
-		for ord := range seen {
-			result = append(result, ord)
-		}
-		sort.Ints(result)
+// selectShardsRendezvous selects shards using rendezvous (highest random weight) hashing.
+// For each shard, it computes hash(tenant, shard) and picks the top-K shards with the highest values.
+func selectShardsRendezvous(commonShards []int, tenant string, count int) []int {
+	if count >= len(commonShards) {
+		result := make([]int, len(commonShards))
+		copy(result, commonShards)
 		return result
 	}
 
-	seed := ShuffleShardSeed(tenant, "") // No AZ suffix for alignment
-	r := rand.New(rand.NewSource(seed))
+	hasher := xxhash.New()
 
-	selected := make(map[int]struct{})
-	result := make([]int, 0, count)
-
-	for len(result) < count {
-		pos := r.Uint64()
-		idx := sort.Search(len(ring), func(i int) bool {
-			return ring[i].hash >= pos
-		})
-		if idx == len(ring) {
-			idx = 0
-		}
-
-		// Walk ring to find unselected ordinal
-		for j := 0; j < len(ring); j++ {
-			checkIdx := (idx + j) % len(ring)
-			ord := ring[checkIdx].ordinal
-			if _, ok := selected[ord]; !ok {
-				selected[ord] = struct{}{}
-				result = append(result, ord)
-				break
-			}
-		}
+	type shardScore struct {
+		shard int
+		score uint64
+	}
+	scores := make([]shardScore, len(commonShards))
+	for i, shard := range commonShards {
+		hasher.Reset()
+		_, _ = hasher.Write([]byte(tenant))
+		_, _ = hasher.Write([]byte(strconv.Itoa(shard)))
+		scores[i] = shardScore{shard: shard, score: hasher.Sum64()}
 	}
 
+	// Partial sort: find top-K by score (descending).
+	sort.Slice(scores, func(i, j int) bool {
+		return scores[i].score > scores[j].score
+	})
+
+	result := make([]int, count)
+	for i := 0; i < count; i++ {
+		result[i] = scores[i].shard
+	}
 	sort.Ints(result)
 	return result
 }
 
-// getTenantShardAligned returns a tenant shard with aligned ordinals across all AZs.
-// Unlike getTenantShard which selects nodes independently per AZ, this selects
-// ordinals first, then takes the same ordinal from each AZ.
-func (s *shuffleShardHashring) getTenantShardAligned(tenant string) (Hashring, error) {
-	// Extract ordinal structure from all nodes
-	azOrdinalMap, commonOrdinals, err := extractOrdinalStructure(s.nodes)
+// getTenantShardRendezvous returns a tenant shard with aligned shards across all AZs
+// using rendezvous hashing for shard selection. Unlike getTenantShard which selects nodes
+// independently per AZ, this selects shards first, then takes the same shard from each AZ.
+func (s *shuffleShardHashring) getTenantShardRendezvous(tenant string) (Hashring, error) {
+	// Extract shard structure from all nodes
+	azShardMap, commonShards, err := extractShardStructure(s.nodes)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to extract ordinal structure")
+		return nil, errors.Wrap(err, "failed to extract shard structure")
 	}
 
-	// Determine shard size (number of ordinals to select)
-	shardSize := s.getShardSize(tenant)
-	if shardSize > len(commonOrdinals) {
-		return nil, fmt.Errorf("shard size %d exceeds available common ordinals (%d)", shardSize, len(commonOrdinals))
+	// shard_size is the total shard size; divide by numAZs to get per-AZ count.
+	totalShardSize := s.getShardSize(tenant)
+	numAZs := len(azShardMap)
+	perAZShards := totalShardSize / numAZs // floor
+	if perAZShards == 0 {
+		return nil, fmt.Errorf("shard size %d too small for %d AZs", totalShardSize, numAZs)
+	}
+	if perAZShards > len(commonShards) {
+		return nil, fmt.Errorf("per-AZ shard count %d (from total %d / %d AZs) exceeds available common shards (%d)", perAZShards, totalShardSize, numAZs, len(commonShards))
 	}
 
-	// Build ordinal ring for consistent hashing
-	// Use fewer sections per ordinal since we have fewer ordinals than nodes
-	sectionsPerOrdinal := SectionsPerNode
-	ordinalRing := buildOrdinalRing(commonOrdinals, sectionsPerOrdinal)
+	// Select shards using rendezvous hashing
+	selectedShards := selectShardsRendezvous(commonShards, tenant, perAZShards)
 
-	// Select ordinals using consistent hashing
-	selectedOrdinals := selectOrdinalsConsistent(ordinalRing, tenant, shardSize)
-
-	// Build endpoint list with same ordinals from each AZ
-	// Sorted AZ order for deterministic endpoint ordering
-	sortedAZs := make([]string, 0, len(azOrdinalMap))
-	for az := range azOrdinalMap {
+	// Build endpoint list with same shards from each AZ
+	sortedAZs := make([]string, 0, len(azShardMap))
+	for az := range azShardMap {
 		sortedAZs = append(sortedAZs, az)
 	}
 	sort.Strings(sortedAZs)
 
-	// Create aligned ketama subring manually to preserve ordinal alignment
-	// without requiring sequential ordinals starting from 0
-	return newAlignedSubring(azOrdinalMap, sortedAZs, selectedOrdinals, SectionsPerNode, s.replicationFactor)
-}
-
-// newAlignedSubring creates a ketama hashring with aligned replicas from a subset of ordinals.
-// Unlike newAlignedKetamaHashring, this doesn't require ordinals to be sequential from 0.
-// The alignment property: for any section, all replicas have the same ordinal across different AZs.
-func newAlignedSubring(
-	azOrdinalMap map[string]map[int]Endpoint,
-	sortedAZs []string,
-	selectedOrdinals []int,
-	sectionsPerNode int,
-	replicationFactor uint64,
-) (*ketamaHashring, error) {
-	numAZs := len(sortedAZs)
-	numOrdinals := len(selectedOrdinals)
-
-	if uint64(numAZs) != replicationFactor {
-		return nil, fmt.Errorf("number of AZs (%d) must equal replication factor (%d)", numAZs, replicationFactor)
-	}
-
-	// Build flat endpoint list: [AZ0-ord0, AZ0-ord1, ..., AZ1-ord0, AZ1-ord1, ...]
-	// where ordN refers to selectedOrdinals[N], not the actual ordinal value
-	totalEndpoints := numAZs * numOrdinals
-	flatEndpoints := make([]Endpoint, 0, totalEndpoints)
-	for _, az := range sortedAZs {
-		for _, ordinal := range selectedOrdinals {
-			ep, ok := azOrdinalMap[az][ordinal]
+	// Build azEndpoints directly (non-contiguous shards are OK for sub-rings).
+	numShards := len(selectedShards)
+	azEndpoints := make([][]Endpoint, len(sortedAZs))
+	var flatEndpoints []Endpoint
+	for i, az := range sortedAZs {
+		azEndpoints[i] = make([]Endpoint, 0, numShards)
+		for _, shard := range selectedShards {
+			ep, ok := azShardMap[az][shard]
 			if !ok {
-				return nil, fmt.Errorf("ordinal %d not found in AZ %s", ordinal, az)
+				return nil, fmt.Errorf("shard %d not found in AZ %s", shard, az)
 			}
-			flatEndpoints = append(flatEndpoints, ep)
+			azEndpoints[i] = append(azEndpoints[i], ep)
 		}
+		flatEndpoints = append(flatEndpoints, azEndpoints[i]...)
 	}
 
-	// Create sections with aligned replicas
-	// For aligned subring, we create sections based on the first AZ's endpoints (primary)
-	// Each section's replicas point to the same "position" (ordinal index) in each AZ
-	hasher := xxhash.New()
-	ringSections := make(sections, 0, numOrdinals*sectionsPerNode)
-
-	for ordinalIdx := 0; ordinalIdx < numOrdinals; ordinalIdx++ {
-		// Primary endpoint is from the first AZ
-		primaryEndpoint := flatEndpoints[ordinalIdx] // AZ0 endpoints are at indices 0..numOrdinals-1
-
-		for sectionIdx := 1; sectionIdx <= sectionsPerNode; sectionIdx++ {
-			hasher.Reset()
-			_, _ = hasher.Write([]byte(primaryEndpoint.Address + ":" + strconv.Itoa(sectionIdx)))
-
-			sec := &section{
-				hash:          hasher.Sum64(),
-				az:            primaryEndpoint.AZ,
-				endpointIndex: uint64(ordinalIdx), // Index within first AZ
-				replicas:      make([]uint64, 0, replicationFactor),
-			}
-
-			// Add replicas: same ordinal index from each AZ
-			for azIdx := 0; azIdx < numAZs; azIdx++ {
-				replicaFlatIndex := azIdx*numOrdinals + ordinalIdx
-				sec.replicas = append(sec.replicas, uint64(replicaFlatIndex))
-			}
-
-			ringSections = append(ringSections, sec)
-		}
-	}
-
-	sort.Sort(ringSections)
-
-	return &ketamaHashring{
-		endpoints:    flatEndpoints,
-		sections:     ringSections,
-		numEndpoints: uint64(totalEndpoints),
+	return &rendezvousHashring{
+		azEndpoints:       azEndpoints,
+		sortedAZs:         sortedAZs,
+		numShards:         numShards,
+		replicationFactor: s.replicationFactor,
+		flatEndpoints:     flatEndpoints,
 	}, nil
 }
 
@@ -979,6 +937,11 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		cache: make(map[string]Hashring),
 	}
 
+	numShardsGauge := promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "thanos_receive_hashring_shards",
+		Help: "Number of shards per hashring after groupByAZ alignment.",
+	}, []string{"hashring"})
+
 	for _, h := range cfg {
 		var hashring Hashring
 		var err error
@@ -986,7 +949,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 		if h.Algorithm != "" {
 			activeAlgorithm = h.Algorithm
 		}
-		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, h.ShuffleShardingConfig, reg)
+		hashring, err = newHashring(activeAlgorithm, h.Endpoints, replicationFactor, h.Hashring, h.Tenants, h.ShuffleShardingConfig, reg, numShardsGauge)
 		if err != nil {
 			return nil, err
 		}
@@ -1007,7 +970,7 @@ func NewMultiHashring(algorithm HashringAlgorithm, replicationFactor uint64, cfg
 	return m, nil
 }
 
-func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, shuffleShardingConfig ShuffleShardingConfig, reg prometheus.Registerer) (Hashring, error) {
+func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationFactor uint64, hashring string, tenants []string, shuffleShardingConfig ShuffleShardingConfig, reg prometheus.Registerer, numShardsGauge *prometheus.GaugeVec) (Hashring, error) {
 
 	switch algorithm {
 	case AlgorithmHashmod:
@@ -1031,11 +994,12 @@ func newHashring(algorithm HashringAlgorithm, endpoints []Endpoint, replicationF
 			return newShuffleShardHashring(ringImpl, shuffleShardingConfig, replicationFactor, reg, hashring)
 		}
 		return ringImpl, nil
-	case AlgorithmAlignedKetama:
-		ringImpl, err := newAlignedKetamaHashring(endpoints, SectionsPerNode, replicationFactor)
+	case AlgorithmRendezvous:
+		ringImpl, err := newRendezvousHashring(endpoints, replicationFactor)
 		if err != nil {
 			return nil, err
 		}
+		numShardsGauge.WithLabelValues(hashring).Set(float64(ringImpl.numShards))
 		if shuffleShardingConfig.ShardSize > 0 {
 			if shuffleShardingConfig.ShardSize > len(endpoints) {
 				return nil, fmt.Errorf("shard size %d is larger than number of nodes in hashring %s (%d)", shuffleShardingConfig.ShardSize, hashring, len(endpoints))
