@@ -199,6 +199,36 @@ func TestValidateRedisConfig(t *testing.T) {
 			expect_err: true,
 		},
 		{
+			name: "tlsValidMinVersionConfig",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = addr
+				cfg.Username = "user"
+				cfg.Password = "1234"
+				cfg.TLSEnabled = true
+				cfg.TLSConfig = TLSConfig{
+					MinVersion: "1.3",
+				}
+				return cfg
+			},
+			expect_err: false,
+		},
+		{
+			name: "tlsInvalidMinVersionConfig",
+			config: func() RedisClientConfig {
+				cfg := DefaultRedisClientConfig
+				cfg.Addr = addr
+				cfg.Username = "user"
+				cfg.Password = "1234"
+				cfg.TLSEnabled = true
+				cfg.TLSConfig = TLSConfig{
+					MinVersion: "0.9",
+				}
+				return cfg
+			},
+			expect_err: true,
+		},
+		{
 			name: "SetAsyncCircuitBreakerDisabled",
 			config: func() RedisClientConfig {
 				cfg := DefaultRedisClientConfig
