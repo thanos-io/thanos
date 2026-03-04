@@ -6,6 +6,7 @@ package block
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -16,10 +17,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/VictoriaMetrics/easyproto"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/golang/groupcache/singleflight"
 	"github.com/oklog/ulid/v2"
+	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -28,11 +31,14 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	"github.com/thanos-io/thanos/pkg/exthttp"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/model"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -1034,6 +1040,137 @@ func (f *ConsistencyDelayMetaFilter) Filter(_ context.Context, metas map[ulid.UL
 	return nil
 }
 
+// IgnoreParquetConvertedBlocksFilter is a filter that filters out blocks that have been converted into Parquet blocks.
+// It takes a look at the metadata files inside of a given bucket and then filters them out during syncing.
+type IgnoreParquetConvertedBlocksFilter struct {
+	bkt         objstore.InstrumentedBucketReader
+	concurrency int
+	logger      log.Logger
+}
+
+func NewIgnoreParquetConvertedBlocksFilter(logger log.Logger, config []byte, concurrency int, reg prometheus.Registerer) (*IgnoreParquetConvertedBlocksFilter, error) {
+	if len(config) == 0 {
+		return &IgnoreParquetConvertedBlocksFilter{}, nil
+	}
+	customBktConfig := exthttp.DefaultCustomBucketConfig()
+	if err := yaml.Unmarshal(config, &customBktConfig); err != nil {
+		return nil, errors.Wrap(err, "parsing config YAML file")
+	}
+	bkt, err := client.NewBucket(logger, config, component.Store.String(), exthttp.CreateHedgedTransportWithConfig(customBktConfig))
+	if err != nil {
+		return nil, err
+	}
+	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, reg, bkt.Name()))
+
+	return &IgnoreParquetConvertedBlocksFilter{bkt: insBkt, concurrency: concurrency, logger: logger}, nil
+}
+
+const parquetMetaFileName = "meta.pb"
+
+func (f *IgnoreParquetConvertedBlocksFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	if f.bkt == nil {
+		return nil
+	}
+
+	var (
+		eg                errgroup.Group
+		ch                = make(chan string, f.concurrency)
+		mtx               sync.Mutex
+		allMigratedBlocks = make(map[ulid.ULID]struct{})
+		merrs             errutil.MultiError
+	)
+
+	for range f.concurrency {
+		eg.Go(func() error {
+			for path := range ch {
+				migratedBlocks, err := f.readMigratedBlocksFromParquetMetadata(ctx, path)
+				if err != nil {
+					mtx.Lock()
+					merrs.Add(fmt.Errorf("failed to read parquet metadata from %s: %w", path, err))
+					mtx.Unlock()
+
+					continue
+				}
+
+				mtx.Lock()
+				for id := range migratedBlocks {
+					allMigratedBlocks[id] = struct{}{}
+				}
+				mtx.Unlock()
+			}
+			return nil
+		})
+	}
+
+	eg.Go(func() error {
+		defer close(ch)
+
+		return f.bkt.Iter(ctx, "", func(name string) error {
+			if path.Base(name) == parquetMetaFileName {
+				select {
+				case ch <- name:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			return nil
+		}, objstore.WithRecursiveIter())
+	})
+
+	if err := eg.Wait(); err != nil {
+		return errors.Wrap(err, "iterate bucket for parquet metadata")
+	}
+
+	if len(merrs) > 0 {
+		return errors.Wrap(merrs.Err(), "read parquet metadata files")
+	}
+
+	for id := range allMigratedBlocks {
+		if _, exists := metas[id]; exists {
+			delete(metas, id)
+			synced.WithLabelValues("parquet-converted").Inc()
+		}
+	}
+
+	return nil
+}
+
+func (f *IgnoreParquetConvertedBlocksFilter) readMigratedBlocksFromParquetMetadata(ctx context.Context, path string) (map[ulid.ULID]struct{}, error) {
+	migratedBlocks := make(map[ulid.ULID]struct{})
+	r, err := f.bkt.Get(ctx, path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get parquet metadata file: %v", path)
+	}
+	defer runutil.CloseWithLogOnErr(f.logger, r, "close bkt get")
+
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read parquet metadata file: %v", path)
+	}
+
+	var fc easyproto.FieldContext
+	for len(content) > 0 {
+		content, err = fc.NextField(content)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read next field from parquet metadata file: %v", path)
+		}
+		switch fc.FieldNum {
+		case 6:
+			u, ok := fc.String()
+			if !ok {
+				return nil, errors.Wrapf(err, "read convertedFromBLIDs field from parquet metadata file: %v", path)
+			}
+			id, err := ulid.Parse(u)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parse block ID %q from parquet metadata file: %v", u, path)
+			}
+			migratedBlocks[id] = struct{}{}
+		}
+	}
+
+	return migratedBlocks, nil
+}
+
 // IgnoreDeletionMarkFilter is a filter that filters out the blocks that are marked for deletion after a given delay.
 // The delay duration is to make sure that the replacement block can be fetched before we filter out the old block.
 // Delay is not considered when computing DeletionMarkBlocks map.
@@ -1190,47 +1327,4 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	}
 
 	return relabelConfig, nil
-}
-
-var _ MetadataFilter = &ParquetMigratedMetaFilter{}
-
-// ParquetMigratedMetaFilter is a metadata filter that filters out blocks that have been
-// migrated to parquet format. The filter checks for the presence of the parquet_migrated
-// extension key with a value of true.
-// Not go-routine safe.
-type ParquetMigratedMetaFilter struct {
-	logger log.Logger
-}
-
-// NewParquetMigratedMetaFilter creates a new ParquetMigratedMetaFilter.
-func NewParquetMigratedMetaFilter(logger log.Logger) *ParquetMigratedMetaFilter {
-	return &ParquetMigratedMetaFilter{
-		logger: logger,
-	}
-}
-
-// Filter filters out blocks that have been marked as migrated to parquet format.
-func (f *ParquetMigratedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
-	for id, meta := range metas {
-		if meta.Thanos.Extensions == nil {
-			continue
-		}
-
-		extensionsMap, ok := meta.Thanos.Extensions.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		parquetMigrated, exists := extensionsMap[metadata.ParquetMigratedExtensionKey]
-		if !exists {
-			continue
-		}
-
-		if migratedBool, ok := parquetMigrated.(bool); ok && migratedBool {
-			level.Debug(f.logger).Log("msg", "filtering out parquet migrated block", "block", id)
-			synced.WithLabelValues(ParquetMigratedMeta).Inc()
-			delete(metas, id)
-		}
-	}
-	return nil
 }

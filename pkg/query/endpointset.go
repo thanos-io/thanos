@@ -181,6 +181,15 @@ func (c *endpointSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
 }
 
+const noExtLabelsPlaceholder = "no_external_labels"
+
+func someExternalLabels(lbls string) string {
+	if lbls == "" {
+		return noExtLabelsPlaceholder
+	}
+	return lbls
+}
+
 func (c *endpointSetNodeCollector) hash(e endpointStat) uint64 {
 	h := c.hasherPool.Get().(*xxhash.Digest)
 	defer func() {
@@ -192,7 +201,7 @@ func (c *endpointSetNodeCollector) hash(e endpointStat) uint64 {
 		_, _ = h.Write([]byte(e.ip))
 	}
 	if _, ok := c.labelsMap[string(ExternalLabels)]; ok {
-		_, _ = h.Write([]byte(e.extLset))
+		_, _ = h.Write([]byte(someExternalLabels(e.extLset)))
 	}
 	if _, ok := c.labelsMap[string(StoreType)]; ok {
 		_, _ = h.Write([]byte(e.component))
@@ -210,14 +219,21 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 		h := c.hash(e)
 		occurrences[h]++
 	}
+	var alreadySeen = make(map[uint64]struct{}, len(occurrences))
 
 	for _, n := range c.storeNodes {
 		h := c.hash(n)
+		_, seen := alreadySeen[h]
+		if seen {
+			continue
+		}
+		alreadySeen[h] = struct{}{}
+
 		lbls := make([]string, 0, len(c.labels))
 		for _, lbl := range c.labels {
 			switch lbl {
 			case string(ExternalLabels):
-				lbls = append(lbls, n.extLset)
+				lbls = append(lbls, someExternalLabels(n.extLset))
 			case string(StoreType):
 				lbls = append(lbls, n.component)
 			case string(IPPort):
