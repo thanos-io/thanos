@@ -113,6 +113,7 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 }
 
 // NewClientConfig provides new client TLS configuration.
+// minTLSVersion must be one of 1.0, 1.1, 1.2, 1.3 per getTlsVersion().
 func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool, minTLSVersion string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
@@ -242,4 +243,10 @@ func getTlsVersion(tlsMinVersion string) (uint16, error) {
 	}
 
 	return validOption.tlsOption[tlsMinVersion], nil
+}
+
+func ValidateTlsVersion(tlsVersion string) error {
+
+	_, err := getTlsVersion(tlsVersion)
+	return err
 }
