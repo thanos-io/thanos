@@ -56,6 +56,8 @@ type TLSConfig struct {
 	ServerName string `yaml:"server_name"`
 	// Disable target certificate validation.
 	InsecureSkipVerify bool `yaml:"insecure_skip_verify"`
+	// Minimum TLS version to use when connecting to the targets. Supported values are "1.0", "1.1", "1.2", "1.3".
+	MinVersion string `yaml:"min_version"`
 }
 
 // RedisClientConfig is the config accepted by RedisClient.
@@ -134,6 +136,12 @@ func (c *RedisClientConfig) validate() error {
 		if (c.TLSConfig.CertFile != "") != (c.TLSConfig.KeyFile != "") {
 			return errors.New("both client key and certificate must be provided")
 		}
+
+		if c.TLSConfig.MinVersion != "" {
+			if err := thanos_tls.ValidateTlsVersion(c.TLSConfig.MinVersion); err != nil {
+				return errors.Wrapf(err, "tls_config.min_version invalid")
+			}
+		}
 	}
 
 	if err := c.SetAsyncCircuitBreaker.validate(); err != nil {
@@ -187,9 +195,8 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 	var tlsConfig *tls.Config
 	if config.TLSEnabled {
 		userTLSConfig := config.TLSConfig
-		// TODO(naman): pass min TLS version from config.
 		tlsClientConfig, err := thanos_tls.NewClientConfig(logger, userTLSConfig.CertFile, userTLSConfig.KeyFile,
-			userTLSConfig.CAFile, userTLSConfig.ServerName, userTLSConfig.InsecureSkipVerify, "")
+			userTLSConfig.CAFile, userTLSConfig.ServerName, userTLSConfig.InsecureSkipVerify, userTLSConfig.MinVersion)
 
 		if err != nil {
 			return nil, err
