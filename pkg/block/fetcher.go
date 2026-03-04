@@ -1067,6 +1067,8 @@ func NewIgnoreParquetConvertedBlocksFilter(logger log.Logger, config []byte, con
 
 const parquetMetaFileName = "meta.pb"
 
+const msPerDay = int64(24 * 60 * 60 * 1000)
+
 func (f *IgnoreParquetConvertedBlocksFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
 	if f.bkt == nil {
 		return nil
@@ -1125,14 +1127,86 @@ func (f *IgnoreParquetConvertedBlocksFilter) Filter(ctx context.Context, metas m
 		return errors.Wrap(merrs.Err(), "read parquet metadata files")
 	}
 
-	for id := range allMigratedBlocks {
-		if _, exists := metas[id]; exists {
-			delete(metas, id)
-			synced.WithLabelValues("parquet-converted").Inc()
-		}
+	// NOTE(GiedriusS): we need to be extra careful here because Parquet converter trims chunks exactly to the day's range.
+	// The input to the Parquet converter might not be aligned exactly so we NEED to have some overlap.
+	// So, only delete metas if the migrated blocks cover each day *fully*.
+	for id := range filterMigratedBlocksByDayCoverage(allMigratedBlocks, metas) {
+		delete(metas, id)
+		synced.WithLabelValues("parquet-converted").Inc()
 	}
 
 	return nil
+}
+
+func filterMigratedBlocksByDayCoverage(migratedBlocks map[ulid.ULID]struct{}, metas map[ulid.ULID]*metadata.Meta) map[ulid.ULID]struct{} {
+	type blockRange struct {
+		id               ulid.ULID
+		minTime, maxTime int64
+	}
+	var blocks []blockRange
+	for id := range migratedBlocks {
+		meta, exists := metas[id]
+		if !exists {
+			continue
+		}
+		blocks = append(blocks, blockRange{id: id, minTime: meta.MinTime, maxTime: meta.MaxTime})
+	}
+	if len(blocks) == 0 {
+		return map[ulid.ULID]struct{}{}
+	}
+
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].minTime < blocks[j].minTime
+	})
+
+	fullyCoveredDays := make(map[int64]struct{})
+	firstDay := (blocks[0].minTime / msPerDay) * msPerDay
+	lastDay := (blocks[len(blocks)-1].maxTime / msPerDay) * msPerDay
+	for day := firstDay; day <= lastDay; day += msPerDay {
+		dayEnd := day + msPerDay - 1
+		coverage := day - 1
+		for _, b := range blocks {
+			if b.maxTime <= day {
+				continue
+			}
+			if b.minTime > dayEnd {
+				break
+			}
+			effectiveMin := max(b.minTime, day)
+			if effectiveMin > coverage+1 {
+				break
+			}
+			if effectiveMax := min(b.maxTime, dayEnd); effectiveMax > coverage {
+				coverage = effectiveMax
+			}
+		}
+		if coverage >= dayEnd {
+			fullyCoveredDays[day] = struct{}{}
+		}
+	}
+
+	result := make(map[ulid.ULID]struct{})
+	for _, b := range blocks {
+		startDay := (b.minTime / msPerDay) * msPerDay
+		endDay := (b.maxTime / msPerDay) * msPerDay
+
+		canDelete := true
+		for day := startDay; day <= endDay; day += msPerDay {
+			effectiveMin := max(b.minTime, day)
+			effectiveMax := min(b.maxTime, day+msPerDay-1)
+			if effectiveMax <= effectiveMin {
+				continue
+			}
+			if _, ok := fullyCoveredDays[day]; !ok {
+				canDelete = false
+				break
+			}
+		}
+		if canDelete {
+			result[b.id] = struct{}{}
+		}
+	}
+	return result
 }
 
 func (f *IgnoreParquetConvertedBlocksFilter) readMigratedBlocksFromParquetMetadata(ctx context.Context, path string) (map[ulid.ULID]struct{}, error) {
