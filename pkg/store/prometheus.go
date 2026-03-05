@@ -22,6 +22,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -158,6 +159,7 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 			return err
 		}
 		var b labels.Builder
+		var numSeries int64
 		for _, lbm := range labelMaps {
 			b.Reset(labels.EmptyLabels())
 			for k, v := range lbm {
@@ -171,6 +173,11 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 			if err = s.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 				return err
 			}
+			numSeries++
+		}
+		if span := opentracing.SpanFromContext(s.Context()); span != nil {
+			span.SetTag("result.series", numSeries)
+			span.SetTag("result.samples", int64(0))
 		}
 		return s.Flush()
 	}
@@ -239,6 +246,7 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 	defer span.Finish()
 	span.SetTag("series_count", len(resp.Results[0].Timeseries))
 
+	var numSeries, numSamples int64
 	for _, e := range resp.Results[0].Timeseries {
 		// https://github.com/prometheus/prometheus/blob/3f6f5d3357e232abe53f1775f893fdf8f842712c/storage/remote/read_handler.go#L166
 		// MergeLabels() prefers local labels over external labels but we prefer
@@ -262,6 +270,8 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 			return err
 		}
 
+		numSeries++
+		numSamples += int64(len(e.Samples))
 		if err := s.Send(storepb.NewSeriesResponse(&storepb.Series{
 			Labels: labelpb.ZLabelsFromPromLabels(lset),
 			Chunks: aggregatedChunks,
@@ -270,6 +280,12 @@ func (p *PrometheusStore) handleSampledPrometheusResponse(
 		}
 	}
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_SAMPLED request.", "series", len(resp.Results[0].Timeseries))
+
+	if span := opentracing.SpanFromContext(s.Context()); span != nil {
+		span.SetTag("result.series", numSeries)
+		span.SetTag("result.samples", numSamples)
+	}
+
 	return s.Flush()
 }
 
@@ -366,6 +382,11 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 	querySpan.SetTag("processed.samples", seriesStats.Samples)
 	querySpan.SetTag("processed.bytes", bodySizer.BytesCount())
 	level.Debug(p.logger).Log("msg", "handled ReadRequest_STREAMED_XOR_CHUNKS request.", "frames", framesNum)
+
+	if span := opentracing.SpanFromContext(s.Context()); span != nil {
+		span.SetTag("result.series", int64(seriesStats.Series))
+		span.SetTag("result.samples", int64(seriesStats.Samples))
+	}
 
 	return s.Flush()
 }
