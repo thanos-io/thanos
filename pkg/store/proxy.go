@@ -297,6 +297,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
 	ctx := srv.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("series.selector", storepb.MatchersToString(originalRequest.Matchers...))
+	}
+
 	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
 	if !foundTenant {
 		if ctx.Value(tenancy.TenantKey) != nil {
