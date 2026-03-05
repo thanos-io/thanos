@@ -610,6 +610,18 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	totalSamples := 0
 	for _, timeseries := range wreq.Timeseries {
 		totalSamples += len(timeseries.Samples)
+		i := 0
+		for _, h := range timeseries.Histograms {
+			// We can also just reject the whole series or request if there is one
+			// native histogram sample getting rejected. But here instead we just
+			//  discard the sample that exceeds the limit.
+			convertedHistogram, allowed := requestLimiter.AllowNativeHistogram(tenantHTTP, h)
+			if allowed {
+				timeseries.Histograms[i] = convertedHistogram
+				i++
+			}
+			timeseries.Histograms = timeseries.Histograms[:i]
+		}
 	}
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
