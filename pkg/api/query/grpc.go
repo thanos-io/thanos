@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,6 +66,10 @@ func RegisterQueryServer(queryServer querypb.QueryServer) func(*grpc.Server) {
 
 func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_QueryServer) error {
 	ctx := server.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("query.expr", request.Query)
+	}
 
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
@@ -189,6 +194,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 
 func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Query_QueryRangeServer) error {
 	ctx := srv.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("query.expr", request.Query)
+	}
+
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
 		timeout := time.Duration(request.TimeoutSeconds) * time.Second
