@@ -26,6 +26,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/types"
 	"github.com/oklog/ulid/v2"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -1867,6 +1868,12 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 	if err != nil {
 		return err
 	}
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("result.series", stats.mergedSeriesCount)
+		span.SetTag("result.samples", stats.mergedChunksCount)
+	}
+
 	return srv.Flush()
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
@@ -302,6 +303,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	}
 	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
 
+	var numSeries, numChunks int64
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
 		series := set.At()
@@ -311,6 +313,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			continue
 		}
 
+		numSeries++
 		storeSeries := storepb.Series{Labels: labelpb.ZLabelsFromPromLabels(completeLabelset)}
 		if r.SkipChunks {
 			if err := srv.Send(storepb.NewSeriesResponse(&storeSeries)); err != nil {
@@ -347,6 +350,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			}
 			frameBytesLeft -= c.Size()
 			seriesChunks = append(seriesChunks, c)
+			numChunks++
 
 			// We are fine with minor inaccuracy of max bytes per frame. The inaccuracy will be max of full chunk size.
 			isNext = chIter.Next()
@@ -375,6 +379,12 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 			return status.Error(codes.Aborted, err.Error())
 		}
 	}
+
+	if span := opentracing.SpanFromContext(srv.Context()); span != nil {
+		span.SetTag("result.series", numSeries)
+		span.SetTag("result.samples", numChunks)
+	}
+
 	return srv.Flush()
 }
 
