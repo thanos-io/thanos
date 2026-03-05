@@ -1585,6 +1585,10 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 
 	tenant, _ := tenancy.GetTenantFromGRPCMetadata(srv.Context())
 
+	if span := opentracing.SpanFromContext(srv.Context()); span != nil {
+		span.SetTag("series.selector", storepb.MatchersToString(req.Matchers...))
+	}
+
 	matchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())

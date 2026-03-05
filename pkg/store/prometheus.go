@@ -128,6 +128,10 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 		newBatchableServer(seriesSrv, int(r.ResponseBatchSize)),
 		sortingStrategyStore)
 
+	if span := opentracing.SpanFromContext(s.Context()); span != nil {
+		span.SetTag("series.selector", storepb.MatchersToString(r.Matchers...))
+	}
+
 	extLset := p.externalLabelsFn()
 
 	match, matchers, err := matchesExternalLabels(r.Matchers, extLset, storecache.NoopMatchersCache)

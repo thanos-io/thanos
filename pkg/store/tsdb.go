@@ -260,6 +260,10 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 		srv = fs
 	}
 
+	if span := opentracing.SpanFromContext(srv.Context()); span != nil {
+		span.SetTag("series.selector", storepb.MatchersToString(r.Matchers...))
+	}
+
 	match, matchers, err := matchesExternalLabels(r.Matchers, s.getExtLset(), s.matcherCache)
 	if err != nil {
 		return status.Error(codes.InvalidArgument, err.Error())
