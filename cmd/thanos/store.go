@@ -406,12 +406,12 @@ func runStore(
 	}
 	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
 		[]block.MetadataFilter{
+			parquetConvertedBlocksFilter,
 			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
 			block.NewLabelShardedMetaFilter(relabelConfig),
 			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
 			ignoreDeletionMarkFilter,
 			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-			parquetConvertedBlocksFilter,
 		})
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
