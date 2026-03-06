@@ -10,6 +10,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
@@ -56,19 +58,28 @@ type WriterOptions struct {
 }
 
 type Writer struct {
-	logger    log.Logger
-	multiTSDB TenantStorage
-	opts      *WriterOptions
+	logger         log.Logger
+	multiTSDB      TenantStorage
+	opts           *WriterOptions
+	commitDuration prometheus.Histogram
 }
 
-func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions) *Writer {
-	if opts == nil {
+func NewWriter(logger log.Logger, multiTSDB TenantStorage, opts *WriterOptions, reg prometheus.Registerer) *Writer {
+	if opts ==
+		nil {
 		opts = &WriterOptions{}
 	}
 	return &Writer{
 		logger:    logger,
 		multiTSDB: multiTSDB,
 		opts:      opts,
+		commitDuration: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
+			Namespace: "thanos",
+			Subsystem: "receive",
+			Name:      "writer_commit_duration_seconds",
+			Help:      "Duration of TSDB commit calls in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		}),
 	}
 }
 
@@ -163,8 +174,10 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 	}
 
 	errs := errorTracker.collectErrors(tLogger)
+	commitStart := time.Now()
 	if err := app.Commit(); err != nil {
 		errs.Add(errors.Wrap(err, "commit samples"))
 	}
+	r.commitDuration.Observe(time.Since(commitStart).Seconds())
 	return errs.ErrOrNil()
 }

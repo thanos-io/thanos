@@ -333,7 +333,7 @@ func TestWriter(t *testing.T) {
 			t.Run("proto_writer", func(t *testing.T) {
 				logger, m, app := setupMultitsdb(t, testData.maxExemplars)
 
-				w := NewWriter(logger, m, testData.opts)
+				w := NewWriter(logger, m, testData.opts, prometheus.NewRegistry())
 
 				for idx, req := range testData.reqs {
 					err := w.Write(context.Background(), tenancy.DefaultTenant, req.Timeseries)
@@ -504,7 +504,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	}
 
 	b.Run("without interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: false})
+		w := NewWriter(logger, m, &WriterOptions{Intern: false}, prometheus.NewRegistry())
 
 		b.ReportAllocs()
 		b.ResetTimer()
@@ -515,7 +515,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	})
 
 	b.Run("with interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: true})
+		w := NewWriter(logger, m, &WriterOptions{Intern: true}, prometheus.NewRegistry())
 
 		b.ReportAllocs()
 		b.ResetTimer()

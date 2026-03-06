@@ -275,7 +275,7 @@ func runReceive(
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
 		Intern:                   conf.writerInterning,
 		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
-	})
+	}, reg)
 
 	var limitsConfig *receive.RootLimitsConfig
 	if conf.writeLimitsConfig != nil {

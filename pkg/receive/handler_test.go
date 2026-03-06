@@ -302,7 +302,7 @@ func newTestHandlerHashring(
 			ReplicaHeader:     DefaultReplicaHeader,
 			ReplicationFactor: replicationFactor,
 			ForwardTimeout:    5 * time.Minute,
-			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts),
+			Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendables[i]), wOpts, prometheus.NewRegistry()),
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
@@ -1166,7 +1166,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		metadata.NoneFunc,
 	)
 	defer func() { testutil.Ok(b, m.Close()) }()
-	handler.writer = NewWriter(logger, m, &WriterOptions{})
+	handler.writer = NewWriter(logger, m, &WriterOptions{}, prometheus.NewRegistry())
 
 	testutil.Ok(b, m.Flush())
 	testutil.Ok(b, m.Open())
