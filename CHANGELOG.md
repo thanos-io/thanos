@@ -16,6 +16,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Added
 
+- [#8691](https://github.com/thanos-io/thanos/pull/8691): Compactor: remove the directory marker objects for some s3 compatible object stores
+
 ### Changed
 
 - [#8670](https://github.com/thanos-io/thanos/pull/8670): Receive: *breaking :warning:* removed `--shipper.ignore-unequal-block-size`. TSDB now delays compaction until blocks have been uploaded by the shipper, allowing compaction while uploading without risking data loss.
