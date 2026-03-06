@@ -153,7 +153,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
+	rwHTTPTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
 	if err != nil {
 		return err
 	}
@@ -276,7 +276,7 @@ func runReceive(
 		RelabelConfigs:       relabelConfig,
 		ReceiverMode:         receiveMode,
 		Tracer:               tracer,
-		TLSConfig:            rwTLSConfig,
+		TLSConfig:            rwHTTPTLSConfig,
 		SplitTenantLabelName: conf.splitTenantLabelName,
 		DialOpts:             dialOpts,
 		ForwardTimeout:       time.Duration(*conf.forwardTimeout),
@@ -850,18 +850,22 @@ type receiveConfig struct {
 
 	grpcConfig grpcConfig
 
-	replicationAddr       string
+	replicationAddr string
+
+	// HTTP server listen address and TLS configuration for HTTP API
 	rwAddress             string
 	rwServerCert          string
 	rwServerKey           string
 	rwServerClientCA      string
-	rwClientCert          string
-	rwClientKey           string
-	rwClientSecure        bool
-	rwClientServerCA      string
-	rwClientServerName    string
-	rwClientSkipVerify    bool
 	rwServerTlsMinVersion string
+
+	// gRPC client TLS configuration for remote write forwarding
+	rwClientCert       string
+	rwClientKey        string
+	rwClientSecure     bool
+	rwClientServerCA   string
+	rwClientServerName string
+	rwClientSkipVerify bool
 
 	dataDir   string
 	labelStrs []string
@@ -946,7 +950,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
-	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the HTTP server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
 
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 

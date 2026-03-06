@@ -473,7 +473,7 @@ Flags:
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.server-tls-min-version="1.3"
-                                 TLS version for the gRPC server, leave blank
+                                 TLS version for the HTTP server, leave blank
                                  to default to TLS 1.3, allow values: ["1.0",
                                  "1.1", "1.2", "1.3"]
       --remote-write.client-tls-cert=""

@@ -14,6 +14,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8700](https://github.com/thanos-io/thanos/pull/8700): Fix incorrect help-text on `--remote-write.server-tls-min-version`
+
 ### Added
 
 ### Changed
