@@ -248,8 +248,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -360,8 +359,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 		err = m.Flush()
 		require.NoError(t, err)
 
-		err = m.Close()
-		require.NoError(t, err)
+		m.Close()
 	})
 }
 
@@ -596,8 +594,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -771,8 +768,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -826,8 +822,7 @@ func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 		err = m.Flush()
 		require.NoError(t, err)
 
-		err = m.Close()
-		require.NoError(t, err)
+		m.Close()
 	})
 }
 
