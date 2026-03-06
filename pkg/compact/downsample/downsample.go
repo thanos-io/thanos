@@ -69,6 +69,12 @@ func cutNewChunk(curEnc, prevEnc chunkenc.Encoding) bool {
 	return false
 }
 
+// hasCustomBuckets returns true if the histogram uses custom buckets (schema < 0).
+// Custom buckets histograms cannot be downsampled.
+func hasCustomBuckets(fh *histogram.FloatHistogram) bool {
+	return fh != nil && fh.Schema < 0
+}
+
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	ctx context.Context,
@@ -350,6 +356,13 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
+
+	// Custom buckets histograms (schema < 0) cannot be downsampled.
+	// Skip them to avoid panic in CopyToSchema.
+	if hasCustomBuckets(fh) {
+		return
+	}
+
 	if fh.Schema < h.schema {
 		panic("schema must be greater or equal to aggregator schema")
 	}
@@ -430,7 +443,8 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
 	for _, s := range samples {
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+		// Skip custom buckets histograms (schema < 0) as they cannot be downsampled.
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema >= 0 && s.fh.Schema < schema {
 			schema = s.fh.Schema
 		}
 	}
@@ -451,6 +465,13 @@ func downsampleHistogramBatch(batch []sample, resolution int64) chunks.Meta {
 	// We need to know the smallest schema in advanced otherwise we might end
 	// up with a non appendable histogram if histogram.schema < chunk.schema.
 	schema := minSchema(batch)
+
+	// If all histograms have custom buckets (schema < 0), we cannot downsample them.
+	// Return an empty chunk meta to skip this batch.
+	if schema == math.MaxInt32 || schema < 0 {
+		return chunks.Meta{}
+	}
+
 	ab := newHistogramAggrChunkBuilder(isGaugeSamples(batch))
 	downsampleBatch(batch, resolution, newHistogramAggregator(schema), ab.addHistogram)
 	return ab.encode()
@@ -682,6 +703,10 @@ func downsampleRawLoop(
 			if s.fh != nil && math.IsNaN(s.fh.Sum) {
 				continue
 			}
+			// Skip custom buckets histograms (schema < 0) as they cannot be downsampled.
+			if hasCustomBuckets(s.fh) {
+				continue
+			}
 			batch = append(batch, s)
 		}
 		data = data[j:]
@@ -689,7 +714,11 @@ func downsampleRawLoop(
 			continue
 		}
 
-		*chks = append(*chks, downsampleBatchFn(batch, resolution))
+		chk := downsampleBatchFn(batch, resolution)
+		// Skip empty chunks (e.g., when all samples were custom buckets).
+		if chk.Chunk != nil {
+			*chks = append(*chks, chk)
+		}
 	}
 }
 
