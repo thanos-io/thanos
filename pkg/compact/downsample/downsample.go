@@ -350,7 +350,9 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
-	if fh.Schema < h.schema {
+	// Custom bucket histograms (schema < 0) cannot be reduced in resolution.
+	// Skip the schema check for custom buckets and use them as-is.
+	if fh.Schema >= 0 && fh.Schema < h.schema {
 		panic("schema must be greater or equal to aggregator schema")
 	}
 
@@ -359,7 +361,8 @@ func (h *histogramAggregator) add(s sample) {
 	oFh := fh
 	// If schema of the sample is greater than the
 	// aggregator schema, we need to reduce the resolution.
-	if fh.Schema > h.schema {
+	// Custom bucket histograms (schema < 0) cannot be reduced, so skip this step.
+	if fh.Schema >= 0 && fh.Schema > h.schema {
 		fh = fh.CopyToSchema(h.schema)
 	}
 
@@ -430,7 +433,9 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
 	for _, s := range samples {
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+		// Skip custom bucket schemas (schema < 0) since they cannot be reduced
+		// in resolution using CopyToSchema. Only consider exponential bucket schemas.
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema >= 0 && s.fh.Schema < schema {
 			schema = s.fh.Schema
 		}
 	}
