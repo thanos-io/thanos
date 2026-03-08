@@ -1924,6 +1924,85 @@ func TestApplyCounterResetsIterator(t *testing.T) {
 
 }
 
+func TestDownsampleRawCustomBucketsHistograms(t *testing.T) {
+	// Regression test for https://github.com/thanos-io/thanos/issues/8698
+	// Downsampling native histograms with custom buckets should not panic.
+	const resolution = int64(300_000) // 5 minutes
+
+	t.Run("all custom buckets", func(t *testing.T) {
+		n := 30
+		histograms := tsdbutil.GenerateTestCustomBucketsFloatHistograms(n)
+		data := make([]sample, 0, n)
+		for i, fh := range histograms {
+			data = append(data, sample{t: int64(i) * 30_000, fh: fh})
+		}
+
+		// Should not panic.
+		chks := DownsampleRaw(data, resolution)
+		require.NotEmpty(t, chks)
+	})
+
+	t.Run("custom buckets with counter resets", func(t *testing.T) {
+		// Generate two batches of custom bucket histograms to simulate a counter reset.
+		batch1 := tsdbutil.GenerateTestCustomBucketsFloatHistograms(15)
+		batch2 := tsdbutil.GenerateTestCustomBucketsFloatHistograms(10)
+
+		data := make([]sample, 0, 25)
+		ts := int64(0)
+		for _, fh := range batch1 {
+			data = append(data, sample{t: ts, fh: fh})
+			ts += 30_000
+		}
+		for _, fh := range batch2 {
+			data = append(data, sample{t: ts, fh: fh})
+			ts += 30_000
+		}
+
+		// Should not panic.
+		chks := DownsampleRaw(data, resolution)
+		require.NotEmpty(t, chks)
+	})
+}
+
+func TestMinSchemaCustomBuckets(t *testing.T) {
+	expHist := &histogram.FloatHistogram{
+		Schema: 3,
+		Count:  1,
+		Sum:    1.0,
+	}
+	cbHist := &histogram.FloatHistogram{
+		Schema:       histogram.CustomBucketsSchema,
+		Count:        1,
+		Sum:          1.0,
+		CustomValues: []float64{0, 1, 2},
+	}
+
+	t.Run("all exponential", func(t *testing.T) {
+		samples := []sample{
+			{t: 1, fh: expHist},
+			{t: 2, fh: &histogram.FloatHistogram{Schema: 1, Count: 1, Sum: 1.0}},
+		}
+		require.Equal(t, int32(1), minSchema(samples))
+	})
+
+	t.Run("all custom buckets", func(t *testing.T) {
+		samples := []sample{
+			{t: 1, fh: cbHist},
+			{t: 2, fh: cbHist},
+		}
+		require.Equal(t, histogram.CustomBucketsSchema, minSchema(samples))
+	})
+
+	t.Run("mixed custom and exponential", func(t *testing.T) {
+		samples := []sample{
+			{t: 1, fh: cbHist},
+			{t: 2, fh: expHist},
+		}
+		// Should return the min exponential schema, not the custom buckets schema.
+		require.Equal(t, int32(3), minSchema(samples))
+	})
+}
+
 func TestApplyCounterResetsIteratorHistograms(t *testing.T) {
 	const lenChunks, lenChunk = 4, 10
 
