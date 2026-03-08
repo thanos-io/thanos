@@ -367,7 +367,14 @@ func (h *histogramAggregator) add(s sample) {
 	}
 
 	if h.total > 0 {
-		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
+		// Check if schemas are incompatible (custom bucket vs exponential bucket).
+		// Custom bucket histograms (schema < 0) and exponential bucket histograms (schema >= 0)
+		// cannot be added together. Treat as a counter reset.
+		incompatibleSchemas := (h.counter.Schema < 0) != (fh.Schema < 0)
+		if incompatibleSchemas {
+			// Schema type changed, treat as counter reset.
+			h.counter = fh.Copy()
+		} else if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
 			// Counter reset, correct the value.
 			mustHistogramOp(h.counter.Add(fh))
 		} else if oFh.Schema < 0 {
@@ -391,7 +398,15 @@ func (h *histogramAggregator) add(s sample) {
 	if h.sum == nil {
 		h.sum = fh.Copy()
 	} else {
-		mustHistogramOp(h.sum.Add(fh))
+		// Check if schemas are incompatible (custom bucket vs exponential bucket).
+		// Custom bucket histograms (schema < 0) and exponential bucket histograms (schema >= 0)
+		// cannot be added together. Reset the sum to the new histogram.
+		incompatibleSchemas := (h.sum.Schema < 0) != (fh.Schema < 0)
+		if incompatibleSchemas {
+			h.sum = fh.Copy()
+		} else {
+			mustHistogramOp(h.sum.Add(fh))
+		}
 	}
 
 	// This needs to be h gauge histogram, otherwise reset detection will be triggered
