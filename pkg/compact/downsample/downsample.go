@@ -370,13 +370,14 @@ func (h *histogramAggregator) add(s sample) {
 		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
 			// Counter reset, correct the value.
 			mustHistogramOp(h.counter.Add(fh))
+		} else if oFh.Schema < 0 {
+			// Custom bucket histograms (schema < 0) cannot be subtracted.
+			// Treat as a counter reset and add the full value.
+			mustHistogramOp(h.counter.Add(fh))
 		} else {
 			// Add delta with previous value to the counter.
-			// TODO: support NHCB.
 			deltaFh, _, _, err := fh.Copy().Sub(h.previous)
 			if err != nil {
-				// TODO(GiedriusS): support native histograms with custom buckets.
-				// This can only happen with custom buckets.
 				panic(fmt.Sprintf("unexpected error: %v", err))
 			}
 
