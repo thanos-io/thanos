@@ -38,10 +38,9 @@ func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
 		zlset[i].Value += "yolo"
 	}
 
+	// ZLabelsFromPromLabels now copies data, so modifying zlset does not affect the original.
 	m := lset.Map()
-	testutil.Equals(t, "1yolo", m["a"])
-
-	m["a"] = "1"
+	testutil.Equals(t, "1", m["a"])
 	testutil.Equals(t, testLsetMap, m)
 }
 
