@@ -40,6 +40,9 @@ func noAllocBytes(buf string) []byte {
 
 // ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel.
 func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
+	if lset.IsEmpty() {
+		return nil
+	}
 	zlabels := make([]ZLabel, 0, lset.Len())
 	lset.Range(func(l labels.Label) {
 		zlabels = append(zlabels, ZLabel{Name: l.Name, Value: l.Value})
