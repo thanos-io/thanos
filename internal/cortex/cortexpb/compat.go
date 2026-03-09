@@ -19,21 +19,29 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/util"
 )
 
-// FromLabelAdaptersToLabels casts []LabelAdapter to labels.Labels.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
-//
-// Note: while resulting labels.Labels is supposedly sorted, this function
-// doesn't enforce that. If input is not sorted, output will be wrong.
+// FromLabelAdaptersToLabels converts []LabelAdapter to labels.Labels.
 func FromLabelAdaptersToLabels(ls []LabelAdapter) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&ls))
+	if len(ls) == 0 {
+		return labels.EmptyLabels()
+	}
+	b := labels.NewScratchBuilder(len(ls))
+	for _, l := range ls {
+		b.Add(l.Name, l.Value)
+	}
+	b.Sort()
+	return b.Labels()
 }
 
-// FromLabelsToLabelAdapters casts labels.Labels to []LabelAdapter.
-// It uses unsafe, but as LabelAdapter == labels.Label this should be safe.
-// This allows us to use labels.Labels directly in protos.
+// FromLabelsToLabelAdapters converts labels.Labels to []LabelAdapter.
 func FromLabelsToLabelAdapters(ls labels.Labels) []LabelAdapter {
-	return *(*[]LabelAdapter)(unsafe.Pointer(&ls))
+	if ls.IsEmpty() {
+		return nil
+	}
+	result := make([]LabelAdapter, 0, ls.Len())
+	ls.Range(func(l labels.Label) {
+		result = append(result, LabelAdapter{Name: l.Name, Value: l.Value})
+	})
+	return result
 }
 
 // FromLabelAdaptersToMetric converts []LabelAdapter to a model.Metric.
