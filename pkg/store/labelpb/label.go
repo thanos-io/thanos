@@ -53,7 +53,6 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 	for _, l := range lset {
 		b.Add(l.Name, l.Value)
 	}
-	b.Sort()
 	return b.Labels()
 }
 
