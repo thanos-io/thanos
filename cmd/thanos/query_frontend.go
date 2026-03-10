@@ -97,6 +97,9 @@ func registerQueryFrontend(app *extkingpin.App) {
 	cmd.Flag("query-range.max-retries-per-request", "Maximum number of retries for a single query range request; beyond this, the downstream error is returned.").
 		Default("5").IntVar(&cfg.QueryRangeConfig.MaxRetries)
 
+	cmd.Flag("query.max-retries-per-request", "Maximum number of retries for a single instant query request; beyond this, the downstream error is returned.").
+		Default("5").IntVar(&cfg.QueryInstantConfig.MaxRetries)
+
 	cmd.Flag("query-frontend.enable-x-functions", "Enable experimental x- functions in query-frontend. --no-query-frontend.enable-x-functions for disabling.").
 		Default("false").BoolVar(&cfg.EnableXFunctions)
 
