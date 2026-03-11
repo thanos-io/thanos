@@ -201,6 +201,7 @@ type Config struct {
 	QueryRangeConfig
 	LabelsConfig
 	DownstreamTripperConfig
+	QueryInstantConfig
 
 	CortexHandlerConfig    *transport.HandlerConfig
 	CompressResponses      bool
@@ -214,6 +215,11 @@ type Config struct {
 	TenantCertField        string
 	EnableXFunctions       bool
 	EnableFeatures         []string
+}
+
+// QueryInstantConfig holds the config for query range tripperware.
+type QueryInstantConfig struct {
+	MaxRetries int
 }
 
 // QueryRangeConfig holds the config for query range tripperware.

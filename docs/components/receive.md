@@ -372,7 +372,8 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1052,1062p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1065,1076p' pkg/receive/handler.go"
+
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -401,8 +402,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:

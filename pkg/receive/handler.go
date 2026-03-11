@@ -769,11 +769,12 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	var writeErrors writeErrors
 	var stats = make(tenantRequestStats)
 
+	// If all series reached the success threshold, we don't cancel the context
+	// so that in-flight forward requests can optimistically complete until timeout,
+	// improving the chance of full replication. On failure we cancel immediately.
+	optimisticallyWaitForSuccesses := false
 	defer func() {
-		if writeErrors.ErrOrNil() != nil {
-			// NOTICE: The cancel function is not used on all paths intentionally,
-			// if there is no error when quorum is reached,
-			// let forward requests to optimistically run until timeout.
+		if !optimisticallyWaitForSuccesses {
 			cancel()
 		}
 	}()
@@ -813,7 +814,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is canceled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success or fail quorum faster.
 	defer func() {
 		go func() {
 			for resp := range responses {
@@ -824,38 +825,51 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}()
 	}()
 
-	quorum := h.writeQuorum()
+	successThreshold := h.writeQuorum()
 	if params.alreadyReplicated {
-		quorum = 1
+		successThreshold = 1
 	}
+	// failureThreshold is the number of failures after which a series can no
+	// longer reach the success threshold. For RF=3 and successThreshold=2 this is 2.
+	failureThreshold := len(params.replicas) - successThreshold + 1
 	successes := make([]int, len(params.writeRequest.Timeseries))
-	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
+	failures := make([]int, len(params.writeRequest.Timeseries))
+	seriesErrs := newReplicationErrors(successThreshold, len(params.writeRequest.Timeseries))
 	for {
 		select {
 		case <-ctx.Done():
 			return stats, ctx.Err()
 		case resp, hasMore := <-responses:
 			if !hasMore {
-				for _, seriesErr := range seriesErrs {
-					writeErrors.Add(seriesErr)
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+					}
 				}
 				return stats, writeErrors.ErrOrNil()
 			}
 
 			if resp.err != nil {
-				// Track errors and successes on a per-series basis.
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
+					failures[seriesID]++
 				}
+			} else {
+				for _, seriesID := range resp.seriesIDs {
+					successes[seriesID]++
+				}
+			}
 
-				continue
-			}
-			// At the end, aggregate all errors if there are any and return them.
-			for _, seriesID := range resp.seriesIDs {
-				successes[seriesID]++
-			}
-			if quorumReached(successes, quorum) {
-				return stats, nil
+			if canReturnEarly(successes, failures, successThreshold, failureThreshold) {
+				var hadErrors bool
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+						hadErrors = true
+					}
+				}
+				optimisticallyWaitForSuccesses = !hadErrors
+				return stats, writeErrors.ErrOrNil()
 			}
 		}
 	}
@@ -1061,13 +1075,15 @@ func (h *Handler) writeQuorum() int {
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
-func quorumReached(successes []int, successThreshold int) bool {
-	for _, success := range successes {
-		if success < successThreshold {
+// canReturnEarly returns true when every series in the request has a
+// determined outcome: either it reached the success threshold or it accumulated
+// enough failures that reaching the success threshold is no longer possible.
+func canReturnEarly(successes, failures []int, successThreshold, failureThreshold int) bool {
+	for i := range successes {
+		if successes[i] < successThreshold && failures[i] < failureThreshold {
 			return false
 		}
 	}
-
 	return true
 }
 
