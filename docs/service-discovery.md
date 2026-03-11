@@ -96,7 +96,7 @@ This configuration will instruct Thanos to discover all endpoints within the `th
 --endpoint=dnssrvnoa+_thanosstores._tcp.mycompany.org
 ```
 
-* `dnsdualstack+` - the domain name after this prefix will be looked up as both A and AAAA queries simultaneously, returning all resolved addresses. This provides dual-stack resilience by resolving both IPv4 and IPv6 addresses, with automatic failover handled by gRPC's built-in health checking. *A port is required for this query type*. This is most useful with `--endpoint-group`, which allows gRPC to manage all resolved addresses as a single logical group with automatic failover. For example:
+* `dnsdualstack+` - the domain name after this prefix will be looked up as both A and AAAA queries, returning all resolved addresses. This provides dual-stack resilience by resolving both IPv4 and IPv6 addresses, with automatic failover handled by gRPC's built-in health checking. *A port is required for this query type*. This is most useful with `--endpoint-group`, which allows gRPC to manage all resolved addresses as a single logical group with automatic failover. For example:
 
 ```
 --endpoint-group=dnsdualstack+stores.thanos.mycompany.org:9090

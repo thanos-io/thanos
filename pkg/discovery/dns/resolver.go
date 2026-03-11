@@ -157,7 +157,7 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
 		}
 		if len(ips) == 0 {
-			level.Error(s.logger).Log("msg", "failed to lookup IP addresses (dual-stack)", "host", host)
+			level.Error(s.logger).Log("msg", "found no IP addresses (dual-stack)", "host", host)
 		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)
