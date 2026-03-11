@@ -42,6 +42,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -1997,4 +1999,124 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	<-time.After(1 * time.Second)
 	cancel()
 	wg.Wait()
+}
+
+// fakeAlwaysOverLimitSeriesLimiter is a headSeriesLimiter that always reports the tenant as over limit.
+type fakeAlwaysOverLimitSeriesLimiter struct{}
+
+func (f *fakeAlwaysOverLimitSeriesLimiter) QueryMetaMonitoring(_ context.Context) error { return nil }
+func (f *fakeAlwaysOverLimitSeriesLimiter) isUnderLimit(_ string) (bool, error)         { return false, nil }
+
+// fakeUnavailableRemoteWriteClient is a WriteableStoreAsyncClient that always returns codes.Unavailable.
+type fakeUnavailableRemoteWriteClient struct{}
+
+func (f *fakeUnavailableRemoteWriteClient) RemoteWrite(_ context.Context, _ *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return nil, status.Error(codes.Unavailable, "peer unavailable")
+}
+
+func (f *fakeUnavailableRemoteWriteClient) RemoteWriteAsync(_ context.Context, _ *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) {
+	err := status.Error(codes.Unavailable, "peer unavailable")
+	responses <- writeResponse{er: er, err: err, seriesIDs: seriesIDs}
+	cb(err)
+}
+
+func (f *fakeUnavailableRemoteWriteClient) Close() error { return nil }
+
+// TestRetryAfterHeaderOnActiveSeriesLimitExceeded verifies that the Retry-After header is set
+// when a tenant exceeds the active-series limit (429 Too Many Requests).
+func TestRetryAfterHeaderOnActiveSeriesLimitExceeded(t *testing.T) {
+	t.Parallel()
+
+	const backoff = 10 * time.Second
+
+	appendable := &fakeAppendable{appender: newFakeAppender(nil, nil, nil)}
+	limiter, err := NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	require.NoError(t, err)
+
+	h := NewHandler(log.NewNopLogger(), &Options{
+		TenantHeader:      tenancy.DefaultTenantHeader,
+		ReplicaHeader:     DefaultReplicaHeader,
+		ReplicationFactor: 1,
+		ForwardTimeout:    5 * time.Second,
+		Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(appendable), &WriterOptions{}),
+		Limiter:           limiter,
+		RetryAfterBackoff: backoff,
+		RetryAfterJitter:  0,
+	})
+
+	// Replace the head series limiter with one that always reports over-limit.
+	h.Limiter.headSeriesLimiterMtx.Lock()
+	h.Limiter.headSeriesLimiter = &fakeAlwaysOverLimitSeriesLimiter{}
+	h.Limiter.headSeriesLimiterMtx.Unlock()
+
+	hashring, err := newSimpleHashring([]Endpoint{{Address: "http://localhost:12345"}})
+	require.NoError(t, err)
+	h.Hashring(hashring)
+	h.options.Endpoint = "http://localhost:12345"
+
+	wreq := &prompb.WriteRequest{Timeseries: makeSeriesWithValues(1)}
+	rec, reqErr := makeRequest(h, "test-tenant", wreq)
+	require.NoError(t, reqErr)
+
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
+	retryAfter := rec.Header().Get("Retry-After")
+	require.NotEmpty(t, retryAfter, "Retry-After header must be set on 429")
+	retryTime, parseErr := http.ParseTime(retryAfter)
+	require.NoError(t, parseErr, "Retry-After header must be a valid HTTP date")
+	require.True(t, retryTime.After(time.Now()), "Retry-After must be in the future")
+}
+
+// TestRetryAfterHeaderOnQuorumUnavailable verifies that the Retry-After header is set
+// when a write fails due to quorum being unavailable (503 Service Unavailable).
+func TestRetryAfterHeaderOnQuorumUnavailable(t *testing.T) {
+	t.Parallel()
+
+	const backoff = 10 * time.Second
+
+	appendables := []*fakeAppendable{
+		{appender: newFakeAppender(nil, nil, nil)},
+		{appender: newFakeAppender(nil, nil, nil)},
+		{appender: newFakeAppender(nil, nil, nil)},
+	}
+
+	handlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, closeFunc())
+		time.AfterFunc(50*time.Millisecond, func() {
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+	}()
+
+	// Replace every peer connection with a client that always returns codes.Unavailable,
+	// so that quorum (2 out of 3) can never be reached when replicating.
+	unavailableClient := newPeerWorker(&fakeUnavailableRemoteWriteClient{}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0)
+	for _, hh := range handlers {
+		hh.options.RetryAfterBackoff = backoff
+		hh.options.RetryAfterJitter = 0
+		pg := hh.peers.(*fakePeersGroup)
+		for endpoint := range pg.clients {
+			pg.clients[endpoint] = unavailableClient
+		}
+	}
+
+	wreq := &prompb.WriteRequest{Timeseries: makeSeriesWithValues(1)}
+
+	for i, hh := range handlers {
+		rec, reqErr := makeRequest(hh, "test-tenant", wreq)
+		require.NoError(t, reqErr)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			// Not all nodes will necessarily return 503 (depends on hashing), skip those that don't.
+			continue
+		}
+
+		retryAfter := rec.Header().Get("Retry-After")
+		require.NotEmptyf(t, retryAfter, "handler %d: Retry-After header must be set on 503", i)
+		retryTime, parseErr := http.ParseTime(retryAfter)
+		require.NoErrorf(t, parseErr, "handler %d: Retry-After header must be a valid HTTP date", i)
+		require.Truef(t, retryTime.After(time.Now()), "handler %d: Retry-After must be in the future", i)
+	}
 }
