@@ -759,7 +759,7 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 			responseStatusCode = http.StatusInternalServerError
 		}
 		if responseStatusCode == http.StatusServiceUnavailable {
-			w.Header().Add("Retry-After", time.Now().Add(h.retryAfterDuration()).Format(http.TimeFormat))
+			w.Header().Add("Retry-After", time.Now().UTC().Add(h.retryAfterDuration()).Format(http.TimeFormat))
 		}
 		http.Error(w, err.Error(), responseStatusCode)
 	}
@@ -806,7 +806,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
-		w.Header().Add("Retry-After", time.Now().Add(h.retryAfterDuration()).Format(http.TimeFormat))
+		w.Header().Add("Retry-After", time.Now().UTC().Add(h.retryAfterDuration()).Format(http.TimeFormat))
 		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 		return
 	}
