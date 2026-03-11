@@ -14,6 +14,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8714](https://github.com/thanos-io/thanos/pull/8714): Tracing: Fix `tls_config` fields (`ca_file`, `cert_file`, `key_file`) being silently ignored when using the OTLP gRPC exporter. Previously, deployments using a private CA or mTLS client certificates had to work around this via `OTEL_EXPORTER_OTLP_CERTIFICATE` and related environment variables.
 - [#8128](https://github.com/thanos-io/thanos/issues/8128): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
 
 ### Added
