@@ -21,10 +21,13 @@ type mockHostnameResolver struct {
 	resultSRVs map[string][]*net.SRV
 	err        error
 
-	// Per-network results for LookupIPAddrByNetwork. Key format: "network:host".
 	resultByNetwork map[string][]net.IPAddr
 	errByNetwork    map[string]error
 	isNotFound      func(error) bool
+}
+
+func lookupKey(network, host string) string {
+	return network + ":" + host
 }
 
 func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error) {
@@ -35,7 +38,7 @@ func (m mockHostnameResolver) LookupIPAddr(ctx context.Context, host string) ([]
 }
 
 func (m mockHostnameResolver) LookupIPAddrByNetwork(_ context.Context, network, host string) ([]net.IPAddr, error) {
-	key := network + ":" + host
+	key := lookupKey(network, host)
 	if m.errByNetwork != nil {
 		if err, ok := m.errByNetwork[key]; ok {
 			return nil, err
@@ -242,8 +245,8 @@ func TestDnsSD_ResolveDualStack(t *testing.T) {
 			addr: host + ":8080",
 			resolver: &mockHostnameResolver{
 				resultByNetwork: map[string][]net.IPAddr{
-					"ip6:" + host: {{IP: ipv6}},
-					"ip4:" + host: {{IP: ipv4}},
+					lookupKey("ip6", host): {{IP: ipv6}},
+					lookupKey("ip4", host): {{IP: ipv4}},
 				},
 			},
 			expectedResult: []string{"[2001:db8::1]:8080", "192.168.1.1:8080"},
@@ -253,7 +256,7 @@ func TestDnsSD_ResolveDualStack(t *testing.T) {
 			addr: host + ":8080",
 			resolver: &mockHostnameResolver{
 				resultByNetwork: map[string][]net.IPAddr{
-					"ip6:" + host: {{IP: ipv6}},
+					lookupKey("ip6", host): {{IP: ipv6}},
 				},
 			},
 			expectedResult: []string{"[2001:db8::1]:8080"},
@@ -263,7 +266,7 @@ func TestDnsSD_ResolveDualStack(t *testing.T) {
 			addr: host + ":8080",
 			resolver: &mockHostnameResolver{
 				resultByNetwork: map[string][]net.IPAddr{
-					"ip4:" + host: {{IP: ipv4}},
+					lookupKey("ip4", host): {{IP: ipv4}},
 				},
 			},
 			expectedResult: []string{"192.168.1.1:8080"},
@@ -280,10 +283,10 @@ func TestDnsSD_ResolveDualStack(t *testing.T) {
 			addr: host + ":8080",
 			resolver: &mockHostnameResolver{
 				resultByNetwork: map[string][]net.IPAddr{
-					"ip4:" + host: {{IP: ipv4}},
+					lookupKey("ip4", host): {{IP: ipv4}},
 				},
 				errByNetwork: map[string]error{
-					"ip6:" + host: errors.New("network unreachable"),
+					lookupKey("ip6", host): errors.New("network unreachable"),
 				},
 			},
 			expectedResult: []string{"192.168.1.1:8080"},
@@ -293,10 +296,10 @@ func TestDnsSD_ResolveDualStack(t *testing.T) {
 			addr: host + ":8080",
 			resolver: &mockHostnameResolver{
 				resultByNetwork: map[string][]net.IPAddr{
-					"ip6:" + host: {{IP: ipv6}},
+					lookupKey("ip6", host): {{IP: ipv6}},
 				},
 				errByNetwork: map[string]error{
-					"ip4:" + host: errors.New("network unreachable"),
+					lookupKey("ip4", host): errors.New("network unreachable"),
 				},
 			},
 			expectedResult: []string{"[2001:db8::1]:8080"},
@@ -329,8 +332,8 @@ func TestDnsSD_ResolveDualStack_Errors(t *testing.T) {
 	t.Run("both families fail propagates error", func(t *testing.T) {
 		resolver := &mockHostnameResolver{
 			errByNetwork: map[string]error{
-				"ip6:" + host: errors.New("network unreachable"),
-				"ip4:" + host: errors.New("network unreachable"),
+				lookupKey("ip6", host): errors.New("network unreachable"),
+				lookupKey("ip4", host): errors.New("network unreachable"),
 			},
 		}
 		dnsSD := dnsSD{resolver, log.NewNopLogger()}
@@ -343,8 +346,8 @@ func TestDnsSD_ResolveDualStack_Errors(t *testing.T) {
 		notFound := &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 		resolver := &mockHostnameResolver{
 			errByNetwork: map[string]error{
-				"ip6:" + host: notFound,
-				"ip4:" + host: notFound,
+				lookupKey("ip6", host): notFound,
+				lookupKey("ip4", host): notFound,
 			},
 			isNotFound: func(err error) bool {
 				dnsErr, ok := err.(*net.DNSError)
@@ -362,8 +365,8 @@ func TestDnsSD_ResolveDualStack_Errors(t *testing.T) {
 		notFound := &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 		resolver := &mockHostnameResolver{
 			errByNetwork: map[string]error{
-				"ip6:" + host: notFound,
-				"ip4:" + host: errors.New("server misbehaving"),
+				lookupKey("ip6", host): notFound,
+				lookupKey("ip4", host): errors.New("server misbehaving"),
 			},
 			isNotFound: func(err error) bool {
 				dnsErr, ok := err.(*net.DNSError)
