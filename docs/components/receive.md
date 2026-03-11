@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1333,1343p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1348,1358p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -701,5 +701,14 @@ Flags:
                                  this number of responses. This is to limit the
                                  memory usage. This flag takes effect only when
                                  the lazy retrieval strategy is enabled.
+      --receive.active-series-limiting.retry-after-backoff=5s
+                                 Backoff duration for the Retry-After header
+                                 returned on 429 (active-series-limiting
+                                 exceeded) and 503 (quorum unavailable)
+                                 responses.
+      --receive.active-series-limiting.retry-after-jitter=0.5
+                                 Fraction of the backoff duration to use as
+                                 random jitter for the Retry-After header (e.g.
+                                 0.5 = ±50%).
 
 ```
