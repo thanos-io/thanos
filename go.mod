@@ -124,6 +124,7 @@ require (
 	github.com/tjhop/slog-gokit v0.1.4
 	go.opentelemetry.io/collector/pdata v1.48.0
 	go.opentelemetry.io/collector/semconv v0.128.0
+	go.opentelemetry.io/proto/otlp v1.9.0
 )
 
 require github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
@@ -303,7 +304,6 @@ require (
 	go.opentelemetry.io/contrib/propagators/jaeger v1.36.0 // indirect
 	go.opentelemetry.io/otel/metric v1.39.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
