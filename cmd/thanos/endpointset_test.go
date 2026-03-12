@@ -9,15 +9,12 @@ import (
 	"github.com/efficientgo/core/testutil"
 )
 
-func boolPtr(b bool) *bool    { return &b }
-func strPtr(s string) *string { return &s }
-
 func TestPerEndpointTLSConfig(t *testing.T) {
 	globalTLSConfig := &tlsConfig{
-		Enabled:  boolPtr(true),
-		CertFile: strPtr("/mock-path.pem"),
-		KeyFile:  strPtr("/mock-key-path.pem"),
-		CAFile:   strPtr("/mock-ca-path.pem"),
+		Enabled:  new(true),
+		CertFile: new("/mock-path.pem"),
+		KeyFile:  new("/mock-key-path.pem"),
+		CAFile:   new("/mock-ca-path.pem"),
 	}
 
 	var (
@@ -44,7 +41,7 @@ func TestPerEndpointTLSConfig(t *testing.T) {
 			endpointConfig: endpointSettings{
 				Address: "store2:9091",
 				ClientConfig: clientConfig{
-					TLSConfig: tlsConfig{CertFile: strPtr("/mock-endpoint-cert-path.pem")},
+					TLSConfig: tlsConfig{CertFile: new("/mock-endpoint-cert-path.pem")},
 				},
 			},
 			endpointEnableChanged: true,
@@ -54,7 +51,7 @@ func TestPerEndpointTLSConfig(t *testing.T) {
 			endpointConfig: endpointSettings{
 				Address: "store3:9091",
 				ClientConfig: clientConfig{
-					TLSConfig: tlsConfig{MinVersion: strPtr("1.2")},
+					TLSConfig: tlsConfig{MinVersion: new("1.2")},
 				},
 			},
 			endpointEnableChanged: true,
@@ -64,7 +61,7 @@ func TestPerEndpointTLSConfig(t *testing.T) {
 			endpointConfig: endpointSettings{
 				Address: "store4:9091",
 				ClientConfig: clientConfig{
-					TLSConfig: tlsConfig{Enabled: boolPtr(true)},
+					TLSConfig: tlsConfig{Enabled: new(true)},
 				},
 			},
 		},
@@ -73,7 +70,7 @@ func TestPerEndpointTLSConfig(t *testing.T) {
 			endpointConfig: endpointSettings{
 				Address: "store5:9091",
 				ClientConfig: clientConfig{
-					TLSConfig: tlsConfig{Enabled: boolPtr(false)},
+					TLSConfig: tlsConfig{Enabled: new(false)},
 				},
 			},
 		},

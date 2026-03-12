@@ -19,6 +19,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AllowedTLSVersions is for global lists the TLS versions allowed to be used.
+var AllowedTLSVersions = []string{"1.0", "1.1", "1.2", "1.3"}
+
 // NewServerConfig provides new server TLS configuration.
 func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string) (*tls.Config, error) {
 	if keyPath == "" && certPath == "" {

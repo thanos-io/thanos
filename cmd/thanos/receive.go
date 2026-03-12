@@ -937,7 +937,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
-	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwServerTlsMinVersion, tls.AllowedTLSVersions...)
 
 	// For historical reasons Thanos Receive uses its own `--remote-write.client-tls-` options
 	// flags for gRPC client TLS configuration, separate to the --grpc-client-tls- options in cmd/thanos/config.go.
@@ -953,7 +953,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&rc.rwClientServerName)
 
-	cmd.Flag("remote-write.client-tls-min-version", "TLS version for the gRPC client, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwClientTlsMinVersion)
+	cmd.Flag("remote-write.client-tls-min-version", "TLS version for the gRPC client, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwClientTlsMinVersion, tls.AllowedTLSVersions...)
 
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").StringVar(&rc.dataDir)

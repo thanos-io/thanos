@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/tls"
 )
 
 type grpcConfig struct {
@@ -54,7 +55,7 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		Default("").StringVar(&gc.tlsSrvClientCA)
 	cmd.Flag("grpc-server-tls-min-version",
 		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
-		Default("1.3").StringVar(&gc.tlsMinVersion)
+		Default("1.3").EnumVar(&gc.tlsMinVersion, tls.AllowedTLSVersions...)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
@@ -84,7 +85,7 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
 	cmd.Flag("grpc-client-tls-min-version",
 		"TLS supported minimum version for gRPC client. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
-		Default("1.3").StringVar(&gc.minTLSVersion)
+		Default("1.3").EnumVar(&gc.minTLSVersion, tls.AllowedTLSVersions...)
 	return gc
 }
 

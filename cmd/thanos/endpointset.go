@@ -105,53 +105,46 @@ func (tc *tlsConfig) applyDefaults(fallback *tlsConfig) {
 		// If user provided any TLS config (cert/key/CA/insecure_skip_verify),
 		// we assume they want TLS enabled rather than using global's enabled value
 		if tc.hasTLSConfig() {
-			defaultVal := true
-			tc.Enabled = &defaultVal
+			tc.Enabled = new(true)
 		} else if fallback != nil && fallback.Enabled != nil {
 			tc.Enabled = fallback.Enabled
 		} else {
-			defaultVal := false
-			tc.Enabled = &defaultVal
+			tc.Enabled = new(false)
 		}
 	}
 	if tc.InsecureSkipVerification == nil {
 		if fallback != nil && fallback.InsecureSkipVerification != nil {
 			tc.InsecureSkipVerification = fallback.InsecureSkipVerification
 		} else {
-			defaultVal := false
-			tc.InsecureSkipVerification = &defaultVal
+			tc.InsecureSkipVerification = new(false)
 		}
 	}
 	if tc.CertFile == nil {
 		if fallback != nil && fallback.CertFile != nil {
 			tc.CertFile = fallback.CertFile
 		} else {
-			defaultVal := ""
-			tc.CertFile = &defaultVal
+			tc.CertFile = new("")
 		}
 	}
 	if tc.KeyFile == nil {
 		if fallback != nil && fallback.KeyFile != nil {
 			tc.KeyFile = fallback.KeyFile
 		} else {
-			defaultVal := ""
-			tc.KeyFile = &defaultVal
+			tc.KeyFile = new("")
 		}
 	}
 	if tc.CAFile == nil {
 		if fallback != nil && fallback.CAFile != nil {
 			tc.CAFile = fallback.CAFile
 		} else {
-			defaultVal := ""
-			tc.CAFile = &defaultVal
+			tc.CAFile = new("")
 		}
 	}
 	if tc.MinVersion == nil {
 		if fallback != nil && fallback.MinVersion != nil {
 			tc.MinVersion = fallback.MinVersion
 		} else {
-			defaultVal := "1.3"
-			tc.MinVersion = &defaultVal
+			tc.MinVersion = new("1.3")
 		}
 	}
 }
