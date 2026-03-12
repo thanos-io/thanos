@@ -437,7 +437,7 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
@@ -471,9 +471,9 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --remote-write.server-tls-min-version="1.3"
+      --remote-write.server-tls-min-version=1.3
                                  TLS version for the gRPC server, leave blank
-                                 to default to TLS 1.3, allow values: ["1.0",
+                                 to default to TLS 1.3, Allowed values: ["1.0",
                                  "1.1", "1.2", "1.3"]
       --remote-write.client-tls-cert=""
                                  TLS Certificates to use to identify this client
@@ -492,9 +492,9 @@ Flags:
                                  Server name to verify the hostname
                                  on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
-      --remote-write.client-tls-min-version="1.3"
+      --remote-write.client-tls-min-version=1.3
                                  TLS version for the gRPC client, leave blank
-                                 to default to TLS 1.3, allow values: ["1.0",
+                                 to default to TLS 1.3, Allowed values: ["1.0",
                                  "1.1", "1.2", "1.3"]
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
