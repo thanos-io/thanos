@@ -44,6 +44,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	caClt := filepath.Join(tmpDirClt, "ca")
 	certClt := filepath.Join(tmpDirClt, "cert")
 	keyClt := filepath.Join(tmpDirClt, "key")
+	tlsMinVersionClt := "1.3"
 
 	tmpDirSrv := t.TempDir()
 	caSrv := filepath.Join(tmpDirSrv, "ca")
@@ -73,7 +74,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
 
 	// Setup the connection and the client.
-	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, tlsMinVersionClt)
 	testutil.Ok(t, err)
 	conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
 	testutil.Ok(t, err)
