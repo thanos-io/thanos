@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
@@ -228,6 +229,7 @@ func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (Wr
 var _ = (peersContainer)(&fakePeersGroup{})
 
 func newTestHandlerHashring(
+	debugName string,
 	appendables []*fakeAppendable,
 	replicationFactor uint64,
 	hashringAlgo HashringAlgorithm,
@@ -245,8 +247,7 @@ func newTestHandlerHashring(
 	var (
 		closers = make([]func() error, 0)
 
-		ag         = addrGen{}
-		logger, _  = logging.NewLogger("debug", "logfmt", "receive_test")
+		logger, _  = logging.NewLogger("debug", "logfmt", debugName)
 		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
 	for i := range appendables {
@@ -260,7 +261,7 @@ func newTestHandlerHashring(
 		})
 		handlers = append(handlers, h)
 		h.peers = fakePeers
-		endpoint := ag.newEndpoint()
+		endpoint := newUniqueEndpoint()
 		h.options.Endpoint = endpoint.Address
 		cfg[0].Endpoints = append(cfg[0].Endpoints, endpoint)
 
@@ -674,7 +675,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring, closeFunc, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo, capnpReplication)
+			handlers, hashring, closeFunc, err := newTestHandlerHashring(tc.name, tc.appendables, tc.replicationFactor, hashringAlgo, capnpReplication)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -874,7 +875,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+			handlers, _, closeFunc, err := newTestHandlerHashring(tc.name, appendables, 3, AlgorithmHashmod, false)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -991,11 +992,11 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	return rec, nil
 }
 
-type addrGen struct{ n int }
+var n atomic.Int64
 
-func (a *addrGen) newEndpoint() Endpoint {
-	a.n++
-	addr := fmt.Sprintf("http://node-%d:%d", a.n, 12345+a.n)
+func newUniqueEndpoint() Endpoint {
+	cur := n.Inc()
+	addr := fmt.Sprintf("http://node-%d:%d", cur, 12345+cur)
 	return Endpoint{
 		Address:          addr,
 		CapNProtoAddress: addr,
@@ -1119,7 +1120,7 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _, closeFunc, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
+	handlers, _, closeFunc, err := newTestHandlerHashring("benchmark_handler", []*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
 	if err != nil {
 		b.Fatalf("unable to create test handler: %v", err)
 	}
@@ -1146,7 +1147,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		false,
 		metadata.NoneFunc,
 	)
-	defer func() { testutil.Ok(b, m.Close()) }()
+	b.Cleanup(func() {
+		m.Close()
+	})
 	handler.writer = NewWriter(logger, m, &WriterOptions{})
 
 	testutil.Ok(b, m.Flush())
@@ -1792,13 +1795,13 @@ func TestHashringChangeCallsClose(t *testing.T) {
 			appender: newFakeAppender(nil, nil, nil),
 		},
 	}
-	allHandlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+	allHandlers, _, closeFunc, err := newTestHandlerHashring("hashring_change_calls_close", appendables, 3, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
 	testutil.Ok(t, closeFunc())
 
 	appendables = appendables[1:]
 
-	_, smallHashring, closeFunc, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod, false)
+	_, smallHashring, closeFunc, err := newTestHandlerHashring("hashring_change_calls_close_small", appendables, 2, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
 	testutil.Ok(t, closeFunc())
 

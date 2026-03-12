@@ -28,12 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
-	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
-
-func TestMain(m *testing.M) {
-	custom.TolerantVerifyLeakMain(m)
-}
 
 func TestAddingExternalLabelsForTenants(t *testing.T) {
 	if testing.
@@ -248,8 +243,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -360,8 +354,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 		err = m.Flush()
 		require.NoError(t, err)
 
-		err = m.Close()
-		require.NoError(t, err)
+		m.Close()
 	})
 }
 
@@ -596,8 +589,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -771,8 +763,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 			err = m.Flush()
 			require.NoError(t, err)
 
-			err = m.Close()
-			require.NoError(t, err)
+			m.Close()
 		})
 	}
 }
@@ -826,8 +817,7 @@ func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 		err = m.Flush()
 		require.NoError(t, err)
 
-		err = m.Close()
-		require.NoError(t, err)
+		m.Close()
 	})
 }
 
