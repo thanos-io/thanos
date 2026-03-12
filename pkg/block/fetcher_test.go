@@ -1452,4 +1452,109 @@ func encodeParquetMetadata(convertedBlockIDs []ulid.ULID) []byte {
 	return m.Marshal(nil)
 }
 
+func TestFilterMigratedBlocksByDayCoverage(t *testing.T) {
+	makeMeta := func(minTime, maxTime int64) *metadata.Meta {
+		return &metadata.Meta{BlockMeta: tsdb.BlockMeta{MinTime: minTime, MaxTime: maxTime}}
+	}
+
+	t.Run("fully covered single day", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("two blocks together cover a full day", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay/2),
+			ULID(2): makeMeta(msPerDay/2, msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("partial day: block starts mid-day", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(msPerDay/2, msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("partial day: block ends mid-day", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay/2),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("block spans two full days", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, 2*msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("block covers full day 0 but only partial day 1", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay+msPerDay/2),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("block spanning two days: second day completed by another migrated block", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay+msPerDay/2),
+			ULID(2): makeMeta(msPerDay+msPerDay/2, 2*msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("block not present in metas is ignored", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("block ends exactly at midnight is treated as covering only the previous day", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("gap between two blocks prevents deletion", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay/4),
+			ULID(2): makeMeta(3*msPerDay/4, msPerDay-1),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("typical prod scenario", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(0, msPerDay/2),
+			ULID(2): makeMeta(msPerDay/2, msPerDay+msPerDay/2),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{ULID(1): {}}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+	t.Run("typical edge case", func(t *testing.T) {
+		migrated := map[ulid.ULID]struct{}{ULID(1): {}, ULID(2): {}}
+		metas := map[ulid.ULID]*metadata.Meta{
+			ULID(1): makeMeta(1, msPerDay/2),
+		}
+		testutil.Equals(t, map[ulid.ULID]struct{}{}, filterMigratedBlocksByDayCoverage(migrated, metas))
+	})
+
+}
+
 var mp easyproto.MarshalerPool

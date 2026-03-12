@@ -831,3 +831,111 @@ func withHeaders(response *PrometheusResponse, headers []*PrometheusResponseHead
 	r.Headers = headers
 	return &r
 }
+
+func TestAnalyzesMerge(t *testing.T) {
+	t.Run("empty input returns empty analysis", func(t *testing.T) {
+		result := AnalyzesMerge()
+		require.NotNil(t, result)
+		require.Equal(t, Duration(0), result.ExecutionTime)
+	})
+
+	t.Run("single analysis is returned as-is", func(t *testing.T) {
+		a := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(10 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(5 * time.Millisecond)},
+			},
+		}
+		result := AnalyzesMerge(a)
+		require.Equal(t, "root", result.Name)
+		require.Equal(t, Duration(10*time.Millisecond), result.ExecutionTime)
+		require.Len(t, result.Children, 1)
+		require.Equal(t, Duration(5*time.Millisecond), result.Children[0].ExecutionTime)
+	})
+
+	t.Run("merge two analyses sums execution times", func(t *testing.T) {
+		a1 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(10 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(5 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(3 * time.Millisecond)},
+			},
+		}
+		a2 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(20 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(7 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(4 * time.Millisecond)},
+			},
+		}
+		result := AnalyzesMerge(a1, a2)
+		require.Equal(t, Duration(30*time.Millisecond), result.ExecutionTime)
+		require.Equal(t, Duration(12*time.Millisecond), result.Children[0].ExecutionTime)
+		require.Equal(t, Duration(7*time.Millisecond), result.Children[1].ExecutionTime)
+	})
+
+	t.Run("merge three analyses does not panic", func(t *testing.T) {
+		// This is the scenario that caused the panic in issue #8128.
+		// With the bug, when the tree has more nodes than len(analysis),
+		// indexing analysis[i] goes out of bounds.
+		a1 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(10 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(5 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(3 * time.Millisecond)},
+			},
+		}
+		a2 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(20 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(7 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(4 * time.Millisecond)},
+			},
+		}
+		a3 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(15 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(6 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(2 * time.Millisecond)},
+			},
+		}
+		require.NotPanics(t, func() {
+			result := AnalyzesMerge(a1, a2, a3)
+			// root: 10 + 20 + 15 = 45ms
+			require.Equal(t, Duration(45*time.Millisecond), result.ExecutionTime)
+			// child1: 5 + 7 + 6 = 18ms
+			require.Equal(t, Duration(18*time.Millisecond), result.Children[0].ExecutionTime)
+			// child2: 3 + 4 + 2 = 9ms
+			require.Equal(t, Duration(9*time.Millisecond), result.Children[1].ExecutionTime)
+		})
+	})
+
+	t.Run("merge with different tree depths handles gracefully", func(t *testing.T) {
+		a1 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(10 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(5 * time.Millisecond)},
+			},
+		}
+		a2 := &Analysis{
+			Name:          "root",
+			ExecutionTime: Duration(20 * time.Millisecond),
+			Children: []*Analysis{
+				{Name: "child1", ExecutionTime: Duration(7 * time.Millisecond)},
+				{Name: "child2", ExecutionTime: Duration(4 * time.Millisecond)},
+			},
+		}
+		require.NotPanics(t, func() {
+			result := AnalyzesMerge(a1, a2)
+			require.Equal(t, Duration(30*time.Millisecond), result.ExecutionTime)
+			require.Equal(t, Duration(12*time.Millisecond), result.Children[0].ExecutionTime)
+		})
+	})
+}

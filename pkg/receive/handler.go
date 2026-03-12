@@ -180,12 +180,14 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Max:    o.MaxBackoff,
 				Jitter: true,
 			},
-			promauto.With(registerer).NewHistogram(
+			promauto.With(registerer).NewHistogramVec(
 				prometheus.HistogramOpts{
-					Name:    "thanos_receive_forward_delay_seconds",
-					Help:    "The delay between the time the request was received and the time it was forwarded to a worker. ",
-					Buckets: prometheus.ExponentialBuckets(0.001, 2, 16),
-				},
+					Name:                           "thanos_receive_forward_delay_seconds",
+					Help:                           "The delay between the time the request was received and the time it was forwarded to a worker. ",
+					Buckets:                        prometheus.ExponentialBuckets(0.001, 2, 16),
+					NativeHistogramBucketFactor:    1.1,
+					NativeHistogramMaxBucketNumber: 100,
+				}, []string{"worker"},
 			),
 			workers,
 			o.MaxArtificialDelay,
@@ -1396,7 +1398,7 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
+func newPeerWorker(client peerClient, forwardDelay prometheus.Observer, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
 	return &peerWorker{
 		client:             client,
 		wp:                 pool.NewWorkerPool(asyncWorkerCount),
@@ -1434,14 +1436,14 @@ type peerWorker struct {
 	client peerClient
 	wp     pool.WorkerPool
 
-	forwardDelay       prometheus.Histogram
+	forwardDelay       prometheus.Observer
 	maxArtificialDelay time.Duration
 }
 
 func newPeerGroup(
 	logger log.Logger,
 	backoff backoff.Backoff,
-	forwardDelay prometheus.Histogram,
+	forwardDelay *prometheus.HistogramVec,
 	asyncForwardWorkersCount uint,
 	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
@@ -1513,7 +1515,7 @@ type peerGroup struct {
 	connections              map[Endpoint]*peerWorker
 	peerStates               map[Endpoint]*retryState
 	expBackoff               backoff.Backoff
-	forwardDelay             prometheus.Histogram
+	forwardDelay             *prometheus.HistogramVec
 	asyncForwardWorkersCount uint
 	replicationProtocol      ReplicationProtocol
 	maxArtificialDelay       time.Duration
@@ -1544,6 +1546,7 @@ func (p *peerGroup) close(endpoint Endpoint) error {
 		return nil
 	}
 
+	p.forwardDelay.Delete(prometheus.Labels{"worker": endpoint.Address})
 	p.connections[endpoint].wp.Close()
 	delete(p.connections, endpoint)
 	if err := c.client.Close(); err != nil {
@@ -1598,7 +1601,7 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 		delay = p.maxArtificialDelay
 	}
 
-	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount, delay)
+	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay.WithLabelValues(endpoint.Address), p.asyncForwardWorkersCount, delay)
 	return p.connections[endpoint], nil
 }
 

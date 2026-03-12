@@ -16,6 +16,9 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8714](https://github.com/thanos-io/thanos/pull/8714): Tracing: Fix `tls_config` fields (`ca_file`, `cert_file`, `key_file`) being silently ignored when using the OTLP gRPC exporter. Previously, deployments using a private CA or mTLS client certificates had to work around this via `OTEL_EXPORTER_OTLP_CERTIFICATE` and related environment variables.
+- [#8128](https://github.com/thanos-io/thanos/issues/8128): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
+
 ### Added
 
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
@@ -35,6 +38,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
 - [#8618](https://github.com/thanos-io/thanos/pull/8618): Query-Frontend: ensure slow query and stats logging on request failures
 - [#8480](https://github.com/thanos-io/thanos/pull/8480): Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
+- [#8667](https://github.com/thanos-io/thanos/pull/8667): Query: fix data race in GetStoreClients by making endpointRef mutex a pointer
+- [#8659](https://github.com/thanos-io/thanos/pull/8659): Store: fix partial response error handling
 
 ### Added
 
