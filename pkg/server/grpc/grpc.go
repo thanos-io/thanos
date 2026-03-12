@@ -123,9 +123,39 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	if options.tlsConfig != nil {
 		options.grpcOpts = append(options.grpcOpts, grpc.Creds(credentials.NewTLS(options.tlsConfig)))
 	}
-	if options.maxConnAge > 0 {
-		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: options.maxConnAge}))
+
+	// Apply keepalive parameters if configured
+	if options.maxConnAge > 0 || options.keepaliveTime > 0 || options.keepaliveTimeout > 0 {
+		serverParams := keepalive.ServerParameters{}
+		if options.maxConnAge > 0 {
+			serverParams.MaxConnectionAge = options.maxConnAge
+		}
+		if options.keepaliveTime > 0 {
+			serverParams.Time = options.keepaliveTime
+		}
+		if options.keepaliveTimeout > 0 {
+			serverParams.Timeout = options.keepaliveTimeout
+		}
+		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveParams(serverParams))
 	}
+
+	// Apply keepalive enforcement policy if configured
+	if options.keepaliveMinTime > 0 || options.keepalivePermitWithoutStream {
+		enforcementPolicy := keepalive.EnforcementPolicy{
+			MinTime:             options.keepaliveMinTime,
+			PermitWithoutStream: options.keepalivePermitWithoutStream,
+		}
+		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveEnforcementPolicy(enforcementPolicy))
+	}
+
+	// Apply window size settings if configured
+	if options.initialWindowSize > 0 {
+		options.grpcOpts = append(options.grpcOpts, grpc.InitialWindowSize(options.initialWindowSize))
+	}
+	if options.initialConnWindowSize > 0 {
+		options.grpcOpts = append(options.grpcOpts, grpc.InitialConnWindowSize(options.initialConnWindowSize))
+	}
+
 	s := grpc.NewServer(options.grpcOpts...)
 
 	// Register all configured servers.
