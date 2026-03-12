@@ -27,7 +27,12 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
+	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
+
+func TestMain(m *testing.M) {
+	custom.TolerantVerifyLeakMain(m)
+}
 
 func TestWriter(t *testing.T) {
 	if testing.

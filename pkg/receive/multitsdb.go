@@ -360,8 +360,12 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 
 	// NOTE(GiedriusS): compaction needs to be successful so that we would ensure that all new blocks are uploaded.
 	lastCompactionNs := t.lastSuccessfulHeadCompaction.Load()
-	if lastCompactionNs == 0 || time.Since(time.Unix(0, lastCompactionNs)) > 6*time.Hour {
-		level.Error(t.logger).Log("msg", "compaction is stuck so not marking tenant as inactive", "now", time.Now(), "last_compaction", time.Unix(0, lastCompactionNs), "diff", time.Since(time.Unix(0, lastCompactionNs)))
+	if lastCompactionNs == 0 {
+		return false
+	}
+
+	if time.Since(time.Unix(0, lastCompactionNs)) > 6*time.Hour {
+		level.Error(t.logger).Log("msg", "compaction is stuck so NOT marking tenant as inactive", "now", time.Now(), "last_compaction", time.Unix(0, lastCompactionNs), "diff", time.Since(time.Unix(0, lastCompactionNs)))
 		return false
 	}
 
@@ -724,8 +728,8 @@ func (t *MultiTSDB) Prune(ctx context.Context) error {
 		markedInactive int
 	)
 
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
+	t.mtx.RLock()
+	defer t.mtx.RUnlock()
 
 	begin := time.Now()
 	for _, tenant := range t.tenants {
