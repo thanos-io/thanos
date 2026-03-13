@@ -50,7 +50,7 @@ func ParseFlagMatchers(s string) ([]*labels.Matcher, error) {
 	}
 	matchers := make([]*labels.Matcher, 0, len(amMatchers))
 	for _, a := range amMatchers {
-		if !model.LabelName.IsValid(model.LabelName(a.Name)) {
+		if !model.UTF8Validation.IsValidLabelName(a.Name) {
 			return nil, errors.Errorf("unsupported format for label %s", a.Name)
 		}
 		matchers = append(matchers, labels.MustNewMatcher(labels.MatchType(a.Type), a.Name, a.Value))

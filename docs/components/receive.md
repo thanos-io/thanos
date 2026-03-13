@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1052,1062p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1068,1078p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -401,8 +401,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
@@ -635,14 +635,19 @@ Flags:
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
       --[no-]tsdb.enable-native-histograms
-                                 [EXPERIMENTAL] Enables the ingestion of native
-                                 histograms.
+                                 (Deprecated) Enables the ingestion of native
+                                 histograms. This flag is a no-op now and will
+                                 be removed in the future. Native histogram
+                                 ingestion is always enabled.
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
                                  happen. This permits avoiding downloading some
                                  files twice albeit at some performance cost.
                                  Possible values are: "", "SHA256".
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --matcher-cache-size=0     Max number of cached matchers items. Using 0
                                  disables caching.
       --request.logging-config-file=<file-path>

@@ -10,19 +10,44 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
+
+### Fixed
+
+- [#8714](https://github.com/thanos-io/thanos/pull/8714): Tracing: Fix `tls_config` fields (`ca_file`, `cert_file`, `key_file`) being silently ignored when using the OTLP gRPC exporter. Previously, deployments using a private CA or mTLS client certificates had to work around this via `OTEL_EXPORTER_OTLP_CERTIFICATE` and related environment variables.
+- [#8128](https://github.com/thanos-io/thanos/issues/8128): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
+
+### Added
+
+### Changed
+
+- [#8670](https://github.com/thanos-io/thanos/pull/8670): Receive: *breaking :warning:* removed `--shipper.ignore-unequal-block-size`. TSDB now delays compaction until blocks have been uploaded by the shipper, allowing compaction while uploading without risking data loss.
+
+### Removed
+
+## [v0.41.0](https://github.com/thanos-io/thanos/tree/release-41.0) - 2026 02 12
+
 ### Fixed
 
 - [#8378](https://github.com/thanos-io/thanos/pull/8378): Store: fix the reuse of dirty posting slices
 - [#8558](https://github.com/thanos-io/thanos/pull/8558): Query-Frontend: Fix not logging requests when external-prefix is set in query
 - [#8254](https://github.com/thanos-io/thanos/issues/8254) Receive: Endless loop of retried replication with capnproto and distributors
+- [#8618](https://github.com/thanos-io/thanos/pull/8618): Query-Frontend: ensure slow query and stats logging on request failures
+- [#8480](https://github.com/thanos-io/thanos/pull/8480): Store: fix(readerpool): avoid inserting nil LazyBinaryReader on error to avoid panic
+- [#8667](https://github.com/thanos-io/thanos/pull/8667): Query: fix data race in GetStoreClients by making endpointRef mutex a pointer
+- [#8659](https://github.com/thanos-io/thanos/pull/8659): Store: fix partial response error handling
 
 ### Added
 
+- [#](https://github.com/thanos-io/thanos/pull/8623): Query: Enable batching of Series per SeriesResponse.
 - [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+- [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
 
 ### Changed
 
+- [#8630](https://github.com/thanos-io/thanos/pull/8630): Receive: *breaking :warning:* shuffle sharding now uses consistent hashing for stability on scale. Existing tenant-to-node assignments will change on upgrade.
 - [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
+- [#8661](https://github.com/thanos-io/thanos/pull/8661): Upgrade Prometheus to v3.8.0. `tsdb.enable-native-histograms` flag in Receiver and Ruler becomes a no-op and deprecated. Now native histogram ingestion is always enabled.
 
 ## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 27
 

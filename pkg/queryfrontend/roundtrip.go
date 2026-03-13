@@ -80,6 +80,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_instant"}, reg),
 		config.ForwardHeaders,
 		config.CortexHandlerConfig.QueryStatsEnabled,
+		config.QueryInstantConfig,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
 		tripper := newRoundTripper(
@@ -343,6 +344,7 @@ func newInstantQueryTripperware(
 	reg prometheus.Registerer,
 	forwardHeaders []string,
 	forceStats bool,
+	instantQueryConfig QueryInstantConfig,
 ) queryrange.Tripperware {
 	var instantQueryMiddlewares []queryrange.Middleware
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -359,6 +361,14 @@ func newInstantQueryTripperware(
 		instantQueryMiddlewares,
 		queryrange.NewStatsMiddleware(forceStats),
 	)
+
+	if instantQueryConfig.MaxRetries > 0 {
+		instantQueryMiddlewares = append(
+			instantQueryMiddlewares,
+			queryrange.InstrumentMiddleware("retry", m),
+			queryrange.NewRetryMiddleware(log.NewNopLogger(), instantQueryConfig.MaxRetries, queryrange.NewRetryMiddlewareMetrics(reg)),
+		)
+	}
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		rt := queryrange.NewRoundTripper(next, codec, forwardHeaders, instantQueryMiddlewares...)

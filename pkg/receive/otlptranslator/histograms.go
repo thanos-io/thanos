@@ -41,7 +41,7 @@ func (c *PrometheusConverter) addExponentialHistogramDataPoints(ctx context.Cont
 			return annots, err
 		}
 
-		lbls := createAttributes(
+		lbls, err := createAttributes(
 			resource,
 			pt.Attributes(),
 			settings,
@@ -50,6 +50,9 @@ func (c *PrometheusConverter) addExponentialHistogramDataPoints(ctx context.Cont
 			model.MetricNameLabel,
 			promName,
 		)
+		if err != nil {
+			return annots, err
+		}
 		ts, _ := c.getOrCreateTimeSeries(lbls)
 		ts.Histograms = append(ts.Histograms, histogram)
 

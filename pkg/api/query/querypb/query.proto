@@ -33,6 +33,10 @@ message QueryStats {
   int64 peak_samples = 2;
 }
 
+message TimeSeriesBatch {
+  repeated prometheus_copy.TimeSeries series = 1;
+}
+
 message QueryRequest {
   string query = 1;
   queryPlan queryPlan = 14;
@@ -54,6 +58,10 @@ message QueryRequest {
   int64 lookback_delta_seconds = 12;
   EngineType engine = 13;
 
+  // response_batch_size controls how many TimeSeries are batched per response message.
+  // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
+  int64 response_batch_size = 15;
+
   reserved 9;
 }
 
@@ -71,6 +79,9 @@ message QueryResponse {
 
     // performance stats
     QueryStats stats = 3;
+
+    /// timeseries_batch is a batch of series from the result of the executed query.
+    TimeSeriesBatch timeseries_batch = 4;
   }
 }
 
@@ -103,6 +114,10 @@ message QueryRangeRequest {
   int64 lookback_delta_seconds = 14;
   EngineType engine = 15;
 
+  // response_batch_size controls how many TimeSeries are batched per response message.
+  // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
+  int64 response_batch_size = 17;
+
   reserved 11;
 }
 
@@ -116,6 +131,9 @@ message QueryRangeResponse {
 
     // performance stats
     QueryStats stats = 3;
+
+    /// timeseries_batch is a batch of series from the result of the executed query.
+    TimeSeriesBatch timeseries_batch = 4;
   }
 }
 

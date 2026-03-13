@@ -180,12 +180,14 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Max:    o.MaxBackoff,
 				Jitter: true,
 			},
-			promauto.With(registerer).NewHistogram(
+			promauto.With(registerer).NewHistogramVec(
 				prometheus.HistogramOpts{
-					Name:    "thanos_receive_forward_delay_seconds",
-					Help:    "The delay between the time the request was received and the time it was forwarded to a worker. ",
-					Buckets: prometheus.ExponentialBuckets(0.001, 2, 16),
-				},
+					Name:                           "thanos_receive_forward_delay_seconds",
+					Help:                           "The delay between the time the request was received and the time it was forwarded to a worker. ",
+					Buckets:                        prometheus.ExponentialBuckets(0.001, 2, 16),
+					NativeHistogramBucketFactor:    1.1,
+					NativeHistogramMaxBucketNumber: 100,
+				}, []string{"worker"},
 			),
 			workers,
 			o.MaxArtificialDelay,
@@ -769,11 +771,12 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	var writeErrors writeErrors
 	var stats = make(tenantRequestStats)
 
+	// If all series reached the success threshold, we don't cancel the context
+	// so that in-flight forward requests can optimistically complete until timeout,
+	// improving the chance of full replication. On failure we cancel immediately.
+	optimisticallyWaitForSuccesses := false
 	defer func() {
-		if writeErrors.ErrOrNil() != nil {
-			// NOTICE: The cancel function is not used on all paths intentionally,
-			// if there is no error when quorum is reached,
-			// let forward requests to optimistically run until timeout.
+		if !optimisticallyWaitForSuccesses {
 			cancel()
 		}
 	}()
@@ -813,7 +816,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is canceled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success or fail quorum faster.
 	defer func() {
 		go func() {
 			for resp := range responses {
@@ -824,38 +827,51 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}()
 	}()
 
-	quorum := h.writeQuorum()
+	successThreshold := h.writeQuorum()
 	if params.alreadyReplicated {
-		quorum = 1
+		successThreshold = 1
 	}
+	// failureThreshold is the number of failures after which a series can no
+	// longer reach the success threshold. For RF=3 and successThreshold=2 this is 2.
+	failureThreshold := len(params.replicas) - successThreshold + 1
 	successes := make([]int, len(params.writeRequest.Timeseries))
-	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
+	failures := make([]int, len(params.writeRequest.Timeseries))
+	seriesErrs := newReplicationErrors(successThreshold, len(params.writeRequest.Timeseries))
 	for {
 		select {
 		case <-ctx.Done():
 			return stats, ctx.Err()
 		case resp, hasMore := <-responses:
 			if !hasMore {
-				for _, seriesErr := range seriesErrs {
-					writeErrors.Add(seriesErr)
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+					}
 				}
 				return stats, writeErrors.ErrOrNil()
 			}
 
 			if resp.err != nil {
-				// Track errors and successes on a per-series basis.
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
+					failures[seriesID]++
 				}
+			} else {
+				for _, seriesID := range resp.seriesIDs {
+					successes[seriesID]++
+				}
+			}
 
-				continue
-			}
-			// At the end, aggregate all errors if there are any and return them.
-			for _, seriesID := range resp.seriesIDs {
-				successes[seriesID]++
-			}
-			if quorumReached(successes, quorum) {
-				return stats, nil
+			if canReturnEarly(successes, failures, successThreshold, failureThreshold) {
+				var hadErrors bool
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+						hadErrors = true
+					}
+				}
+				optimisticallyWaitForSuccesses = !hadErrors
+				return stats, writeErrors.ErrOrNil()
 			}
 		}
 	}
@@ -1061,13 +1077,15 @@ func (h *Handler) writeQuorum() int {
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
-func quorumReached(successes []int, successThreshold int) bool {
-	for _, success := range successes {
-		if success < successThreshold {
+// canReturnEarly returns true when every series in the request has a
+// determined outcome: either it reached the success threshold or it accumulated
+// enough failures that reaching the success threshold is no longer possible.
+func canReturnEarly(successes, failures []int, successThreshold, failureThreshold int) bool {
+	for i := range successes {
+		if successes[i] < successThreshold && failures[i] < failureThreshold {
 			return false
 		}
 	}
-
 	return true
 }
 
@@ -1078,6 +1096,28 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
+
+	// Fast path for IngestorOnly mode: write directly to local TSDB.
+	// This skips distributeTimeseriesToReplicas and sendLocalWrite since
+	// the Router already determined this data belongs to this node.
+	if h.receiverMode == IngestorOnly {
+		err := h.writer.Write(ctx, r.Tenant, r.Timeseries)
+		if err != nil {
+			level.Debug(h.logger).Log("msg", "failed to write to local TSDB", "err", err)
+		}
+		switch cause := errors.Cause(err); cause {
+		case nil:
+			return &storepb.WriteResponse{}, nil
+		default:
+			if isNotReady(cause) {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
+			if isConflict(cause) {
+				return nil, status.Error(codes.AlreadyExists, err.Error())
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
@@ -1358,7 +1398,7 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
+func newPeerWorker(client peerClient, forwardDelay prometheus.Observer, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
 	return &peerWorker{
 		client:             client,
 		wp:                 pool.NewWorkerPool(asyncWorkerCount),
@@ -1396,14 +1436,14 @@ type peerWorker struct {
 	client peerClient
 	wp     pool.WorkerPool
 
-	forwardDelay       prometheus.Histogram
+	forwardDelay       prometheus.Observer
 	maxArtificialDelay time.Duration
 }
 
 func newPeerGroup(
 	logger log.Logger,
 	backoff backoff.Backoff,
-	forwardDelay prometheus.Histogram,
+	forwardDelay *prometheus.HistogramVec,
 	asyncForwardWorkersCount uint,
 	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
@@ -1475,7 +1515,7 @@ type peerGroup struct {
 	connections              map[Endpoint]*peerWorker
 	peerStates               map[Endpoint]*retryState
 	expBackoff               backoff.Backoff
-	forwardDelay             prometheus.Histogram
+	forwardDelay             *prometheus.HistogramVec
 	asyncForwardWorkersCount uint
 	replicationProtocol      ReplicationProtocol
 	maxArtificialDelay       time.Duration
@@ -1506,6 +1546,7 @@ func (p *peerGroup) close(endpoint Endpoint) error {
 		return nil
 	}
 
+	p.forwardDelay.Delete(prometheus.Labels{"worker": endpoint.Address})
 	p.connections[endpoint].wp.Close()
 	delete(p.connections, endpoint)
 	if err := c.client.Close(); err != nil {
@@ -1560,7 +1601,7 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 		delay = p.maxArtificialDelay
 	}
 
-	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount, delay)
+	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay.WithLabelValues(endpoint.Address), p.asyncForwardWorkersCount, delay)
 	return p.connections[endpoint], nil
 }
 

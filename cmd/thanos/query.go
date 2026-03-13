@@ -359,6 +359,7 @@ func registerQuery(app *extkingpin.App) {
 			*tenantLabel,
 			*queryDistributedWithOverlappingInterval,
 			*lazyRetrievalMaxBufferedResponses,
+			store.DefaultResponseBatchSize,
 		)
 	})
 }
@@ -424,6 +425,7 @@ func runQuery(
 	tenantLabel string,
 	queryDistributedWithOverlappingInterval bool,
 	lazyRetrievalMaxBufferedResponses int,
+	seriesResponseBatchSize int,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -458,6 +460,7 @@ func runQuery(
 			maxConcurrentSelects,
 			queryTimeout,
 			deduplicationFunc,
+			seriesResponseBatchSize,
 		)
 		remoteEndpointsCreator = query.NewRemoteEndpointsCreator(
 			logger,

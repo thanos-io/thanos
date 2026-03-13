@@ -17,7 +17,8 @@ Flags:
                            --help-man).
       --[no-]version       Show application version.
       --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt  Log format to use. Possible options: logfmt, json or
+                           journald.
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing
                            configuration. See format details:
@@ -147,7 +148,8 @@ Flags:
                            --help-man).
       --[no-]version       Show application version.
       --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt  Log format to use. Possible options: logfmt, json or
+                           journald.
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing
                            configuration. See format details:
@@ -255,8 +257,8 @@ Flags:
                                 --help-long and --help-man).
       --[no-]version            Show application version.
       --log.level=info          Log filtering level.
-      --log.format=logfmt       Log format to use. Possible options: logfmt or
-                                json.
+      --log.format=logfmt       Log format to use. Possible options: logfmt,
+                                json or journald.
       --tracing.config-file=<file-path>
                                 Path to YAML file with tracing
                                 configuration. See format details:
@@ -381,7 +383,8 @@ Flags:
                            --help-man).
       --[no-]version       Show application version.
       --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt  Log format to use. Possible options: logfmt, json or
+                           journald.
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing
                            configuration. See format details:
@@ -466,8 +469,8 @@ Flags:
                              and --help-man).
       --[no-]version         Show application version.
       --log.level=info       Log filtering level.
-      --log.format=logfmt    Log format to use. Possible options: logfmt or
-                             json.
+      --log.format=logfmt    Log format to use. Possible options: logfmt,
+                             json or journald.
       --tracing.config-file=<file-path>
                              Path to YAML file with tracing
                              configuration. See format details:
@@ -550,8 +553,8 @@ Flags:
                              and --help-man).
       --[no-]version         Show application version.
       --log.level=info       Log filtering level.
-      --log.format=logfmt    Log format to use. Possible options: logfmt or
-                             json.
+      --log.format=logfmt    Log format to use. Possible options: logfmt,
+                             json or journald.
       --tracing.config-file=<file-path>
                              Path to YAML file with tracing
                              configuration. See format details:
@@ -615,8 +618,8 @@ Flags:
                               and --help-man).
       --[no-]version          Show application version.
       --log.level=info        Log filtering level.
-      --log.format=logfmt     Log format to use. Possible options: logfmt or
-                              json.
+      --log.format=logfmt     Log format to use. Possible options: logfmt,
+                              json or journald.
       --tracing.config-file=<file-path>
                               Path to YAML file with tracing
                               configuration. See format details:
@@ -750,8 +753,8 @@ Flags:
                               and --help-man).
       --[no-]version          Show application version.
       --log.level=info        Log filtering level.
-      --log.format=logfmt     Log format to use. Possible options: logfmt or
-                              json.
+      --log.format=logfmt     Log format to use. Possible options: logfmt,
+                              json or journald.
       --tracing.config-file=<file-path>
                               Path to YAML file with tracing
                               configuration. See format details:
@@ -858,7 +861,8 @@ Flags:
                            --help-man).
       --[no-]version       Show application version.
       --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt  Log format to use. Possible options: logfmt, json or
+                           journald.
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing
                            configuration. See format details:
@@ -940,7 +944,8 @@ Flags:
                             and --help-man).
       --[no-]version        Show application version.
       --log.level=info      Log filtering level.
-      --log.format=logfmt   Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt   Log format to use. Possible options: logfmt,
+                            json or journald.
       --tracing.config-file=<file-path>
                             Path to YAML file with tracing
                             configuration. See format details:
@@ -1020,8 +1025,8 @@ Flags:
                                and --help-man).
       --[no-]version           Show application version.
       --log.level=info         Log filtering level.
-      --log.format=logfmt      Log format to use. Possible options: logfmt or
-                               json.
+      --log.format=logfmt      Log format to use. Possible options: logfmt,
+                               json or journald.
       --tracing.config-file=<file-path>
                                Path to YAML file with tracing
                                configuration. See format details:
@@ -1054,6 +1059,9 @@ Flags:
       --[no-]shipper.upload-compacted
                                If true shipper will try to upload compacted
                                blocks as well.
+      --shipper.upload-concurrency=5
+                               Number of goroutines to use when uploading block
+                               files to object storage.
 
 ```
 
@@ -1084,7 +1092,8 @@ Flags:
                            --help-man).
       --[no-]version       Show application version.
       --log.level=info     Log filtering level.
-      --log.format=logfmt  Log format to use. Possible options: logfmt or json.
+      --log.format=logfmt  Log format to use. Possible options: logfmt, json or
+                           journald.
       --tracing.config-file=<file-path>
                            Path to YAML file with tracing
                            configuration. See format details:

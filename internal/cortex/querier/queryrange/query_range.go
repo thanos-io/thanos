@@ -237,7 +237,7 @@ func AnalyzesMerge(analysis ...*Analysis) *Analysis {
 		traverseAnalysis(a, &elements)
 
 		for i := 0; i < len(elements) && i < len(rootElements); i++ {
-			rootElements[i].ExecutionTime += analysis[i].ExecutionTime
+			rootElements[i].ExecutionTime += elements[i].ExecutionTime
 		}
 	}
 

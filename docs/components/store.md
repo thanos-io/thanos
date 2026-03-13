@@ -54,8 +54,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
@@ -162,6 +162,17 @@ Flags:
                                  Alternative to 'objstore.config-file'
                                  flag (mutually exclusive). Content of
                                  YAML file that contains object store
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore-parquet.config-file=<file-path>
+                                 Path to YAML file that
+                                 contains object store-parquet
+                                 configuration. See format details:
+                                 https://thanos.io/tip/thanos/storage.md/#configuration
+      --objstore-parquet.config=<content>
+                                 Alternative to 'objstore-parquet.config-file'
+                                 flag (mutually exclusive). Content of YAML
+                                 file that contains object store-parquet
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/storage.md/#configuration
       --sync-block-duration=15m  Repeat interval for syncing the blocks between

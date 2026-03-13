@@ -134,6 +134,7 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	}
 
+	batchSize := request.ResponseBatchSize
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
 		series := &prompb.TimeSeries{
@@ -143,15 +144,39 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 			return err
 		}
 	case promql.Vector:
-		for _, sample := range vector {
-			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
-			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
-				Samples:    floats,
-				Histograms: histograms,
+		if batchSize <= 1 {
+			for _, sample := range vector {
+				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
+				series := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
+					return err
+				}
 			}
-			if err := server.Send(querypb.NewQueryResponse(series)); err != nil {
-				return err
+		} else {
+			batch := make([]*prompb.TimeSeries, 0, batchSize)
+			for _, sample := range vector {
+				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
+				series := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				batch = append(batch, series)
+				if int64(len(batch)) >= batchSize {
+					if err := server.Send(querypb.NewQueryBatchResponse(batch)); err != nil {
+						return err
+					}
+					batch = make([]*prompb.TimeSeries, 0, batchSize)
+				}
+			}
+			if len(batch) > 0 {
+				if err := server.Send(querypb.NewQueryBatchResponse(batch)); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -226,29 +251,78 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	}
 
+	batchSize := request.ResponseBatchSize
 	switch value := result.Value.(type) {
 	case promql.Matrix:
-		for _, series := range value {
-			floats, histograms := prompb.SamplesFromPromqlSeries(series)
-			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
-				Samples:    floats,
-				Histograms: histograms,
+		if batchSize <= 1 {
+			for _, series := range value {
+				floats, histograms := prompb.SamplesFromPromqlSeries(series)
+				ts := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				if err := srv.Send(querypb.NewQueryRangeResponse(ts)); err != nil {
+					return err
+				}
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
-				return err
+		} else {
+			batch := make([]*prompb.TimeSeries, 0, batchSize)
+			for _, series := range value {
+				floats, histograms := prompb.SamplesFromPromqlSeries(series)
+				ts := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(series.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				batch = append(batch, ts)
+				if int64(len(batch)) >= batchSize {
+					if err := srv.Send(querypb.NewQueryRangeBatchResponse(batch)); err != nil {
+						return err
+					}
+					batch = make([]*prompb.TimeSeries, 0, batchSize)
+				}
+			}
+			if len(batch) > 0 {
+				if err := srv.Send(querypb.NewQueryRangeBatchResponse(batch)); err != nil {
+					return err
+				}
 			}
 		}
 	case promql.Vector:
-		for _, sample := range value {
-			floats, histograms := prompb.SamplesFromPromqlSamples(sample)
-			series := &prompb.TimeSeries{
-				Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
-				Samples:    floats,
-				Histograms: histograms,
+		if batchSize <= 1 {
+			for _, sample := range value {
+				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
+				series := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
+					return err
+				}
 			}
-			if err := srv.Send(querypb.NewQueryRangeResponse(series)); err != nil {
-				return err
+		} else {
+			batch := make([]*prompb.TimeSeries, 0, batchSize)
+			for _, sample := range value {
+				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
+				series := &prompb.TimeSeries{
+					Labels:     labelpb.ZLabelsFromPromLabels(sample.Metric),
+					Samples:    floats,
+					Histograms: histograms,
+				}
+				batch = append(batch, series)
+				if int64(len(batch)) >= batchSize {
+					if err := srv.Send(querypb.NewQueryRangeBatchResponse(batch)); err != nil {
+						return err
+					}
+					batch = make([]*prompb.TimeSeries, 0, batchSize)
+				}
+			}
+			if len(batch) > 0 {
+				if err := srv.Send(querypb.NewQueryRangeBatchResponse(batch)); err != nil {
+					return err
+				}
 			}
 		}
 	case promql.Scalar:

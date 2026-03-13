@@ -206,8 +206,8 @@ Flags:
                                and --help-man).
       --[no-]version           Show application version.
       --log.level=info         Log filtering level.
-      --log.format=logfmt      Log format to use. Possible options: logfmt or
-                               json.
+      --log.format=logfmt      Log format to use. Possible options: logfmt,
+                               json or journald.
       --tracing.config-file=<file-path>
                                Path to YAML file with tracing
                                configuration. See format details:
@@ -264,6 +264,10 @@ Flags:
       --query-range.max-retries-per-request=5
                                Maximum number of retries for a single query
                                range request; beyond this, the downstream error
+                               is returned.
+      --query.max-retries-per-request=5
+                               Maximum number of retries for a single instant
+                               query request; beyond this, the downstream error
                                is returned.
       --[no-]query-frontend.enable-x-functions
                                Enable experimental x-

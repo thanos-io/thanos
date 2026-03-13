@@ -20,7 +20,8 @@ func Test_GoKitLogToSlog(t *testing.T) {
 
 	for _, logFormat := range []string{"logfmt", "json"} {
 		for i, lv := range logLevels {
-			logger := logging.NewLogger(lv, logFormat, "test")
+			logger, err := logging.NewLogger(lv, logFormat, "test")
+			require.NoError(t, err)
 
 			slog := GoKitLogToSlog(logger)
 			for j, slogLv := range slogLevels {

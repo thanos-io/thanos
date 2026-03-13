@@ -716,7 +716,7 @@ func (c *Client) LowestTimestamp(ctx context.Context, base *url.URL) (int64, err
 	}
 	defer runutil.ExhaustCloseWithLogOnErr(c.logger, resp.Body, "request body")
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.UTF8Validation)
 	families, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
 		return 0, errors.Wrapf(err, "parsing metric families against %s", u.String())

@@ -275,8 +275,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
@@ -362,6 +362,9 @@ Flags:
                                  Possible values are: "", "SHA256".
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --query=<query> ...        Addresses of statically configured query
                                  API servers (repeatable). The scheme may be
                                  prefixed with 'dns+' or 'dnssrv+' to detect
@@ -504,8 +507,10 @@ Flags:
                                  (enables promql experimental functions for
                                  ruler)
       --[no-]tsdb.enable-native-histograms
-                                 [EXPERIMENTAL] Enables the ingestion of native
-                                 histograms.
+                                 (Deprecated) Enables the ingestion of native
+                                 histograms. This flag is a no-op now and will
+                                 be removed in the future. Native histogram
+                                 ingestion is always enabled.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

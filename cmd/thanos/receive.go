@@ -74,7 +74,7 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "parse labels")
 		}
 
-		if !model.LabelName.IsValid(model.LabelName(conf.tenantLabelName)) {
+		if !model.UTF8Validation.IsValidLabelName(conf.tenantLabelName) {
 			return errors.Errorf("unsupported format for tenant label name, got %s", conf.tenantLabelName)
 		}
 		if lset.Len() == 0 {
@@ -100,7 +100,6 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
-			EnableNativeHistograms:         conf.tsdbEnableNativeHistograms,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -193,13 +192,6 @@ func runReceive(
 	upload := len(confContentYaml) > 0
 	if enableIngestion {
 		if upload {
-			if tsdbOpts.MinBlockDuration != tsdbOpts.MaxBlockDuration {
-				if !conf.ignoreBlockSize {
-					return errors.Errorf("found that TSDB Max time is %d and Min time is %d. "+
-						"Compaction needs to be disabled (tsdb.min-block-duration = tsdb.max-block-duration)", tsdbOpts.MaxBlockDuration, tsdbOpts.MinBlockDuration)
-				}
-				level.Warn(logger).Log("msg", "flag to ignore min/max block duration flags differing is being used. If the upload of a 2h block fails and a tsdb compaction happens that block may be missing from your Thanos bucket storage.")
-			}
 			// The background shipper continuously scans the data directory and uploads
 			// new blocks to object storage service.
 			bkt, err = client.NewBucket(logger, confContentYaml, comp.String(), nil)
@@ -234,6 +226,8 @@ func runReceive(
 		}
 		multiTSDBOptions = append(multiTSDBOptions, receive.WithMatchersCache(cache))
 	}
+
+	multiTSDBOptions = append(multiTSDBOptions, receive.WithUploadConcurrency(conf.uploadConcurrency))
 
 	dbs := receive.NewMultiTSDB(
 		conf.dataDir,
@@ -698,10 +692,7 @@ func startTSDBAndUpload(g *run.Group,
 			} else {
 				level.Info(logger).Log("msg", "storage is flushed successfully")
 			}
-			if err := dbs.Close(); err != nil {
-				level.Error(logger).Log("err", err, "msg", "failed to close storage")
-				return
-			}
+			dbs.Close()
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
@@ -758,7 +749,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Debug(logger).Log("msg", "upload phase starting")
 			start := time.Now()
 
-			uploaded, err := dbs.Sync(ctx)
+			uploaded, err := dbs.SyncAllTenants(ctx)
 			if err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
 				return err
@@ -786,7 +777,7 @@ func startTSDBAndUpload(g *run.Group,
 					<-uploadC // Closed by storage routine when it's done.
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
-					uploaded, err := dbs.Sync(ctx)
+					uploaded, err := dbs.SyncAllTenants(ctx)
 					if err != nil {
 						cancel()
 						level.Error(logger).Log("msg", "the final upload failed", "err", err)
@@ -798,10 +789,6 @@ func startTSDBAndUpload(g *run.Group,
 
 				defer close(uploadDone)
 
-				// Run the uploader in a loop.
-				tick := time.NewTicker(30 * time.Second)
-				defer tick.Stop()
-
 				for {
 					select {
 					case <-ctx.Done():
@@ -812,10 +799,6 @@ func startTSDBAndUpload(g *run.Group,
 							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
-					case <-tick.C:
-						if err := upload(ctx); err != nil {
-							level.Error(logger).Log("msg", "recurring upload failed", "err", err)
-						}
 					}
 				}
 			}, func(error) {
@@ -913,9 +896,9 @@ type receiveConfig struct {
 
 	hashFunc string
 
-	ignoreBlockSize       bool
 	allowOutOfOrderUpload bool
 	skipCorruptedBlocks   bool
+	uploadConcurrency     int
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
@@ -1069,8 +1052,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.tsdbMemorySnapshotOnShutdown)
 
 	cmd.Flag("tsdb.enable-native-histograms",
-		"[EXPERIMENTAL] Enables the ingestion of native histograms.").
-		Default("false").BoolVar(&rc.tsdbEnableNativeHistograms)
+		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
+		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("writer.intern",
 		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
@@ -1078,8 +1061,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
-
-	cmd.Flag("shipper.ignore-unequal-block-size", "If true receive will not require min and max block size flags to be set to the same value. Only use this if you want to keep long retention and compaction enabled, as in the worst case it can result in ~2h data loss for your Thanos bucket storage.").Default("false").Hidden().BoolVar(&rc.ignoreBlockSize)
 
 	cmd.Flag("shipper.allow-out-of-order-uploads",
 		"If true, shipper will skip failed block uploads in the given iteration and retry later. This means that some newer blocks might be uploaded sooner than older blocks."+
@@ -1092,6 +1073,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 			"This can trigger compaction without those blocks and as a result will create an overlap situation. Set it to true if you have vertical compaction enabled and wish to upload blocks as soon as possible without caring"+
 			"about order.").
 		Default("false").Hidden().BoolVar(&rc.skipCorruptedBlocks)
+
+	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("0").IntVar(&rc.uploadConcurrency)
 
 	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 

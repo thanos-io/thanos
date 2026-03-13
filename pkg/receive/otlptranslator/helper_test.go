@@ -195,7 +195,8 @@ func TestCreateAttributes(t *testing.T) {
 			settings := Settings{
 				PromoteResourceAttributes: tc.promoteResourceAttributes,
 			}
-			lbls := createAttributes(resource, attrs, settings, tc.ignoreAttrs, false, model.MetricNameLabel, "test_metric")
+			lbls, err := createAttributes(resource, attrs, settings, tc.ignoreAttrs, false, model.MetricNameLabel, "test_metric")
+			assert.NoError(t, err)
 
 			assert.ElementsMatch(t, lbls, tc.expectedLabels)
 		})

@@ -65,12 +65,13 @@ func TestQueue_Push_Relabelled_Alerts(t *testing.T) {
 		nil, nil, 10, 10, labels.New(), []string{},
 		[]*relabel.Config{
 			{
-				SourceLabels: model.LabelNames{"a"},
-				Separator:    ";",
-				Regex:        relabel.MustNewRegexp(".*(b).*"),
-				TargetLabel:  "d",
-				Action:       relabel.Replace,
-				Replacement:  "$1",
+				SourceLabels:         model.LabelNames{"a"},
+				Separator:            ";",
+				Regex:                relabel.MustNewRegexp(".*(b).*"),
+				TargetLabel:          "d",
+				Action:               relabel.Replace,
+				Replacement:          "$1",
+				NameValidationScheme: model.UTF8Validation,
 			},
 		},
 	)
@@ -95,9 +96,10 @@ func TestQueue_Push_RelabelDropAlerts(t *testing.T) {
 	q := NewQueue(nil, nil, 10, 10, labels.EmptyLabels(), nil,
 		[]*relabel.Config{
 			{
-				SourceLabels: model.LabelNames{"a"},
-				Regex:        relabel.MustNewRegexp("1"),
-				Action:       relabel.Drop,
+				SourceLabels:         model.LabelNames{"a"},
+				Regex:                relabel.MustNewRegexp("1"),
+				Action:               relabel.Drop,
+				NameValidationScheme: model.UTF8Validation,
 			},
 		})
 

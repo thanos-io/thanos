@@ -101,8 +101,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
@@ -220,6 +220,9 @@ Flags:
                                  Possible values are: "", "SHA256".
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --store.limits.request-series=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is

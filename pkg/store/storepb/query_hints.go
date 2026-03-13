@@ -12,10 +12,26 @@ func (m *QueryHints) toPromQL(labelMatchers []LabelMatcher) string {
 	grouping := m.Grouping.toPromQL()
 	matchers := MatchersToString(labelMatchers...)
 	queryRange := m.Range.toPromQL()
+	projection := m.projectionToPromQL()
 
-	query := fmt.Sprintf("%s %s (%s%s)", m.Func.Name, grouping, matchers, queryRange)
+	query := fmt.Sprintf("%s %s %s(%s%s)", m.Func.Name, grouping, projection, matchers, queryRange)
 	// Remove double spaces if some expressions are missing.
 	return strings.Join(strings.Fields(query), " ")
+}
+
+func (m *QueryHints) projectionToPromQL() string {
+	if m == nil || len(m.ProjectionLabels) == 0 {
+		return ""
+	}
+
+	var op string
+	if m.ProjectionInclude {
+		op = "projection"
+	} else {
+		op = "projection without"
+	}
+
+	return fmt.Sprintf("%s (%s) ", op, strings.Join(m.ProjectionLabels, ","))
 }
 
 func (m *Grouping) toPromQL() string {

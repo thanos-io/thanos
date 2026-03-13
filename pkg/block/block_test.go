@@ -144,7 +144,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
 		m := &metadata.Meta{}
@@ -166,7 +166,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
@@ -198,7 +198,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
 
 		m := &metadata.Meta{}
 		testutil.Ok(t, json.Unmarshal(bkt.Objects()[path.Join(b2.String(), MetaFilename)], m))
