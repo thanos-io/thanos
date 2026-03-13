@@ -179,7 +179,7 @@ func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
 		if err != nil {
 			return errSeriesIterator{err}
 		}
-		return chk.Iterator(nil)
+		return newHistogramResetDetector(chk.Iterator(nil))
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}
 }
@@ -320,4 +320,68 @@ func (c *lazySeriesSet) Warnings() annotations.Annotations {
 		return c.set.Warnings()
 	}
 	return nil
+}
+
+// histogramResetDetector sets the CounterResetHint to UnknownCounterReset for the first histogram read from the Iterator.
+//
+// The reset hint is always present in the first sample of the chunk, and all
+// consecutive samples will have a NotCounterReset hint. During deduplication the
+// first sample could be skipped, which means the reset will not be properly
+// detected. This iterator will make sure that in that case the hint for the
+// first read sample is set to UnknownCounterReset so that the PromQL engine will
+// do the reset detection manually.
+type histogramResetDetector struct {
+	chunkenc.Iterator
+
+	lastT       int64
+	lastValType chunkenc.ValueType
+
+	i             int16
+	histogramRead bool
+}
+
+func newHistogramResetDetector(iterator chunkenc.Iterator) *histogramResetDetector {
+	return &histogramResetDetector{
+		Iterator: iterator,
+		i:        -1,
+	}
+}
+
+func (it *histogramResetDetector) Seek(t int64) chunkenc.ValueType {
+	for {
+		if it.lastT >= t {
+			return it.lastValType
+		}
+		if it.lastValType = it.Next(); it.lastValType == chunkenc.ValNone {
+			return chunkenc.ValNone
+		}
+	}
+}
+
+func (it *histogramResetDetector) Next() chunkenc.ValueType {
+	it.i++
+	it.lastValType = it.Iterator.Next()
+	if it.lastValType == chunkenc.ValNone {
+		return chunkenc.ValNone
+	}
+	it.lastT = it.Iterator.AtT()
+	return it.lastValType
+}
+
+func (it *histogramResetDetector) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	t, h := it.Iterator.AtHistogram(h)
+	if !it.histogramRead && it.i != 0 {
+		h.CounterResetHint = histogram.UnknownCounterReset
+	}
+	it.histogramRead = true
+	return t, h
+}
+
+func (it *histogramResetDetector) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	t, fh := it.Iterator.AtFloatHistogram(fh)
+	if !it.histogramRead && it.i != 0 {
+		fh.CounterResetHint = histogram.UnknownCounterReset
+	}
+	it.histogramRead = true
+	return t, fh
 }
