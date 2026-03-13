@@ -1,9 +1,9 @@
 ---
 type: proposal
 title: Avoid Global Sort on Querier Select
-status: approved
+status: reverted
 owner: bwplotka,fpetkovski
-menu: proposals-accepted
+menu: proposals-done
 ---
 
 ## Avoid Global Sort on Querier Select
@@ -186,3 +186,29 @@ set := &promSeriesSet{
 	warns: warns,
 }
 ```
+
+## Post-mortem of proposal
+
+We implemented an early version of this but immediately ran into correctness issues. The root of the problem, which resulted in inaccurate query responses, was that removing (or adding) labels to a set of labelsets potentially scrambled the order. This affected deduplication since it depends on receiving the series in an organized sequence. In simpler terms, to accurately duplicate, we need to be aware at all times if we have received all replicas for a given labelset; thus, deduplication only functions properly on organized series sets.
+
+Let's consider we have the following series labels:
+
+```
+a=1,b=1
+a=1,b=2
+a=2,b=1
+a=2,b=2
+```
+
+If the replica label is `a`, then the response transforms into:
+
+```
+b=1
+b=2
+b=1
+b=2
+```
+
+Theoretically, we could address this in the distant future by modifying the ordering rules within the TSDB, but I'm uncertain if that will ever materialize.
+
+Nevertheless, despite the initial challenges faced in implementation and subsequent reverting, we have made significant improvements to the querying internals. For example, we now use a ProxyHeap in a multitude of components, rather than repeating the same logic across each individual component.
