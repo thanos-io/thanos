@@ -53,7 +53,7 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
   };
 
   // Constructing List Items recursively.
-  const mapper = (nodes: QueryTree[], parentId?: any, lvl?: any) => {
+  const mapper = (nodes: QueryTree[], parentId?: string, lvl?: number) => {
     return nodes.map((node: QueryTree, index: number) => {
       const id = `${index}-${parentId ? parentId : 'top'}`.replace(/[^a-zA-Z0-9-_]/g, '');
       const item = (
@@ -62,7 +62,7 @@ const ListTree: React.FC<NodeProps> = ({ id, node }) => {
             className={`bg-transparent p-0 border-0 ${parentId ? `rounded-0 ${lvl ? 'border-bottom-0' : ''}` : ''}`}
           >
             {
-              <div className={`d-flex align-items-center`} style={{ paddingLeft: `${25 * lvl}px` }}>
+              <div className={`d-flex align-items-center`} style={{ paddingLeft: `${25 * (lvl || 0)}px` }}>
                 {node.children && (
                   <div className="pl-0 btn text-primary" style={{ cursor: 'inherit' }} color="link">
                     {mapping[id] ? '\u002B' : '\u002D'}
