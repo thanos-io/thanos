@@ -24,6 +24,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/tsdb"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -48,8 +49,10 @@ import (
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/status"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/targets"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -346,6 +349,46 @@ func runSidecar(
 			info.WithRulesInfoFunc(),
 			info.WithTargetsInfoFunc(),
 			info.WithMetricMetadataInfoFunc(),
+			info.WithStatusInfoFunc(),
+		)
+
+		statusSrv := status.NewServer(
+			component.Sidecar.String(),
+			status.WithTSDBStatisticsGetter(
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
+					if !httpProbe.IsReady() {
+						return nil, errors.New("not ready")
+					}
+
+					ctx, cancel := context.WithTimeout(context.Background(), conf.prometheus.getConfigTimeout)
+					defer cancel()
+
+					// Check if external labels match the provided matchers.
+					extLabels := m.Labels()
+					if len(matchers) > 0 {
+						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+						if err != nil {
+							return nil, errors.Wrap(err, "failed to convert matchers")
+						}
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								// External labels don't match, return empty result.
+								return nil, nil
+							}
+						}
+					}
+
+					statsEntry, err := c.TSDBStatusInGRPC(ctx, conf.prometheus.url, limit)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to get tsdb status from prometheus")
+					}
+
+					result := map[string]tsdb.Stats{
+						"": statsEntry.ToTSDBStats(limit),
+					}
+					return result, nil
+				}),
+			),
 		)
 
 		storeServer := store.NewLimitedStoreServer(store.NewInstrumentedStoreServer(reg, promStore), reg, conf.storeRateLimits)
@@ -356,6 +399,7 @@ func runSidecar(
 			grpcserver.WithServer(meta.RegisterMetadataServer(meta.NewPrometheus(conf.prometheus.url, c))),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplarSrv)),
 			grpcserver.WithServer(info.RegisterInfoServer(infoSrv)),
+			grpcserver.WithServer(status.RegisterStatusServer(statusSrv)),
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
