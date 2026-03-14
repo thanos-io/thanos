@@ -635,3 +635,77 @@ This configuration sends up to three additional requests if the initial request 
 In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build by downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
 
 For more information, please refer to the [Binary index-header](../operating/binary-index-header.md) operational guide.
+
+## Parquet support (beta)
+
+We and the community at large (Cortex, etc.) have been working hard on supporting [Parquet data format](https://parquet.apache.org/). This guide outlines how to use it in Thanos. It solves a few important issues for us:
+
+- There is no need for a binary index header anymore thus starts are almost immediate. We still need to sync some metadata, though, but that takes a very small time in comparison.
+- The format is optimized for object storage access. The Prometheus TSDB format assumes that random reads are fine but that's not the case for object storage.
+
+The Cortex website has an excellent document regarding all downsides of the current [format](https://cortexmetrics.io/docs/proposals/parquet-storage/). The only thing I would add that mmap generally doesn't work well with Go unless you have enough memory for the cache. If there are lots of page faults then the threads onto which goroutines are scheduled freeze. This can surface as spurious tail-latency increases. See [this](https://db.cs.cmu.edu/mmap-cidr2022/) for more.
+
+Also, it's worth mentioning that there are two types of overfetching. The original Thanos Store code contains an optimization if multiple byte ranges are requested from the same block and the gap between those two ranges is smaller than some constant then the requests for those ranges are merged, and the unused bytes are just skipped over. This is because majority if not all remote object storage providers do not support specifying multiple byte ranges in one request. It is cheaper (in terms of money and time) to request once and skip over what is not needed. It could be called "byte range overfetching".
+
+There is another type of overfetching that happens at the data format level. For example, the original Thanos Store has a "lazy postings" optimization where it tries to avoid reading postings in certain conditions. It uses heuristics for that so this optimization can sometimes lead to overfetching.
+
+Parquet is vulnerable to the latter but not the former. It still contains the "byte range overfetching" optimization but it's much less likely to be triggered. This is because the data is sorted much better according to the form of the queries. By default, Parquet rows are sorted by the metric name (and this is changeable) and most queries contain some metric name inside of them. So, with this we are already able to skip through reading lots of data AND most importantly the data that we do want to read is close to each other.
+
+The Parquet data format is also amenable to concurrent decompression & processing through row groups & pages.
+
+So far, the code lives under a different [repository](https://github.com/thanos-io/thanos-parquet-gateway). Docker images are available on [quay](https://quay.io/repository/thanos/thanos-parquet-gateway?tab=tags). We plan to migrate it to the main repository in the (near) future.
+
+Here's how the schema looks like:
+
+```
+┌─────────────────────────┬───────────┬──────────────────────┬─────────────┬─────────────────────────────────────────────────────────┐
+│         Column          │   Type    │       Encoding       │ Compression │                          Notes                          │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_index        │ ByteArray │ DeltaLengthByteArray │ zstd        │ Bitmap of populated label columns per row.              │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_hash         │ Int64     │ Plain                │ zstd        │ xxHash64 of the label set. Used for projections.        │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_chunk_0      │ ByteArray │ DeltaLengthByteArray │ zstd        │ Chunk data for hours 0–8 of block                       │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_chunk_1      │ ByteArray │ DeltaLengthByteArray │ zstd        │ Chunk data for hours 8–16 of block                      │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_chunk_2      │ ByteArray │ DeltaLengthByteArray │ zstd        │ Chunk data for hours 16–24 of block                     │
+├─────────────────────────┼───────────┼──────────────────────┼─────────────┼─────────────────────────────────────────────────────────┤
+│ ___cf_meta_label_<name> │ String    │ RLE Dictionary       │ zstd        │ One column per label name, dynamically built per block  │
+└─────────────────────────┴───────────┴──────────────────────┴─────────────┴─────────────────────────────────────────────────────────┘
+```
+
+The Parquet converter creates files in another bucket. The structure looks like this:
+
+```
+/<external labels hash>/YYYY/MM/DD/<shard>.labels.parquet
+/<external labels hash>/YYYY/MM/DD/<shard>.chunks.parquet
+/<external labels hash>/YYYY/MM/DD/meta.pb
+```
+
+Having this structure allows to quickly find the needed information without peeking into the metadata files. This is especially useful when using external tooling to query data for statistical reasons and so on.
+
+Currently, hash collisions are detected but *not* handled. If such a situation is detected then the converter errors out and produces a diagnostic message.
+
+The Parquet project introduces yet another component that the users will need to take care of but in the long term we have an inspiration to have a component (or maybe Prometheus itself will do that) that produces native Parquet files.
+
+When the converter does its job for any certain day, it uploads the source block ULIDs to `meta.pb` file. Thanos Store on the other end is able to read the source ULIDs from those files and crosscheck with the "old" bucket. If in the "old" bucket a block is detected that has been converted as per `meta.pb` files then it is not loaded. This allows gradual migration.
+
+Also, note that because most blocks will not exactly fit into the day's range, it means that the old Thanos Store will still probably almost always load a very small amount of blocks to cover the gap. For example, imagine the blocks look like this:
+
+```
+[---][---][---][---][---]            <- Parquet blocks
+            [---][---][----]         <- TSDB blocks
+                        /\
+                         cut-off date
+```
+
+The last TSDB block will still be loaded to account for that small inequality in times. Also, worth mentioning that the chunks are recoded in the Parquet blocks so the chunks data is also identical to the time ranges. Hence, some (very small amount of) data will be decoded twice by the Querier. In practice we don't see it as a big problem at the moment. This will be solved once the original sources will also produce Parquet blocks.
+
+There are still lots of things we'd like to do before moving the code to the main repository. The list includes but is not limited to: retention management, make the Parquet gateway completely stateless, improve the speed of conversion, implement StoreAPI batching for it, adding functionality to remove the old TSDB buckets, etc.
+
+The information about the Parquet bucket should be specified by `--objstore-parquet.config-file=` or `--objstore-parquet.config=`. It should point to the same bucket (target) that is used by the Parquet converter. When that is enabled, Thanos Store will drop blocks that have been converted to Parquet.
+
+At the moment, the original data is NEVER deleted so you can always remove the previously mentioned options and then the state will be like how it was before the conversion.
+
+After setting up the conversion component, you will also need what is called a "serve gateway". It is the equivalent of the Thanos Store component - it reads the Parquet files and implements the Store/Query APIs. Add them like usual with `--endpoint=` and other command-line parameters on Thanos Query.
