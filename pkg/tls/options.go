@@ -19,6 +19,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AllowedTLSVersions is for global lists the TLS versions allowed to be used.
+var AllowedTLSVersions = []string{"1.0", "1.1", "1.2", "1.3"}
+
 // NewServerConfig provides new server TLS configuration.
 func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string) (*tls.Config, error) {
 	if keyPath == "" && certPath == "" {
@@ -113,7 +116,8 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 }
 
 // NewClientConfig provides new client TLS configuration.
-func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool) (*tls.Config, error) {
+// minTLSVersion must be one of 1.0, 1.1, 1.2, 1.3 per getTlsVersion().
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool, minTLSVersion string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
 		caPEM, err := os.ReadFile(filepath.Clean(caCert))
@@ -135,8 +139,21 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		level.Info(logger).Log("msg", "TLS client using system certificate pool")
 	}
 
+	var (
+		mtlsVersion uint16
+		err         error
+	)
+
+	if minTLSVersion != "" {
+		mtlsVersion, err = getTlsVersion(minTLSVersion)
+		if err != nil {
+			return nil, err
+		}
+		level.Info(logger).Log("msg", fmt.Sprintf("setting minimum TLS version to %s", minTLSVersion))
+	}
 	tlsCfg := &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: mtlsVersion,
 	}
 
 	if serverName != "" {
@@ -229,4 +246,10 @@ func getTlsVersion(tlsMinVersion string) (uint16, error) {
 	}
 
 	return validOption.tlsOption[tlsMinVersion], nil
+}
+
+func ValidateTlsVersion(tlsVersion string) error {
+
+	_, err := getTlsVersion(tlsVersion)
+	return err
 }

@@ -90,7 +90,7 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
@@ -462,6 +462,7 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+    min_version: ""
   cache_size: 0
   master_name: ""
   max_async_buffer_size: 10000
