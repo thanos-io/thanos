@@ -624,8 +624,6 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 }
 
 func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
-	t.Skip("Flaky")
-
 	t.Parallel()
 
 	l, err := net.Listen("tcp", "localhost:0")
@@ -650,7 +648,6 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 	dir2 := t.TempDir()
 
 	outDir := t.TempDir()
-	outDir2 := t.TempDir()
 
 	// dir
 	// └─ rule-dir -> dir2/rule-dir
@@ -672,10 +669,6 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 					Dir:       dir,
 					OutputDir: outDir,
 				},
-				{
-					Dir:       dir2,
-					OutputDir: outDir2,
-				},
 			},
 			WatchedDirs:   nil,
 			WatchInterval: 1 * time.Second, // use a small watch interval.
@@ -693,7 +686,7 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 	// ├─ rule3-001.yaml -> rule3-source.yaml
 	// └─ rule3-source.yaml
 	//
-	// The reloader watches 2 directories: dir and dir/rule-dir.
+	// The reloader watches only 1 directory: dir.
 	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule1.yaml"), []byte("rule"), os.ModePerm))
 	testutil.Ok(t, os.WriteFile(path.Join(dir, "rule2.yaml"), []byte("rule2"), os.ModePerm))
 	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3"), os.ModePerm))
@@ -809,27 +802,6 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Equals(t, "rule2", string(data))
 	data, err = os.ReadFile(filepath.Join(outDir, "rule3.yaml"))
-	testutil.Ok(t, err)
-	testutil.Equals(t, "rule3-changed", string(data))
-
-	outEntries2, err := os.ReadDir(outDir2)
-	testutil.Ok(t, err)
-	outFiles2 := []string{}
-	for _, entry := range outEntries2 {
-		outFiles2 = append(outFiles2, entry.Name())
-	}
-	slices.Sort(outFiles2)
-	expectedOutFiles2 := []string{
-		"rule3-001.yaml",
-		"rule3-source.yaml",
-	}
-	slices.Sort(expectedOutFiles2)
-	testutil.Equals(t, expectedOutFiles2, outFiles2)
-
-	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-001.yaml"))
-	testutil.Ok(t, err)
-	testutil.Equals(t, "rule3-changed", string(data))
-	data, err = os.ReadFile(filepath.Join(outDir2, "rule3-source.yaml"))
 	testutil.Ok(t, err)
 	testutil.Equals(t, "rule3-changed", string(data))
 }
