@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/promql-engine/query"
@@ -22,6 +23,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 func TestRemoteEngine_Warnings(t *testing.T) {
@@ -269,6 +271,49 @@ func TestRemoteEngine_MinT(t *testing.T) {
 	}
 }
 
+func TestRemoteEngine_Tenancy(t *testing.T) {
+	t.Parallel()
+
+	mock := &tenantCheckClient{}
+	engine := NewRemoteEngine(
+		log.NewNopLogger(),
+		NewClient(mock, "testclient", nil),
+		Opts{
+			Timeout: time.Second,
+		},
+	)
+
+	expr, err := extpromql.ParseExpr("up")
+	testutil.Ok(t, err)
+	plan, err := logicalplan.NewFromAST(expr, &query.Options{
+		Start: time.Now(),
+		End:   time.Now(),
+	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
+
+	ctx := context.WithValue(context.Background(), tenancy.TenantKey, "my-tenant")
+
+	t.Run("instant_query", func(t *testing.T) {
+		mock.tenant = ""
+		qry, err := engine.NewInstantQuery(ctx, nil, plan.Root(), time.Unix(0, 0))
+		testutil.Ok(t, err)
+
+		res := qry.Exec(ctx)
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, "my-tenant", mock.tenant)
+	})
+
+	t.Run("range_query", func(t *testing.T) {
+		mock.tenant = ""
+		qry, err := engine.NewRangeQuery(ctx, nil, plan.Root(), time.Unix(0, 0), time.Unix(10, 0), time.Second)
+		testutil.Ok(t, err)
+
+		res := qry.Exec(ctx)
+		testutil.Ok(t, res.Err)
+		testutil.Equals(t, "my-tenant", mock.tenant)
+	})
+}
+
 func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
 	return labelpb.ZLabelSet{
 		Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings(ss...)),
@@ -349,4 +394,29 @@ func (m *queryErrClient) Recv() (*querypb.QueryResponse, error) {
 	}
 	m.errSent = true
 	return nil, errors.New("error")
+}
+
+type tenantCheckClient struct {
+	warnClient
+	tenant string
+}
+
+func (m *tenantCheckClient) Query(ctx context.Context, req *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		vals := md.Get(tenancy.DefaultTenantHeader)
+		if len(vals) > 0 {
+			m.tenant = vals[0]
+		}
+	}
+	return m.warnClient.Query(ctx, req, opts...)
+}
+
+func (m *tenantCheckClient) QueryRange(ctx context.Context, req *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
+	if md, ok := metadata.FromOutgoingContext(ctx); ok {
+		vals := md.Get(tenancy.DefaultTenantHeader)
+		if len(vals) > 0 {
+			m.tenant = vals[0]
+		}
+	}
+	return m.warnClient.QueryRange(ctx, req, opts...)
 }
