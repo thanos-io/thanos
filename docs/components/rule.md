@@ -624,3 +624,32 @@ The configuration format is the following:
   grpc_config:
     endpoint_addresses: []
 ```
+
+## Metrics
+
+### List of Metrics Exported By Ruler
+
+| Metric Name                                              | Type      | Description                                                                                                 |
+|----------------------------------------------------------|-----------|-------------------------------------------------------------------------------------------------------------|
+| thanos_alert_queue_alerts_dropped_total                  | counter   | Total number of alerts that were dropped from the queue.                                                    |
+| thanos_alert_queue_alerts_popped_total                   | counter   | Total number of alerts popped from the queue.                                                               |
+| thanos_alert_queue_alerts_pushed_total                   | counter   | Total number of alerts pushed to the queue.                                                                 |
+| thanos_alert_queue_capacity                              | gauge     | Capacity of the alert queue.                                                                                |
+| thanos_alert_queue_length                                | gauge     | Length of the alert queue.                                                                                  |
+| thanos_alert_sender_alerts_dropped_total                 | counter   | Total number of alerts dropped in case of all sends to alertmanagers failed.                                |
+| thanos_alert_sender_errors                               | counter   | Total number of errors while sending alerts to alertmanager.                                                |
+| thanos_alert_sender_alerts_sent_total                    | counter   | Total number of alerts sent by alertmanager.                                                                |
+| thanos_alert_sender_errors_total                         | counter   | Total number of errors while sending alerts to alertmanager.                                                |
+| thanos_alert_sender_latency_seconds                      | histogram | Latency for sending alert notifications (not including dropped notifications).                              |
+| thanos_rule_config_last_reload_successful                | gauge     | Whether the last configuration reload attempt was successful.                                               |
+| thanos_rule_config_last_reload_success_timestamp_seconds | gauge     | Timestamp of the last successful configuration reload.                                                      |
+| thanos_rule_duplicated_query_addresses_total             | counter   | The number of times a duplicated query addresses is detected from the different configs in rule.            |
+| thanos_rule_loaded_rules                                 | gauge     | Loaded rules partitioned by file and group.                                                                 |
+| thanos_rule_evaluation_with_warnings_total               | counter   | The total number of rule evaluation that were successful but had warnings which can indicate partial error. |
+| thanos_rule_grpc_endpoints_duplicated_total              | counter   | The number of times a duplicated grpc endpoint is detected from the different configs in rule.              |
+| thanos_rule_alertmanagers_dns_failures                   | counter   | The number of DNS lookup failures of the Thanos ruler alertmanager.                                         |
+| thanos_rule_alertmanagers_dns_lookups                    | counter   | The number of DNS lookups resolutions attempts of the Thanos ruler alertmanager.                            |
+| thanos_rule_alertmanagers_dns_provider_results           | gauge     | The number of resolved endpoints for each configured address.                                               |
+| thanos_rule_query_apis_dns_failures                      | counter   | The number of DNS lookup failures of the Thanos ruler queries.                                              |
+| thanos_rule_query_apis_dns_lookups                       | counter   | The number of DNS lookups resolutions attempts of the Thanos ruler queries.                                 |
+| thanos_rule_query_apis_dns_provider_results              | gauge     | The number of resolved endpoints for each configured address.                                               |
