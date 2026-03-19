@@ -1506,12 +1506,20 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 			"replica":  er.replica,
 		})
 	}); err != nil {
-		responseWriter <- newWriteResponse(
-			seriesIDs,
-			errors.Wrapf(err, "scheduling forward request for endpoint %v", er.endpoint),
-			er,
-		)
-		cb(err)
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			sp := trace.SpanFromContext(ctx)
+			sp.SetAttributes(attribute.Bool("error", true))
+			sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "scheduling forward request for endpoint %v", er.endpoint),
+				er,
+			)
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
 	}
 }
 

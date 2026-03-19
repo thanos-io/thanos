@@ -80,8 +80,11 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 		}
 	}
 
-	if ctx.Err() != nil {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return &storepb.WriteResponse{}, status.Error(codes.DeadlineExceeded, fmt.Sprintf("writing to peer: %s", err.Error()))
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return &storepb.WriteResponse{}, status.Error(codes.Canceled, fmt.Sprintf("writing to peer: %s", err.Error()))
 	}
 	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s", err.Error()))
 }
