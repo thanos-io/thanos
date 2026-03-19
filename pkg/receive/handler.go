@@ -808,9 +808,8 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
 
-	h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
-
 	go func() {
+		h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
 		wg.Wait()
 		close(responses)
 	}()
@@ -1475,7 +1474,7 @@ type peersContainer interface {
 
 func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
 	now := time.Now()
-	p.wp.Go(func() {
+	if err := p.wp.Go(ctx, func() {
 		if p.maxArtificialDelay > 0 {
 			var randDuration = time.Duration(rand.Int63n(int64(p.maxArtificialDelay)))
 			if randDuration < 1*time.Second {
@@ -1506,7 +1505,22 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 			"endpoint": er.endpoint,
 			"replica":  er.replica,
 		})
-	})
+	}); err != nil {
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			sp := trace.SpanFromContext(ctx)
+			sp.SetAttributes(attribute.Bool("error", true))
+			sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "scheduling forward request for endpoint %v", er.endpoint),
+				er,
+			)
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
+	}
 }
 
 type peerGroup struct {
