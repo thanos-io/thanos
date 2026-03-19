@@ -190,7 +190,16 @@ func (b *BasicService) main() {
 
 	stoppingFrom = Running
 	if b.runningFn != nil {
-		err = b.runningFn(b.serviceContext)
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- b.runningFn(b.serviceContext)
+		}()
+		select {
+		case err = <-errCh:
+			// runningFn finished
+		case <-b.serviceContext.Done():
+			err = nil // context canceled, normal stop
+		}
 	}
 
 stop:
