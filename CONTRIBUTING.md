@@ -185,6 +185,34 @@ It is a good practice to keep your branch updated by rebasing your branch to mai
 * If you feel like your PR is waiting too long for a review, feel free to ping the [`#thanos-dev`](https://slack.cncf.io/) channel on our slack for a review!
 * If you are a new contributor with no write access, you can tag in the respective maintainer for the changes, but be patient enough for the reviews. *Remember, good things take time :)*
 
+### Pull Request Title Format
+
+When submitting a pull request (PR), please ensure that the title follows the specified format:
+
+#### Prefixes
+
+PR titles must start with one of the following prefixes:
+- `query:`
+- `compactor:`
+- `query-frontend:`
+- `receiver:`
+- `rule:`
+- `sidecar:`
+- `store:`
+- `tools:`
+- `.*:` (any string followed by a colon)
+
+Or combinations of components:
+- `query,store: Enhance data retrieval efficiency`
+
+#### Examples of Valid PR Titles
+
+- `query: Improve query performance`
+- `receiver: Fix bug in data processing`
+- `feature: Add new logging functionality`
+
+PR titles that do not adhere to this format will not pass the automated title verification and may be rejected.
+
 ### Dependency management
 
 The Thanos project uses [Go modules](https://golang.org/cmd/go/#hdr-Modules__module_versions__and_more) to manage dependencies on external packages. This requires a working Go environment with version 1.11 or greater and git installed.
