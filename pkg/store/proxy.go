@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -296,6 +297,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 	// We may arrive here either via the promql engine
 	// or as a result of a grpc call in layered queries
 	ctx := srv.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("series.selector", storepb.MatchersToString(originalRequest.Matchers...))
+	}
+
 	tenant, foundTenant := tenancy.GetTenantFromGRPCMetadata(ctx)
 	if !foundTenant {
 		if ctx.Value(tenancy.TenantKey) != nil {
@@ -356,6 +362,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		respHeap = NewResponseDeduplicator(respHeap)
 	}
 
+	var numSeries, numChunks int64
 	i := 0
 	for respHeap.Next() {
 		i++
@@ -368,10 +375,20 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 			return status.Error(codes.Aborted, resp.GetWarning())
 		}
 
+		if series := resp.GetSeries(); series != nil {
+			numSeries++
+			numChunks += int64(len(series.Chunks))
+		}
+
 		if err := srv.Send(resp); err != nil {
 			level.Error(reqLogger).Log("msg", "failed to stream response", "error", err)
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
+	}
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("result.series", numSeries)
+		span.SetTag("result.samples", numChunks)
 	}
 
 	// Flush any remaining buffered series from the batchable server.
