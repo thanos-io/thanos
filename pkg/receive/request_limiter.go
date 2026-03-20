@@ -6,6 +6,9 @@ package receive
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/model/histogram"
+
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 const (
@@ -17,7 +20,8 @@ const (
 var unlimitedRequestLimitsConfig = NewEmptyRequestLimitsConfig().
 	SetSizeBytesLimit(0).
 	SetSeriesLimit(0).
-	SetSamplesLimit(0)
+	SetSamplesLimit(0).
+	SetNativeHistogramBucketsLimit(0)
 
 // configRequestLimiter implements requestLimiter interface.
 type configRequestLimiter struct {
@@ -125,6 +129,54 @@ func (l *configRequestLimiter) AllowSamples(tenant string, amount int64) bool {
 	return allowed
 }
 
+func (l *configRequestLimiter) AllowNativeHistogram(tenant string, hp prompb.Histogram) (prompb.Histogram, bool) {
+	limit := l.limitsFor(tenant).NativeHistogramBucketsLimit
+	if *limit <= 0 {
+		return hp, true
+	}
+
+	var (
+		exceedLimit bool
+	)
+	// TODO: Increment limit hit metrics for native histogram buckets.
+	// Existing metric is a summary not a counter.
+	if hp.IsFloatHistogram() {
+		exceedLimit = int64(len(hp.PositiveCounts)+len(hp.NegativeCounts)) > *limit
+		if !exceedLimit {
+			return hp, true
+		}
+		// Exceed limit and there is no way to reduce resolution further.
+		if hp.Schema <= histogram.ExponentialSchemaMin {
+			return prompb.Histogram{}, false
+		}
+		fh := prompb.FloatHistogramProtoToFloatHistogram(hp)
+		for int64(len(fh.PositiveBuckets)+len(fh.NegativeBuckets)) > *limit {
+			if fh.Schema <= histogram.ExponentialSchemaMin {
+				return prompb.Histogram{}, false
+			}
+			fh = fh.ReduceResolution(fh.Schema - 1)
+		}
+		return prompb.FloatHistogramToHistogramProto(hp.Timestamp, fh), true
+	}
+
+	exceedLimit = int64(len(hp.PositiveDeltas)+len(hp.NegativeDeltas)) > *limit
+	if !exceedLimit {
+		return hp, true
+	}
+	// Exceed limit and there is no way to reduce resolution further.
+	if hp.Schema <= histogram.ExponentialSchemaMin {
+		return prompb.Histogram{}, false
+	}
+	h := prompb.HistogramProtoToHistogram(hp)
+	for int64(len(h.PositiveBuckets)+len(h.NegativeBuckets)) > *limit {
+		if h.Schema <= histogram.ExponentialSchemaMin {
+			return prompb.Histogram{}, false
+		}
+		h = h.ReduceResolution(h.Schema - 1)
+	}
+	return prompb.HistogramToHistogramProto(hp.Timestamp, h), true
+}
+
 func (l *configRequestLimiter) limitsFor(tenant string) *requestLimitsConfig {
 	limits, ok := l.tenantLimits[tenant]
 	if !ok {
@@ -145,4 +197,8 @@ func (l *noopRequestLimiter) AllowSeries(tenant string, amount int64) bool {
 
 func (l *noopRequestLimiter) AllowSamples(tenant string, amount int64) bool {
 	return true
+}
+
+func (l *noopRequestLimiter) AllowNativeHistogram(tenant string, h prompb.Histogram) (prompb.Histogram, bool) {
+	return h, true
 }
