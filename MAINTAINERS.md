@@ -1,6 +1,6 @@
 # Core Maintainers of this repository
 
-| Name                  | Email                     | Slack                    | GitHub                                             | Company             |
+| Name                  | Email                     | CNCF Slack               | GitHub                                             | Company             |
 |-----------------------|---------------------------|--------------------------|----------------------------------------------------|---------------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
 | Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
@@ -28,7 +28,7 @@ We also have some nice souls that help triaging issues and PRs. See [here](https
 
 Full list of triage persons is displayed below:
 
-| Name           | Slack            | GitHub                                             | Company             |
+| Name           | CNCF Slack       | GitHub                                             | Company             |
 |----------------|------------------|----------------------------------------------------|---------------------|
 | Adrien Fillon  | `@Adrien F`      | [@adrien-f](https://github.com/adrien-f)           |                     |
 | Ian Billett    | `@billett`       | [@bill3tt](https://github.com/bill3tt)             | Red Hat             |
@@ -39,6 +39,7 @@ Full list of triage persons is displayed below:
 | Douglas Camata | `@douglascamata` | [@douglascamata](https://github.com/douglascamata) | Red Hat             |
 | Harry John     | `@harry671003`   | [@harry671003](https://github.com/harry671003)     | Amazon Web Services |
 | Pedro Tanaka   | `@pedro.tanaka`  | [@pedro-stanaka](https://github.com/pedro-stanaka) | Shopify             |
+| Craig Ringer   | `@Craig Ringer`  | [@ringerc](https://github.com/MichaHoffmann)       | EnterpriseDB        |
 
 Please reach any of the maintainer on slack or email if you want to help as well.
 
