@@ -430,7 +430,7 @@ func runSidecar(
 				shipper.WithUploadConcurrency(conf.shipper.uploadConcurrency),
 			)
 
-			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
+			return runutil.RepeatWithJitter(ctx, 30*time.Second, 0.2, func() error {
 				if uploaded, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err, "uploaded", uploaded)
 				}
