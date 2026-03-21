@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -397,6 +398,15 @@ func runSidecar(
 		if err := promclient.IsWALDirAccessible(conf.tsdb.path); err != nil {
 			level.Error(logger).Log("err", err)
 		}
+
+		// Open a restricted root for the TSDB directory to prevent accidental
+		// path traversal in file operations. This bounds all operations to
+		// conf.tsdb.path.
+		tsdbRoot, err := os.OpenRoot(conf.tsdb.path)
+		if err != nil {
+			return errors.Wrap(err, "open tsdb directory root")
+		}
+		defer tsdbRoot.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
