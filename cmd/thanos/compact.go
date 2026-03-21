@@ -352,16 +352,30 @@ func runCompact(
 		return errors.Wrap(err, "create compactor")
 	}
 
+	// Ensure the data directory exists and open a restricted root for it.
+	// Using os.Root constrains file operations within conf.dataDir, preventing
+	// accidental path traversal from malicious or malformed input.
+	if err = os.MkdirAll(conf.dataDir, os.ModePerm); err != nil {
+		return errors.Wrap(err, "create data directory")
+	}
+	var dataRoot *os.Root
+	dataRoot, err = os.OpenRoot(conf.dataDir)
+	if err != nil {
+		return errors.Wrap(err, "open data directory root")
+	}
+	defer dataRoot.Close()
+
 	var (
 		compactDir      = path.Join(conf.dataDir, "compact")
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
 	)
 
-	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
+	// Create required subdirectories using the restricted root so that
+	// they are bound to conf.dataDir and cannot escape via traversal.
+	if err = dataRoot.Mkdir("compact", os.ModePerm); err != nil && !os.IsExist(err) {
 		return errors.Wrap(err, "create working compact directory")
 	}
-
-	if err := os.MkdirAll(downsamplingDir, os.ModePerm); err != nil {
+	if err = dataRoot.Mkdir("downsample", os.ModePerm); err != nil && !os.IsExist(err) {
 		return errors.Wrap(err, "create working downsample directory")
 	}
 

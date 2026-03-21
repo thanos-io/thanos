@@ -204,6 +204,18 @@ func runReceive(
 		}
 	}
 
+	// Ensure the data directory exists and open a restricted root for it.
+	// Using os.Root constrains subsequent file operations to conf.dataDir,
+	// preventing accidental path traversal from malicious or malformed input.
+	if err := os.MkdirAll(conf.dataDir, 0750); err != nil {
+		return errors.Wrapf(err, "create data directory %v", conf.dataDir)
+	}
+	dataRoot, err := os.OpenRoot(conf.dataDir)
+	if err != nil {
+		return errors.Wrap(err, "open data directory root")
+	}
+	defer dataRoot.Close()
+
 	// Create TSDB for the default tenant.
 	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
