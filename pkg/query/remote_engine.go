@@ -22,7 +22,6 @@ import (
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -340,9 +339,10 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 
 	r.samplesStats = stats.NewQuerySamples(false)
 
+	var requestTenant string
 	if tenant := ctx.Value(tenancy.TenantKey); tenant != nil {
 		if tenantStr, ok := tenant.(string); ok {
-			qctx = metadata.AppendToOutgoingContext(qctx, tenancy.DefaultTenantHeader, tenantStr)
+			requestTenant = tenantStr
 		}
 	}
 
@@ -358,6 +358,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
 			ResponseBatchSize:     store.DefaultResponseBatchSize,
+			Tenant:                requestTenant,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -437,6 +438,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
 		ResponseBatchSize:     store.DefaultResponseBatchSize,
+		Tenant:                requestTenant,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {

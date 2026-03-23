@@ -15,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/promql-engine/query"
@@ -402,21 +401,11 @@ type tenantCheckClient struct {
 }
 
 func (m *tenantCheckClient) Query(ctx context.Context, req *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
-	if md, ok := metadata.FromOutgoingContext(ctx); ok {
-		vals := md.Get(tenancy.DefaultTenantHeader)
-		if len(vals) > 0 {
-			m.tenant = vals[0]
-		}
-	}
+	m.tenant = req.Tenant
 	return m.warnClient.Query(ctx, req, opts...)
 }
 
 func (m *tenantCheckClient) QueryRange(ctx context.Context, req *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
-	if md, ok := metadata.FromOutgoingContext(ctx); ok {
-		vals := md.Get(tenancy.DefaultTenantHeader)
-		if len(vals) > 0 {
-			m.tenant = vals[0]
-		}
-	}
+	m.tenant = req.Tenant
 	return m.warnClient.QueryRange(ctx, req, opts...)
 }
