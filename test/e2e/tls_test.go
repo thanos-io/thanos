@@ -54,7 +54,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	genCerts(t, certSrv, keySrv, caClt)
 	genCerts(t, certClt, keyClt, caSrv)
 
-	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion)
+	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, nil)
 	testutil.Ok(t, err)
 
 	srv := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 1 * time.Millisecond}), grpc.Creds(credentials.NewTLS(configSrv)))
@@ -190,6 +190,6 @@ func TestInvalidCertAndKey(t *testing.T) {
 	keySrv := filepath.Join(tmpDirSrv, "key")
 	tlsMinVersion := "1.3"
 	// Certificate and key are not present in the above path
-	_, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion)
+	_, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, nil)
 	testutil.NotOk(t, err)
 }
