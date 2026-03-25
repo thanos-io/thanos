@@ -20,7 +20,7 @@ import (
 )
 
 // NewServerConfig provides new server TLS configuration.
-func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string) (*tls.Config, error) {
+func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string, ciphers []string) (*tls.Config, error) {
 	if keyPath == "" && certPath == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
@@ -44,6 +44,13 @@ func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersi
 	tlsCfg := &tls.Config{
 		MinVersion: minTlsVersion,
 	}
+
+	cipherSuiteIDs, err := getCipherSuiteIDs(ciphers)
+	if err != nil {
+		return nil, err
+	}
+	tlsCfg.CipherSuites = cipherSuiteIDs
+
 	// Certificate is loaded during server startup to check for any errors.
 	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
@@ -213,8 +220,34 @@ func (validOption validOption) joinString() string {
 	return strings.Join(keys, ", ")
 }
 
-func getTlsVersion(tlsMinVersion string) (uint16, error) {
+func getCipherSuiteIDs(ciphers []string) ([]uint16, error) {
+	if len(ciphers) == 0 {
+		return nil, nil
+	}
 
+	supported := tls.CipherSuites()
+	cipherMap := make(map[string]uint16, len(supported))
+	for _, cs := range supported {
+		cipherMap[cs.Name] = cs.ID
+	}
+
+	ids := make([]uint16, 0, len(ciphers))
+	for _, name := range ciphers {
+		id, ok := cipherMap[name]
+		if !ok {
+			validNames := make([]string, 0, len(cipherMap))
+			for n := range cipherMap {
+				validNames = append(validNames, n)
+			}
+			sort.Strings(validNames)
+			return nil, errors.New(fmt.Sprintf("invalid cipher suite: %s, valid values are %s", name, strings.Join(validNames, ", ")))
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func getTlsVersion(tlsMinVersion string) (uint16, error) {
 	validOption := validOption{
 		tlsOption: map[string]uint16{
 			"1.0": tls.VersionTLS10,
