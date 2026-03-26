@@ -268,14 +268,14 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		iter := indexReader.Symbols()
 		i := 0
 		for iter.Next() {
-			r, err := headerReader.LookupSymbol(ctx, uint32(i))
+			r, err := headerReader.LookupSymbol(ctx, uint32(i), false)
 			testutil.Ok(t, err)
 			testutil.Equals(t, iter.At(), r)
 
 			i++
 		}
 		testutil.Ok(t, iter.Err())
-		_, err := headerReader.LookupSymbol(ctx, uint32(i))
+		_, err := headerReader.LookupSymbol(ctx, uint32(i), false)
 		testutil.NotOk(t, err)
 
 	} else {
@@ -284,15 +284,15 @@ func compareIndexToHeader(t *testing.T, indexByteSlice index.ByteSlice, headerRe
 		testutil.Ok(t, err)
 
 		for refs, sym := range symbols {
-			r1, err := headerReader.LookupSymbol(ctx, refs)
+			r1, err := headerReader.LookupSymbol(ctx, refs, false)
 			testutil.Ok(t, err)
 			testutil.Equals(t, sym, r1)
 
-			r2, err := headerReader.LookupSymbol(ctx, refs)
+			r2, err := headerReader.LookupSymbol(ctx, refs, false)
 			testutil.Ok(t, err)
 			testutil.Equals(t, sym, r2)
 		}
-		_, err = headerReader.LookupSymbol(ctx, 200000)
+		_, err = headerReader.LookupSymbol(ctx, 200000, false)
 		testutil.NotOk(t, err)
 	}
 
@@ -483,7 +483,7 @@ func benchmarkBinaryReaderLookupSymbol(b *testing.B, numSeries int) {
 
 	for b.Loop() {
 		for i := range symbolsOffsets {
-			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i]); err != nil {
+			if _, err := reader.LookupSymbol(ctx, symbolsOffsets[i], false); err != nil {
 				b.Fail()
 			}
 		}

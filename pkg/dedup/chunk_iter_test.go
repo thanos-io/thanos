@@ -333,6 +333,10 @@ func (h histoSample) T() int64 {
 	return h.t
 }
 
+func (h histoSample) ST() int64 {
+	return h.t
+}
+
 func (h histoSample) F() float64 {
 	return h.f
 }
