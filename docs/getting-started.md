@@ -40,7 +40,7 @@ Thanos can **not** be downloaded nor installed via the `go get` or `go install` 
 
 Thanos uses the directive *replace*. The reason is to provide a way to unblock ourselves promptly while also being flexible in the packages that we (re)use. Support for `go install` is not likely at this point.
 
-If you want to build Thanos from source you would need a working installation of the Go 1.18+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
+If you want to build Thanos from source you would need a working installation of the Go 1.26+ [toolchain](https://github.com/golang/tools) (`GOPATH`, `PATH=${GOPATH}/bin:${PATH}`). Next one should make a clone of our repository:
 
 ```
 git clone git@github.com:thanos-io/thanos.git
@@ -71,7 +71,7 @@ Thanos is **not** tied to Kubernetes. However, Kubernetes, Thanos and Prometheus
 
 Our friendly community maintains a few different ways of installing Thanos on Kubernetes. See those below:
 
-* [prometheus-operator](https://github.com/coreos/prometheus-operator): Prometheus operator has support for deploying Prometheus with Thanos
+* [prometheus-operator](https://github.com/prometheus-operator/prometheus-operator): Prometheus operator has support for deploying Prometheus with Thanos
 * [kube-thanos](https://github.com/thanos-io/kube-thanos): Jsonnet based Kubernetes templates.
 * [Community Helm charts](https://artifacthub.io/packages/search?ts_query_web=thanos)
 
