@@ -39,9 +39,9 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Added
 
-- [#](https://github.com/thanos-io/thanos/pull/8623): Query: Enable batching of Series per SeriesResponse.
-- [#](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
-- [#](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shippper
+- [#8623](https://github.com/thanos-io/thanos/pull/8623): Query: Enable batching of Series per SeriesResponse.
+- [#8582](https://github.com/thanos-io/thanos/pull/8582): Sidecar: support --storage.tsdb.delay-compact-file.path Prometheus flag.
+- [#8595](https://github.com/thanos-io/thanos/pull/8595): *: add --shipper.upload-compacted flag for controlling upload concurrency in components that use shipper
 
 ### Changed
 
