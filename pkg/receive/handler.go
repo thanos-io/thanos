@@ -1305,8 +1305,8 @@ func (es *writeErrors) ErrOrNil() error {
 }
 
 // Cause returns the primary cause for a write failure.
-// If multiple errors have occurred, Cause will prefer
-// recoverable over non-recoverable errors.
+// If multiple errors have occurred, Cause will return the most
+// frequently occurring error type.
 func (es *writeErrors) Cause() error {
 	if len(es.errs) == 0 {
 		return nil
@@ -1336,10 +1336,10 @@ func (es *writeErrors) Cause() error {
 		}
 	}
 
-	for _, exp := range expErrs {
-		if exp.count > 0 {
-			return exp.err
-		}
+	// Sort by count descending and return the most frequent error.
+	sort.Sort(sort.Reverse(expErrs))
+	if expErrs[0].count > 0 {
+		return expErrs[0].err
 	}
 
 	return unknownErr

@@ -2001,3 +2001,56 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+// TestReplicationErrorsConflictScenario tests what happens in RF=3, Quorum=2
+// when 1 replica is unavailable and 2 replicas return conflict errors.
+func TestReplicationErrorsConflictScenario(t *testing.T) {
+	t.Parallel()
+
+	// Simulate RF=3, Quorum=2 scenario:
+	// - 1 replica returns unavailable
+	// - 2 replicas return conflict
+	errs := &replicationErrors{
+		threshold: 2,
+	}
+
+	// Add 1 unavailable error
+	errs.Add(errUnavailable)
+	// Add 2 conflict errors
+	errs.Add(storage.ErrOutOfOrderSample)
+	errs.Add(storage.ErrDuplicateSampleForTimestamp)
+
+	// Call Cause() to see what error is returned
+	cause := errs.Cause()
+
+	// With threshold=2:
+	// - conflict count = 2 (>= threshold)
+	// - unavailable count = 1 (< threshold)
+	// Since conflict count meets the threshold, errConflict is returned
+	// This then gets mapped to HTTP 409 Conflict in the handler
+
+	require.Equal(t, errConflict, cause, "Expected errConflict since 2 conflicts meet the quorum threshold of 2")
+}
+
+func TestWriteErrorsConflictScenario(t *testing.T) {
+	t.Parallel()
+
+	errs := &writeErrors{}
+
+	// Add 1 unavailable error
+	errs.Add(errUnavailable)
+	// Add 2 conflict errors
+	errs.Add(storage.ErrOutOfOrderSample)
+	errs.Add(storage.ErrDuplicateSampleForTimestamp)
+
+	// Call Cause() to see what error is returned
+	cause := errs.Cause()
+
+	// writeErrors.Cause() now returns the most frequent error:
+	// - conflict count = 2
+	// - unavailable count = 1
+	// Since conflict is most frequent, errConflict is returned
+	// This maps to HTTP 409 Conflict
+
+	require.Equal(t, errConflict, cause, "Expected errConflict since it's the most frequent error (2 vs 1)")
+}
