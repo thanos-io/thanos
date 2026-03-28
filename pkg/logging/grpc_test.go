@@ -158,13 +158,13 @@ func TestFillGlobalOptionConfig(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		config     *RequestConfig
-		isGRPC     bool
-		wantLevel  string
-		wantStart  bool
-		wantEnd    bool
-		wantErr    bool
+		name      string
+		config    *RequestConfig
+		isGRPC    bool
+		wantLevel string
+		wantStart bool
+		wantEnd   bool
+		wantErr   bool
 	}{
 		{
 			name:      "empty config returns defaults",
