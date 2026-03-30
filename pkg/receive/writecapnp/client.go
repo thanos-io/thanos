@@ -22,7 +22,7 @@ import (
 )
 
 type Dialer interface {
-	Dial() (net.Conn, error)
+	DialContext(ctx context.Context) (net.Conn, error)
 }
 
 type TCPDialer struct {
@@ -33,12 +33,9 @@ func NewTCPDialer(address string) *TCPDialer {
 	return &TCPDialer{address: address}
 }
 
-func (t TCPDialer) Dial() (net.Conn, error) {
-	addr, err := net.ResolveTCPAddr("tcp", t.address)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialTCP("tcp", nil, addr)
+func (t TCPDialer) DialContext(ctx context.Context) (net.Conn, error) {
+	var d net.Dialer
+	conn, err := d.DialContext(ctx, "tcp", t.address)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to dial peer %s", t.address)
 	}
@@ -83,6 +80,12 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 		}
 	}
 
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return &storepb.WriteResponse{}, status.Error(codes.DeadlineExceeded, fmt.Sprintf("writing to peer: %s", err.Error()))
+	}
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return &storepb.WriteResponse{}, status.Error(codes.Canceled, fmt.Sprintf("writing to peer: %s", err.Error()))
+	}
 	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s", err.Error()))
 }
 
@@ -154,7 +157,7 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 		return nil
 	}
 
-	conn, err := r.dialer.Dial()
+	conn, err := r.dialer.DialContext(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to dial peer")
 	}
