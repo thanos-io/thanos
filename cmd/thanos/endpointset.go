@@ -67,7 +67,8 @@ type endpointSettings struct {
 }
 
 type EndpointConfig struct {
-	Endpoints []endpointSettings `yaml:"endpoints"`
+	DefaultClientConfig clientConfig       `yaml:"default_client_config"`
+	Endpoints           []endpointSettings `yaml:"endpoints"`
 }
 
 type endpointConfigProvider struct {
@@ -163,7 +164,7 @@ func (er *endpointConfigProvider) config() EndpointConfig {
 	er.mu.Lock()
 	defer er.mu.Unlock()
 
-	res := EndpointConfig{Endpoints: make([]endpointSettings, len(er.cfg.Endpoints))}
+	res := EndpointConfig{Endpoints: make([]endpointSettings, len(er.cfg.Endpoints)), DefaultClientConfig: er.cfg.DefaultClientConfig}
 	copy(res.Endpoints, er.cfg.Endpoints)
 	return res
 }
@@ -453,6 +454,18 @@ func setupEndpointSet(
 	endpointset := query.NewEndpointSet(time.Now, logger, reg, func() []*query.GRPCEndpointSpec {
 		endpointConfig := configProvider.config()
 
+		// Use YAML config over flags when present.
+		if !endpointConfig.DefaultClientConfig.UseGlobalTLSOpts() {
+			// Set missing fields to safe defaults before use.
+			endpointConfig.DefaultClientConfig.TLSConfig.applyDefaults(nil)
+			globalTLSOpt, err = extgrpc.StoreClientTLSCredentials(logger, *endpointConfig.DefaultClientConfig.TLSConfig.Enabled, *endpointConfig.DefaultClientConfig.TLSConfig.InsecureSkipVerification, *endpointConfig.DefaultClientConfig.TLSConfig.CertFile, *endpointConfig.DefaultClientConfig.TLSConfig.KeyFile, *endpointConfig.DefaultClientConfig.TLSConfig.CAFile, endpointConfig.DefaultClientConfig.ServerName, *endpointConfig.DefaultClientConfig.TLSConfig.MinVersion)
+			if err != nil {
+				level.Error(logger).Log("msg", "failed to build gRPC dial options for default client config", "err", err)
+				return nil
+			}
+
+			globalTLSConfig = &endpointConfig.DefaultClientConfig.TLSConfig
+		}
 		specs := make([]*query.GRPCEndpointSpec, 0)
 		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {

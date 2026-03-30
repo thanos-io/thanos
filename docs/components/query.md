@@ -300,31 +300,51 @@ Each entry in the per-endpoint `client_config` overrides the corresponding setti
 Example file service-discovery config file in YAML, showing the corresponding [global flag](#flags) for each per-endpoint option as a comment:
 
 ```yaml
+default_client_config:
+  tls_config:
+    enabled: <bool>
+    insecure_skip_verify: <bool>
+    cert_file: "<path>"
+    key_file: "<path>"
+    ca_file: "<path>"
+    min_version: "<str>"
+  server_name: "<str>"
+  compression: "<str>"               # "none" or "snappy"
+
 endpoints:
   - address: "<endpoint-address>"
-    client_config:
+    client_config:                    # overrides default_client_config for this endpoint
       tls_config:
-        enabled: <bool>              # --[no-]grpc-client-tls-secure
-        insecure_skip_verify: <bool> # --[no-]grpc-client-tls-skip-verify
-        cert_file: "<path>"          # --grpc-client-tls-cert
-        key_file: "<path>"           # --grpc-client-tls-key
-        ca_file: "<path>"            # --grpc-client-tls-ca
-        min_version: "<str>"         # --grpc-server-tls-min-version
-      server_name: "<str>"           # --grpc-client-server-name
-      compression: "<str>"           # --grpc-compression "none" or "snappy"
+        enabled: <bool>
+        insecure_skip_verify: <bool>
+        cert_file: "<path>"
+        key_file: "<path>"
+        ca_file: "<path>"
+        min_version: "<str>"
+      server_name: "<str>"
+      compression: "<str>"
 ```
+
+#### Precedence
+
+Per-endpoint `client_config` takes the highest priority. If not set, `default_client_config` from the YAML is used.
 
 #### Note
 
-If you provide TLS-specific fields (`cert_file`, `key_file`, `ca_file`, or `insecure_skip_verify`) without explicitly setting `enabled`, Thanos will **automatically infer `enabled: true`**. To disable TLS, set `enabled: false`. If you provide no TLS configuration at all (no `client_config`), the endpoint will inherit all settings from the global flags.
+If you provide TLS-specific fields (`cert_file`, `key_file`, `ca_file`, or `insecure_skip_verify`) without explicitly setting `enabled`, Thanos will **automatically infer `enabled: true`**. To disable TLS, set `enabled: false`. If you provide no TLS configuration at all (no `client_config`), the endpoint will inherit settings from `default_client_config` or the global flags (deprecated after v0.43.0).
 
 There is no support for per-endpoint TLS overrides for endpoints supplied by DNS service discovery or static CLI options.
 
 See also https://pkg.go.dev/crypto/tls#Config for lower-level field details.
 
-In order to make use of global TLS config, don't provide any `client_config`:
+In order to use the default TLS config for all endpoints, don't provide any `client_config`:
 
 ```yaml
+default_client_config:
+  tls_config:
+    enabled: true
+    ca_file: "/path/to/ca.crt"
+
 endpoints:
   - address: "<endpoint-address>"
 ```
@@ -390,27 +410,6 @@ Flags:
                                  and redo TLS handshakes.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
-      --[no-]grpc-client-tls-secure
-                                 Use TLS when talking to the gRPC server
-      --[no-]grpc-client-tls-skip-verify
-                                 Disable TLS certificate verification i.e self
-                                 signed, signed by fake CA
-      --grpc-client-tls-cert=""  TLS Certificates to use to identify this client
-                                 to the server
-      --grpc-client-tls-key=""   TLS Key for the client's certificate
-      --grpc-client-tls-ca=""    TLS CA Certificates to use to verify gRPC
-                                 servers
-      --grpc-client-server-name=""
-                                 Server name to verify the hostname on
-                                 the returned gRPC certificates. See
-                                 https://tools.ietf.org/html/rfc4366#section-3.1
-      --grpc-compression=none    Compression algorithm to use for gRPC requests
-                                 to other clients. Must be one of: snappy, none
-      --grpc-client-tls-min-version=1.3
-                                 TLS supported minimum version for gRPC client.
-                                 If no version is specified, it'll default to
-                                 1.3. Allowed values: ["1.0", "1.1", "1.2",
-                                 "1.3"]
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.

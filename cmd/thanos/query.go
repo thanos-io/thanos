@@ -270,11 +270,17 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
+		if grpcClientConfig.secure || grpcClientConfig.skipVerify || grpcClientConfig.cert != "" || grpcClientConfig.key != "" || grpcClientConfig.caCert != "" || grpcClientConfig.serverName != "" {
+			level.Warn(logger).Log("msg", "--grpc-client-tls-* flags are deprecated and will be removed after v0.43.0, use default_client_config in endpoint.sd-config-file instead")
+		}
+
+		// remove this when the deprecated flags are removed, as the endpoint set will be the only way to configure store endpoints.
 		globalTLSOpt, err := extgrpc.StoreClientTLSCredentials(logger, grpcClientConfig.secure, grpcClientConfig.skipVerify, grpcClientConfig.cert, grpcClientConfig.key, grpcClientConfig.caCert, grpcClientConfig.serverName, grpcClientConfig.minTLSVersion)
 		if err != nil {
 			return err
 		}
 
+		// remove this when the deprecated flags are removed, as the endpoint set will be the only way to configure store endpoints.
 		globalTLSConfig := &tlsConfig{
 			Enabled:                  &grpcClientConfig.secure,
 			InsecureSkipVerification: &grpcClientConfig.skipVerify,
