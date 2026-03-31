@@ -64,18 +64,18 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 		return c.CodecV2.Marshal(v)
 	}
 	size := gmsg.Size()
-	pool := mem.DefaultBufferPool()
-	buf := pool.Get(size)
+	// Use nopPool instead of DefaultBufferPool to avoid use-after-free with unsafe label strings.
+	// See TODO comment in Unmarshal: we use unsafe code around labels so we cannot use pooling.
+	buf := nopPool.Get(size)
 
 	n, err := gmsg.MarshalToSizedBuffer((*buf)[:size])
 	if err != nil {
-		pool.Put(buf)
 		return mem.BufferSlice{}, err
 	}
 
 	bufExact := (*buf)[:n]
 
-	return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
+	return mem.BufferSlice{mem.NewBuffer(&bufExact, &nopPool)}, nil
 }
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
