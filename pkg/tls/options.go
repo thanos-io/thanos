@@ -39,7 +39,7 @@ func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersi
 		return nil, errors.New("both server key and certificate must be provided")
 	}
 
-	minTlsVersion, err := getTlsVersion(tlsMinVersion)
+	minTlsVersion, err := GetTlsVersion(tlsMinVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 }
 
 // NewClientConfig provides new client TLS configuration.
-// minTLSVersion must be one of 1.0, 1.1, 1.2, 1.3 per getTlsVersion().
+// minTLSVersion must be one of 1.0, 1.1, 1.2, 1.3 per GetTlsVersion().
 func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool, minTLSVersion string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
@@ -145,7 +145,7 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 	)
 
 	if minTLSVersion != "" {
-		mtlsVersion, err = getTlsVersion(minTLSVersion)
+		mtlsVersion, err = GetTlsVersion(minTLSVersion)
 		if err != nil {
 			return nil, err
 		}
@@ -230,7 +230,7 @@ func (validOption validOption) joinString() string {
 	return strings.Join(keys, ", ")
 }
 
-func getTlsVersion(tlsMinVersion string) (uint16, error) {
+func GetTlsVersion(tlsMinVersion string) (uint16, error) {
 
 	validOption := validOption{
 		tlsOption: map[string]uint16{
@@ -246,10 +246,4 @@ func getTlsVersion(tlsMinVersion string) (uint16, error) {
 	}
 
 	return validOption.tlsOption[tlsMinVersion], nil
-}
-
-func ValidateTlsVersion(tlsVersion string) error {
-
-	_, err := getTlsVersion(tlsVersion)
-	return err
 }

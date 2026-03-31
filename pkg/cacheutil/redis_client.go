@@ -138,7 +138,7 @@ func (c *RedisClientConfig) validate() error {
 		}
 
 		if c.TLSConfig.MinVersion != "" {
-			if err := thanos_tls.ValidateTlsVersion(c.TLSConfig.MinVersion); err != nil {
+			if _, err := thanos_tls.GetTlsVersion(c.TLSConfig.MinVersion); err != nil {
 				return errors.Wrapf(err, "tls_config.min_version invalid")
 			}
 		}

@@ -410,6 +410,32 @@ Flags:
                                  and redo TLS handshakes.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
+      --[no-]grpc-client-tls-secure
+                                 Deprecated after v0.43.0: Use TLS when talking
+                                 to the gRPC server
+      --[no-]grpc-client-tls-skip-verify
+                                 Deprecated after v0.43.0: Disable TLS
+                                 certificate verification i.e self signed,
+                                 signed by fake CA
+      --grpc-client-tls-cert=""  Deprecated after v0.43.0: TLS Certificates to
+                                 use to identify this client to the server
+      --grpc-client-tls-key=""   Deprecated after v0.43.0: TLS Key for the
+                                 client's certificate
+      --grpc-client-tls-ca=""    Deprecated after v0.43.0: TLS CA Certificates
+                                 to use to verify gRPC servers
+      --grpc-client-server-name=""
+                                 Deprecated after v0.43.0: Server
+                                 name to verify the hostname on the
+                                 returned gRPC certificates. See
+                                 https://tools.ietf.org/html/rfc4366#section-3.1
+      --grpc-compression=none    Deprecated after v0.43.0: Compression algorithm
+                                 to use for gRPC requests to other clients.
+                                 Must be one of: snappy, none
+      --grpc-client-tls-min-version=1.3
+                                 Deprecated after v0.43.0: TLS supported
+                                 minimum version for gRPC client. If no version
+                                 is specified, it'll default to 1.3. Allowed
+                                 values: ["1.0", "1.1", "1.2", "1.3"]
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.
