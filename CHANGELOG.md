@@ -21,6 +21,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Added
 
+- [#8747](https://github.com/thanos-io/thanos/pull/8747): Compact: add native Parquet writing that converts TSDB blocks to Parquet format once a full 24-hour period is available from 8-hour compacted blocks. When enabled with `--parquet.write=true`, the compactor builds complete daily Parquet files with automatic reconciliation on startup and periodic intervals. Parquet files are organized into daily folders (e.g., `2026-03-28/`) with label-based sharding support. The Parquet schema supports 3 × 8h chunk columns to represent a full 24-hour period. Temporary files respect `--data-dir` for disk space management
 - [#8691](https://github.com/thanos-io/thanos/pull/8691): Compactor: remove the directory marker objects for some s3 compatible object stores
 
 ### Changed

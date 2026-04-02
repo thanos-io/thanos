@@ -51,11 +51,12 @@ require (
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f
 	github.com/oklog/run v1.2.0
-	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/oklog/ulid v1.3.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/onsi/gomega v1.36.2
 	github.com/opentracing/basictracer-go v1.1.0
 	github.com/opentracing/opentracing-go v1.2.0
+	github.com/parquet-go/parquet-go v0.25.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus-community/prom-label-proxy v0.11.1
 	github.com/prometheus/alertmanager v0.30.0
@@ -167,6 +168,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.50.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.52.0 // indirect
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible // indirect
+	github.com/andybalholm/brotli v1.1.0 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.6 // indirect
@@ -264,6 +266,7 @@ require (
 	github.com/opentracing-contrib/go-stdlib v1.1.0 // indirect
 	github.com/oracle/oci-go-sdk/v65 v65.93.1 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

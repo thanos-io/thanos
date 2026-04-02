@@ -890,6 +890,122 @@ func (c DefaultCompactionLifecycleCallback) GetBlockPopulator(_ context.Context,
 	return tsdb.DefaultBlockPopulator{}, nil
 }
 
+// ParquetCompactionLifecycleCallback wraps another CompactionLifecycleCallback and adds
+// Parquet writing functionality after successful compaction.
+type ParquetCompactionLifecycleCallback struct {
+	wrapped       CompactionLifecycleCallback
+	parquetWriter ParquetWriter
+	async         bool // If true, run conversions in background goroutines
+}
+
+// ParquetWriter is the interface for writing TSDB blocks to Parquet format.
+type ParquetWriter interface {
+	WriteBlock(ctx context.Context, blockID ulid.ULID, meta *metadata.Meta) error
+}
+
+// NewParquetCompactionLifecycleCallback creates a new ParquetCompactionLifecycleCallback
+// that wraps an existing callback and adds Parquet writing.
+// If async is true, Parquet conversions run in background goroutines and don't block compaction.
+func NewParquetCompactionLifecycleCallback(
+	wrapped CompactionLifecycleCallback,
+	writer ParquetWriter,
+	async bool,
+) *ParquetCompactionLifecycleCallback {
+	return &ParquetCompactionLifecycleCallback{
+		wrapped:       wrapped,
+		parquetWriter: writer,
+		async:         async,
+	}
+}
+
+// PreCompactionCallback delegates to the wrapped callback.
+func (c *ParquetCompactionLifecycleCallback) PreCompactionCallback(
+	ctx context.Context,
+	logger log.Logger,
+	group *Group,
+	toCompactBlocks []*metadata.Meta,
+) error {
+	return c.wrapped.PreCompactionCallback(ctx, logger, group, toCompactBlocks)
+}
+
+// PostCompactionCallback calls the wrapped callback, then attempts to write the block to Parquet.
+// If async mode is enabled, the Parquet conversion runs in a background goroutine.
+func (c *ParquetCompactionLifecycleCallback) PostCompactionCallback(
+	ctx context.Context,
+	logger log.Logger,
+	group *Group,
+	blockID ulid.ULID,
+) error {
+	// Call wrapped callback first
+	if err := c.wrapped.PostCompactionCallback(ctx, logger, group, blockID); err != nil {
+		return err
+	}
+
+	// Read block metadata from bucket
+	rc, err := group.bkt.Get(ctx, filepath.Join(blockID.String(), metadata.MetaFilename))
+	if err != nil {
+		level.Warn(logger).Log("msg", "failed to read block metadata for Parquet conversion", "block", blockID, "err", err)
+		// Don't fail compaction if Parquet conversion fails
+		return nil
+	}
+	meta, err := metadata.Read(rc)
+	if err != nil {
+		level.Warn(logger).Log("msg", "failed to parse block metadata for Parquet conversion", "block", blockID, "err", err)
+		return nil
+	}
+
+	// Only convert exactly 8-hour blocks (compaction level 2)
+	// Note: Thanos default compaction levels are 1h, 2h, 8h, 48h, 14d
+	// We ONLY convert 8h blocks because:
+	// 1. Parquet schema has 3 chunk columns (3x8h = 24h)
+	// 2. 48h/14d blocks would wrap around and mix chunks from different days
+	// 3. 48h/14d blocks are just compacted versions of 8h blocks (redundant)
+	blockDuration := time.Duration(meta.MaxTime-meta.MinTime) * time.Millisecond
+	if blockDuration != 8*time.Hour {
+		level.Debug(logger).Log("msg", "skipping Parquet conversion, only 8h blocks are converted",
+			"block", blockID, "duration", blockDuration)
+		return nil
+	}
+
+	// Perform conversion (async or sync based on configuration)
+	convertFunc := func() {
+		level.Info(logger).Log("msg", "converting block to Parquet", "block", blockID, "duration", blockDuration)
+
+		// Use background context for async conversions to avoid cancellation
+		convCtx := ctx
+		if c.async {
+			convCtx = context.Background()
+		}
+
+		if err := c.parquetWriter.WriteBlock(convCtx, blockID, meta); err != nil {
+			level.Error(logger).Log("msg", "failed to write Parquet", "block", blockID, "err", err)
+			return
+		}
+
+		level.Info(logger).Log("msg", "successfully converted block to Parquet", "block", blockID)
+	}
+
+	if c.async {
+		// Run in background goroutine - don't block compaction
+		go convertFunc()
+		level.Info(logger).Log("msg", "started async Parquet conversion", "block", blockID)
+	} else {
+		// Run synchronously - blocks compaction until complete
+		convertFunc()
+	}
+
+	return nil
+}
+
+// GetBlockPopulator delegates to the wrapped callback.
+func (c *ParquetCompactionLifecycleCallback) GetBlockPopulator(
+	ctx context.Context,
+	logger log.Logger,
+	group *Group,
+) (tsdb.BlockPopulator, error) {
+	return c.wrapped.GetBlockPopulator(ctx, logger, group)
+}
+
 // Compactor provides compaction against an underlying storage of time series data.
 // It is similar to tsdb.Compactor but only relevant methods are kept. Plan and Write are removed.
 // TODO(bwplotka): Split the Planner from Compactor on upstream as well, so we can import it.
