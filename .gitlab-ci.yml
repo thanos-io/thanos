@@ -1,9 +1,14 @@
 stages:
+  - review
   - build
   - package
   - publish
 
 include:
+  - component: $CI_SERVER_FQDN/cloudflare/ci/ai/opencode@~latest
+    inputs:
+      runOnMR: true
+
   - component: $CI_SERVER_FQDN/cloudflare/ci/docker-image/build-push-image@~latest
     inputs:
       runOnMR: true
@@ -12,7 +17,6 @@ include:
   - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       jobPrefix: "go-amd64"
-      golangVersion: "1.25"
       runOnBranches: "cf-release-.*"
       GOLANG_MAKE_TARGET: "build"
       GOLANG_MAKE_ARGS: "PREFIX=output"
@@ -45,7 +49,6 @@ include:
   - component: $CI_SERVER_FQDN/cloudflare/ci/golang/make@~latest
     inputs:
       jobPrefix: "go-arm64"
-      golangVersion: "1.25"
       runOnBranches: "cf-release-.*"
       GOLANG_MAKE_TARGET: "build"
       GOLANG_MAKE_ARGS: "PREFIX=output"
