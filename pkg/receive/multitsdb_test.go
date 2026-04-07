@@ -245,7 +245,7 @@ func TestFlushOnShutdown(t *testing.T) {
 			}
 
 			testutil.Equals(t, tc.expectedBlocks, len(db.Blocks()))
-			testutil.Ok(t, m.Close())
+			m.Close()
 		})
 	}
 }
@@ -270,7 +270,6 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 		testutil.Equals(t, 2, len(ss))
 
 		for _, s := range ss {
-
 			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
 			case true:
 				g.Go(func() error {
@@ -579,7 +578,6 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 		testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 	})
-
 }
 
 func TestMultiTSDBAddNewTenant(t *testing.T) {

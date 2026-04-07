@@ -639,6 +639,9 @@ Flags:
                                  histograms. This flag is a no-op now and will
                                  be removed in the future. Native histogram
                                  ingestion is always enabled.
+      --tsdb.flush-blocks-on-shutdown
+                                 If true, receive will flush TSDB blocks to disk
+                                 on shutdown.
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not
