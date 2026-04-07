@@ -22,6 +22,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 ### Added
 
 - [#8691](https://github.com/thanos-io/thanos/pull/8691): Compactor: remove the directory marker objects for some s3 compatible object stores
+- [#8753](https://github.com/thanos-io/thanos/pull/8753): Receiver: add the --tsdb.flush-blocks-on-shutdown flag to control shutdown behaviour
 
 ### Changed
 
