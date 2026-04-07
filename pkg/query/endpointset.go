@@ -600,8 +600,9 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 	for _, er := range endpoints {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
-				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				ExemplarsClient:        exemplarspb.NewExemplarsClient(er.cc),
+				LabelSets:              labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				SupportsExternalLabels: er.ComponentType() == component.Query,
 			})
 		}
 	}
