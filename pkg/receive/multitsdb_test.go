@@ -193,6 +193,63 @@ func TestMultiTSDB(t *testing.T) {
 	})
 }
 
+// TestFlushOnShutdown verifies that when flush-on-shutdown is enabled, a
+// sample in the head is compacted into a block during shutdown, and when
+// disabled, no block is produced.
+func TestFlushOnShutdown(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		// name describes the test scenario.
+		name string
+		// flushOnShutdown controls whether Flush is called before Close.
+		flushOnShutdown bool
+		// expectedBlocks is the number of blocks expected after shutdown.
+		expectedBlocks int
+	}{
+		{
+			// Simulates shutdown with flush enabled: sample should be compacted into a block.
+			name:            "flush enabled produces block on shutdown",
+			flushOnShutdown: true,
+			expectedBlocks:  1,
+		},
+		{
+			// Simulates shutdown with flush disabled: sample stays in WAL, no block is produced.
+			name:            "flush disabled produces no block on shutdown",
+			flushOnShutdown: false,
+			expectedBlocks:  0,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			logger := log.NewLogfmtLogger(os.Stderr)
+			const testTenant = "test_tenant"
+
+			m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc)
+
+			testutil.Ok(t, m.Flush())
+			testutil.Ok(t, m.Open())
+			testutil.Ok(t, appendSample(m, testTenant, time.Now()))
+
+			tenant := m.testGetTenant(testTenant)
+			db := tenant.readyStorage().Get()
+			testutil.Equals(t, 0, len(db.Blocks()))
+
+			if tc.flushOnShutdown {
+				testutil.Ok(t, m.Flush())
+			}
+
+			testutil.Equals(t, tc.expectedBlocks, len(db.Blocks()))
+			m.Close()
+		})
+	}
+}
+
 var (
 	expectedFooResp = &storepb.Series{
 		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
@@ -213,7 +270,6 @@ func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
 		testutil.Equals(t, 2, len(ss))
 
 		for _, s := range ss {
-
 			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
 			case true:
 				g.Go(func() error {
@@ -522,7 +578,6 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 		testutil.Equals(t, 1, len(m.TSDBLocalClients()))
 	})
-
 }
 
 func TestMultiTSDBAddNewTenant(t *testing.T) {
