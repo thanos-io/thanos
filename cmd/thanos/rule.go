@@ -417,17 +417,7 @@ func runRule(
 	}
 
 	if len(grpcEndpoints) > 0 {
-		dialOpts, err := extgrpc.StoreClientGRPCOpts(
-			logger,
-			reg,
-			tracer,
-			false,
-			false,
-			"",
-			"",
-			"",
-			"",
-		)
+		dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer)
 		if err != nil {
 			return err
 		}

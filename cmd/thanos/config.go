@@ -70,6 +70,7 @@ type grpcClientConfig struct {
 	cert, key, caCert string
 	serverName        string
 	compression       string
+	serviceConfig     string
 }
 
 func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
@@ -81,19 +82,34 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
 	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
+	cmd.Flag("grpc-service-config", "gRPC service configuration in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").Default("").StringVar(&gc.serviceConfig)
+
+	return gc
+}
+
+func (gc *grpcClientConfig) registerReceiverFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
+	cmd.Flag("remote-write.client-tls-secure", "Use TLS when talking to the other receivers.").Default("false").BoolVar(&gc.secure)
+	cmd.Flag("remote-write.client-tls-skip-verify", "Disable TLS certificate verification when talking to the other receivers i.e self signed, signed by fake CA.").Default("false").BoolVar(&gc.skipVerify)
+	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&gc.cert)
+	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&gc.key)
+	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&gc.caCert)
+	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
+	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
+	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&gc.compression, snappy.Name, compressionNone)
+	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&gc.serviceConfig)
 
 	return gc
 }
 
 func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "building gRPC client")
+	opts := []extgrpc.StoreClientGRPCOption{
+		extgrpc.WithCompression(gc.compression),
+		extgrpc.WithServiceConfig(gc.serviceConfig),
 	}
-	if gc.compression != compressionNone {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(gc.compression)))
+	if gc.secure {
+		opts = append(opts, extgrpc.WithTLS(gc.cert, gc.key, gc.caCert, gc.serverName, gc.skipVerify))
 	}
-	return dialOpts, nil
+	return extgrpc.StoreClientGRPCOpts(logger, reg, tracer, opts...)
 }
 
 type httpConfig struct {
