@@ -373,7 +373,6 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 The following formula is used for calculating quorum:
 
 ```go mdox-exec="sed -n '1068,1078p' pkg/receive/handler.go"
-// writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
 	// would need to succeed all the time. Another way to think about it is when migrating
@@ -384,6 +383,7 @@ func (h *Handler) writeQuorum() int {
 	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
+
 ```
 
 So, if the replication factor is 2 then at least one write must succeed. With RF=3, two writes must succeed, and so on.
@@ -475,23 +475,31 @@ Flags:
                                  TLS version for the gRPC server, leave blank
                                  to default to TLS 1.3, allow values: ["1.0",
                                  "1.1", "1.2", "1.3"]
-      --remote-write.client-tls-cert=""
-                                 TLS Certificates to use to identify this client
-                                 to the server.
-      --remote-write.client-tls-key=""
-                                 TLS Key for the client's certificate.
       --[no-]remote-write.client-tls-secure
                                  Use TLS when talking to the other receivers.
       --[no-]remote-write.client-tls-skip-verify
                                  Disable TLS certificate verification when
                                  talking to the other receivers i.e self signed,
                                  signed by fake CA.
+      --remote-write.client-tls-cert=""
+                                 TLS Certificates to use to identify this client
+                                 to the server.
+      --remote-write.client-tls-key=""
+                                 TLS Key for the client's certificate.
       --remote-write.client-tls-ca=""
                                  TLS CA Certificates to use to verify servers.
       --remote-write.client-server-name=""
                                  Server name to verify the hostname
                                  on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --receive.grpc-compression=snappy
+                                 Compression algorithm to use for gRPC requests
+                                 to other receivers. Must be one of: snappy,
+                                 none
+      --receive.grpc-service-config=<content>
+                                 gRPC service configuration file
+                                 or content in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
@@ -562,10 +570,6 @@ Flags:
       --receive.forward.async-workers=5
                                  Number of concurrent workers processing
                                  forwarding of remote-write requests.
-      --receive.grpc-compression=snappy
-                                 Compression algorithm to use for gRPC requests
-                                 to other receivers. Must be one of: snappy,
-                                 none
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
@@ -575,10 +579,6 @@ Flags:
                                  capnproto
       --receive.capnproto-address="0.0.0.0:19391"
                                  Address for the Cap'n Proto server.
-      --receive.grpc-service-config=<content>
-                                 gRPC service configuration file
-                                 or content in JSON format. See
-                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.relabel-config-file=<file-path>
                                  Path to YAML file that contains relabeling
                                  configuration.

@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errors"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/logutil"
@@ -115,9 +114,6 @@ func validateEndpointConfig(cfg EndpointConfig) error {
 	for _, ecfg := range cfg.Endpoints {
 		if dns.IsDynamicNode(ecfg.Address) && ecfg.Strict {
 			return errors.Newf("%s is a dynamically specified endpoint i.e. it uses SD and that is not permitted under strict mode.", ecfg.Address)
-		}
-		if !ecfg.Group && len(ecfg.ServiceConfig) != 0 {
-			return errors.Newf("%s service_config is only valid for endpoint groups.", ecfg.Address)
 		}
 	}
 	return nil
@@ -354,15 +350,19 @@ func setupEndpointSet(
 		// groups and non dynamic endpoints
 		for _, ecfg := range endpointConfig.Endpoints {
 			strict, group, addr := ecfg.Strict, ecfg.Group, ecfg.Address
+			opts := dialOpts
+			if ecfg.ServiceConfig != "" {
+				opts = append(append(make([]grpc.DialOption, 0, len(dialOpts)+1), dialOpts...), grpc.WithDefaultServiceConfig(ecfg.ServiceConfig))
+			}
 			if group {
-				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, append(dialOpts, extgrpc.EndpointGroupGRPCOpts(ecfg.ServiceConfig)...)...))
+				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("thanos:///%s", addr), strict, opts...))
 			} else if !dns.IsDynamicNode(addr) {
-				specs = append(specs, query.NewGRPCEndpointSpec(addr, strict, dialOpts...))
+				specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("passthrough:///%s", addr), strict, opts...))
 			}
 		}
 		// dynamic endpoints
 		for _, addr := range dnsEndpointProvider.Addresses() {
-			specs = append(specs, query.NewGRPCEndpointSpec(addr, false, dialOpts...))
+			specs = append(specs, query.NewGRPCEndpointSpec(fmt.Sprintf("passthrough:///%s", addr), false, dialOpts...))
 		}
 		return removeDuplicateEndpointSpecs(specs)
 	}, unhealthyTimeout, endpointTimeout, queryTimeout, queryConnMetricLabels...)

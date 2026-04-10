@@ -30,15 +30,12 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
-	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/compressutil"
 	"github.com/thanos-io/thanos/pkg/exemplars"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
-	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/info"
@@ -158,26 +155,9 @@ func runReceive(
 		return err
 	}
 
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(
-		logger,
-		reg,
-		tracer,
-		conf.rwClientSecure,
-		conf.rwClientSkipVerify,
-		conf.rwClientCert,
-		conf.rwClientKey,
-		conf.rwClientServerCA,
-		conf.rwClientServerName,
-	)
+	dialOpts, err := conf.rwClientConfig.dialOptions(logger, reg, tracer)
 	if err != nil {
 		return err
-	}
-	if conf.compression != compressionNone {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
-	}
-
-	if conf.grpcServiceConfig != "" {
-		dialOpts = append(dialOpts, grpc.WithDefaultServiceConfig(conf.grpcServiceConfig))
 	}
 
 	var bkt objstore.Bucket
@@ -844,12 +824,7 @@ type receiveConfig struct {
 	rwServerCert          string
 	rwServerKey           string
 	rwServerClientCA      string
-	rwClientCert          string
-	rwClientKey           string
-	rwClientSecure        bool
-	rwClientServerCA      string
-	rwClientServerName    string
-	rwClientSkipVerify    bool
+	rwClientConfig        grpcClientConfig
 	rwServerTlsMinVersion string
 
 	dataDir   string
@@ -873,9 +848,7 @@ type receiveConfig struct {
 	forwardTimeout      *model.Duration
 	maxBackoff          *model.Duration
 	maxArtificialDelay  *model.Duration
-	compression         string
 	replicationProtocol string
-	grpcServiceConfig   string
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -937,17 +910,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
 
-	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
-
-	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
-
-	cmd.Flag("remote-write.client-tls-secure", "Use TLS when talking to the other receivers.").Default("false").BoolVar(&rc.rwClientSecure)
-
-	cmd.Flag("remote-write.client-tls-skip-verify", "Disable TLS certificate verification when talking to the other receivers i.e self signed, signed by fake CA.").Default("false").BoolVar(&rc.rwClientSkipVerify)
-
-	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&rc.rwClientServerCA)
-
-	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&rc.rwClientServerName)
+	rc.rwClientConfig.registerReceiverFlag(cmd)
 
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").StringVar(&rc.dataDir)
@@ -987,8 +950,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replica-header", "HTTP header specifying the replica number of a write request.").Default(receive.DefaultReplicaHeader).StringVar(&rc.replicaHeader)
 
 	cmd.Flag("receive.forward.async-workers", "Number of concurrent workers processing forwarding of remote-write requests.").Default("5").UintVar(&rc.asyncForwardWorkerCount)
-	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
-	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&rc.compression, snappy.Name, compressionNone)
 
 	cmd.Flag("receive.replication-factor", "How many times to replicate incoming write requests.").Default("1").Uint64Var(&rc.replicationFactor)
 
@@ -998,8 +959,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		EnumVar(&rc.replicationProtocol, replicationProtocols...)
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
-
-	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&rc.grpcServiceConfig)
 
 	rc.forwardTimeout = extkingpin.ModelDuration(cmd.Flag("receive-forward-timeout", "Timeout for each forward request.").Default("5s").Hidden())
 
