@@ -26,7 +26,7 @@ In a single cycle, the compactors use syncs to catch two types of events:
 
 There’s also blocks marked for deletion, but the compactors check and exclude blocks marked in a separate step, so following syncs don’t change this result either.
 
-Then, the main purpose of syncing multiple times is to find new blocks, and with the current solution, a lot of iteration time is redundant. It would be useful to support checkpoints and a \`startAfter\` option in the bucket listing to resume an interrupted sync after a restart, and to only sync preexisting blocks once per cycle.
+Then, the main purpose of syncing multiple times is to find new blocks, and with the current solution, a lot of iteration time is redundant. It would be useful to support checkpoints and a `startAfter` option in the bucket listing to resume an interrupted sync after a restart, and to only sync preexisting blocks once per cycle.
 
 ## Goals
 
