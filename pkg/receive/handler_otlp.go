@@ -161,6 +161,10 @@ func (h *Handler) convertToPrometheusFormat(ctx context.Context, pmetrics pmetri
 		AddMetricSuffixes:         true,
 		DisableTargetInfo:         !h.options.OtlpEnableTargetInfo,
 		PromoteResourceAttributes: h.options.OtlpResourceAttributes,
+		// ExportCreatedMetric preserves StartTimeUnixNano from OTLP as a
+		// _created timestamp, enabling correct counter reset detection by
+		// downstream Prometheus-compatible systems.
+		ExportCreatedMetric: true,
 	}
 
 	annots, err := converter.FromMetrics(ctx, pmetrics, settings)
