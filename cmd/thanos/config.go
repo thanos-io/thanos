@@ -35,6 +35,7 @@ type grpcConfig struct {
 	tlsSrvKey        string
 	tlsSrvClientCA   string
 	tlsMinVersion    string
+	tlsCiphers       []string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
 }
@@ -55,6 +56,9 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-tls-min-version",
 		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
 		Default("1.3").StringVar(&gc.tlsMinVersion)
+	cmd.Flag("grpc-server-tls-ciphers",
+		"TLS cipher suites for gRPC server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").
+		StringsVar(&gc.tlsCiphers)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
