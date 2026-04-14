@@ -901,11 +901,11 @@ test_metric{a="2", b="2"} 1`)
 				MetricCount:    "10",
 				SeriesCount:    "1",
 				MetricInterval: "3600",
-				SeriesInterval: "30",
-				ValueInterval:  "30",
+				SeriesInterval: "5",
+				ValueInterval:  "5",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "10",
 				RemoteRequestCount:  "5",
 
@@ -923,7 +923,7 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "5",
 				RemoteRequestCount:  "5",
 
@@ -937,11 +937,11 @@ test_metric{a="2", b="2"} 1`)
 				MetricCount:    "10",
 				SeriesCount:    "1",
 				MetricInterval: "3600",
-				SeriesInterval: "30",
-				ValueInterval:  "30",
+				SeriesInterval: "5",
+				ValueInterval:  "5",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "10",
 				RemoteRequestCount:  "5",
 
@@ -952,7 +952,7 @@ test_metric{a="2", b="2"} 1`)
 
 		// Here, 4/5 requests are failed due to limiting as we ingest one initial request.
 		// 4 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 30 * time.Second, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
