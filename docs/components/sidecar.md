@@ -142,6 +142,12 @@ Flags:
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
+      --grpc-server-tls-ciphers=GRPC-SERVER-TLS-CIPHERS ...
+                                 TLS cipher suites for gRPC server
+                                 (repeatable). If not specified,
+                                 the default Go cipher suites are used.
+                                 See https://pkg.go.dev/crypto/tls#pkg-constants
+                                 for valid values.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
