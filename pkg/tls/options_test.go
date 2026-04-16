@@ -84,6 +84,78 @@ func TestGetCipherSuiteIDs(t *testing.T) {
 	}
 }
 
+func TestGetCurveIDs(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       []string
+		wantIDs     []tls.CurveID
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:    "empty input returns nil",
+			input:   []string{},
+			wantIDs: nil,
+		},
+		{
+			name:    "nil input returns nil",
+			input:   nil,
+			wantIDs: nil,
+		},
+		{
+			name:    "single valid curve",
+			input:   []string{"X25519"},
+			wantIDs: []tls.CurveID{tls.X25519},
+		},
+		{
+			name:    "multiple valid curves preserves order",
+			input:   []string{"CurveP384", "X25519"},
+			wantIDs: []tls.CurveID{tls.CurveP384, tls.X25519},
+		},
+		{
+			name:    "all valid curves",
+			input:   []string{"CurveP256", "CurveP384", "CurveP521", "X25519"},
+			wantIDs: []tls.CurveID{tls.CurveP256, tls.CurveP384, tls.CurveP521, tls.X25519},
+		},
+		{
+			name:    "duplicate curve returns duplicate IDs",
+			input:   []string{"CurveP256", "CurveP256"},
+			wantIDs: []tls.CurveID{tls.CurveP256, tls.CurveP256},
+		},
+		{
+			name:        "unknown curve returns error",
+			input:       []string{"INVALID_CURVE"},
+			wantErr:     true,
+			errContains: "INVALID_CURVE",
+		},
+		{
+			name:        "error message contains valid curve names",
+			input:       []string{"BAD_CURVE"},
+			wantErr:     true,
+			errContains: "CurveP256",
+		},
+		{
+			name:        "valid curve followed by invalid returns error",
+			input:       []string{"X25519", "UNKNOWN"},
+			wantErr:     true,
+			errContains: "UNKNOWN",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ids, err := getCurveIDs(tc.input)
+			if tc.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errContains)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantIDs, ids)
+		})
+	}
+}
+
 func TestTlsOptions(t *testing.T) {
 	var tests = []struct {
 		input  string

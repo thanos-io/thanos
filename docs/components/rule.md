@@ -322,6 +322,11 @@ Flags:
                                  the default Go cipher suites are used.
                                  See https://pkg.go.dev/crypto/tls#pkg-constants
                                  for valid values.
+      --grpc-server-tls-curves=GRPC-SERVER-TLS-CURVES ...
+                                 TLS curves for gRPC server (repeatable). If
+                                 not specified, the default Go curves are used.
+                                 Valid values: CurveP256, CurveP384, CurveP521,
+                                 X25519.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
