@@ -36,6 +36,7 @@ type grpcConfig struct {
 	tlsSrvClientCA   string
 	tlsMinVersion    string
 	tlsCiphers       []string
+	tlsCurves        []string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
 }
@@ -59,6 +60,9 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-tls-ciphers",
 		"TLS cipher suites for gRPC server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").
 		StringsVar(&gc.tlsCiphers)
+	cmd.Flag("grpc-server-tls-curves",
+		"TLS curves for gRPC server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").
+		StringsVar(&gc.tlsCurves)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
