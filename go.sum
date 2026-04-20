@@ -3853,6 +3853,8 @@ github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0/go.mod h1:qq
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/ringerc/thanos-prometheus-patches v0.0.0-20260323025352-061110462a8f h1:mcG7IcW2OWdqXNdSQa9S96Fx0EaWCvrelT09gx2mwCQ=
 github.com/ringerc/thanos-prometheus-patches v0.0.0-20260323025352-061110462a8f/go.mod h1:rs6XoWKvgAStqxHxb2Twh1BR6rp7qw7fmUgW+gaXjbw=
+github.com/ringerc/thanos-promql-engine-patches v0.0.0-20260420022527-da95a4d59cbf h1:qZe6zzthYWHW1SOOIShPvG6xuKh9AdR3cMr9v2ItOZU=
+github.com/ringerc/thanos-promql-engine-patches v0.0.0-20260420022527-da95a4d59cbf/go.mod h1:wnuwKhd6v+YwIgIiDXXFO6S/dnBJbxLwiHy8Xx/oCc0=
 github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
 github.com/rivo/uniseg v0.4.7 h1:WUdvkW8uEhrYfLC4ZzdpI2ztxP1I582+49Oc5Mq64VQ=
 github.com/rivo/uniseg v0.4.7/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=

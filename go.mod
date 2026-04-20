@@ -346,7 +346,7 @@ replace (
 
 	// Patched for Prometheus v0.310.0 (3.10) compatibility.
 	// TODO: Remove once upstream promql-engine supports Prometheus 3.10.
-	github.com/thanos-io/promql-engine => /home/craig/projects/EDB/UPM/upm-stack/thanos-promql-engine
+	github.com/thanos-io/promql-engine => github.com/ringerc/thanos-promql-engine-patches v0.0.0-20260420022527-da95a4d59cbf
 
 	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
 
