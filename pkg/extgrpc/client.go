@@ -24,6 +24,44 @@ import (
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
+// ClientOption is a functional option for gRPC client configuration.
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+	initialWindowSize            int32
+	initialConnWindowSize        int32
+}
+
+func defaultClientOptions() *clientOptions {
+	return &clientOptions{
+		keepaliveTime:                10 * time.Second,
+		keepaliveTimeout:             5 * time.Second,
+		keepalivePermitWithoutStream: false,
+		initialWindowSize:            4 << 20, // 4MB
+		initialConnWindowSize:        4 << 20, // 4MB
+	}
+}
+
+// WithKeepaliveParams sets the keepalive parameters for the gRPC client.
+func WithKeepaliveParams(time, timeout time.Duration, permitWithoutStream bool) ClientOption {
+	return func(o *clientOptions) {
+		o.keepaliveTime = time
+		o.keepaliveTimeout = timeout
+		o.keepalivePermitWithoutStream = permitWithoutStream
+	}
+}
+
+// WithInitialWindowSize sets the initial window size for the gRPC client.
+func WithInitialWindowSize(streamWindow, connWindow int32) ClientOption {
+	return func(o *clientOptions) {
+		o.initialWindowSize = streamWindow
+		o.initialConnWindowSize = connWindow
+	}
+}
+
 type nonPoolingCodec struct {
 	encoding.CodecV2
 }
@@ -80,7 +118,12 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 
 // EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
-func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
+func EndpointGroupGRPCOpts(serviceConfig string, opts ...ClientOption) []grpc.DialOption {
+	options := defaultClientOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	if serviceConfig == "" {
 		serviceConfig = `
 {
@@ -99,12 +142,23 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 	return []grpc.DialOption{
 		grpc.WithDefaultServiceConfig(serviceConfig),
 		grpc.WithDisableServiceConfig(),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                options.keepaliveTime,
+			Timeout:             options.keepaliveTimeout,
+			PermitWithoutStream: options.keepalivePermitWithoutStream,
+		}),
+		grpc.WithInitialWindowSize(options.initialWindowSize),
+		grpc.WithInitialConnWindowSize(options.initialConnWindowSize),
 	}
 }
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
+func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string, opts ...ClientOption) ([]grpc.DialOption, error) {
+	options := defaultClientOptions()
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	grpcMets := grpc_prometheus.NewClientMetrics(
 		grpc_prometheus.WithClientHandlingTimeHistogram(grpc_prometheus.WithHistogramOpts(
 			&prometheus.HistogramOpts{
@@ -130,7 +184,13 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 			grpcMets.StreamClientInterceptor(),
 			tracing.StreamClientInterceptor(tracer),
 		),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                options.keepaliveTime,
+			Timeout:             options.keepaliveTimeout,
+			PermitWithoutStream: options.keepalivePermitWithoutStream,
+		}),
+		grpc.WithInitialWindowSize(options.initialWindowSize),
+		grpc.WithInitialConnWindowSize(options.initialConnWindowSize),
 	}
 	if reg != nil {
 		reg.MustRegister(grpcMets)

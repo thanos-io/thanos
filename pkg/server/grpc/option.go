@@ -20,6 +20,14 @@ type options struct {
 
 	tlsConfig *tls.Config
 
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+	keepaliveMinTime             time.Duration
+
+	initialWindowSize     int32
+	initialConnWindowSize int32
+
 	grpcOpts []grpc.ServerOption
 }
 
@@ -86,5 +94,29 @@ func WithTLSConfig(cfg *tls.Config) Option {
 func WithMaxConnAge(t time.Duration) Option {
 	return optionFunc(func(o *options) {
 		o.maxConnAge = t
+	})
+}
+
+// WithKeepaliveParams sets the keepalive parameters for gRPC server.
+func WithKeepaliveParams(time, timeout time.Duration, permitWithoutStream bool) Option {
+	return optionFunc(func(o *options) {
+		o.keepaliveTime = time
+		o.keepaliveTimeout = timeout
+		o.keepalivePermitWithoutStream = permitWithoutStream
+	})
+}
+
+// WithKeepaliveEnforcementPolicy sets the keepalive enforcement policy for gRPC server.
+func WithKeepaliveEnforcementPolicy(minTime time.Duration, permitWithoutStream bool) Option {
+	return optionFunc(func(o *options) {
+		o.keepaliveMinTime = minTime
+	})
+}
+
+// WithInitialWindowSize sets the initial window size for gRPC server.
+func WithInitialWindowSize(streamWindow, connWindow int32) Option {
+	return optionFunc(func(o *options) {
+		o.initialWindowSize = streamWindow
+		o.initialConnWindowSize = connWindow
 	})
 }
