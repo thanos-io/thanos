@@ -2875,8 +2875,8 @@ func TestDownsampleNHCutNewChunk(t *testing.T) {
 	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncHistogram))
 }
 
-// Helper function to create a raw block with histograms (no downsampling)
-func createBlockWithHistograms(t *testing.T, dir string, histograms []histogram.FloatHistogram) *memBlock {
+// Helper function to create a raw block with histograms (no downsampling).
+func createBlockWithHistograms(t *testing.T, histograms []histogram.FloatHistogram) *memBlock {
 	var ts int64 = 0
 	samples := make([]sample, 0, len(histograms))
 	for _, fh := range histograms {
@@ -2893,7 +2893,7 @@ func TestDownsampleCustomBucketHistograms(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	// Create a raw block with custom bucket histograms (schema -53 for custom buckets).
-	mb := createBlockWithHistograms(t, dir, []histogram.FloatHistogram{
+	mb := createBlockWithHistograms(t, []histogram.FloatHistogram{
 		{
 			CounterResetHint: histogram.NotCounterReset,
 			Count:            13,
@@ -2944,7 +2944,7 @@ func TestDownsampleMixedExponentialAndCustomBucketHistograms(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	// Create a raw block with mixed histogram types.
-	mb := createBlockWithHistograms(t, dir, []histogram.FloatHistogram{
+	mb := createBlockWithHistograms(t, []histogram.FloatHistogram{
 		// Exponential bucket histogram
 		{
 			CounterResetHint: histogram.NotCounterReset,
