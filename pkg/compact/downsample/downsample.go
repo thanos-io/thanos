@@ -339,10 +339,10 @@ func (h *histogramAggregator) reset() {
 }
 
 func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
-	// NOTE(GiedriusS): this can only happen with custom
-	// boundaries. We do not support them yet.
 	// The two boolean return values are for NHCB (Native Histogram Custom Buckets)
-	// which we don't support yet, so we ignore them.
+	// which indicate schema incompatibility and counter reset detection.
+	// These are handled explicitly in the histogramAggregator.add() method,
+	// so errors here are unexpected and indicate a programming error.
 	if err != nil {
 		panic(fmt.Sprintf("unexpected error: %v", err))
 	}
@@ -350,38 +350,71 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
-	if fh.Schema < h.schema {
-		panic("schema must be greater or equal to aggregator schema")
+
+	// Custom buckets (schema < 0) cannot be compared with exponential buckets (schema >= 0).
+	// If we're mixing schema types, treat it as a counter reset.
+	isCustomBucket := fh.Schema < 0
+	isPreviousCustomBucket := h.previous != nil && h.previous.Schema < 0
+
+	if h.total > 0 && isCustomBucket != isPreviousCustomBucket {
+		// Schema type changed (custom <-> exponential), treat as counter reset.
+		h.counter = fh.Copy()
+		h.sum = fh.Copy()
+		h.sum.CounterResetHint = histogram.GaugeType
+		h.previous = fh
+		h.count++
+		h.total++
+		return
 	}
 
-	// A schema increase is treated as a reset, so we need to preserve
-	// the original histogram in case the schema is adjusted.
-	oFh := fh
-	// If schema of the sample is greater than the
-	// aggregator schema, we need to reduce the resolution.
-	if fh.Schema > h.schema {
-		fh = fh.CopyToSchema(h.schema)
-	}
+	// For custom buckets, skip schema checks since they use CustomValues instead of exponential buckets.
+	if !isCustomBucket {
+		if fh.Schema < h.schema {
+			panic("schema must be greater or equal to aggregator schema")
+		}
 
-	if h.total > 0 {
-		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
-			// Counter reset, correct the value.
-			mustHistogramOp(h.counter.Add(fh))
-		} else {
-			// Add delta with previous value to the counter.
-			// TODO: support NHCB.
-			deltaFh, _, _, err := fh.Copy().Sub(h.previous)
-			if err != nil {
-				// TODO(GiedriusS): support native histograms with custom buckets.
-				// This can only happen with custom buckets.
-				panic(fmt.Sprintf("unexpected error: %v", err))
+		// A schema increase is treated as a reset, so we need to preserve
+		// the original histogram in case the schema is adjusted.
+		oFh := fh
+		// If schema of the sample is greater than the
+		// aggregator schema, we need to reduce the resolution.
+		if fh.Schema > h.schema {
+			fh = fh.CopyToSchema(h.schema)
+		}
+
+		if h.total > 0 {
+			if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
+				// Counter reset, correct the value.
+				mustHistogramOp(h.counter.Add(fh))
+			} else {
+				// Add delta with previous value to the counter.
+				deltaFh, _, _, err := fh.Copy().Sub(h.previous)
+				if err != nil {
+					panic(fmt.Sprintf("unexpected error: %v", err))
+				}
+
+				mustHistogramOp(h.counter.Add(deltaFh))
 			}
-
-			mustHistogramOp(h.counter.Add(deltaFh))
+		} else {
+			// First sample sets the counter.
+			h.counter = fh.Copy()
 		}
 	} else {
-		// First sample sets the counter.
-		h.counter = fh.Copy()
+		// Custom buckets: Sub() doesn't work, so we add the full value.
+		// For the first sample or after a reset, just set the counter.
+		if h.total == 0 {
+			h.counter = fh.Copy()
+		} else {
+			// For custom buckets, we can't use Sub() to get deltas, so we detect resets
+			// and add the full histogram value.
+			if fh.CounterResetHint != histogram.GaugeType && fh.DetectReset(h.previous) {
+				// Counter reset detected.
+				h.counter = fh.Copy()
+			} else {
+				// No reset, add the full histogram (not delta).
+				mustHistogramOp(h.counter.Add(fh))
+			}
+		}
 	}
 
 	if h.sum == nil {
@@ -430,7 +463,9 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
 	for _, s := range samples {
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+		// Skip custom bucket schemas (schema < 0) when finding minimum schema.
+		// Custom buckets use CustomValues and are incompatible with exponential buckets.
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema >= 0 && s.fh.Schema < schema {
 			schema = s.fh.Schema
 		}
 	}
