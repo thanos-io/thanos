@@ -5,24 +5,19 @@ package extpromql
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 
-	"github.com/thanos-io/promql-engine/execution/parse"
+	// Ensure XFunctions are registered in parser.Functions via init().
+	_ "github.com/thanos-io/promql-engine/execution/parse"
 )
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	maps.Copy(allFuncs, parser.Functions)
-	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	return parser.NewParser(parser.Options{}).ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of

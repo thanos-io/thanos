@@ -141,5 +141,5 @@ func selectChunkSeriesSet(ctx context.Context, sortSeries bool, hints *storage.S
 	if sortSeries {
 		postings = ir.SortedPostings(postings)
 	}
-	return prom_tsdb.NewBlockChunkSeriesSet(blockID, ir, chunks, tombstones, postings, mint, maxt, disableTrimming, false)
+	return prom_tsdb.NewBlockChunkSeriesSet(blockID, ir, chunks, tombstones, postings, mint, maxt, disableTrimming)
 }

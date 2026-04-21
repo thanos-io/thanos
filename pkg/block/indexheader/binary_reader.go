@@ -981,7 +981,7 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 	return rngs, nil
 }
 
-func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32, noCopy bool) (string, error) {
+func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	if r.indexVersion == index.FormatV1 {
 		// For v1 little trick is needed. Refs are actual offset inside index, not index-header. This is different
 		// of the header length difference between two files.
@@ -1001,7 +1001,7 @@ func (r *BinaryReader) LookupSymbol(ctx context.Context, o uint32, noCopy bool) 
 	}
 	r.valueSymbolsMx.RUnlock()
 
-	s, err := r.symbols.Lookup(o, noCopy)
+	s, err := r.symbols.Lookup(o)
 	if err != nil {
 		return s, err
 	}

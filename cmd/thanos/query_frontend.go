@@ -310,7 +310,6 @@ func runQueryFrontend(
 	if len(cfg.EnableFeatures) > 0 {
 		for _, feature := range cfg.EnableFeatures {
 			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 			}
 		}

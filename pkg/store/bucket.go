@@ -3562,11 +3562,11 @@ func (b *blockSeriesClient) CloseSend() error {
 func (r *bucketIndexReader) LookupLabelsSymbols(ctx context.Context, symbolized []symbolizedLabel, b *labels.Builder) error {
 	b.Reset(labels.EmptyLabels())
 	for _, s := range symbolized {
-		ln, err := r.dec.LookupSymbol(ctx, s.name, false)
+		ln, err := r.dec.LookupSymbol(ctx, s.name)
 		if err != nil {
 			return errors.Wrap(err, "lookup label name")
 		}
-		lv, err := r.dec.LookupSymbol(ctx, s.value, false)
+		lv, err := r.dec.LookupSymbol(ctx, s.value)
 		if err != nil {
 			return errors.Wrap(err, "lookup label value")
 		}

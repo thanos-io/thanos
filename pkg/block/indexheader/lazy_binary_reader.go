@@ -190,7 +190,7 @@ func (r *LazyBinaryReader) PostingsOffset(name, value string) (index.Range, erro
 }
 
 // LookupSymbol implements Reader.
-func (r *LazyBinaryReader) LookupSymbol(ctx context.Context, o uint32, noCopy bool) (string, error) {
+func (r *LazyBinaryReader) LookupSymbol(ctx context.Context, o uint32) (string, error) {
 	r.readerMx.RLock()
 	defer r.readerMx.RUnlock()
 
@@ -199,7 +199,7 @@ func (r *LazyBinaryReader) LookupSymbol(ctx context.Context, o uint32, noCopy bo
 	}
 
 	r.usedAt.Store(time.Now().UnixNano())
-	return r.reader.LookupSymbol(ctx, o, noCopy)
+	return r.reader.LookupSymbol(ctx, o)
 }
 
 // LabelValues implements Reader.
