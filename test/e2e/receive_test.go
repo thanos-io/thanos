@@ -901,11 +901,11 @@ test_metric{a="2", b="2"} 1`)
 				MetricCount:    "10",
 				SeriesCount:    "1",
 				MetricInterval: "3600",
-				SeriesInterval: "5",
-				ValueInterval:  "5",
+				SeriesInterval: "30",
+				ValueInterval:  "30",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "5s",
+				RemoteWriteInterval: "30s",
 				RemoteBatchSize:     "10",
 				RemoteRequestCount:  "5",
 
@@ -937,11 +937,11 @@ test_metric{a="2", b="2"} 1`)
 				MetricCount:    "10",
 				SeriesCount:    "1",
 				MetricInterval: "3600",
-				SeriesInterval: "5",
-				ValueInterval:  "5",
+				SeriesInterval: "30",
+				ValueInterval:  "30",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "5s",
+				RemoteWriteInterval: "30s",
 				RemoteBatchSize:     "10",
 				RemoteRequestCount:  "5",
 
