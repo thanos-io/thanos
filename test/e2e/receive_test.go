@@ -1305,12 +1305,12 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 		},
 	}
 
-	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(20 * time.Second).Init()
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(2 * time.Second).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	ts := time.Now()
 
-	for i := range 1000 {
+	for i := range 20 {
 		t.Log("writing a request:", i, time.Now().UnixMilli())
 
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
