@@ -50,7 +50,7 @@ SERIES_REQUEST='{
   "skip_chunks": false
 }'
 
-GOGOPROTO_ROOT="$(GO111MODULE=on go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
+GOGOPROTO_ROOT="$(go list -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 
 cd $DIR/../pkg/ || exit
 grpcurl \
