@@ -6,6 +6,12 @@ on:
       - main
     tags:
   pull_request:
+    paths:
+      - 'docs/**'
+      - 'website/**'
+      - '*.md'
+      - 'CONTRIBUTING.md'
+      - '.github/workflows/docs.yaml'
 
 permissions:  
   contents: read

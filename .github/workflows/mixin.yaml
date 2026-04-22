@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths:
+      - 'mixin/**'
+      - '.github/workflows/mixin.yaml'
 
 permissions:  
   contents: read
