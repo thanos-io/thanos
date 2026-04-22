@@ -1,0 +1,37 @@
+name: Cleanup PR Caches
+
+on:
+  pull_request:
+    types:
+      - closed
+
+jobs:
+  cleanup:
+    name: Delete runner caches for closed PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Delete caches
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="refs/pull/${{ github.event.pull_request.number }}/merge"
+          echo "Listing caches for branch: $BRANCH"
+          cache_ids=$(gh api --paginate \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/actions/caches?ref=$BRANCH&per_page=100" \
+            --jq '.actions_caches[].id')
+          if [ -z "$cache_ids" ]; then
+            echo "No caches found for this PR."
+            exit 0
+          fi
+          echo "Deleting caches..."
+          while IFS= read -r id; do
+            gh cache delete "$id" \
+              --repo "$REPO"
+            echo "Deleted cache ID: $id"
+          done <<< "$cache_ids"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
