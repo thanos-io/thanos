@@ -141,6 +141,29 @@ jobs:
           skip: ./pkg/ui/*,./pkg/store/6545postingsrepro,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
           ignore_words_list: intrumentation,mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te,ans
 
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    name: Lint Dockerfiles
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+      - name: Lint Dockerfile.multi-stage
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile.multi-stage
+      - name: Lint Dockerfile.multi-arch
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile.multi-arch
+      - name: Lint Dockerfile.e2e-tests
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile.e2e-tests
+
   build-e2e-image:
     runs-on: ubuntu-24.04
     name: Build e2e Docker image
