@@ -13,6 +13,7 @@ permissions:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     name: Thanos unit tests
     env:
       THANOS_TEST_OBJSTORE_SKIP: GCS,S3,AZURE,COS,ALIYUNOSS,BOS,OCI,OBS,SWIFT
@@ -45,6 +46,7 @@ jobs:
 
   cross-build-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     name: Go build for different platforms
     env:
       GOBIN: /tmp/.bin
@@ -72,6 +74,7 @@ jobs:
 
   build-stringlabels:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Go build with -tags=stringlabels
     env:
       GOBIN: /tmp/.bin
@@ -99,6 +102,7 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     name: Linters (Static Analysis) for Go
     env:
       GOBIN: /tmp/.bin
@@ -129,6 +133,7 @@ jobs:
 
   codespell:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     name: Check misspelled words
     steps:
       - name: Checkout code
@@ -143,6 +148,7 @@ jobs:
 
   build-e2e-image:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     name: Build e2e Docker image
     steps:
       - name: Checkout code
@@ -169,6 +175,7 @@ jobs:
         parallelism: [8]
         index: [0, 1, 2, 3, 4, 5, 6, 7]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     name: Thanos end-to-end tests
     env:
       GOBIN: /tmp/.bin
