@@ -493,7 +493,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
           return;
         }
         this.setState({
-          error: 'Error getting query explaination: ' + error.message,
+          error: 'Error getting query explanation: ' + error.message,
           loading: false,
         });
       });

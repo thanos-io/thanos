@@ -64,7 +64,7 @@ describe('Panel', () => {
       results.push(opts);
     };
     const panel = shallow(<Panel {...defaultProps} onOptionsChanged={onOptionsChanged} />);
-    // Panel construction updates Explain checkbox prop to disbale.
+    // Panel construction updates Explain checkbox prop to disable.
     // Hence, a result is added and dropping it.
     results.length = 0;
     const links = panel.find(NavLink);
