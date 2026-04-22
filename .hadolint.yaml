@@ -1,0 +1,4 @@
+ignore:
+  # Dockerfile.multi-stage installs alpine-sdk in a build stage; pinning an
+  # exact apk package version is not practical here.
+  - DL3018
