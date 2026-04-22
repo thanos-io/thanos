@@ -81,7 +81,7 @@ const (
 	// without downloading them. Please take a look at https://github.com/prometheus/tsdb/pull/397 to know
 	// where this number comes from. Long story short: TSDB is made in such a way, and it is made in such a way
 	// because you barely get any improvements in compression when the number of samples is beyond this.
-	// Take a look at Figure 6 in this whitepaper http://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
+	// Take a look at Figure 6 in this whitepaper https://www.vldb.org/pvldb/vol8/p1816-teller.pdf.
 	MaxSamplesPerChunk = 120
 	// EstimatedMaxChunkSize is average max of chunk size. This can be exceeded though in very rare (valid) cases.
 	EstimatedMaxChunkSize  = 16000

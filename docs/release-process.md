@@ -2,9 +2,9 @@
 
 This page describes the release cadence and process for Thanos project.
 
-We use [Semantic Versioning](http://semver.org/).
+We use [Semantic Versioning](https://semver.org/).
 
-NOTE: As [Semantic Versioning](http://semver.org/spec/v2.0.0.html) states all 0.y.z releases can contain breaking changes in API (flags, grpc API, any backward compatibility)
+NOTE: As [Semantic Versioning](https://semver.org/spec/v2.0.0.html) states all 0.y.z releases can contain breaking changes in API (flags, grpc API, any backward compatibility)
 
 ## Cadence
 
@@ -165,6 +165,6 @@ Feel free to mimic following PR: https://github.com/thanos-io/thanos/pull/3861
 
 The following changes to the above procedures apply:
 
-* In line with [Semantic Versioning](http://semver.org/), append something like `-rc.0` to the version (with the corresponding changes to the tag name, the release name etc.).
+* In line with [Semantic Versioning](https://semver.org/), append something like `-rc.0` to the version (with the corresponding changes to the tag name, the release name etc.).
 * Tick the `This is a pre-release` box when drafting the release in the GitHub UI.
 * Still update `CHANGELOG.md`, but when you cut the final release later, merge all the changes from the pre-releases into the one final update.

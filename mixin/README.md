@@ -2,19 +2,19 @@
 
 > Note that everything is experimental and may change significantly at any time. Also it still has missing alert and dashboard definitions for certain components, e.g. rule and sidecar. Please feel free to contribute.
 
-This directory contains extensible and customizable monitoring definitions for Thanos. [Grafana](http://grafana.com/) dashboards, and [Prometheus rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) combined with documentation and scripts to provide easy monitoring experience for Thanos.
+This directory contains extensible and customizable monitoring definitions for Thanos. [Grafana](https://grafana.com/) dashboards, and [Prometheus rules](https://prometheus.io/docs/prometheus/latest/configuration/recording_rules/) combined with documentation and scripts to provide easy monitoring experience for Thanos.
 
 You can find more about monitoring-mixins in [the design document](https://github.com/monitoring-mixins/docs/blob/master/design.pdf), and you can check out other examples like [Prometheus Mixin](https://github.com/prometheus/prometheus/tree/master/documentation/prometheus-mixin).
 
-The content of this project is written in [jsonnet](http://jsonnet.org/). This project could both be described as a package as well as a library.
+The content of this project is written in [jsonnet](https://jsonnet.org/). This project could both be described as a package as well as a library.
 
 ## Requirements
 
 ### jsonnet
 
-The content of this project consists of a set of [jsonnet](http://jsonnet.org/) files making up a library to be consumed.
+The content of this project consists of a set of [jsonnet](https://jsonnet.org/) files making up a library to be consumed.
 
-We recommend to use [go-jsonnet](https://github.com/google/go-jsonnet). It's an implementation of [Jsonnet](http://jsonnet.org/) in pure Go. It is feature complete but is not as heavily exercised as the [Jsonnet C++ implementation](https://github.com/google/jsonnet).
+We recommend to use [go-jsonnet](https://github.com/google/go-jsonnet). It's an implementation of [Jsonnet](https://jsonnet.org/) in pure Go. It is feature complete but is not as heavily exercised as the [Jsonnet C++ implementation](https://github.com/google/jsonnet).
 
 To install:
 

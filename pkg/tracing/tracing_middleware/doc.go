@@ -23,7 +23,7 @@ not have the appropriate requests propagated.
 All server-side spans are tagged with grpc_ctxtags information.
 
 For more information see:
-http://opentracing.io/documentation/
+https://opentracing.io/documentation/
 https://github.com/opentracing/specification/blob/master/semantic_conventions.md
 */
 package tracing_middleware
