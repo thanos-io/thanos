@@ -141,7 +141,28 @@ jobs:
           skip: ./pkg/ui/*,./pkg/store/6545postingsrepro,./internal/*,./mixin/vendor/*,./.bingo/*,go.mod,go.sum
           ignore_words_list: mmaped,nd,ot,re-use,ser,serie,sme,sudu,tast,te,ans
 
+  build-e2e-image:
+    runs-on: ubuntu-24.04
+    name: Build e2e Docker image
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Build e2e Docker image
+        run: make docker-e2e
+
+      - name: Export image
+        run: docker save thanos | gzip > /tmp/thanos-e2e.tar.gz
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thanos-e2e-image
+          path: /tmp/thanos-e2e.tar.gz
+          retention-days: 1
+
   e2e:
+    needs: build-e2e-image
     strategy:
       fail-fast: false
       matrix:
@@ -168,5 +189,14 @@ jobs:
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
 
+      - name: Download e2e image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: thanos-e2e-image
+          path: /tmp
+
+      - name: Load e2e Docker image
+        run: docker load < /tmp/thanos-e2e.tar.gz
+
       - name: Run e2e docker-based tests
-        run: make test-e2e GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
+        run: make test-e2e SKIP_DOCKER_BUILD=1 GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
