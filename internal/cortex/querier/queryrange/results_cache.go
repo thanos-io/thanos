@@ -7,18 +7,18 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/thanos-io/thanos/pkg/extpromql"
 	"net/http"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/thanos-io/thanos/pkg/extpromql"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
-	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,7 +26,6 @@ import (
 	"github.com/prometheus/prometheus/model/timestamp"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/uber/jaeger-client-go"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
@@ -509,7 +508,6 @@ func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent
 			continue
 		}
 
-		accumulator.TraceId = jaegerTraceID(ctx)
 		accumulator.End = extents[i].End
 		currentRes, err := extents[i].toResponse()
 		if err != nil {
@@ -545,7 +543,6 @@ func merge(extents []Extent, acc *accumulator) ([]Extent, error) {
 		Start:    acc.Extent.Start,
 		End:      acc.Extent.End,
 		Response: any,
-		TraceId:  acc.Extent.TraceId,
 	}), nil
 }
 
@@ -569,7 +566,6 @@ func toExtent(ctx context.Context, req Request, res Response) (Extent, error) {
 		Start:    req.GetStart(),
 		End:      req.GetEnd(),
 		Response: any,
-		TraceId:  jaegerTraceID(ctx),
 	}, nil
 }
 
@@ -689,20 +685,6 @@ func (s resultsCache) put(ctx context.Context, key string, extents []Extent) {
 	}
 
 	s.cache.Store(ctx, []string{cache.HashKey(key)}, [][]byte{buf})
-}
-
-func jaegerTraceID(ctx context.Context) string {
-	span := opentracing.SpanFromContext(ctx)
-	if span == nil {
-		return ""
-	}
-
-	spanContext, ok := span.Context().(jaeger.SpanContext)
-	if !ok {
-		return ""
-	}
-
-	return spanContext.TraceID().String()
 }
 
 // extractStats returns the stats for a given time range

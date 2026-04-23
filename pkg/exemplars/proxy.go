@@ -95,10 +95,13 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 
 			labelMatchers = labelMatchers[:0]
 			for _, m := range matcherSet {
-				if containsLabelName(m.Name, extLbls) {
+				if !st.SupportsExternalLabels && containsLabelName(m.Name, extLbls) {
 					// If the current matcher matches one external label,
 					// we don't add it to the current metric selector
 					// as Prometheus' Exemplars API cannot handle external labels.
+					// However, if the downstream store supports external labels
+					// (e.g., a Query node), we preserve the matchers so it can
+					// use them for its own routing.
 					continue
 				}
 				labelMatchers = append(labelMatchers, m.String())

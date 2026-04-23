@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1068,1078p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1067,1078p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -384,6 +384,7 @@ func (h *Handler) writeQuorum() int {
 	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
+
 ```
 
 So, if the replication factor is 2 then at least one write must succeed. With RF=3, two writes must succeed, and so on.
@@ -442,6 +443,17 @@ Flags:
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
+      --grpc-server-tls-ciphers=GRPC-SERVER-TLS-CIPHERS ...
+                                 TLS cipher suites for gRPC server
+                                 (repeatable). If not specified,
+                                 the default Go cipher suites are used.
+                                 See https://pkg.go.dev/crypto/tls#pkg-constants
+                                 for valid values.
+      --grpc-server-tls-curves=GRPC-SERVER-TLS-CURVES ...
+                                 TLS curves for gRPC server (repeatable). If
+                                 not specified, the default Go curves are used.
+                                 Valid values: CurveP256, CurveP384, CurveP521,
+                                 X25519.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
@@ -472,9 +484,20 @@ Flags:
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
       --remote-write.server-tls-min-version="1.3"
-                                 TLS version for the gRPC server, leave blank
+                                 TLS version for the HTTP server, leave blank
                                  to default to TLS 1.3, allow values: ["1.0",
                                  "1.1", "1.2", "1.3"]
+      --remote-write.server-tls-ciphers=REMOTE-WRITE.SERVER-TLS-CIPHERS ...
+                                 TLS cipher suites for the HTTP server
+                                 (repeatable). If not specified,
+                                 the default Go cipher suites are used.
+                                 See https://pkg.go.dev/crypto/tls#pkg-constants
+                                 for valid values.
+      --remote-write.server-tls-curves=REMOTE-WRITE.SERVER-TLS-CURVES ...
+                                 TLS curves for the HTTP server (repeatable). If
+                                 not specified, the default Go curves are used.
+                                 Valid values: CurveP256, CurveP384, CurveP521,
+                                 X25519.
       --remote-write.client-tls-cert=""
                                  TLS Certificates to use to identify this client
                                  to the server.
