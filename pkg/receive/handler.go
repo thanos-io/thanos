@@ -93,6 +93,9 @@ var (
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
 	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	// TryRemoteWriteAsync submits the request without blocking. Returns false if the peer's
+	// worker pool is at capacity; the caller should fall back to RemoteWriteAsync.
+	TryRemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error)) bool
 }
 
 // Options for the web Handler.
@@ -957,13 +960,31 @@ func (h *Handler) sendWrites(
 		}(writeDestination)
 	}
 
-	// Do the writes to remote nodes. Run them all in parallel.
+	// First pass: submit to remote nodes non-blocking so that peers with available pool
+	// capacity (typically the fast ones) all get in flight before we stall on any saturated peer.
+	// This lets quorum be reached—and the HTTP response returned—without waiting for a slow peer's
+	// worker pool to drain.
+	type deferredRemote struct {
+		tenant           string
+		writeDestination endpointReplica
+		trackedSeries    trackedSeries
+	}
+	var deferred []deferredRemote
+
 	for writeDestination := range remoteWrites {
 		for tenant, trackedSeries := range remoteWrites[writeDestination] {
 			wg.Add(1)
-
-			h.sendRemoteWrite(ctx, tenant, writeDestination, trackedSeries, params.alreadyReplicated, responses, wg)
+			if !h.tryRemoteWrite(ctx, tenant, writeDestination, trackedSeries, params.alreadyReplicated, responses, wg) {
+				wg.Done()
+				deferred = append(deferred, deferredRemote{tenant, writeDestination, trackedSeries})
+			}
 		}
+	}
+
+	// Second pass: blocking submission for any peer whose pool was saturated during the first pass.
+	for _, d := range deferred {
+		wg.Add(1)
+		h.sendRemoteWrite(ctx, d.tenant, d.writeDestination, d.trackedSeries, params.alreadyReplicated, responses, wg)
 	}
 }
 
@@ -1006,38 +1027,36 @@ func (h *Handler) sendLocalWrite(
 
 }
 
-// sendRemoteWrite sends a write request to the remote node. It takes care of checking whether the endpoint is up or not
-// in the peerGroup, correctly marking them as up or down when appropriate.
-// The responses are sent to the responses channel.
-func (h *Handler) sendRemoteWrite(
+// prepareRemoteWrite resolves the peer connection, builds the WriteRequest, and constructs the
+// completion callback. Returns (nil, nil, nil) when a connection error has already been written to
+// responses and wg.Done called — callers must check for nil before proceeding.
+func (h *Handler) prepareRemoteWrite(
 	ctx context.Context,
 	tenant string,
-	endpointReplica endpointReplica,
-	trackedSeries trackedSeries,
+	er endpointReplica,
+	ts trackedSeries,
 	alreadyReplicated bool,
 	responses chan writeResponse,
 	wg *sync.WaitGroup,
-) {
-	endpoint := endpointReplica.endpoint
+) (WriteableStoreAsyncClient, *storepb.WriteRequest, func(error)) {
+	endpoint := er.endpoint
 	cl, err := h.peers.getConnection(ctx, endpoint)
 	if err != nil {
 		if errors.Is(err, errUnavailable) {
-			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", er)
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica)
+		responses <- newWriteResponse(ts.seriesIDs, err, er)
 		wg.Done()
-		return
+		return nil, nil, nil
 	}
 
-	// This is called "real" because it's 1-indexed.
-	realReplicationIndex := int64(endpointReplica.replica + 1)
-	// Actually make the request against the endpoint we determined should handle these time series.
-	cl.RemoteWriteAsync(ctx, &storepb.WriteRequest{
-		Timeseries: trackedSeries.timeSeries,
+	// Replica is 1-indexed on the wire; 0 indicates un-replicated.
+	req := &storepb.WriteRequest{
+		Timeseries: ts.timeSeries,
 		Tenant:     tenant,
-		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-		Replica: realReplicationIndex,
-	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+		Replica:    int64(er.replica + 1),
+	}
+	cb := func(err error) {
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -1052,16 +1071,53 @@ func (h *Handler) sendRemoteWrite(
 					h.replications.WithLabelValues(labelError).Inc()
 				}
 			}
-
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {
-					h.peers.markPeerUnavailable(endpointReplica.endpoint)
+					h.peers.markPeerUnavailable(er.endpoint)
 				}
 			}
 		}
 		wg.Done()
-	})
+	}
+	return cl, req, cb
+}
+
+// sendRemoteWrite sends a write request to the remote node. It blocks until the peer's worker
+// pool accepts the work.
+func (h *Handler) sendRemoteWrite(
+	ctx context.Context,
+	tenant string,
+	er endpointReplica,
+	ts trackedSeries,
+	alreadyReplicated bool,
+	responses chan writeResponse,
+	wg *sync.WaitGroup,
+) {
+	cl, req, cb := h.prepareRemoteWrite(ctx, tenant, er, ts, alreadyReplicated, responses, wg)
+	if cl == nil {
+		return
+	}
+	cl.RemoteWriteAsync(ctx, req, er, ts.seriesIDs, responses, cb)
+}
+
+// tryRemoteWrite is the non-blocking counterpart of sendRemoteWrite. It returns false when the
+// peer's worker pool is at capacity; the caller should then fall back to sendRemoteWrite.
+// wg.Done is NOT called on a false return — the caller must not have called wg.Add before checking.
+func (h *Handler) tryRemoteWrite(
+	ctx context.Context,
+	tenant string,
+	er endpointReplica,
+	ts trackedSeries,
+	alreadyReplicated bool,
+	responses chan writeResponse,
+	wg *sync.WaitGroup,
+) bool {
+	cl, req, cb := h.prepareRemoteWrite(ctx, tenant, er, ts, alreadyReplicated, responses, wg)
+	if cl == nil {
+		return true
+	}
+	return cl.TryRemoteWriteAsync(ctx, req, er, ts.seriesIDs, responses, cb)
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -1472,9 +1528,9 @@ type peersContainer interface {
 	io.Closer
 }
 
-func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+func (p *peerWorker) buildWork(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) pool.Work {
 	now := time.Now()
-	if err := p.wp.Go(ctx, func() {
+	return func() {
 		if p.maxArtificialDelay > 0 {
 			var randDuration = time.Duration(rand.Int63n(int64(p.maxArtificialDelay)))
 			if randDuration < 1*time.Second {
@@ -1505,7 +1561,11 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 			"endpoint": er.endpoint,
 			"replica":  er.replica,
 		})
-	}); err != nil {
+	}
+}
+
+func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+	if err := p.wp.Go(ctx, p.buildWork(ctx, req, er, seriesIDs, responseWriter, cb)); err != nil {
 		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
 			sp := trace.SpanFromContext(ctx)
 			sp.SetAttributes(attribute.Bool("error", true))
@@ -1521,6 +1581,10 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 			"replica":  er.replica,
 		})
 	}
+}
+
+func (p *peerWorker) TryRemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) bool {
+	return p.wp.TryGo(p.buildWork(ctx, req, er, seriesIDs, responseWriter, cb))
 }
 
 type peerGroup struct {

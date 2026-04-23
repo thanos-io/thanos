@@ -968,4 +968,9 @@ func (s *stubAsyncClient) RemoteWriteAsync(ctx context.Context, in *storepb.Writ
 	cb(err)
 }
 
+func (s *stubAsyncClient) TryRemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) bool {
+	s.RemoteWriteAsync(ctx, in, er, seriesIDs, responses, cb)
+	return true
+}
+
 func (s *stubAsyncClient) Close() error { return nil }
