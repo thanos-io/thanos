@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
 
 ### Fixed
+- [#8684](https://github.com/thanos-io/thanos/pull/8684): Fix: EncodeAggrChunk created corrupt block if the last chunk is empty
 
 - [#8702](https://github.com/thanos-io/thanos/issues/8702): Query: Fix exemplar proxy stripping external label matchers in multi-tier query topologies. In Query A → Query B → Sidecar setups, external label matchers are now preserved when forwarding to downstream Query nodes so they can route to the correct stores.
 - [#8726](https://github.com/thanos-io/thanos/pull/8726): *: Bump `thanos-community/grpc-go` fork to fix CVE-2026-33186 (CVSS 9.1), an authorization bypass via malformed `:path` headers that could bypass path-based "deny" rules in `grpc/authz` interceptors.
