@@ -18,7 +18,7 @@ Queries against store gateway which are touching large number of blocks (no matt
 
 # Relabelling
 
-Similar to [promtail](https://grafana.com/docs/loki/latest/clients/promtail/configuration/#relabel_configs) this config follows native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
+Similar to [promtail](https://grafana.com/docs/loki/latest/configure/#relabel_configs) this config follows native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
 
 Currently, thanos only supports the following relabel actions:
 
@@ -29,7 +29,7 @@ Currently, thanos only supports the following relabel actions:
 * hashmod
   * on `external labels` for all components
 
-  * on `__block_id` for store gateway, see this [example](https://github.com/observatorium/configuration/blob/bf1304b0d7bce2ae3fefa80412bb358f9aa176fb/environments/openshift/manifests/observatorium-template.yaml#L1514-L1521)
+  * on `__block_id` for store gateway, see this [example](https://github.com/observatorium/observatorium/blob/bf1304b0d7bce2ae3fefa80412bb358f9aa176fb/environments/openshift/manifests/observatorium-template.yaml#L1514-L1521)
 
 The relabel config is used to filter the relevant blocks every time a Thanos component synchronizes with object storage. If a block is dropped, this means it will be ignored by the component.
 

@@ -86,7 +86,7 @@ On each component that works on the object storage (e.g Store GW and Compactor),
 
 ### Relabelling
 
-Similar to [promtail](https://grafana.com/docs/loki/latest/clients/promtail/scraping/#relabeling) this config will follow native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
+Similar to [promtail](https://grafana.com/docs/loki/latest/configure/#relabel_configs) this config will follow native [Prometheus relabel-config](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) syntax.
 
 The relabel config will define filtering process done on **every** synchronization with object storage.
 
