@@ -298,6 +298,38 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 	return nil
 }
 
+func (s *Shipper) AreAllBlocksUploaded() (bool, error) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	metas, _, err := s.blockMetasFromOldest()
+	if err != nil {
+		return false, errors.Wrap(err, "get block metas from oldest")
+	}
+
+	if len(metas) == 0 {
+		return true, nil
+	}
+
+	meta, err := ReadMetaFile(s.metadataFilePath)
+	if err != nil {
+		return false, errors.Wrap(err, "read meta file")
+	}
+
+	uploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
+	for _, id := range meta.Uploaded {
+		uploaded[id] = struct{}{}
+	}
+
+	for _, m := range metas {
+		if _, ok := uploaded[m.ULID]; !ok {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
 // Sync performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
 // to the object bucket once.
 //

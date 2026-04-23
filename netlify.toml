@@ -7,7 +7,7 @@
 # via a simple cURL.
 [build.environment]
   HUGO_VERSION = "v0.101.0"
-  GO_VERSION = "1.25.7"
+  GO_VERSION = "1.26.0"
 
 [context.production]
   # NOTE: the sleep at the end is to make sure logs are not truncated on error.

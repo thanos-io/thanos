@@ -153,7 +153,7 @@ func runReceive(
 		}
 	}
 
-	rwHTTPTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
+	rwHTTPTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion, conf.rwServerTlsCiphers, conf.rwServerTlsCurves)
 	if err != nil {
 		return err
 	}
@@ -346,7 +346,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion, conf.grpcConfig.tlsCiphers, conf.grpcConfig.tlsCurves)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -692,10 +692,7 @@ func startTSDBAndUpload(g *run.Group,
 			} else {
 				level.Info(logger).Log("msg", "storage is flushed successfully")
 			}
-			if err := dbs.Close(); err != nil {
-				level.Error(logger).Log("err", err, "msg", "failed to close storage")
-				return
-			}
+			dbs.Close()
 			level.Info(logger).Log("msg", "storage is closed")
 		}()
 
@@ -752,7 +749,7 @@ func startTSDBAndUpload(g *run.Group,
 			level.Debug(logger).Log("msg", "upload phase starting")
 			start := time.Now()
 
-			uploaded, err := dbs.Sync(ctx)
+			uploaded, err := dbs.SyncAllTenants(ctx)
 			if err != nil {
 				level.Warn(logger).Log("msg", "upload failed", "elapsed", time.Since(start), "err", err)
 				return err
@@ -780,7 +777,7 @@ func startTSDBAndUpload(g *run.Group,
 					<-uploadC // Closed by storage routine when it's done.
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
-					uploaded, err := dbs.Sync(ctx)
+					uploaded, err := dbs.SyncAllTenants(ctx)
 					if err != nil {
 						cancel()
 						level.Error(logger).Log("msg", "the final upload failed", "err", err)
@@ -792,10 +789,6 @@ func startTSDBAndUpload(g *run.Group,
 
 				defer close(uploadDone)
 
-				// Run the uploader in a loop.
-				tick := time.NewTicker(30 * time.Second)
-				defer tick.Stop()
-
 				for {
 					select {
 					case <-ctx.Done():
@@ -806,10 +799,6 @@ func startTSDBAndUpload(g *run.Group,
 							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
 						uploadDone <- struct{}{}
-					case <-tick.C:
-						if err := upload(ctx); err != nil {
-							level.Error(logger).Log("msg", "recurring upload failed", "err", err)
-						}
 					}
 				}
 			}, func(error) {
@@ -858,6 +847,8 @@ type receiveConfig struct {
 	rwServerKey           string
 	rwServerClientCA      string
 	rwServerTlsMinVersion string
+	rwServerTlsCiphers    []string
+	rwServerTlsCurves     []string
 
 	// gRPC client TLS configuration for remote write forwarding
 	rwClientCert       string
@@ -951,6 +942,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
 	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the HTTP server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+
+	cmd.Flag("remote-write.server-tls-ciphers", "TLS cipher suites for the HTTP server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").StringsVar(&rc.rwServerTlsCiphers)
+
+	cmd.Flag("remote-write.server-tls-curves", "TLS curves for the HTTP server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").StringsVar(&rc.rwServerTlsCurves)
 
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 

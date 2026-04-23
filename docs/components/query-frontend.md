@@ -265,6 +265,10 @@ Flags:
                                Maximum number of retries for a single query
                                range request; beyond this, the downstream error
                                is returned.
+      --query.max-retries-per-request=5
+                               Maximum number of retries for a single instant
+                               query request; beyond this, the downstream error
+                               is returned.
       --[no-]query-frontend.enable-x-functions
                                Enable experimental x-
                                functions in query-frontend.

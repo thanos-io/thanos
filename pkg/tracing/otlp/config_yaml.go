@@ -10,6 +10,7 @@ import (
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"google.golang.org/grpc/credentials"
 )
 
 type retryConfig struct {
@@ -51,6 +52,9 @@ func traceGRPCOptions(config Config) []otlptracegrpc.Option {
 
 	if config.Insecure {
 		options = append(options, otlptracegrpc.WithInsecure())
+	} else {
+		tlsConfig, _ := exthttp.NewTLSConfig(&config.TLSConfig)
+		options = append(options, otlptracegrpc.WithTLSCredentials(credentials.NewTLS(tlsConfig)))
 	}
 
 	if config.ReconnectionPeriod != 0 {
