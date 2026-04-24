@@ -10,7 +10,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-- [#](https://github.com/thanos-io/thanos/pull/) Compact: Fix panic when downsampling native histograms with custom buckets (NHCB)
+- [#8773](https://github.com/thanos-io/thanos/pull/8773) Compact: Fix panic when downsampling native histograms with custom buckets (NHCB)
 
 It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
 
