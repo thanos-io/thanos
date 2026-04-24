@@ -77,7 +77,7 @@ Rolling this out has little to no impact on the running Prometheus instance. Thi
 
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
-* *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
+* *[Example Kubernetes manifests using Prometheus operator](https://github.com/prometheus-operator/prometheus-operator/tree/main/example/thanos)*
 * *[Example Deploying Sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-helm/README.md)*
 * *[Details & Config for other object stores](storage.md)*
 * *[Example Thanos Setup integrated with Cilium(Service Map)](../tutorials/thanos-with-cilium/README.md)*
@@ -97,7 +97,7 @@ thanos sidecar \
     --grpc-address              0.0.0.0:19090              # GRPC endpoint for StoreAPI
 ```
 
-* *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
+* *[Example Kubernetes manifests using Prometheus operator](https://github.com/prometheus-operator/prometheus-operator/tree/main/example/thanos)*
 
 ### Uploading Old Metrics
 
@@ -190,7 +190,7 @@ thanos query \
 
 Read more details [here](service-discovery.md).
 
-* *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
+* *[Example Kubernetes manifests using Prometheus operator](https://github.com/prometheus-operator/prometheus-operator/tree/main/example/thanos)*
 
 ## Store Gateway
 
