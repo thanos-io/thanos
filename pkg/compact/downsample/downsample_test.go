@@ -2893,7 +2893,7 @@ func TestDownsampleCustomBucketHistograms(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	// Create a raw block with custom bucket histograms (schema -53 for custom buckets).
-	mb := createBlockWithHistograms(t, []histogram.FloatHistogram{
+	inputHistograms := []histogram.FloatHistogram{
 		{
 			CounterResetHint: histogram.NotCounterReset,
 			Count:            13,
@@ -2912,7 +2912,8 @@ func TestDownsampleCustomBucketHistograms(t *testing.T) {
 			CustomValues:     []float64{1, 2, 3, 4, 5, 6, 7},
 			PositiveBuckets:  []float64{1, 3, 3, 4, 3, 1},
 		},
-	})
+	}
+	mb := createBlockWithHistograms(t, inputHistograms)
 
 	fakeMeta := &metadata.Meta{
 		BlockMeta: tsdb.BlockMeta{
@@ -2924,6 +2925,42 @@ func TestDownsampleCustomBucketHistograms(t *testing.T) {
 	// Downsample to 5m resolution.
 	resLevel1, err := Downsample(context.Background(), logger, fakeMeta, mb, dir, ResLevel1)
 	testutil.Ok(t, err)
+
+	// Verify downsampled values at 5m resolution.
+	_, lbls, chks := GetMetaLabelsAndChunks(t, dir, resLevel1)
+	testutil.Equals(t, 1, len(lbls))
+	testutil.Equals(t, 1, len(chks))
+
+	// Read and verify the downsampled counter aggregate.
+	chunkr, err := chunks.NewDirReader(filepath.Join(dir, resLevel1.String(), block.ChunksDirname), NewPool())
+	testutil.Ok(t, err)
+	defer chunkr.Close()
+
+	c, _, err := chunkr.ChunkOrIterable(chks[0][0])
+	testutil.Ok(t, err)
+	aggrChunk := c.(*AggrChunk)
+
+	// Verify counter aggregate - should accumulate both histograms.
+	counterChunk, err := aggrChunk.Get(AggrCounter)
+	testutil.Ok(t, err)
+
+	var counterSamples []sample
+	testutil.Ok(t, expandChunkIterator(counterChunk.Iterator(nil), counterChunk.Encoding(), &counterSamples))
+	testutil.Equals(t, 1, len(counterSamples))
+
+	// Counter should be accumulated: first histogram + second histogram.
+	expectedCounter := inputHistograms[0].Copy()
+	_, _, _, err = expectedCounter.Add(&inputHistograms[1])
+	testutil.Ok(t, err)
+
+	// Verify schema preserved.
+	testutil.Equals(t, int32(-53), counterSamples[0].fh.Schema)
+	// Verify custom values preserved.
+	testutil.Equals(t, inputHistograms[0].CustomValues, counterSamples[0].fh.CustomValues)
+	// Verify count accumulated.
+	testutil.Equals(t, expectedCounter.Count, counterSamples[0].fh.Count)
+	// Verify sum accumulated.
+	testutil.Equals(t, expectedCounter.Sum, counterSamples[0].fh.Sum)
 
 	// Downsample to 1h resolution.
 	meta, err := metadata.ReadFromDir(filepath.Join(dir, resLevel1.String()))

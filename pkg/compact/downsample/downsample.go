@@ -69,11 +69,6 @@ func cutNewChunk(curEnc, prevEnc chunkenc.Encoding) bool {
 	return false
 }
 
-// Custom buckets histograms cannot be downsampled.
-func hasCustomBuckets(fh *histogram.FloatHistogram) bool {
-	return fh != nil && fh.Schema < 0
-}
-
 // Downsample downsamples the given block. It writes a new block into dir and returns its ID.
 func Downsample(
 	ctx context.Context,
@@ -405,20 +400,14 @@ func (h *histogramAggregator) add(s sample) {
 			h.counter = fh.Copy()
 		}
 	} else {
-		// Custom buckets: Sub() doesn't work, so we add the full value.
-		// For the first sample or after a reset, just set the counter.
+		// Custom buckets: Can't use Sub() for delta computation.
+		// For counters: accumulate by adding each new value, regardless of reset.
+		// For gauges: just track latest value.
 		if h.total == 0 {
+			// First sample sets the counter.
 			h.counter = fh.Copy()
 		} else {
-			// For custom buckets, we can't use Sub() to get deltas, so we detect resets
-			// and add the full histogram value.
-			if fh.CounterResetHint != histogram.GaugeType && fh.DetectReset(h.previous) {
-				// Counter reset detected.
-				h.counter = fh.Copy()
-			} else {
-				// No reset, add the full histogram (not delta).
-				mustHistogramOp(h.counter.Add(fh))
-			}
+			mustHistogramOp(h.counter.Add(fh))
 		}
 	}
 
@@ -467,13 +456,28 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
+	hasCustomBuckets := false
+	hasExponentialBuckets := false
+
 	for _, s := range samples {
-		// Skip custom bucket schemas (schema < 0) when finding minimum schema.
-		// Custom buckets use CustomValues and are incompatible with exponential buckets.
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema >= 0 && s.fh.Schema < schema {
-			schema = s.fh.Schema
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) {
+			if s.fh.Schema < 0 {
+				hasCustomBuckets = true
+			} else {
+				hasExponentialBuckets = true
+				if s.fh.Schema < schema {
+					schema = s.fh.Schema
+				}
+			}
 		}
 	}
+
+	// If we have both custom and exponential buckets, prefer exponential.
+	// If only custom buckets, return a custom bucket schema marker.
+	if hasCustomBuckets && !hasExponentialBuckets {
+		return -1 // Marker for custom buckets only
+	}
+
 	return schema
 }
 
@@ -492,12 +496,8 @@ func downsampleHistogramBatch(batch []sample, resolution int64) chunks.Meta {
 	// up with a non appendable histogram if histogram.schema < chunk.schema.
 	schema := minSchema(batch)
 
-	// If all histograms have custom buckets (schema < 0), we cannot downsample them.
-	// Return an empty chunk meta to skip this batch.
-	if schema == math.MaxInt32 || schema < 0 {
-		return chunks.Meta{}
-	}
-
+	// For custom buckets (schema < 0), we can still downsample by aggregating them.
+	// The schema will be preserved as-is for custom buckets.
 	ab := newHistogramAggrChunkBuilder(isGaugeSamples(batch))
 	downsampleBatch(batch, resolution, newHistogramAggregator(schema), ab.addHistogram)
 	return ab.encode()
@@ -729,10 +729,6 @@ func downsampleRawLoop(
 			if s.fh != nil && math.IsNaN(s.fh.Sum) {
 				continue
 			}
-			// Skip custom buckets histograms (schema < 0) as they cannot be downsampled.
-			if hasCustomBuckets(s.fh) {
-				continue
-			}
 			batch = append(batch, s)
 		}
 		data = data[j:]
@@ -740,11 +736,7 @@ func downsampleRawLoop(
 			continue
 		}
 
-		chk := downsampleBatchFn(batch, resolution)
-		// Skip empty chunks (e.g., when all samples were custom buckets).
-		if chk.Chunk != nil {
-			*chks = append(*chks, chk)
-		}
+		*chks = append(*chks, downsampleBatchFn(batch, resolution))
 	}
 }
 
