@@ -17,7 +17,8 @@ import (
 // ExemplarStore wraps the ExemplarsClient and contains the info of external labels.
 type ExemplarStore struct {
 	ExemplarsClient
-	LabelSets []labels.Labels
+	LabelSets              []labels.Labels
+	SupportsExternalLabels bool
 }
 
 // UnmarshalJSON implements json.Unmarshaler.

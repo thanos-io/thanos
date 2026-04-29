@@ -153,7 +153,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion, conf.rwServerTlsCiphers, conf.rwServerTlsCurves)
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion, conf.grpcConfig.tlsCiphers, conf.grpcConfig.tlsCurves)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -853,6 +853,8 @@ type receiveConfig struct {
 	rwClientSkipVerify    bool
 	rwServerTlsMinVersion string
 	rwClientTlsMinVersion string
+	rwServerTlsCiphers    []string
+	rwServerTlsCurves     []string
 
 	dataDir   string
 	labelStrs []string
@@ -937,7 +939,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
-	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwServerTlsMinVersion, tls.AllowedTLSVersions...)
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the HTTP server, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwServerTlsMinVersion, tls.AllowedTLSVersions...)
+
+	cmd.Flag("remote-write.server-tls-ciphers", "TLS cipher suites for the HTTP server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").StringsVar(&rc.rwServerTlsCiphers)
+
+	cmd.Flag("remote-write.server-tls-curves", "TLS curves for the HTTP server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").StringsVar(&rc.rwServerTlsCurves)
 
 	// For historical reasons Thanos Receive uses its own `--remote-write.client-tls-` options
 	// flags for gRPC client TLS configuration, separate to the --grpc-client-tls- options in cmd/thanos/config.go.
