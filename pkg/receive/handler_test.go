@@ -1233,7 +1233,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 
 	logger := log.NewNopLogger()
 	m := NewMultiTSDB(
-		dir, logger, reg, &tsdb.Options{
+		openTestRoot(b, dir), logger, reg, &tsdb.Options{
 			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
 			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
 			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
