@@ -12,6 +12,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
 
+- [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
+
 ### Fixed
 
 - [#8702](https://github.com/thanos-io/thanos/issues/8702): Query: Fix exemplar proxy stripping external label matchers in multi-tier query topologies. In Query A → Query B → Sidecar setups, external label matchers are now preserved when forwarding to downstream Query nodes so they can route to the correct stores.
@@ -27,6 +29,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8730](https://github.com/thanos-io/thanos/pull/8730): Receive: add `--remote-write.server-tls-ciphers` to configure cipher suites for the HTTP server.
 - [#8770](https://github.com/thanos-io/thanos/pull/8770): *: add `--grpc-server-tls-curves` to configure curves for gRPC servers.
 - [#8770](https://github.com/thanos-io/thanos/pull/8770): Receive: add `--remote-write.server-tls-curves` to configure curves for the HTTP server.
+
+- [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
 
 ### Changed
 

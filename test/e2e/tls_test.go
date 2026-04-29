@@ -45,6 +45,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	caClt := filepath.Join(tmpDirClt, "ca")
 	certClt := filepath.Join(tmpDirClt, "cert")
 	keyClt := filepath.Join(tmpDirClt, "key")
+	tlsMinVersionClt := "1.3"
 
 	tmpDirSrv := t.TempDir()
 	caSrv := filepath.Join(tmpDirSrv, "ca")
@@ -74,7 +75,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
 
 	// Setup the connection and the client.
-	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, tlsMinVersionClt)
 	testutil.Ok(t, err)
 	conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
 	testutil.Ok(t, err)
@@ -137,7 +138,7 @@ func TestGRPCServerTLSCiphersAndVersions(t *testing.T) {
 
 	t.Run("compatible configurations", func(t *testing.T) {
 		// Setup the connection and the client.
-		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
 		testutil.Ok(t, err)
 
 		// Configure TLS version 1.2 only with a cipher suite supported by the server.
@@ -159,7 +160,7 @@ func TestGRPCServerTLSCiphersAndVersions(t *testing.T) {
 	})
 
 	t.Run("cipher suite mismatch", func(t *testing.T) {
-		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
 		testutil.Ok(t, err)
 
 		// Configure TLS version 1.2 only with a cipher suite NOT supported by the server.
@@ -180,7 +181,7 @@ func TestGRPCServerTLSCiphersAndVersions(t *testing.T) {
 	})
 
 	t.Run("TLS version mismatch", func(t *testing.T) {
-		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
 		testutil.Ok(t, err)
 
 		// Configure TLS version 1.1 only.
@@ -240,7 +241,7 @@ func TestGRPCServerTLSCurves(t *testing.T) {
 
 	t.Run("compatible configurations", func(t *testing.T) {
 		// Setup the connection and the client.
-		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
 		testutil.Ok(t, err)
 
 		configClt.CurvePreferences = []tls.CurveID{tls.CurveP521}
@@ -259,7 +260,7 @@ func TestGRPCServerTLSCurves(t *testing.T) {
 	})
 
 	t.Run("curves mismatch", func(t *testing.T) {
-		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
 		testutil.Ok(t, err)
 
 		configClt.CurvePreferences = []tls.CurveID{tls.CurveP256}

@@ -190,7 +190,7 @@ func TestTlsOptions(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		minTlsVersion, err := getTlsVersion(test.input)
+		minTlsVersion, err := GetTlsVersion(test.input)
 
 		if test.fail {
 			require.Error(t, err)
