@@ -910,10 +910,11 @@ type Compactor interface {
 
 // Compact plans and runs a single compaction against the group. The compacted result
 // is uploaded into the bucket the blocks were retrieved from.
-func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
+func (cg *Group) Compact(ctx context.Context, dir *os.Root, planner Planner, comp Compactor, blockDeletableChecker BlockDeletableChecker, compactionLifecycleCallback CompactionLifecycleCallback) (shouldRerun bool, compIDs []ulid.ULID, rerr error) {
 	cg.compactionRunsStarted.Inc()
 
-	subDir := filepath.Join(dir, cg.Key())
+	subPath := cg.Key()
+	subDir := filepath.Join(dir.Name(), subPath)
 
 	defer func() {
 		// Leave the compact directory for inspection if it is a halt error
@@ -921,12 +922,12 @@ func (cg *Group) Compact(ctx context.Context, dir string, planner Planner, comp 
 		if rerr != nil {
 			return
 		}
-		if err := os.RemoveAll(subDir); err != nil {
+		if err := dir.RemoveAll(subPath); err != nil {
 			level.Error(cg.logger).Log("msg", "failed to remove compaction group work directory", "path", subDir, "err", err)
 		}
 	}()
 
-	if err := os.MkdirAll(subDir, 0750); err != nil {
+	if err := dir.MkdirAll(subPath, 0750); err != nil {
 		return false, nil, errors.Wrap(err, "create compaction group dir")
 	}
 
@@ -1481,7 +1482,16 @@ func NewBucketCompactorWithCheckerAndCallback(
 
 // Compact runs compaction over bucket.
 func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
+	if err := os.MkdirAll(c.compactDir, 0750); err != nil {
+		return errors.Wrap(err, "create compact root directory")
+	}
+	dir, err := os.OpenRoot(c.compactDir)
+	if err != nil {
+		return errors.Wrap(err, "open compact root directory")
+	}
+
 	defer func() {
+		dir.Close()
 		// Do not remove the compactDir if an error has occurred
 		// because potentially on the next run we would not have to download
 		// everything again.
@@ -1510,7 +1520,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 		for i := 0; i < c.concurrency; i++ {
 			wg.Go(func() {
 				for g := range groupChan {
-					shouldRerunGroup, _, err := g.Compact(workCtx, c.compactDir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
+					shouldRerunGroup, _, err := g.Compact(workCtx, dir, c.planner, c.comp, c.blockDeletableChecker, c.compactionLifecycleCallback)
 					if err == nil {
 						if shouldRerunGroup {
 							mtx.Lock()
