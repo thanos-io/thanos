@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"go.uber.org/atomic"
@@ -791,6 +792,92 @@ func TestReceiveQuorumKetama(t *testing.T) {
 	}
 }
 
+// TestReceiveSaturatedPoolRF2 verifies that with replication factor 2 (quorum=1)
+// writes don't block when one peer's worker pool is saturated.
+func TestReceiveSaturatedPoolRF2(t *testing.T) {
+	t.Parallel()
+
+	fakePeers := &fakePeersGroup{clients: map[Endpoint]*peerWorker{}}
+	limiter, err := NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	require.NoError(t, err)
+
+	app := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+
+	h := NewHandler(log.NewNopLogger(), &Options{
+		ReplicationFactor: 2,
+		ForwardTimeout:    100 * time.Second,
+		Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(app), &WriterOptions{}),
+		Limiter:           limiter,
+		Endpoint:          newUniqueEndpoint().String(),
+	})
+
+	endpoints := []Endpoint{
+		{
+			Address: newUniqueEndpoint().String(),
+		},
+		{
+			Address: newUniqueEndpoint().String(),
+		},
+	}
+
+	cfg := []HashringConfig{{
+		Hashring:  "test",
+		Endpoints: endpoints,
+	}}
+
+	hashring, err := NewMultiHashring(AlgorithmHashmod, 2, cfg, prometheus.NewRegistry())
+	require.NoError(t, err)
+
+	h.Hashring(hashring)
+	h.peers = fakePeers
+
+	synctest.Test(t, func(t *testing.T) {
+		t.Cleanup(func() { require.NoError(t, fakePeers.Close()) })
+
+		fakePeers.clients[endpoints[0]] = newPeerWorker(
+			&alwaysSucceedClient{},
+			prometheus.NewHistogram(prometheus.HistogramOpts{}),
+			1, 0,
+		)
+
+		fakePeers.clients[endpoints[1]] = newPeerWorker(
+			&alwaysSucceedClient{},
+			prometheus.NewHistogram(prometheus.HistogramOpts{}),
+			1, 30*time.Second,
+		)
+
+		wreq := &storepb.WriteRequest{Timeseries: makeSeriesWithValues(1)}
+		go func() {
+			for range 500 {
+				_, err := h.RemoteWrite(t.Context(), wreq)
+				require.NoError(t, err)
+			}
+		}()
+
+		_, err := h.RemoteWrite(t.Context(), wreq)
+		require.NoError(t, err)
+
+		time.Sleep(10 * time.Minute)
+		synctest.Wait()
+
+		// NOTE(GiedriusS): waiting until the best-effort writers are done
+		// because the waiting is happening in a goroutine.
+		require.NoError(t, runutil.Retry(1*time.Second, t.Context().Done(), func() error {
+			laggyPool := fakePeers.clients[endpoints[1]].wp
+
+			r := laggyPool.TryGo(func() {})
+			if !r {
+				return fmt.Errorf("pool still busy")
+			}
+
+			return nil
+		}))
+	})
+
+}
+
 func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
 	if testing.
 		Short() {
@@ -957,6 +1044,14 @@ func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, t
 	return false
 }
 
+type alwaysSucceedClient struct{}
+
+func (a *alwaysSucceedClient) RemoteWrite(_ context.Context, _ *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return &storepb.WriteResponse{}, nil
+}
+
+func (a *alwaysSucceedClient) Close() error { return nil }
+
 // cycleErrors returns an error generator that cycles through every given error.
 func cycleErrors(errs []error) func() error {
 	var mu sync.Mutex
@@ -1019,6 +1114,11 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *st
 		seriesIDs: seriesIDs,
 	}
 	cb(err)
+}
+
+func (f *fakeRemoteWriteGRPCServer) TryRemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) bool {
+	f.RemoteWriteAsync(ctx, in, er, seriesIDs, responses, cb)
+	return true
 }
 
 func (f *fakeRemoteWriteGRPCServer) Close() error { return nil }

@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1067,1078p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1123,1133p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -384,7 +384,6 @@ func (h *Handler) writeQuorum() int {
 	}
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
-
 ```
 
 So, if the replication factor is 2 then at least one write must succeed. With RF=3, two writes must succeed, and so on.
