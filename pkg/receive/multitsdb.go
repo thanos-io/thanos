@@ -623,6 +623,9 @@ func (t *MultiTSDB) Open() error {
 
 	var g errgroup.Group
 	for _, f := range files {
+		if f.Name() == "lost+found" {
+			continue
+		}
 		if !f.IsDir() {
 			continue
 		}
@@ -807,6 +810,9 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 
 	merr := errutil.MultiError{}
 	for _, fi := range fis {
+		if fi.Name() == "lost+found" {
+			continue
+		}
 		if !fi.IsDir() {
 			continue
 		}

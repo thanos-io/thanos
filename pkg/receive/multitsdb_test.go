@@ -1020,3 +1020,38 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestMultiTSDBIgnoresLostFoundDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	// Create lost+found directory
+	lostFoundDir := filepath.Join(dir, "lost+found")
+	require.NoError(t, os.Mkdir(lostFoundDir, 0750))
+
+	// Create a default tenant directory to ensure the TSDB initializes correctly
+	defaultTenantDir := filepath.Join(dir, "default-tenant")
+	require.NoError(t, os.Mkdir(defaultTenantDir, 0750))
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+		RetentionDuration: (6 * time.Hour).Milliseconds(),
+	}, labels.FromStrings("replica", "test"), "tenant_id", objstore.NewInMemBucket(), false, false, metadata.NoneFunc)
+	t.Cleanup(func() {
+		m.Close()
+	})
+
+	require.NoError(t, m.Open())
+
+	// Verify lost+found is not treated as a tenant
+	m.mtx.RLock()
+	defer m.mtx.RUnlock()
+
+	for tenantID := range m.tenants {
+		require.NotEqual(t, "lost+found", tenantID, "lost+found should be ignored and not treated as a tenant")
+	}
+}
