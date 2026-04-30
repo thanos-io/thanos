@@ -675,8 +675,15 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 	beforeRange := time.Now()
 
 	var res *promql.Result
-	tracing.DoInSpan(ctx, "instant_query_exec", func(ctx context.Context) {
+	tracing.DoWithSpan(ctx, "instant_query_exec", func(ctx context.Context, span tracing.Span) {
 		res = qry.Exec(ctx)
+		if res != nil && res.Err == nil {
+			// Calculate and set trace attributes for the query result
+			numSeries, numSamples, estimatedBytes := calculateQueryResultMetrics(res.Value)
+			span.SetTag("result.series", numSeries)
+			span.SetTag("result.samples", numSamples)
+			span.SetTag("result.estimated_final_memory_bytes", estimatedBytes)
+		}
 	})
 	if res.Err != nil {
 		switch res.Err.(type) {
@@ -712,12 +719,14 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
-	return &queryData{
+	responseData := &queryData{
 		ResultType:    res.Value.Type(),
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, warnings, nil, qry.Close
+	}
+
+	return responseData, warnings, nil, qry.Close
 }
 
 func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (any, []error, *api.ApiError, func()) {
@@ -987,8 +996,15 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 	defer qapi.gate.Done()
 
 	var res *promql.Result
-	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
+	tracing.DoWithSpan(ctx, "range_query_exec", func(ctx context.Context, span tracing.Span) {
 		res = qry.Exec(ctx)
+		if res != nil && res.Err == nil {
+			// Calculate and set trace attributes for the query result
+			numSeries, numSamples, estimatedBytes := calculateQueryResultMetrics(res.Value)
+			span.SetTag("result.series", numSeries)
+			span.SetTag("result.samples", numSamples)
+			span.SetTag("result.estimated_final_memory_bytes", estimatedBytes)
+		}
 	})
 	beforeRange := time.Now()
 	if res.Err != nil {
@@ -1023,12 +1039,14 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 	if r.FormValue(Stats) != "" {
 		qs = stats.NewQueryStats(qry.Stats())
 	}
-	return &queryData{
+	responseData := &queryData{
 		ResultType:    res.Value.Type(),
 		Result:        res.Value,
 		Stats:         qs,
 		QueryAnalysis: analysis,
-	}, warnings, nil, qry.Close
+	}
+
+	return responseData, warnings, nil, qry.Close
 }
 
 func (qapi *QueryAPI) labelValues(r *http.Request) (any, []error, *api.ApiError, func()) {
@@ -1729,4 +1747,52 @@ func convertToTSDBStat(stats []statuspb.Statistic, limit int) []v1.TSDBStat {
 	}
 
 	return statuspb.ConvertToPrometheusTSDBStat(stats)
+}
+
+// estimateLabelsSize estimates the in-memory size of a labels.Labels structure
+// by summing the lengths of all label names and values.
+func estimateLabelsSize(lbls labels.Labels) int64 {
+	var size int64
+	lbls.Range(func(l labels.Label) {
+		size += int64(len(l.Name) + len(l.Value))
+	})
+	return size
+}
+
+// calculateQueryResultMetrics computes metrics for a PromQL query result:
+// - numSeries: number of time series in the result
+// - numSamples: total number of samples across all series
+// - estimatedBytes: estimated in-memory size (labels + samples).
+func calculateQueryResultMetrics(result parser.Value) (numSeries, numSamples, estimatedBytes int64) {
+	switch v := result.(type) {
+	case promql.Vector:
+		numSeries = int64(len(v))
+		for _, sample := range v {
+			numSamples++
+			estimatedBytes += estimateLabelsSize(sample.Metric)
+			estimatedBytes += 16 // timestamp (8 bytes) + value (8 bytes)
+		}
+	case promql.Matrix:
+		numSeries = int64(len(v))
+		for _, series := range v {
+			floatSamples := int64(len(series.Floats))
+			histogramSamples := int64(len(series.Histograms))
+			numSamples += floatSamples + histogramSamples
+			estimatedBytes += estimateLabelsSize(series.Metric)
+			// Each float sample: 8 bytes timestamp + 8 bytes value
+			estimatedBytes += floatSamples * 16
+			// Each histogram sample: 8 bytes timestamp + estimated histogram size
+			// Histograms are more complex, but we use a rough estimate of 100 bytes per histogram
+			estimatedBytes += histogramSamples * (8 + 100)
+		}
+	case promql.Scalar:
+		numSeries = 1
+		numSamples = 1
+		estimatedBytes = 16 // timestamp + value
+	case promql.String:
+		numSeries = 1
+		numSamples = 1
+		estimatedBytes = int64(len(v.V))
+	}
+	return numSeries, numSamples, estimatedBytes
 }

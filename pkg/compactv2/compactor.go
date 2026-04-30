@@ -11,11 +11,12 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	stderrors "errors"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/thanos/pkg/block"
@@ -84,11 +85,9 @@ func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWr
 		closers  []io.Closer
 	)
 	defer func() {
-		errs := tsdb_errors.NewMulti(err)
-		if cerr := tsdb_errors.CloseAll(closers); cerr != nil {
-			errs.Add(errors.Wrap(cerr, "close"))
+		if cerr := closeAll(closers); cerr != nil {
+			err = stderrors.Join(err, errors.Wrap(cerr, "close"))
 		}
-		err = errs.Err()
 	}()
 
 	for _, b := range readers {
@@ -186,4 +185,13 @@ func compactSeries(ctx context.Context, sReaders ...seriesReader) (symbols index
 	}
 	// Merge series using compacting chunk series merger.
 	return symbols, storage.NewMergeChunkSeriesSet(sets, 0, storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)), nil
+}
+
+// closeAll closes all given closers while recording all errors.
+func closeAll(cs []io.Closer) error {
+	var errs []error
+	for _, c := range cs {
+		errs = append(errs, c.Close())
+	}
+	return stderrors.Join(errs...)
 }
