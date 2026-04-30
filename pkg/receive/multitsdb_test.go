@@ -956,7 +956,7 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 
 		tenant.ship = shipper.New(
 			nil,
-			td,
+			openTestRoot(t, td),
 			shipper.WithLogger(log.NewNopLogger()),
 			shipper.WithSource(metadata.BucketUploadSource),
 			shipper.WithHashFunc(metadata.NoneFunc),

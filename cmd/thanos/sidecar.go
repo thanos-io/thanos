@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -415,9 +416,15 @@ func runSidecar(
 				return errors.Wrapf(err, "aborting as no external labels found after waiting %s", promReadyTimeout)
 			}
 
+			dataDir, err := os.OpenRoot(conf.tsdb.path)
+			if err != nil {
+				return errors.Wrap(err, "opening tsdb directory")
+			}
+			defer dataDir.Close()
+
 			s := shipper.New(
 				bkt,
-				conf.tsdb.path,
+				dataDir,
 				shipper.WithLogger(logger),
 				shipper.WithRegisterer(reg),
 				shipper.WithSource(metadata.SidecarSource),
