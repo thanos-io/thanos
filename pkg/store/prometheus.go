@@ -534,7 +534,7 @@ func (p *PrometheusStore) encodeChunk(ss []prompb.Sample) (storepb.Chunk_Encodin
 		return 0, nil, err
 	}
 	for _, s := range ss {
-		a.Append(s.Timestamp, s.Value)
+		a.Append(0, s.Timestamp, s.Value)
 	}
 	return storepb.Chunk_XOR, c.Bytes(), nil
 }

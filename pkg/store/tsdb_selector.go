@@ -45,8 +45,10 @@ func (sr *TSDBSelector) MatchLabelSets(labelSets ...labels.Labels) (bool, []labe
 
 func (sr *TSDBSelector) runRelabelRules(labelSets []labels.Labels) []labels.Labels {
 	result := make([]labels.Labels, 0)
+	lb := labels.NewBuilder(labels.EmptyLabels())
 	for _, labelSet := range labelSets {
-		if _, keep := relabel.Process(labelSet, sr.relabelConfig...); !keep {
+		lb.Reset(labelSet)
+		if keep := relabel.ProcessBuilder(lb, sr.relabelConfig...); !keep {
 			continue
 		}
 

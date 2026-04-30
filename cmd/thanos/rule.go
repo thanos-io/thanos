@@ -596,7 +596,6 @@ func runRule(
 		if len(conf.EnableFeatures) > 0 {
 			for _, feature := range conf.EnableFeatures {
 				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
 					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 				}
 			}
