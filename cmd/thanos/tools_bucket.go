@@ -1505,9 +1505,15 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
+		tbcDir, err := os.OpenRoot(tbc.path)
+		if err != nil {
+			return errors.Wrap(err, "unable to open tbc directory")
+		}
+		defer tbcDir.Close()
+
 		s := shipper.New(
 			bkt,
-			tbc.path,
+			tbcDir,
 			shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.BucketUploadSource),

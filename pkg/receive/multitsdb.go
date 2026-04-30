@@ -556,6 +556,12 @@ func (t *tenant) close(cd closeDelete) {
 			}
 		}
 
+		if t.ship != nil {
+			if err := t.ship.Close(); err != nil {
+				level.Error(t.logger).Log("msg", "failed closing tenant's shipper", "tenant", t.tenantName, "err", err)
+			}
+		}
+
 		t.readyS.set(nil)
 		t.setComponents(nil, nil, nil, nil, nil)
 	})
@@ -971,9 +977,14 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	var ship *shipper.Shipper
 	if t.bucket != nil {
+		// shipDataDir must be closed together with tenant
+		shipDataDir, err := os.OpenRoot(dataDir)
+		if err != nil {
+			return err
+		}
 		ship = shipper.New(
 			t.bucket,
-			dataDir,
+			shipDataDir,
 			shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.ReceiveSource),

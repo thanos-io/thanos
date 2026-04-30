@@ -860,9 +860,15 @@ func runRule(
 			}
 		}()
 
+		dataDir, err := os.OpenRoot(conf.dataDir)
+		if err != nil {
+			return errors.Wrap(err, "open data dir")
+		}
+		defer dataDir.Close()
+
 		s := shipper.New(
 			bkt,
-			conf.dataDir,
+			dataDir,
 			shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.RulerSource),
