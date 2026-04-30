@@ -62,6 +62,8 @@ message QueryRequest {
   // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
   int64 response_batch_size = 15;
 
+  string tenant = 16;
+
   reserved 9;
 }
 
@@ -118,6 +120,8 @@ message QueryRangeRequest {
   // If set to 0 or 1, each TimeSeries is sent as a separate response (default behavior).
   int64 response_batch_size = 17;
 
+  string tenant = 18;
+  
   reserved 11;
 }
 
