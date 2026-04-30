@@ -662,6 +662,8 @@ func runQuery(
 			grpcserver.WithListen(grpcServerConfig.bindAddress),
 			grpcserver.WithGracePeriod(grpcServerConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(grpcServerConfig.maxConnectionAge),
+			grpcserver.WithKeepaliveEnforcementMinTime(grpcServerConfig.keepaliveEnforcementMinTime),
+			grpcserver.WithKeepaliveEnforcementPermitWithoutStream(grpcServerConfig.keepaliveEnforcementPermitWithoutStream),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 

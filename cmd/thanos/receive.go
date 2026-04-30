@@ -430,6 +430,8 @@ func runReceive(
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
+			grpcserver.WithKeepaliveEnforcementMinTime(conf.grpcConfig.keepaliveEnforcementMinTime),
+			grpcserver.WithKeepaliveEnforcementPermitWithoutStream(conf.grpcConfig.keepaliveEnforcementPermitWithoutStream),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 
