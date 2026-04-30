@@ -13,10 +13,12 @@ import (
 type options struct {
 	registerServerFuncs []registerServerFunc
 
-	gracePeriod time.Duration
-	maxConnAge  time.Duration
-	listen      string
-	network     string
+	gracePeriod                             time.Duration
+	maxConnAge                              time.Duration
+	keepaliveEnforcementMinTime             time.Duration
+	keepaliveEnforcementPermitWithoutStream bool
+	listen                                  string
+	network                                 string
 
 	tlsConfig *tls.Config
 
@@ -86,5 +88,28 @@ func WithTLSConfig(cfg *tls.Config) Option {
 func WithMaxConnAge(t time.Duration) Option {
 	return optionFunc(func(o *options) {
 		o.maxConnAge = t
+	})
+}
+
+// WithKeepaliveEnforcementMinTime sets the minimum time a client must wait
+// between successive keepalive pings. Corresponds to
+// keepalive.EnforcementPolicy.MinTime. Clients that ping more frequently will
+// receive ENHANCE_YOUR_CALM and have their connection closed. Should be set to
+// match or be less than the client keepalive interval (Thanos gRPC client
+// default: 10s). A non-zero value is required to activate the enforcement
+// policy; see also WithKeepaliveEnforcementPermitWithoutStream.
+func WithKeepaliveEnforcementMinTime(t time.Duration) Option {
+	return optionFunc(func(o *options) {
+		o.keepaliveEnforcementMinTime = t
+	})
+}
+
+// WithKeepaliveEnforcementPermitWithoutStream controls whether the server
+// allows clients to send keepalive pings when there are no active RPCs.
+// Corresponds to keepalive.EnforcementPolicy.PermitWithoutStream. Only
+// takes effect when WithKeepaliveEnforcementMinTime is also set.
+func WithKeepaliveEnforcementPermitWithoutStream(permit bool) Option {
+	return optionFunc(func(o *options) {
+		o.keepaliveEnforcementPermitWithoutStream = permit
 	})
 }
