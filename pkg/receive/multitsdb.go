@@ -626,6 +626,9 @@ func (t *MultiTSDB) Open() error {
 		if !f.IsDir() {
 			continue
 		}
+		if f.Name() == "lost+found" {
+			continue
+		}
 
 		g.Go(func() error {
 			_, err := t.getOrLoadTenant(f.Name())
@@ -808,6 +811,9 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	merr := errutil.MultiError{}
 	for _, fi := range fis {
 		if !fi.IsDir() {
+			continue
+		}
+		if fi.Name() == "lost+found" {
 			continue
 		}
 		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {

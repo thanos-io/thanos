@@ -170,6 +170,22 @@ func TestMultiTSDB(t *testing.T) {
 		testMulitTSDBSeries(t, m)
 	})
 
+	t.Run("open ignores lost+found directory", func(t *testing.T) {
+		lostFound := filepath.Join(dir, "lost+found")
+		testutil.Ok(t, os.MkdirAll(lostFound, 0750))
+
+		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
+		defer m.Close()
+
+		testutil.Ok(t, m.Open())
+		testutil.Equals(t, (*tenant)(nil), m.testGetTenant("lost+found"))
+	})
+
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
 		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
