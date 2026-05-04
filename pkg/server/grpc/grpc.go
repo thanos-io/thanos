@@ -9,6 +9,7 @@ import (
 	"net"
 	"runtime/debug"
 	"slices"
+	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
@@ -126,12 +127,9 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	if options.maxConnAge > 0 {
 		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: options.maxConnAge}))
 	}
-	if options.keepaliveEnforcementMinTime > 0 {
-		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             options.keepaliveEnforcementMinTime,
-			PermitWithoutStream: options.keepaliveEnforcementPermitWithoutStream,
-		}))
-	}
+	options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime: 10 * time.Second,
+	}))
 	s := grpc.NewServer(options.grpcOpts...)
 
 	// Register all configured servers.

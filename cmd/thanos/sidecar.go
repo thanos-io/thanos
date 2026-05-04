@@ -359,8 +359,6 @@ func runSidecar(
 			grpcserver.WithListen(conf.grpc.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpc.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpc.maxConnectionAge),
-			grpcserver.WithKeepaliveEnforcementMinTime(conf.grpc.keepaliveEnforcementMinTime),
-			grpcserver.WithKeepaliveEnforcementPermitWithoutStream(conf.grpc.keepaliveEnforcementPermitWithoutStream),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 

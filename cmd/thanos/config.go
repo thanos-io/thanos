@@ -31,17 +31,15 @@ import (
 )
 
 type grpcConfig struct {
-	bindAddress                             string
-	tlsSrvCert                              string
-	tlsSrvKey                               string
-	tlsSrvClientCA                          string
-	tlsMinVersion                           string
-	tlsCiphers                              []string
-	tlsCurves                               []string
-	gracePeriod                             time.Duration
-	maxConnectionAge                        time.Duration
-	keepaliveEnforcementMinTime             time.Duration
-	keepaliveEnforcementPermitWithoutStream bool
+	bindAddress      string
+	tlsSrvCert       string
+	tlsSrvKey        string
+	tlsSrvClientCA   string
+	tlsMinVersion    string
+	tlsCiphers       []string
+	tlsCurves        []string
+	gracePeriod      time.Duration
+	maxConnectionAge time.Duration
 }
 
 func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
@@ -68,16 +66,6 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		StringsVar(&gc.tlsCurves)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
-	cmd.Flag("grpc-server-keepalive-min-time",
-		"Minimum time a client must wait between sending keepalive pings to the server. "+
-			"Clients pinging more frequently will be disconnected with ENHANCE_YOUR_CALM. "+
-			"Set to match or less than the client keepalive interval (Thanos gRPC client default: 10s). "+
-			"0 disables explicit enforcement, leaving the gRPC library default (5m) in effect.").
-		Default("0s").DurationVar(&gc.keepaliveEnforcementMinTime)
-	cmd.Flag("grpc-server-keepalive-permit-without-stream",
-		"If true, the server allows keepalive pings from clients even when there are no active RPCs. "+
-			"Only takes effect when grpc-server-keepalive-min-time is greater than zero.").
-		Default("false").BoolVar(&gc.keepaliveEnforcementPermitWithoutStream)
 	cmd.Flag("grpc-grace-period",
 		"Time to wait after an interrupt received for GRPC Server.").
 		Default("2m").DurationVar(&gc.gracePeriod)
