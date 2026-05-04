@@ -437,7 +437,7 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
@@ -482,9 +482,9 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --remote-write.server-tls-min-version="1.3"
+      --remote-write.server-tls-min-version=1.3
                                  TLS version for the HTTP server, leave blank
-                                 to default to TLS 1.3, allow values: ["1.0",
+                                 to default to TLS 1.3, Allowed values: ["1.0",
                                  "1.1", "1.2", "1.3"]
       --remote-write.server-tls-ciphers=REMOTE-WRITE.SERVER-TLS-CIPHERS ...
                                  TLS cipher suites for the HTTP server
@@ -514,6 +514,10 @@ Flags:
                                  Server name to verify the hostname
                                  on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --remote-write.client-tls-min-version=1.3
+                                 TLS version for the gRPC client, leave blank
+                                 to default to TLS 1.3, Allowed values: ["1.0",
+                                 "1.1", "1.2", "1.3"]
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple

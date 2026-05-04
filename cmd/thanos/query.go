@@ -31,6 +31,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/exemplars"
+	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -269,6 +270,26 @@ func registerQuery(app *extkingpin.App) {
 			return err
 		}
 
+		if grpcClientConfig.secure || grpcClientConfig.skipVerify || grpcClientConfig.cert != "" || grpcClientConfig.key != "" || grpcClientConfig.caCert != "" || grpcClientConfig.serverName != "" {
+			level.Warn(logger).Log("msg", "--grpc-client-tls-* flags are deprecated and will be removed after v0.43.0, use default_client_config in endpoint.sd-config-file instead")
+		}
+
+		// remove this when the deprecated flags are removed, as the endpoint set will be the only way to configure store endpoints.
+		globalTLSOpt, err := extgrpc.StoreClientTLSCredentials(logger, grpcClientConfig.secure, grpcClientConfig.skipVerify, grpcClientConfig.cert, grpcClientConfig.key, grpcClientConfig.caCert, grpcClientConfig.serverName, grpcClientConfig.minTLSVersion)
+		if err != nil {
+			return err
+		}
+
+		// remove this when the deprecated flags are removed, as the endpoint set will be the only way to configure store endpoints.
+		globalTLSConfig := &tlsConfig{
+			Enabled:                  &grpcClientConfig.secure,
+			InsecureSkipVerification: &grpcClientConfig.skipVerify,
+			CertFile:                 &grpcClientConfig.cert,
+			KeyFile:                  &grpcClientConfig.key,
+			CAFile:                   &grpcClientConfig.caCert,
+			MinVersion:               &grpcClientConfig.minTLSVersion,
+		}
+
 		if *promqlQueryMode != string(apiv1.PromqlQueryModeLocal) {
 			level.Info(logger).Log("msg", "Distributed query mode enabled, using Thanos as the default query engine.")
 			*defaultEngine = string(apiv1.PromqlEngineThanos)
@@ -293,6 +314,9 @@ func registerQuery(app *extkingpin.App) {
 			time.Duration(*endpointInfoTimeout),
 			time.Duration(*queryTimeout),
 			dialOpts,
+			globalTLSConfig,
+			globalTLSOpt,
+			grpcClientConfig.compression, // global grpc tls compression.
 			*injectTestAddresses,
 			*queryConnMetricLabels...,
 		)

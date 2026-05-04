@@ -421,16 +421,18 @@ func runRule(
 			logger,
 			reg,
 			tracer,
-			false,
-			false,
-			"",
-			"",
-			"",
-			"",
 		)
 		if err != nil {
 			return err
 		}
+
+		tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "", "")
+		if err != nil {
+			return err
+		}
+
+		// No TLS config for rule component
+		noTLSConfig := &tlsConfig{}
 
 		grpcEndpointSet, err = setupEndpointSet(
 			g,
@@ -451,6 +453,9 @@ func runRule(
 			5*time.Second,
 			conf.evalInterval,
 			dialOpts,
+			noTLSConfig,
+			tlsDialOpts,
+			"", // no global compression
 			[]string{},
 		)
 		if err != nil {
