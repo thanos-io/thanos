@@ -403,6 +403,17 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 
 const compactionDelayPercentBlockLength = 10
 
+// lostFoundDir is the directory name that ext4 (and some other filesystems)
+// create automatically at the root of every partition. When a receiver's
+// --tsdb.path points directly at a mount point, the directory scan in Open()
+// and RemoveLockFilesIfAny() would otherwise treat it as a tenant name and
+// attempt to open or clean a TSDB for it, producing spurious errors on
+// startup. A name-based skip is the simplest cross-platform fix; checking the
+// inode or filesystem type would require platform-specific syscalls and adds
+// complexity without meaningful safety benefit, since a tenant legitimately
+// named "lost+found" is not a realistic concern.
+const lostFoundDir = "lost+found"
+
 // generateCompactionDelay() generates a time.Duration of up to compactionDelayPercentBlockLength% of the block range. Used to stagger compactions & uploads.
 func (t *tenant) generateCompactionDelay() time.Duration {
 	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
@@ -626,7 +637,7 @@ func (t *MultiTSDB) Open() error {
 		if !f.IsDir() {
 			continue
 		}
-		if f.Name() == "lost+found" {
+		if f.Name() == lostFoundDir {
 			continue
 		}
 
@@ -813,7 +824,7 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 		if !fi.IsDir() {
 			continue
 		}
-		if fi.Name() == "lost+found" {
+		if fi.Name() == lostFoundDir {
 			continue
 		}
 		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
