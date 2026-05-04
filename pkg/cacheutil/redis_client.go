@@ -211,6 +211,9 @@ func NewRedisClientWithConfig(logger log.Logger, name string, config RedisClient
 		ConnWriteTimeout:  config.WriteTimeout,
 		DisableCache:      clientSideCacheDisabled,
 		TLSConfig:         tlsConfig,
+		SendToReplicas: func(cmd rueidis.Completed) bool {
+			return cmd.IsReadOnly()
+		},
 	}
 
 	if config.MasterName != "" {
