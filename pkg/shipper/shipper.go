@@ -75,7 +75,7 @@ func newMetrics(reg prometheus.Registerer) *metrics {
 // them to a remote data store.
 type Shipper struct {
 	logger           log.Logger
-	dir              string
+	dir              *os.Root
 	metrics          *metrics
 	bucket           objstore.Bucket
 	source           metadata.SourceType
@@ -204,7 +204,7 @@ func applyOptions(opts []Option) *shipperOptions {
 // New creates a new shipper that detects new TSDB blocks in dir and uploads them to
 // remote if necessary. It attaches the Thanos metadata section in each meta JSON file.
 // If uploadCompacted is enabled, it also uploads compacted blocks which are already in filesystem.
-func New(bucket objstore.Bucket, dir string, opts ...Option) *Shipper {
+func New(bucket objstore.Bucket, dir *os.Root, opts ...Option) *Shipper {
 	options := applyOptions(opts)
 
 	return &Shipper{
@@ -219,7 +219,7 @@ func New(bucket objstore.Bucket, dir string, opts ...Option) *Shipper {
 		uploadCompacted:        options.uploadCompacted,
 		hashFunc:               options.hashFunc,
 		uploadConcurrency:      options.uploadConcurrency,
-		metadataFilePath:       filepath.Join(dir, filepath.Clean(options.metaFileName)),
+		metadataFilePath:       filepath.Join(dir.Name(), filepath.Clean(options.metaFileName)),
 	}
 }
 
@@ -228,6 +228,11 @@ func (s *Shipper) SetLabels(lbls labels.Labels) {
 	defer s.mtx.Unlock()
 
 	s.labels = func() labels.Labels { return lbls }
+}
+
+// Close releases the os.Root directory handle held by the shipper.
+func (s *Shipper) Close() error {
+	return s.dir.Close()
 }
 
 type lazyOverlapChecker struct {
@@ -475,23 +480,24 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 
 	// We hard-link the files into a temporary upload directory so we are not affected
 	// by other operations happening against the TSDB directory.
-	updir := filepath.Join(s.dir, "thanos", "upload", meta.ULID.String())
+	updir := filepath.Join("thanos", "upload", meta.ULID.String())
 
 	// Remove updir just in case.
-	if err := os.RemoveAll(updir); err != nil {
+	if err := s.dir.RemoveAll(updir); err != nil {
 		return errors.Wrap(err, "clean upload directory")
 	}
-	if err := os.MkdirAll(updir, 0750); err != nil {
+	if err := s.dir.MkdirAll(updir, 0750); err != nil {
 		return errors.Wrap(err, "create upload dir")
 	}
 	defer func() {
-		if err := os.RemoveAll(updir); err != nil {
+		if err := s.dir.RemoveAll(updir); err != nil {
 			level.Error(s.logger).Log("msg", "failed to clean upload directory", "err", err)
 		}
 	}()
 
-	dir := filepath.Join(s.dir, meta.ULID.String())
-	if err := hardlinkBlock(dir, updir); err != nil {
+	absUpdir := filepath.Join(s.dir.Name(), updir)
+	dir := filepath.Join(s.dir.Name(), meta.ULID.String())
+	if err := hardlinkBlock(dir, absUpdir); err != nil {
 		return errors.Wrap(err, "hard link block")
 	}
 	// Attach current labels and write a new meta file with Thanos extensions.
@@ -501,24 +507,32 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 		})
 	}
 	meta.Thanos.Source = s.source
-	meta.Thanos.SegmentFiles = block.GetSegmentFiles(updir)
-	if err := meta.WriteToDir(s.logger, updir); err != nil {
+	meta.Thanos.SegmentFiles = block.GetSegmentFiles(absUpdir)
+	if err := meta.WriteToDir(s.logger, absUpdir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
 	var uploadOptions []objstore.UploadOption
 	if s.uploadConcurrency > 0 {
 		uploadOptions = append(uploadOptions, objstore.WithUploadConcurrency(s.uploadConcurrency))
 	}
-	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc, uploadOptions...)
+	return block.Upload(ctx, s.logger, s.bucket, absUpdir, s.hashFunc, uploadOptions...)
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir
 // sorted by minTime asc.
 func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks []string, _ error) {
-	fis, err := os.ReadDir(s.dir)
+
+	dir, err := s.dir.Open(".")
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "open dir")
+	}
+	defer dir.Close()
+
+	fis, err := dir.ReadDir(-1)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "read dir")
 	}
+
 	names := make([]string, 0, len(fis))
 	for _, fi := range fis {
 		names = append(names, fi.Name())
@@ -527,9 +541,9 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 		if _, ok := block.IsBlockDir(n); !ok {
 			continue
 		}
-		dir := filepath.Join(s.dir, n)
+		dir := filepath.Join(s.dir.Name(), n)
 
-		fi, err := os.Stat(dir)
+		fi, err := s.dir.Stat(n)
 		if err != nil {
 			if s.skipCorruptedBlocks {
 				level.Error(s.logger).Log("msg", "stat block", "err", err, "block", dir)

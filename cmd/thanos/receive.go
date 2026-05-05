@@ -205,8 +205,18 @@ func runReceive(
 		}
 	}
 
+	// TODO(guidonguido): check that. Do we need to create the default storage dir?
+	if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
+		return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
+	}
+
+	dataDir, err := os.OpenRoot(conf.dataDir)
+	if err != nil {
+		return errors.Wrap(err, "open storage dir")
+	}
+
 	// Create TSDB for the default tenant.
-	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
+	if err := createDefautTenantTSDB(logger, conf.defaultTenantID, dataDir); err != nil {
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
@@ -231,7 +241,7 @@ func runReceive(
 	multiTSDBOptions = append(multiTSDBOptions, receive.WithUploadConcurrency(conf.uploadConcurrency))
 
 	dbs := receive.NewMultiTSDB(
-		conf.dataDir,
+		dataDir,
 		logger,
 		reg,
 		tsdbOpts,
@@ -811,23 +821,17 @@ func startTSDBAndUpload(g *run.Group,
 	return nil
 }
 
-func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
-	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
+func createDefautTenantTSDB(logger log.Logger, defaultTenantID string, dataDir *os.Root) error {
 
-	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
+	if _, err := dataDir.Stat(defaultTenantID); !os.IsNotExist(err) {
 		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
-		return nil
-	}
-
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "no existing storage found, not creating default tenant data dir")
 		return nil
 	}
 
 	level.Info(logger).Log("msg", "default tenant data dir not found, creating", "defaultTenantID", defaultTenantID)
 
-	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
-		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
+	if err := dataDir.MkdirAll(defaultTenantID, 0750); err != nil {
+		return errors.Wrapf(err, "create default tenant data dir: %v", path.Join(dataDir.Name(), defaultTenantID))
 	}
 
 	return nil

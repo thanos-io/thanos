@@ -29,6 +29,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8730](https://github.com/thanos-io/thanos/pull/8730): Receive: add `--remote-write.server-tls-ciphers` to configure cipher suites for the HTTP server.
 - [#8770](https://github.com/thanos-io/thanos/pull/8770): *: add `--grpc-server-tls-curves` to configure curves for gRPC servers.
 - [#8770](https://github.com/thanos-io/thanos/pull/8770): Receive: add `--remote-write.server-tls-curves` to configure curves for the HTTP server.
+- [#8797](https://github.com/thanos-io/thanos/pull/8797): Receive, Compact, Sidecar: Use `os.Root` API to confine filesystem access to the service data directory.
 
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
 
