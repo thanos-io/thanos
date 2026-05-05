@@ -338,7 +338,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 1 commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -408,7 +408,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -425,7 +425,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 commit error with replication",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -442,7 +442,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 appender error with replication",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -563,8 +563,28 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			},
 		},
 		{
+			// cce: two permanent conflicts + one generic error. Even if the
+			// error node recovers, the best possible outcome is 1 success +
+			// 2 conflicts which cannot reach quorum of 2. Must return 409.
+			name:              "size 3 with replication two conflicts and one commit error",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
 			name:              "size 3 with replication one conflict and one commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -581,7 +601,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 with replication two commit errors",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -624,7 +644,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 3 one commit and two conflict error",
-			status:            http.StatusConflict,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -709,12 +729,6 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					rec, err := makeRequest(handler, tenant, tc.wreq)
 					if err != nil {
 						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
-					}
-					// TODO(GiedriusS): fix this for gRPC replication too.
-					if capnpReplication {
-						if rec.Code == 503 {
-							rec.Code = 500
-						}
 					}
 					if rec.Code != tc.status {
 						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())

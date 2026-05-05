@@ -87,7 +87,6 @@ var (
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
-	errInternal    = errors.New("internal error")
 )
 
 type WriteableStoreAsyncClient interface {
@@ -838,6 +837,10 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	failureThreshold := len(params.replicas) - successThreshold + 1
 	successes := make([]int, len(params.writeRequest.Timeseries))
 	failures := make([]int, len(params.writeRequest.Timeseries))
+	// conflictFailures tracks how many replicas returned a permanent conflict for
+	// each series. When conflictFailures[i] >= failureThreshold the series can
+	// never reach quorum regardless of retries.
+	conflictFailures := make([]int, len(params.writeRequest.Timeseries))
 	seriesErrs := newReplicationErrors(successThreshold, len(params.writeRequest.Timeseries))
 	for {
 		select {
@@ -854,9 +857,13 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 			}
 
 			if resp.err != nil {
+				isConflictErr := isConflict(errors.Cause(resp.err))
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
 					failures[seriesID]++
+					if isConflictErr {
+						conflictFailures[seriesID]++
+					}
 				}
 			} else {
 				for _, seriesID := range resp.seriesIDs {
@@ -864,7 +871,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 				}
 			}
 
-			if canReturnEarly(successes, failures, successThreshold, failureThreshold) {
+			if canReturnEarly(successes, conflictFailures, successThreshold, failureThreshold) {
 				var hadErrors bool
 				for i, seriesErr := range seriesErrs {
 					if failures[i] >= failureThreshold {
@@ -1132,12 +1139,17 @@ func (h *Handler) writeQuorum() int {
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
-// canReturnEarly returns true when every series in the request has a
-// determined outcome: either it reached the success threshold or it accumulated
-// enough failures that reaching the success threshold is no longer possible.
-func canReturnEarly(successes, failures []int, successThreshold, failureThreshold int) bool {
+// canReturnEarly returns true when every series has a determined outcome.
+// A series is determined when it either reached the success threshold, or its
+// conflict failure count reached the failure threshold meaning it can never
+// reach quorum even if every remaining non-conflict replica succeeds.
+//
+// Non-conflict failures do not trigger early return, we must wait
+// for all replica responses so we can count total conflicts accurately and
+// decide whether the request is permanently failed (409) or retryable (503).
+func canReturnEarly(successes, conflictFailures []int, successThreshold, failureThreshold int) bool {
 	for i := range successes {
-		if successes[i] < successThreshold && failures[i] < failureThreshold {
+		if successes[i] < successThreshold && conflictFailures[i] < failureThreshold {
 			return false
 		}
 	}
@@ -1408,11 +1420,17 @@ type replicationErrors struct {
 	threshold int
 }
 
-// Cause extracts a sentinel error with the highest occurrence that
-// has happened more than the given threshold.
-// If no single error has occurred more than the threshold, but the
-// total number of errors meets the threshold,
-// replicationErr will return errInternal.
+// Cause extracts the sentinel error that best describes the replication outcome.
+//
+// If one error type appears at least threshold times it is returned directly
+// (a conflict-dominated series can never succeed).
+//
+// Otherwise, if total errors meet the threshold but no single type dominates,
+// the series failed quorum due to a mix of error types.
+//
+// Because canReturnEarly only fires early when conflict failures alone reach
+// the threshold, reaching this fallback guarantees that conflict_count < failureThreshold,
+// the request could succeed on retry once transient failures resolve.
 func (es *replicationErrors) Cause() error {
 	if len(es.errs) == 0 {
 		return errorSet{}
@@ -1439,7 +1457,9 @@ func (es *replicationErrors) Cause() error {
 	}
 
 	if len(es.errs) >= es.threshold {
-		return errInternal
+		// conflict count is below the threshold so retry may
+		// succeed once transient replicas recover.
+		return errUnavailable
 	}
 
 	return nil
