@@ -127,7 +127,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure we log slow queries and query statistics regardless of how the request completes.
 	defer func() {
-		f.reportQueryStatsAndSlowQueries(r, resp, buf, startTime, stats)
+		f.reportQueryStatsAndSlowQueries(r, w.Header(), buf, startTime, stats)
 	}()
 
 	var err error
@@ -153,7 +153,7 @@ func (f *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // reportQueryStatsAndSlowQueries handles logging of slow queries and query statistics.
-func (f *Handler) reportQueryStatsAndSlowQueries(r *http.Request, resp *http.Response, buf bytes.Buffer, startTime time.Time, stats *querier_stats.Stats) {
+func (f *Handler) reportQueryStatsAndSlowQueries(r *http.Request, responseHeaders http.Header, buf bytes.Buffer, startTime time.Time, stats *querier_stats.Stats) {
 	queryResponseTime := time.Since(startTime)
 
 	shouldReportSlowQuery := f.cfg.LogQueriesLongerThan != 0 &&
@@ -164,10 +164,6 @@ func (f *Handler) reportQueryStatsAndSlowQueries(r *http.Request, resp *http.Res
 		queryString := f.parseRequestQueryString(r, buf)
 
 		if shouldReportSlowQuery {
-			var responseHeaders http.Header
-			if resp != nil {
-				responseHeaders = resp.Header
-			}
 			f.reportSlowQuery(r, responseHeaders, queryString, queryResponseTime, stats)
 		}
 		if f.cfg.QueryStatsEnabled {
