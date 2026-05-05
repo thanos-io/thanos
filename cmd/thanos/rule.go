@@ -59,7 +59,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extannotations"
-	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
@@ -85,10 +84,11 @@ import (
 )
 
 type ruleConfig struct {
-	http    httpConfig
-	grpc    grpcConfig
-	web     webConfig
-	shipper shipperConfig
+	http       httpConfig
+	grpc       grpcConfig
+	grpcClient grpcClientConfig
+	web        webConfig
+	shipper    shipperConfig
 
 	query              queryConfig
 	queryConfigYAML    []byte
@@ -126,6 +126,7 @@ type Expression struct {
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.http.registerFlag(cmd)
 	rc.grpc.registerFlag(cmd)
+	rc.grpcClient.registerFlag(cmd)
 	rc.web.registerFlag(cmd)
 	rc.shipper.registerFlag(cmd)
 	rc.query.registerFlag(cmd)
@@ -417,17 +418,7 @@ func runRule(
 	}
 
 	if len(grpcEndpoints) > 0 {
-		dialOpts, err := extgrpc.StoreClientGRPCOpts(
-			logger,
-			reg,
-			tracer,
-			false,
-			false,
-			"",
-			"",
-			"",
-			"",
-		)
+		dialOpts, err := conf.grpcClient.dialOptions(logger, reg, tracer)
 		if err != nil {
 			return err
 		}
