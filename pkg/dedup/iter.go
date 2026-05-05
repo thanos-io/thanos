@@ -286,8 +286,10 @@ type dedupSeriesIterator struct {
 	lastT    int64
 	lastIter chunkenc.Iterator
 
-	penA, penB int64
-	useA       bool
+	penA, penB   int64
+	lastA, lastB int64
+	stepA        int64
+	useA         bool
 }
 
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
@@ -295,10 +297,12 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 		a:        a,
 		b:        b,
 		lastT:    math.MinInt64,
+		lastA:    math.MinInt64,
+		lastB:    math.MinInt64,
 		lastIter: a,
 		useA:     true,
-		aval:     a.Next(),
-		bval:     b.Next(),
+		aval:     chunkenc.ValNone,
+		bval:     chunkenc.ValNone,
 	}
 }
 
@@ -314,11 +318,22 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		}
 	}()
 
-	// Advance both iterators to at least the next highest timestamp plus the potential penalty.
-	if it.aval != chunkenc.ValNone {
+	// Keep the current timestamps, so we know if each iterator moved to the next sample or not.
+	if it.lastT != math.MinInt64 && it.aval != chunkenc.ValNone {
+		// If we have a sample for A then get the timestamp of it.
+		it.lastA = it.a.AtT()
+	}
+	if it.lastT != math.MinInt64 && it.bval != chunkenc.ValNone {
+		// If we have a sample for B then get the timestamp of it.
+		it.lastB = it.b.AtT()
+	}
+
+	// Advance both iterators to the next sample in each stream unless we've
+	// reached the end (lastT >= 0 but val is None).
+	if it.lastT == math.MinInt64 || it.aval != chunkenc.ValNone {
 		it.aval = it.a.Seek(it.lastT + 1 + it.penA)
 	}
-	if it.bval != chunkenc.ValNone {
+	if it.lastT == math.MinInt64 || it.bval != chunkenc.ValNone {
 		it.bval = it.b.Seek(it.lastT + 1 + it.penB)
 	}
 
@@ -346,7 +361,25 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	ta := it.a.AtT()
 	tb := it.b.AtT()
 
+	// By default, we use A unless B has a lower timestamp.
 	it.useA = ta <= tb
+
+	// If we've decided to use B, then we first need to check
+	// if B's Seek() stayed at the same sample or moved forward.
+	// If it stayed then we need to decide if B is:
+	// - filling a gap in A
+	// - there's an offset between A & B samples
+	if !it.useA && it.lastT != math.MinInt64 && tb == it.lastB {
+		if it.stepA > 0 {
+			// We know A's step size. If A's next sample is within 2x
+			// of that step, A has no gap — B is an offset replica,
+			// stick with A. Otherwise A has a real gap and B fills it.
+			it.useA = ta-it.lastT < 2*it.stepA
+		} else {
+			// No known step size yet. Default to A.
+			it.useA = true
+		}
+	}
 
 	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
 	// samples to the next seek against it.
@@ -364,6 +397,9 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 			it.penB = initialPenalty
 		}
 		it.penA = 0
+		if it.lastA != math.MinInt64 {
+			it.stepA = ta - it.lastA
+		}
 		it.lastT = ta
 		it.lastIter = it.a
 
@@ -402,6 +438,11 @@ func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
 }
 
 func (it *dedupSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	if it.lastT == math.MinInt64 {
+		if it.Next() == chunkenc.ValNone {
+			return chunkenc.ValNone
+		}
+	}
 	// Don't use underlying Seek, but iterate over next to not miss gaps.
 	for {
 		ts := it.AtT()

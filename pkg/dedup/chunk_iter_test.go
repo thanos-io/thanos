@@ -405,10 +405,8 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 			},
 			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{
 				histoSample{t: 0 * scrapeIntervalMilli, h: histogramSample},
-				histoSample{t: 1 * scrapeIntervalMilli, h: histogramSample},
 				histoSample{t: 2 * scrapeIntervalMilli, h: histogramSample},
 				histoSample{t: 3 * scrapeIntervalMilli, h: histogramSample},
-				histoSample{t: 4 * scrapeIntervalMilli, h: histogramSample},
 			}),
 		},
 		{
