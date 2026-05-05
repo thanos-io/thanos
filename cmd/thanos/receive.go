@@ -314,7 +314,7 @@ func runReceive(
 
 		level.Debug(logger).Log("msg", "setting up TSDB")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm), conf.backgroundUploadEnabled); err != nil {
 				return err
 			}
 		}
@@ -663,6 +663,7 @@ func startTSDBAndUpload(g *run.Group,
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
 	hashringAlgorithm receive.HashringAlgorithm,
+	backgroundUploadEnabled bool,
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -682,7 +683,9 @@ func startTSDBAndUpload(g *run.Group,
 
 	// TSDBs reload logic, listening on hashring changes.
 	cancel := make(chan struct{})
+	storageDone := make(chan struct{})
 	g.Add(func() error {
+		defer close(storageDone)
 		defer close(uploadC)
 
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
@@ -729,13 +732,21 @@ func startTSDBAndUpload(g *run.Group,
 						return errors.Wrap(err, "opening storage")
 					}
 					if upload {
-						uploadC <- struct{}{}
-						<-uploadDone
+						if backgroundUploadEnabled {
+							dbUpdatesCompleted.Inc()
+							statusProber.Ready()
+							triggerAsyncUpload(logger, uploadC)
+						} else {
+							uploadC <- struct{}{}
+							<-uploadDone
+							dbUpdatesCompleted.Inc()
+							statusProber.Ready()
+						}
+					} else {
+						dbUpdatesCompleted.Inc()
+						statusProber.Ready()
 					}
-					dbUpdatesCompleted.Inc()
-					statusProber.Ready()
 					level.Info(logger).Log("msg", "storage started, and server is ready to receive requests")
-					dbUpdatesCompleted.Inc()
 				}
 				initialized = true
 			}
@@ -758,7 +769,10 @@ func startTSDBAndUpload(g *run.Group,
 			level.Debug(logger).Log("msg", "upload phase done", "uploaded", uploaded, "elapsed", time.Since(start))
 			return nil
 		}
-		{
+		if backgroundUploadEnabled {
+			level.Info(logger).Log("msg", "upload enabled, scheduling initial sync")
+			triggerAsyncUpload(logger, uploadC)
+		} else {
 			level.Info(logger).Log("msg", "upload enabled, starting initial sync")
 			if err := upload(context.Background()); err != nil {
 				return errors.Wrap(err, "initial upload failed")
@@ -775,7 +789,7 @@ func startTSDBAndUpload(g *run.Group,
 
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
-					<-uploadC // Closed by storage routine when it's done.
+					<-storageDone
 					level.Info(logger).Log("msg", "uploading the final cut block before exiting")
 					ctx, cancel := context.WithCancel(context.Background())
 					uploaded, err := dbs.SyncAllTenants(ctx)
@@ -787,19 +801,21 @@ func startTSDBAndUpload(g *run.Group,
 					cancel()
 					level.Info(logger).Log("msg", "the final cut block was uploaded", "uploaded", uploaded)
 				}()
-
-				defer close(uploadDone)
-
 				for {
 					select {
 					case <-ctx.Done():
 						return nil
-					case <-uploadC:
+					case _, ok := <-uploadC:
+						if !ok {
+							return nil
+						}
 						// Upload on demand.
 						if err := upload(ctx); err != nil {
 							level.Error(logger).Log("msg", "on demand upload failed", "err", err)
 						}
-						uploadDone <- struct{}{}
+						if !backgroundUploadEnabled {
+							uploadDone <- struct{}{}
+						}
 					}
 				}
 			}, func(error) {
@@ -809,6 +825,15 @@ func startTSDBAndUpload(g *run.Group,
 	}
 
 	return nil
+}
+
+func triggerAsyncUpload(logger log.Logger, uploadC chan struct{}) {
+	select {
+	case uploadC <- struct{}{}:
+		level.Debug(logger).Log("msg", "scheduled async upload")
+	default:
+		level.Debug(logger).Log("msg", "async upload already queued")
+	}
 }
 
 func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
@@ -900,9 +925,10 @@ type receiveConfig struct {
 
 	hashFunc string
 
-	allowOutOfOrderUpload bool
-	skipCorruptedBlocks   bool
-	uploadConcurrency     int
+	allowOutOfOrderUpload   bool
+	skipCorruptedBlocks     bool
+	uploadConcurrency       int
+	backgroundUploadEnabled bool
 
 	reqLogConfig      *extflag.PathOrContent
 	relabelConfigPath *extflag.PathOrContent
@@ -1087,6 +1113,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("false").Hidden().BoolVar(&rc.skipCorruptedBlocks)
 
 	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("0").IntVar(&rc.uploadConcurrency)
+
+	cmd.Flag("receive.background-upload",
+		"If true, uploads triggered during startup or hashring changes will run in the background instead of blocking readiness.").
+		Default("false").Hidden().BoolVar(&rc.backgroundUploadEnabled)
 
 	cmd.Flag("matcher-cache-size", "Max number of cached matchers items. Using 0 disables caching.").Default("0").IntVar(&rc.matcherCacheSize)
 
