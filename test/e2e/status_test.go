@@ -19,6 +19,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/receive"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/status/statuspb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
 
@@ -199,6 +200,36 @@ test_metric1{a="4", b="3"} 1`)
 			// test_metric1 should be the metric with the highest number of series (10 from one receiver).
 			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
+			}
+
+			return nil
+		}))
+
+		// Check with matcher filtering on the default tenant (tenant_id="default-tenant").
+		testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+			matcher := labels.MustNewMatcher(labels.MatchEqual, tenancy.DefaultTenantLabel, tenancy.DefaultTenant)
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100, matcher)
+			if err != nil {
+				return err
+			}
+
+			if err = assertHeadStatistics(stats, seriesCount); err != nil {
+				return err
+			}
+
+			return nil
+		}))
+
+		// Check with matcher filtering on a tenant which doesn't exist.
+		testutil.Ok(t, runutil.RetryWithLog(logger, time.Second, ctx.Done(), func() error {
+			matcher := labels.MustNewMatcher(labels.MatchEqual, tenancy.DefaultTenantLabel, "not found")
+			stats, err := promclient.NewDefaultClient().TSDBStatusInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), 100, matcher)
+			if err != nil {
+				return err
+			}
+
+			if stats.HeadStatistics.NumSeries != 0 {
+				return errors.Errorf("expected zero series, got %d", stats.HeadStatistics.NumSeries)
 			}
 
 			return nil
