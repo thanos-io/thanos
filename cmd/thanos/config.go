@@ -27,6 +27,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/tls"
 )
 
 type grpcConfig struct {
@@ -35,6 +36,8 @@ type grpcConfig struct {
 	tlsSrvKey        string
 	tlsSrvClientCA   string
 	tlsMinVersion    string
+	tlsCiphers       []string
+	tlsCurves        []string
 	gracePeriod      time.Duration
 	maxConnectionAge time.Duration
 }
@@ -54,7 +57,13 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		Default("").StringVar(&gc.tlsSrvClientCA)
 	cmd.Flag("grpc-server-tls-min-version",
 		"TLS supported minimum version for gRPC server. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
-		Default("1.3").StringVar(&gc.tlsMinVersion)
+		Default("1.3").EnumVar(&gc.tlsMinVersion, tls.AllowedTLSVersions...)
+	cmd.Flag("grpc-server-tls-ciphers",
+		"TLS cipher suites for gRPC server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").
+		StringsVar(&gc.tlsCiphers)
+	cmd.Flag("grpc-server-tls-curves",
+		"TLS curves for gRPC server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").
+		StringsVar(&gc.tlsCurves)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-grace-period",
@@ -70,28 +79,29 @@ type grpcClientConfig struct {
 	cert, key, caCert string
 	serverName        string
 	compression       string
+	minTLSVersion     string
 }
 
+// Todo remove after v0.43.0 as we want users to use yaml based configuration for TLS.
 func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
-	cmd.Flag("grpc-client-tls-secure", "Use TLS when talking to the gRPC server").Default("false").BoolVar(&gc.secure)
-	cmd.Flag("grpc-client-tls-skip-verify", "Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").BoolVar(&gc.skipVerify)
-	cmd.Flag("grpc-client-tls-cert", "TLS Certificates to use to identify this client to the server").Default("").StringVar(&gc.cert)
-	cmd.Flag("grpc-client-tls-key", "TLS Key for the client's certificate").Default("").StringVar(&gc.key)
-	cmd.Flag("grpc-client-tls-ca", "TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&gc.caCert)
-	cmd.Flag("grpc-client-server-name", "Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
+	cmd.Flag("grpc-client-tls-secure", "Deprecated after v0.43.0: Use TLS when talking to the gRPC server").Default("false").BoolVar(&gc.secure)
+	cmd.Flag("grpc-client-tls-skip-verify", "Deprecated after v0.43.0: Disable TLS certificate verification i.e self signed, signed by fake CA").Default("false").BoolVar(&gc.skipVerify)
+	cmd.Flag("grpc-client-tls-cert", "Deprecated after v0.43.0: TLS Certificates to use to identify this client to the server").Default("").StringVar(&gc.cert)
+	cmd.Flag("grpc-client-tls-key", "Deprecated after v0.43.0: TLS Key for the client's certificate").Default("").StringVar(&gc.key)
+	cmd.Flag("grpc-client-tls-ca", "Deprecated after v0.43.0: TLS CA Certificates to use to verify gRPC servers").Default("").StringVar(&gc.caCert)
+	cmd.Flag("grpc-client-server-name", "Deprecated after v0.43.0: Server name to verify the hostname on the returned gRPC certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&gc.serverName)
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
-	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
-
+	cmd.Flag("grpc-compression", "Deprecated after v0.43.0: Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
+	cmd.Flag("grpc-client-tls-min-version",
+		"Deprecated after v0.43.0: TLS supported minimum version for gRPC client. If no version is specified, it'll default to 1.3. Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").
+		Default("1.3").EnumVar(&gc.minTLSVersion, tls.AllowedTLSVersions...)
 	return gc
 }
 
 func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer) ([]grpc.DialOption, error) {
-	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer, gc.secure, gc.skipVerify, gc.cert, gc.key, gc.caCert, gc.serverName)
+	dialOpts, err := extgrpc.StoreClientGRPCOpts(logger, reg, tracer)
 	if err != nil {
 		return nil, errors.Wrapf(err, "building gRPC client")
-	}
-	if gc.compression != compressionNone {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(gc.compression)))
 	}
 	return dialOpts, nil
 }
@@ -206,6 +216,7 @@ type shipperConfig struct {
 	skipCorruptedBlocks   bool
 	hashFunc              string
 	metaFileName          string
+	uploadConcurrency     int
 }
 
 func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig {
@@ -228,6 +239,7 @@ func (sc *shipperConfig) registerFlag(cmd extkingpin.FlagClause) *shipperConfig 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&sc.hashFunc, "SHA256", "")
 	cmd.Flag("shipper.meta-file-name", "the file to store shipper metadata in").Default(shipper.DefaultMetaFilename).StringVar(&sc.metaFileName)
+	cmd.Flag("shipper.upload-concurrency", "Number of goroutines to use when uploading block files to object storage.").Default("0").IntVar(&sc.uploadConcurrency)
 	return sc
 }
 
@@ -319,7 +331,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 		if len(parts) != 2 {
 			return labels.EmptyLabels(), errors.Errorf("unrecognized label %q", l)
 		}
-		if !model.LabelName.IsValid(model.LabelName(parts[0])) {
+		if !model.UTF8Validation.IsValidLabelName(parts[0]) {
 			return labels.EmptyLabels(), errors.Errorf("unsupported format for label %s", l)
 		}
 		val, err := strconv.Unquote(parts[1])

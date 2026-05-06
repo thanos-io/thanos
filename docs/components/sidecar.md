@@ -101,8 +101,8 @@ Flags:
                                  --help-long and --help-man).
       --[no-]version             Show application version.
       --log.level=info           Log filtering level.
-      --log.format=logfmt        Log format to use. Possible options: logfmt or
-                                 json.
+      --log.format=logfmt        Log format to use. Possible options: logfmt,
+                                 json or journald.
       --tracing.config-file=<file-path>
                                  Path to YAML file with tracing
                                  configuration. See format details:
@@ -137,11 +137,22 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
+      --grpc-server-tls-ciphers=GRPC-SERVER-TLS-CIPHERS ...
+                                 TLS cipher suites for gRPC server
+                                 (repeatable). If not specified,
+                                 the default Go cipher suites are used.
+                                 See https://pkg.go.dev/crypto/tls#pkg-constants
+                                 for valid values.
+      --grpc-server-tls-curves=GRPC-SERVER-TLS-CURVES ...
+                                 TLS curves for gRPC server (repeatable). If
+                                 not specified, the default Go curves are used.
+                                 Valid values: CurveP256, CurveP384, CurveP521,
+                                 X25519.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
@@ -220,6 +231,9 @@ Flags:
                                  Possible values are: "", "SHA256".
       --shipper.meta-file-name="thanos.shipper.json"
                                  the file to store shipper metadata in
+      --shipper.upload-concurrency=0
+                                 Number of goroutines to use when uploading
+                                 block files to object storage.
       --store.limits.request-series=0
                                  The maximum series allowed for a single Series
                                  request. The Series call fails if this limit is

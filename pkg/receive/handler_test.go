@@ -21,8 +21,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"go.uber.org/atomic"
 	"gopkg.in/yaml.v3"
 
 	"github.com/alecthomas/units"
@@ -162,6 +164,14 @@ func (f *fakeAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labe
 	panic("not implemented")
 }
 
+func (f *fakeAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
+func (f *fakeAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
+	panic("not implemented")
+}
+
 func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
 	return storage.SeriesRef(hash), l
 }
@@ -220,6 +230,7 @@ func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (Wr
 var _ = (peersContainer)(&fakePeersGroup{})
 
 func newTestHandlerHashring(
+	debugName string,
 	appendables []*fakeAppendable,
 	replicationFactor uint64,
 	hashringAlgo HashringAlgorithm,
@@ -237,8 +248,7 @@ func newTestHandlerHashring(
 	var (
 		closers = make([]func() error, 0)
 
-		ag         = addrGen{}
-		logger     = logging.NewLogger("debug", "logfmt", "receive_test")
+		logger, _  = logging.NewLogger("debug", "logfmt", debugName)
 		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
 	for i := range appendables {
@@ -252,7 +262,7 @@ func newTestHandlerHashring(
 		})
 		handlers = append(handlers, h)
 		h.peers = fakePeers
-		endpoint := ag.newEndpoint()
+		endpoint := newUniqueEndpoint()
 		h.options.Endpoint = endpoint.Address
 		cfg[0].Endpoints = append(cfg[0].Endpoints, endpoint)
 
@@ -328,7 +338,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 1 commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -398,7 +408,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 1,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -415,7 +425,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 commit error with replication",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -432,7 +442,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 appender error with replication",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -553,8 +563,28 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			},
 		},
 		{
+			// cce: two permanent conflicts + one generic error. Even if the
+			// error node recovers, the best possible outcome is 1 success +
+			// 2 conflicts which cannot reach quorum of 2. Must return 409.
+			name:              "size 3 with replication two conflicts and one commit error",
+			status:            http.StatusConflict,
+			replicationFactor: 3,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
 			name:              "size 3 with replication one conflict and one commit error",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -571,7 +601,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 3 with replication two commit errors",
-			status:            http.StatusInternalServerError,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -614,7 +644,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 		{
 			name:              "size 6 with replication 3 one commit and two conflict error",
-			status:            http.StatusConflict,
+			status:            http.StatusServiceUnavailable,
 			replicationFactor: 3,
 			wreq:              wreq,
 			appendables: []*fakeAppendable{
@@ -666,7 +696,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			handlers, hashring, closeFunc, err := newTestHandlerHashring(tc.appendables, tc.replicationFactor, hashringAlgo, capnpReplication)
+			handlers, hashring, closeFunc, err := newTestHandlerHashring(tc.name, tc.appendables, tc.replicationFactor, hashringAlgo, capnpReplication)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -700,12 +730,6 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 					if err != nil {
 						t.Fatalf("handler %d: unexpectedly failed making HTTP request: %v", i+1, err)
 					}
-					// TODO(GiedriusS): fix this for gRPC replication too.
-					if capnpReplication {
-						if rec.Code == 503 {
-							rec.Code = 500
-						}
-					}
 					if rec.Code != tc.status {
 						t.Errorf("handler %d: got unexpected HTTP status code: expected %d, got %d; body: %s", i+1, tc.status, rec.Code, rec.Body.String())
 					}
@@ -721,7 +745,7 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			for _, ts := range tc.wreq.Timeseries {
 				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
 				for j, a := range tc.appendables {
-					if withConsistencyDelay {
+					if withConsistencyDelay && tc.status == http.StatusOK {
 						var expected int
 						n := a.appender.(*fakeAppender).Get(lset)
 						got := uint64(len(n))
@@ -742,6 +766,12 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							// is run once for each handler and they all use the same appender.
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
 							if tc.randomNode {
+								expectedMin = len(ts.Samples)
+							}
+							// When the write fails, early failure quorum return may cancel
+							// in-flight remote writes before they reach the appender, so
+							// we can only guarantee at least one write landed.
+							if tc.status != http.StatusOK {
 								expectedMin = len(ts.Samples)
 							}
 						}
@@ -774,6 +804,92 @@ func TestReceiveQuorumKetama(t *testing.T) {
 			testReceiveQuorum(t, AlgorithmKetama, false, capnpReplication)
 		})
 	}
+}
+
+// TestReceiveSaturatedPoolRF2 verifies that with replication factor 2 (quorum=1)
+// writes don't block when one peer's worker pool is saturated.
+func TestReceiveSaturatedPoolRF2(t *testing.T) {
+	t.Parallel()
+
+	fakePeers := &fakePeersGroup{clients: map[Endpoint]*peerWorker{}}
+	limiter, err := NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	require.NoError(t, err)
+
+	app := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+
+	h := NewHandler(log.NewNopLogger(), &Options{
+		ReplicationFactor: 2,
+		ForwardTimeout:    100 * time.Second,
+		Writer:            NewWriter(log.NewNopLogger(), newFakeTenantAppendable(app), &WriterOptions{}),
+		Limiter:           limiter,
+		Endpoint:          newUniqueEndpoint().String(),
+	})
+
+	endpoints := []Endpoint{
+		{
+			Address: newUniqueEndpoint().String(),
+		},
+		{
+			Address: newUniqueEndpoint().String(),
+		},
+	}
+
+	cfg := []HashringConfig{{
+		Hashring:  "test",
+		Endpoints: endpoints,
+	}}
+
+	hashring, err := NewMultiHashring(AlgorithmHashmod, 2, cfg, prometheus.NewRegistry())
+	require.NoError(t, err)
+
+	h.Hashring(hashring)
+	h.peers = fakePeers
+
+	synctest.Test(t, func(t *testing.T) {
+		t.Cleanup(func() { require.NoError(t, fakePeers.Close()) })
+
+		fakePeers.clients[endpoints[0]] = newPeerWorker(
+			&alwaysSucceedClient{},
+			prometheus.NewHistogram(prometheus.HistogramOpts{}),
+			1, 0,
+		)
+
+		fakePeers.clients[endpoints[1]] = newPeerWorker(
+			&alwaysSucceedClient{},
+			prometheus.NewHistogram(prometheus.HistogramOpts{}),
+			1, 30*time.Second,
+		)
+
+		wreq := &storepb.WriteRequest{Timeseries: makeSeriesWithValues(1)}
+		go func() {
+			for range 500 {
+				_, err := h.RemoteWrite(t.Context(), wreq)
+				require.NoError(t, err)
+			}
+		}()
+
+		_, err := h.RemoteWrite(t.Context(), wreq)
+		require.NoError(t, err)
+
+		time.Sleep(10 * time.Minute)
+		synctest.Wait()
+
+		// NOTE(GiedriusS): waiting until the best-effort writers are done
+		// because the waiting is happening in a goroutine.
+		require.NoError(t, runutil.Retry(1*time.Second, t.Context().Done(), func() error {
+			laggyPool := fakePeers.clients[endpoints[1]].wp
+
+			r := laggyPool.TryGo(func() {})
+			if !r {
+				return fmt.Errorf("pool still busy")
+			}
+
+			return nil
+		}))
+	})
+
 }
 
 func TestReceiveWithConsistencyDelayHashmod(t *testing.T) {
@@ -860,7 +976,7 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 					appender: newFakeAppender(nil, nil, nil),
 				},
 			}
-			handlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+			handlers, _, closeFunc, err := newTestHandlerHashring(tc.name, appendables, 3, AlgorithmHashmod, false)
 			if err != nil {
 				t.Fatalf("unable to create test handler: %v", err)
 			}
@@ -942,6 +1058,14 @@ func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, t
 	return false
 }
 
+type alwaysSucceedClient struct{}
+
+func (a *alwaysSucceedClient) RemoteWrite(_ context.Context, _ *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return &storepb.WriteResponse{}, nil
+}
+
+func (a *alwaysSucceedClient) Close() error { return nil }
+
 // cycleErrors returns an error generator that cycles through every given error.
 func cycleErrors(errs []error) func() error {
 	var mu sync.Mutex
@@ -977,11 +1101,11 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	return rec, nil
 }
 
-type addrGen struct{ n int }
+var n atomic.Int64
 
-func (a *addrGen) newEndpoint() Endpoint {
-	a.n++
-	addr := fmt.Sprintf("http://node-%d:%d", a.n, 12345+a.n)
+func newUniqueEndpoint() Endpoint {
+	cur := n.Inc()
+	addr := fmt.Sprintf("http://node-%d:%d", cur, 12345+cur)
 	return Endpoint{
 		Address:          addr,
 		CapNProtoAddress: addr,
@@ -1004,6 +1128,11 @@ func (f *fakeRemoteWriteGRPCServer) RemoteWriteAsync(ctx context.Context, in *st
 		seriesIDs: seriesIDs,
 	}
 	cb(err)
+}
+
+func (f *fakeRemoteWriteGRPCServer) TryRemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) bool {
+	f.RemoteWriteAsync(ctx, in, er, seriesIDs, responses, cb)
+	return true
 }
 
 func (f *fakeRemoteWriteGRPCServer) Close() error { return nil }
@@ -1105,7 +1234,7 @@ func makeSeriesWithValues(numSeries int) []prompb.TimeSeries {
 func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	dir := b.TempDir()
 
-	handlers, _, closeFunc, err := newTestHandlerHashring([]*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
+	handlers, _, closeFunc, err := newTestHandlerHashring("benchmark_handler", []*fakeAppendable{nil}, 1, AlgorithmHashmod, false)
 	if err != nil {
 		b.Fatalf("unable to create test handler: %v", err)
 	}
@@ -1132,7 +1261,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 		false,
 		metadata.NoneFunc,
 	)
-	defer func() { testutil.Ok(b, m.Close()) }()
+	b.Cleanup(func() {
+		m.Close()
+	})
 	handler.writer = NewWriter(logger, m, &WriterOptions{})
 
 	testutil.Ok(b, m.Flush())
@@ -1397,11 +1528,12 @@ func TestRelabel(t *testing.T) {
 			name: "has relabel configs but no relabelling applied",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"zoo"},
-					TargetLabel:  "bar",
-					Regex:        relabel.MustNewRegexp("bar"),
-					Action:       relabel.Replace,
-					Replacement:  "baz",
+					SourceLabels:         model.LabelNames{"zoo"},
+					TargetLabel:          "bar",
+					Regex:                relabel.MustNewRegexp("bar"),
+					Action:               relabel.Replace,
+					Replacement:          "baz",
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1453,16 +1585,18 @@ func TestRelabel(t *testing.T) {
 			name: "relabel rewrite existing labels",
 			relabel: []*relabel.Config{
 				{
-					TargetLabel: "foo",
-					Action:      relabel.Replace,
-					Regex:       relabel.MustNewRegexp(""),
-					Replacement: "test",
+					TargetLabel:          "foo",
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp(""),
+					Replacement:          "test",
+					NameValidationScheme: model.UTF8Validation,
 				},
 				{
-					TargetLabel: "__name__",
-					Action:      relabel.Replace,
-					Regex:       relabel.MustNewRegexp(""),
-					Replacement: "foo",
+					TargetLabel:          "__name__",
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp(""),
+					Replacement:          "foo",
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1514,8 +1648,9 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops label",
 			relabel: []*relabel.Config{
 				{
-					Action: relabel.LabelDrop,
-					Regex:  relabel.MustNewRegexp("foo"),
+					Action:               relabel.LabelDrop,
+					Regex:                relabel.MustNewRegexp("foo"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1563,9 +1698,10 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops time series",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"foo"},
-					Action:       relabel.Drop,
-					Regex:        relabel.MustNewRegexp("bar"),
+					SourceLabels:         model.LabelNames{"foo"},
+					Action:               relabel.Drop,
+					Regex:                relabel.MustNewRegexp("bar"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1598,8 +1734,9 @@ func TestRelabel(t *testing.T) {
 			name: "relabel rewrite existing exemplar series labels",
 			relabel: []*relabel.Config{
 				{
-					Action: relabel.LabelDrop,
-					Regex:  relabel.MustNewRegexp("foo"),
+					Action:               relabel.LabelDrop,
+					Regex:                relabel.MustNewRegexp("foo"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1659,9 +1796,10 @@ func TestRelabel(t *testing.T) {
 			name: "relabel drops exemplars",
 			relabel: []*relabel.Config{
 				{
-					SourceLabels: model.LabelNames{"foo"},
-					Action:       relabel.Drop,
-					Regex:        relabel.MustNewRegexp("bar"),
+					SourceLabels:         model.LabelNames{"foo"},
+					Action:               relabel.Drop,
+					Regex:                relabel.MustNewRegexp("bar"),
+					NameValidationScheme: model.UTF8Validation,
 				},
 			},
 			writeRequest: prompb.WriteRequest{
@@ -1771,13 +1909,13 @@ func TestHashringChangeCallsClose(t *testing.T) {
 			appender: newFakeAppender(nil, nil, nil),
 		},
 	}
-	allHandlers, _, closeFunc, err := newTestHandlerHashring(appendables, 3, AlgorithmHashmod, false)
+	allHandlers, _, closeFunc, err := newTestHandlerHashring("hashring_change_calls_close", appendables, 3, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
 	testutil.Ok(t, closeFunc())
 
 	appendables = appendables[1:]
 
-	_, smallHashring, closeFunc, err := newTestHandlerHashring(appendables, 2, AlgorithmHashmod, false)
+	_, smallHashring, closeFunc, err := newTestHandlerHashring("hashring_change_calls_close_small", appendables, 2, AlgorithmHashmod, false)
 	testutil.Ok(t, err)
 	testutil.Ok(t, closeFunc())
 

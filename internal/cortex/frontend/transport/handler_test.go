@@ -122,3 +122,30 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 		})
 	}
 }
+
+func TestHandler_SlowQueryLogOnError(t *testing.T) {
+	t.Parallel()
+
+	cfg := HandlerConfig{
+		QueryStatsEnabled:    true,
+		LogQueriesLongerThan: 1 * time.Microsecond,
+	}
+
+	fakeRT := &fakeRoundTripper{
+		requestLatency: 2 * time.Microsecond,
+		response:       nil,
+		err:            errDeadlineExceeded,
+	}
+
+	logWriter := &bytes.Buffer{}
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(logWriter))
+
+	handler := NewHandler(cfg, fakeRT, logger, prometheus.NewRegistry())
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/v1/query?query=up", nil))
+
+	// Verify slow query is logged even when round-tripper returns an error
+	require.Contains(t, logWriter.String(), "slow query detected")
+	require.Contains(t, logWriter.String(), "time_taken=")
+	require.Contains(t, logWriter.String(), "path=/api/v1/query")
+	require.Contains(t, logWriter.String(), "param_query=up")
+}

@@ -5,6 +5,7 @@ package query
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,7 @@ func NewQueryableCreator(
 	maxConcurrentSelects int,
 	selectTimeout time.Duration,
 	deduplicationFunc string,
+	seriesResponseBatchSize int,
 ) QueryableCreator {
 	gf := gate.NewGateFactory(extprom.WrapRegistererWithPrefix("concurrent_selects_", reg), maxConcurrentSelects, gate.Selects)
 
@@ -104,34 +106,36 @@ func NewQueryableCreator(
 			gateProviderFn: func() gate.Gate {
 				return gf.New()
 			},
-			maxConcurrentSelects: maxConcurrentSelects,
-			selectTimeout:        selectTimeout,
-			shardInfo:            shardInfo,
-			seriesStatsReporter:  seriesStatsReporter,
+			maxConcurrentSelects:    maxConcurrentSelects,
+			selectTimeout:           selectTimeout,
+			shardInfo:               shardInfo,
+			seriesStatsReporter:     seriesStatsReporter,
+			seriesResponseBatchSize: seriesResponseBatchSize,
 		}
 	}
 }
 
 type queryable struct {
-	logger               log.Logger
-	deduplicationFunc    string
-	replicaLabels        []string
-	storeDebugMatchers   [][]*labels.Matcher
-	proxy                storepb.StoreServer
-	deduplicate          bool
-	maxResolutionMillis  int64
-	partialResponse      bool
-	skipChunks           bool
-	gateProviderFn       func() gate.Gate
-	maxConcurrentSelects int
-	selectTimeout        time.Duration
-	shardInfo            *storepb.ShardInfo
-	seriesStatsReporter  seriesStatsReporter
+	logger                  log.Logger
+	deduplicationFunc       string
+	replicaLabels           []string
+	storeDebugMatchers      [][]*labels.Matcher
+	proxy                   storepb.StoreServer
+	deduplicate             bool
+	maxResolutionMillis     int64
+	partialResponse         bool
+	skipChunks              bool
+	gateProviderFn          func() gate.Gate
+	maxConcurrentSelects    int
+	selectTimeout           time.Duration
+	shardInfo               *storepb.ShardInfo
+	seriesStatsReporter     seriesStatsReporter
+	seriesResponseBatchSize int
 }
 
 // Querier returns a new storage querier against the underlying proxy store API.
 func (q *queryable) Querier(mint, maxt int64) (storage.Querier, error) {
-	return newQuerier(q.logger, mint, maxt, q.deduplicationFunc, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter), nil
+	return newQuerier(q.logger, mint, maxt, q.deduplicationFunc, q.replicaLabels, q.storeDebugMatchers, q.proxy, q.deduplicate, q.maxResolutionMillis, q.partialResponse, q.skipChunks, q.gateProviderFn(), q.selectTimeout, q.shardInfo, q.seriesStatsReporter, q.seriesResponseBatchSize), nil
 }
 
 type querier struct {
@@ -149,6 +153,7 @@ type querier struct {
 	selectTimeout           time.Duration
 	shardInfo               *storepb.ShardInfo
 	seriesStatsReporter     seriesStatsReporter
+	seriesResponseBatchSize int
 }
 
 // newQuerier creates implementation of storage.Querier that fetches data from the proxy
@@ -169,6 +174,7 @@ func newQuerier(
 	selectTimeout time.Duration,
 	shardInfo *storepb.ShardInfo,
 	seriesStatsReporter seriesStatsReporter,
+	seriesResponseBatchSize int,
 ) *querier {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -195,6 +201,7 @@ func newQuerier(
 		skipChunks:              skipChunks,
 		shardInfo:               shardInfo,
 		seriesStatsReporter:     seriesStatsReporter,
+		seriesResponseBatchSize: seriesResponseBatchSize,
 	}
 }
 
@@ -221,6 +228,16 @@ func (s *seriesServer) Send(r *storepb.SeriesResponse) error {
 	if r.GetSeries() != nil {
 		s.seriesSet = append(s.seriesSet, *r.GetSeries())
 		s.seriesSetStats.Count(r.GetSeries())
+		return nil
+	}
+
+	if r.GetBatch() != nil {
+		batch := *r.GetBatch()
+		s.seriesSet = slices.Grow(s.seriesSet, len(batch.Series))
+		for _, series := range batch.Series {
+			s.seriesSet = append(s.seriesSet, *series)
+			s.seriesSetStats.Count(series)
+		}
 		return nil
 	}
 
@@ -353,6 +370,11 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		ShardInfo:               q.shardInfo,
 		PartialResponseStrategy: q.partialResponseStrategy,
 		SkipChunks:              q.skipChunks,
+		ResponseBatchSize:       int64(q.seriesResponseBatchSize),
+		QueryHints: &storepb.QueryHints{
+			ProjectionLabels:  hints.ProjectionLabels,
+			ProjectionInclude: hints.ProjectionInclude,
+		},
 	}
 	if q.isDedupEnabled() {
 		// Soft ask to sort without replica labels and push them at the end of labelset.

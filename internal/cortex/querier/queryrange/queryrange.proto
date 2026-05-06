@@ -148,7 +148,7 @@ message Extent  {
   int64 end = 2 [(gogoproto.jsontag) = "end"];
   // reserved the previous key to ensure cache transition
   reserved 3;
-  string trace_id = 4 [(gogoproto.jsontag) = "-"];
+  reserved 4;
   google.protobuf.Any response = 5 [(gogoproto.jsontag) = "response"];
 }
 

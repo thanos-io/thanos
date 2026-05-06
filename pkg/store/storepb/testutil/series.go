@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/prometheus/prometheus/tsdb/wlog"
 	"github.com/prometheus/prometheus/util/compression"
-	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/compressutil"
 	"github.com/thanos-io/thanos/pkg/store/hintspb"
@@ -112,7 +112,6 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 
 	headOpts := tsdb.DefaultHeadOptions()
 	headOpts.ChunkDirRoot = opts.TSDBDir
-	headOpts.EnableNativeHistograms = *atomic.NewBool(true)
 	h, err := tsdb.NewHead(nil, nil, w, nil, headOpts, nil)
 	testutil.Ok(t, err)
 
@@ -295,6 +294,14 @@ func (s *SeriesServer) Send(r *storepb.SeriesResponse) error {
 
 	if r.GetHints() != nil {
 		s.HintsSet = append(s.HintsSet, r.GetHints())
+		return nil
+	}
+
+	if r.GetBatch() != nil {
+		batch := *r.GetBatch()
+		s.SeriesSet = slices.Grow(s.SeriesSet, len(batch.Series))
+		s.SeriesSet = append(s.SeriesSet, batch.Series...)
+
 		return nil
 	}
 	// Unsupported field, skip.

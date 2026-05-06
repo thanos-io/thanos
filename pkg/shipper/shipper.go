@@ -85,6 +85,7 @@ type Shipper struct {
 	allowOutOfOrderUploads bool
 	skipCorruptedBlocks    bool
 	hashFunc               metadata.HashFunc
+	uploadConcurrency      int
 
 	labels func() labels.Labels
 	mtx    sync.RWMutex
@@ -104,6 +105,7 @@ type shipperOptions struct {
 	uploadCompacted        bool
 	allowOutOfOrderUploads bool
 	skipCorruptedBlocks    bool
+	uploadConcurrency      int
 }
 
 type Option func(*shipperOptions)
@@ -171,6 +173,13 @@ func WithSkipCorruptedBlocks(skip bool) Option {
 	}
 }
 
+// WithUploadConcurrency sets the number of goroutines to use when uploading block files.
+func WithUploadConcurrency(concurrency int) Option {
+	return func(o *shipperOptions) {
+		o.uploadConcurrency = concurrency
+	}
+}
+
 func applyOptions(opts []Option) *shipperOptions {
 	so := new(shipperOptions)
 	for _, o := range opts {
@@ -209,6 +218,7 @@ func New(bucket objstore.Bucket, dir string, opts ...Option) *Shipper {
 		skipCorruptedBlocks:    options.skipCorruptedBlocks,
 		uploadCompacted:        options.uploadCompacted,
 		hashFunc:               options.hashFunc,
+		uploadConcurrency:      options.uploadConcurrency,
 		metadataFilePath:       filepath.Join(dir, filepath.Clean(options.metaFileName)),
 	}
 }
@@ -286,6 +296,38 @@ func (c *lazyOverlapChecker) IsOverlapping(ctx context.Context, newMeta tsdb.Blo
 		return errors.Errorf("shipping compacted block %s is blocked; overlap spotted: %s", newMeta.ULID, o.String())
 	}
 	return nil
+}
+
+func (s *Shipper) AreAllBlocksUploaded() (bool, error) {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	metas, _, err := s.blockMetasFromOldest()
+	if err != nil {
+		return false, errors.Wrap(err, "get block metas from oldest")
+	}
+
+	if len(metas) == 0 {
+		return true, nil
+	}
+
+	meta, err := ReadMetaFile(s.metadataFilePath)
+	if err != nil {
+		return false, errors.Wrap(err, "read meta file")
+	}
+
+	uploaded := make(map[ulid.ULID]struct{}, len(meta.Uploaded))
+	for _, id := range meta.Uploaded {
+		uploaded[id] = struct{}{}
+	}
+
+	for _, m := range metas {
+		if _, ok := uploaded[m.ULID]; !ok {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 // Sync performs a single synchronization, which ensures all non-compacted local blocks have been uploaded
@@ -463,7 +505,11 @@ func (s *Shipper) upload(ctx context.Context, meta *metadata.Meta) error {
 	if err := meta.WriteToDir(s.logger, updir); err != nil {
 		return errors.Wrap(err, "write meta file")
 	}
-	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc)
+	var uploadOptions []objstore.UploadOption
+	if s.uploadConcurrency > 0 {
+		uploadOptions = append(uploadOptions, objstore.WithUploadConcurrency(s.uploadConcurrency))
+	}
+	return block.Upload(ctx, s.logger, s.bucket, updir, s.hashFunc, uploadOptions...)
 }
 
 // blockMetasFromOldest returns the block meta of each block found in dir

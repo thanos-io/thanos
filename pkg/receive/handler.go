@@ -87,12 +87,14 @@ var (
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
-	errInternal    = errors.New("internal error")
 )
 
 type WriteableStoreAsyncClient interface {
 	storepb.WriteableStoreClient
 	RemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error))
+	// TryRemoteWriteAsync submits the request without blocking. Returns false if the peer's
+	// worker pool is at capacity; the caller should fall back to RemoteWriteAsync.
+	TryRemoteWriteAsync(context.Context, *storepb.WriteRequest, endpointReplica, []int, chan writeResponse, func(error)) bool
 }
 
 // Options for the web Handler.
@@ -180,12 +182,14 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Max:    o.MaxBackoff,
 				Jitter: true,
 			},
-			promauto.With(registerer).NewHistogram(
+			promauto.With(registerer).NewHistogramVec(
 				prometheus.HistogramOpts{
-					Name:    "thanos_receive_forward_delay_seconds",
-					Help:    "The delay between the time the request was received and the time it was forwarded to a worker. ",
-					Buckets: prometheus.ExponentialBuckets(0.001, 2, 16),
-				},
+					Name:                           "thanos_receive_forward_delay_seconds",
+					Help:                           "The delay between the time the request was received and the time it was forwarded to a worker. ",
+					Buckets:                        prometheus.ExponentialBuckets(0.001, 2, 16),
+					NativeHistogramBucketFactor:    1.1,
+					NativeHistogramMaxBucketNumber: 100,
+				}, []string{"worker"},
 			),
 			workers,
 			o.MaxArtificialDelay,
@@ -769,11 +773,12 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	var writeErrors writeErrors
 	var stats = make(tenantRequestStats)
 
+	// If all series reached the success threshold, we don't cancel the context
+	// so that in-flight forward requests can optimistically complete until timeout,
+	// improving the chance of full replication. On failure we cancel immediately.
+	optimisticallyWaitForSuccesses := false
 	defer func() {
-		if writeErrors.ErrOrNil() != nil {
-			// NOTICE: The cancel function is not used on all paths intentionally,
-			// if there is no error when quorum is reached,
-			// let forward requests to optimistically run until timeout.
+		if !optimisticallyWaitForSuccesses {
 			cancel()
 		}
 	}()
@@ -805,15 +810,14 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	responses := make(chan writeResponse, maxBufferedResponses)
 	wg := sync.WaitGroup{}
 
-	h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
-
 	go func() {
+		h.sendWrites(ctx, &wg, params, localWrites, remoteWrites, responses)
 		wg.Wait()
 		close(responses)
 	}()
 
 	// At the end, make sure to exhaust the channel, letting remaining unnecessary requests finish asynchronously.
-	// This is needed if context is canceled or if we reached success of fail quorum faster.
+	// This is needed if context is canceled or if we reached success or fail quorum faster.
 	defer func() {
 		go func() {
 			for resp := range responses {
@@ -824,38 +828,59 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		}()
 	}()
 
-	quorum := h.writeQuorum()
+	successThreshold := h.writeQuorum()
 	if params.alreadyReplicated {
-		quorum = 1
+		successThreshold = 1
 	}
+	// failureThreshold is the number of failures after which a series can no
+	// longer reach the success threshold. For RF=3 and successThreshold=2 this is 2.
+	failureThreshold := len(params.replicas) - successThreshold + 1
 	successes := make([]int, len(params.writeRequest.Timeseries))
-	seriesErrs := newReplicationErrors(quorum, len(params.writeRequest.Timeseries))
+	failures := make([]int, len(params.writeRequest.Timeseries))
+	// conflictFailures tracks how many replicas returned a permanent conflict for
+	// each series. When conflictFailures[i] >= failureThreshold the series can
+	// never reach quorum regardless of retries.
+	conflictFailures := make([]int, len(params.writeRequest.Timeseries))
+	seriesErrs := newReplicationErrors(successThreshold, len(params.writeRequest.Timeseries))
 	for {
 		select {
 		case <-ctx.Done():
 			return stats, ctx.Err()
 		case resp, hasMore := <-responses:
 			if !hasMore {
-				for _, seriesErr := range seriesErrs {
-					writeErrors.Add(seriesErr)
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+					}
 				}
 				return stats, writeErrors.ErrOrNil()
 			}
 
 			if resp.err != nil {
-				// Track errors and successes on a per-series basis.
+				isConflictErr := isConflict(errors.Cause(resp.err))
 				for _, seriesID := range resp.seriesIDs {
 					seriesErrs[seriesID].Add(resp.err)
+					failures[seriesID]++
+					if isConflictErr {
+						conflictFailures[seriesID]++
+					}
 				}
+			} else {
+				for _, seriesID := range resp.seriesIDs {
+					successes[seriesID]++
+				}
+			}
 
-				continue
-			}
-			// At the end, aggregate all errors if there are any and return them.
-			for _, seriesID := range resp.seriesIDs {
-				successes[seriesID]++
-			}
-			if quorumReached(successes, quorum) {
-				return stats, nil
+			if canReturnEarly(successes, conflictFailures, successThreshold, failureThreshold) {
+				var hadErrors bool
+				for i, seriesErr := range seriesErrs {
+					if failures[i] >= failureThreshold {
+						writeErrors.Add(seriesErr)
+						hadErrors = true
+					}
+				}
+				optimisticallyWaitForSuccesses = !hadErrors
+				return stats, writeErrors.ErrOrNil()
 			}
 		}
 	}
@@ -942,13 +967,31 @@ func (h *Handler) sendWrites(
 		}(writeDestination)
 	}
 
-	// Do the writes to remote nodes. Run them all in parallel.
+	// First pass: submit to remote nodes non-blocking so that peers with available pool
+	// capacity (typically the fast ones) all get in flight before we stall on any saturated peer.
+	// This lets quorum be reached—and the HTTP response returned—without waiting for a slow peer's
+	// worker pool to drain.
+	type deferredRemote struct {
+		tenant           string
+		writeDestination endpointReplica
+		trackedSeries    trackedSeries
+	}
+	var deferred []deferredRemote
+
 	for writeDestination := range remoteWrites {
 		for tenant, trackedSeries := range remoteWrites[writeDestination] {
 			wg.Add(1)
-
-			h.sendRemoteWrite(ctx, tenant, writeDestination, trackedSeries, params.alreadyReplicated, responses, wg)
+			if !h.tryRemoteWrite(ctx, tenant, writeDestination, trackedSeries, params.alreadyReplicated, responses, wg) {
+				wg.Done()
+				deferred = append(deferred, deferredRemote{tenant, writeDestination, trackedSeries})
+			}
 		}
+	}
+
+	// Second pass: blocking submission for any peer whose pool was saturated during the first pass.
+	for _, d := range deferred {
+		wg.Add(1)
+		h.sendRemoteWrite(ctx, d.tenant, d.writeDestination, d.trackedSeries, params.alreadyReplicated, responses, wg)
 	}
 }
 
@@ -991,38 +1034,36 @@ func (h *Handler) sendLocalWrite(
 
 }
 
-// sendRemoteWrite sends a write request to the remote node. It takes care of checking whether the endpoint is up or not
-// in the peerGroup, correctly marking them as up or down when appropriate.
-// The responses are sent to the responses channel.
-func (h *Handler) sendRemoteWrite(
+// prepareRemoteWrite resolves the peer connection, builds the WriteRequest, and constructs the
+// completion callback. Returns (nil, nil, nil) when a connection error has already been written to
+// responses and wg.Done called — callers must check for nil before proceeding.
+func (h *Handler) prepareRemoteWrite(
 	ctx context.Context,
 	tenant string,
-	endpointReplica endpointReplica,
-	trackedSeries trackedSeries,
+	er endpointReplica,
+	ts trackedSeries,
 	alreadyReplicated bool,
 	responses chan writeResponse,
 	wg *sync.WaitGroup,
-) {
-	endpoint := endpointReplica.endpoint
+) (WriteableStoreAsyncClient, *storepb.WriteRequest, func(error)) {
+	endpoint := er.endpoint
 	cl, err := h.peers.getConnection(ctx, endpoint)
 	if err != nil {
 		if errors.Is(err, errUnavailable) {
-			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", endpointReplica)
+			err = errors.Wrapf(errUnavailable, "backing off forward request for endpoint %v", er)
 		}
-		responses <- newWriteResponse(trackedSeries.seriesIDs, err, endpointReplica)
+		responses <- newWriteResponse(ts.seriesIDs, err, er)
 		wg.Done()
-		return
+		return nil, nil, nil
 	}
 
-	// This is called "real" because it's 1-indexed.
-	realReplicationIndex := int64(endpointReplica.replica + 1)
-	// Actually make the request against the endpoint we determined should handle these time series.
-	cl.RemoteWriteAsync(ctx, &storepb.WriteRequest{
-		Timeseries: trackedSeries.timeSeries,
+	// Replica is 1-indexed on the wire; 0 indicates un-replicated.
+	req := &storepb.WriteRequest{
+		Timeseries: ts.timeSeries,
 		Tenant:     tenant,
-		// Increment replica since on-the-wire format is 1-indexed and 0 indicates un-replicated.
-		Replica: realReplicationIndex,
-	}, endpointReplica, trackedSeries.seriesIDs, responses, func(err error) {
+		Replica:    int64(er.replica + 1),
+	}
+	cb := func(err error) {
 		if err == nil {
 			h.forwardRequests.WithLabelValues(labelSuccess).Inc()
 			if !alreadyReplicated {
@@ -1037,16 +1078,53 @@ func (h *Handler) sendRemoteWrite(
 					h.replications.WithLabelValues(labelError).Inc()
 				}
 			}
-
 			// Check if peer connection is unavailable, update the peer state to avoid spamming that peer.
 			if st, ok := status.FromError(err); ok {
 				if st.Code() == codes.Unavailable {
-					h.peers.markPeerUnavailable(endpointReplica.endpoint)
+					h.peers.markPeerUnavailable(er.endpoint)
 				}
 			}
 		}
 		wg.Done()
-	})
+	}
+	return cl, req, cb
+}
+
+// sendRemoteWrite sends a write request to the remote node. It blocks until the peer's worker
+// pool accepts the work.
+func (h *Handler) sendRemoteWrite(
+	ctx context.Context,
+	tenant string,
+	er endpointReplica,
+	ts trackedSeries,
+	alreadyReplicated bool,
+	responses chan writeResponse,
+	wg *sync.WaitGroup,
+) {
+	cl, req, cb := h.prepareRemoteWrite(ctx, tenant, er, ts, alreadyReplicated, responses, wg)
+	if cl == nil {
+		return
+	}
+	cl.RemoteWriteAsync(ctx, req, er, ts.seriesIDs, responses, cb)
+}
+
+// tryRemoteWrite is the non-blocking counterpart of sendRemoteWrite. It returns false when the
+// peer's worker pool is at capacity; the caller should then fall back to sendRemoteWrite.
+// wg.Done is NOT called on a false return — the caller must not have called wg.Add before checking.
+func (h *Handler) tryRemoteWrite(
+	ctx context.Context,
+	tenant string,
+	er endpointReplica,
+	ts trackedSeries,
+	alreadyReplicated bool,
+	responses chan writeResponse,
+	wg *sync.WaitGroup,
+) bool {
+	cl, req, cb := h.prepareRemoteWrite(ctx, tenant, er, ts, alreadyReplicated, responses, wg)
+	if cl == nil {
+		return true
+	}
+	return cl.TryRemoteWriteAsync(ctx, req, er, ts.seriesIDs, responses, cb)
 }
 
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
@@ -1061,13 +1139,20 @@ func (h *Handler) writeQuorum() int {
 	return int((h.options.ReplicationFactor / 2) + 1)
 }
 
-func quorumReached(successes []int, successThreshold int) bool {
-	for _, success := range successes {
-		if success < successThreshold {
+// canReturnEarly returns true when every series has a determined outcome.
+// A series is determined when it either reached the success threshold, or its
+// conflict failure count reached the failure threshold meaning it can never
+// reach quorum even if every remaining non-conflict replica succeeds.
+//
+// Non-conflict failures do not trigger early return, we must wait
+// for all replica responses so we can count total conflicts accurately and
+// decide whether the request is permanently failed (409) or retryable (503).
+func canReturnEarly(successes, conflictFailures []int, successThreshold, failureThreshold int) bool {
+	for i := range successes {
+		if successes[i] < successThreshold && conflictFailures[i] < failureThreshold {
 			return false
 		}
 	}
-
 	return true
 }
 
@@ -1078,6 +1163,28 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
+
+	// Fast path for IngestorOnly mode: write directly to local TSDB.
+	// This skips distributeTimeseriesToReplicas and sendLocalWrite since
+	// the Router already determined this data belongs to this node.
+	if h.receiverMode == IngestorOnly {
+		err := h.writer.Write(ctx, r.Tenant, r.Timeseries)
+		if err != nil {
+			level.Debug(h.logger).Log("msg", "failed to write to local TSDB", "err", err)
+		}
+		switch cause := errors.Cause(err); cause {
+		case nil:
+			return &storepb.WriteResponse{}, nil
+		default:
+			if isNotReady(cause) {
+				return nil, status.Error(codes.Unavailable, err.Error())
+			}
+			if isConflict(cause) {
+				return nil, status.Error(codes.AlreadyExists, err.Error())
+			}
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 
 	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
@@ -1313,11 +1420,17 @@ type replicationErrors struct {
 	threshold int
 }
 
-// Cause extracts a sentinel error with the highest occurrence that
-// has happened more than the given threshold.
-// If no single error has occurred more than the threshold, but the
-// total number of errors meets the threshold,
-// replicationErr will return errInternal.
+// Cause extracts the sentinel error that best describes the replication outcome.
+//
+// If one error type appears at least threshold times it is returned directly
+// (a conflict-dominated series can never succeed).
+//
+// Otherwise, if total errors meet the threshold but no single type dominates,
+// the series failed quorum due to a mix of error types.
+//
+// Because canReturnEarly only fires early when conflict failures alone reach
+// the threshold, reaching this fallback guarantees that conflict_count < failureThreshold,
+// the request could succeed on retry once transient failures resolve.
 func (es *replicationErrors) Cause() error {
 	if len(es.errs) == 0 {
 		return errorSet{}
@@ -1344,7 +1457,9 @@ func (es *replicationErrors) Cause() error {
 	}
 
 	if len(es.errs) >= es.threshold {
-		return errInternal
+		// conflict count is below the threshold so retry may
+		// succeed once transient replicas recover.
+		return errUnavailable
 	}
 
 	return nil
@@ -1358,7 +1473,7 @@ func newReplicationErrors(threshold, numErrors int) []*replicationErrors {
 	return errs
 }
 
-func newPeerWorker(client peerClient, forwardDelay prometheus.Histogram, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
+func newPeerWorker(client peerClient, forwardDelay prometheus.Observer, asyncWorkerCount uint, maxArtificialDelay time.Duration) *peerWorker {
 	return &peerWorker{
 		client:             client,
 		wp:                 pool.NewWorkerPool(asyncWorkerCount),
@@ -1396,14 +1511,14 @@ type peerWorker struct {
 	client peerClient
 	wp     pool.WorkerPool
 
-	forwardDelay       prometheus.Histogram
+	forwardDelay       prometheus.Observer
 	maxArtificialDelay time.Duration
 }
 
 func newPeerGroup(
 	logger log.Logger,
 	backoff backoff.Backoff,
-	forwardDelay prometheus.Histogram,
+	forwardDelay *prometheus.HistogramVec,
 	asyncForwardWorkersCount uint,
 	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
@@ -1433,9 +1548,9 @@ type peersContainer interface {
 	io.Closer
 }
 
-func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+func (p *peerWorker) buildWork(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) pool.Work {
 	now := time.Now()
-	p.wp.Go(func() {
+	return func() {
 		if p.maxArtificialDelay > 0 {
 			var randDuration = time.Duration(rand.Int63n(int64(p.maxArtificialDelay)))
 			if randDuration < 1*time.Second {
@@ -1466,7 +1581,30 @@ func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteReq
 			"endpoint": er.endpoint,
 			"replica":  er.replica,
 		})
-	})
+	}
+}
+
+func (p *peerWorker) RemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) {
+	if err := p.wp.Go(ctx, p.buildWork(ctx, req, er, seriesIDs, responseWriter, cb)); err != nil {
+		tracing.DoInSpan(ctx, "receive_forward", func(ctx context.Context) {
+			sp := trace.SpanFromContext(ctx)
+			sp.SetAttributes(attribute.Bool("error", true))
+			sp.SetAttributes(attribute.String("error.msg", err.Error()))
+			responseWriter <- newWriteResponse(
+				seriesIDs,
+				errors.Wrapf(err, "scheduling forward request for endpoint %v", er.endpoint),
+				er,
+			)
+			cb(err)
+		}, opentracing.Tags{
+			"endpoint": er.endpoint,
+			"replica":  er.replica,
+		})
+	}
+}
+
+func (p *peerWorker) TryRemoteWriteAsync(ctx context.Context, req *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responseWriter chan writeResponse, cb func(error)) bool {
+	return p.wp.TryGo(p.buildWork(ctx, req, er, seriesIDs, responseWriter, cb))
 }
 
 type peerGroup struct {
@@ -1475,7 +1613,7 @@ type peerGroup struct {
 	connections              map[Endpoint]*peerWorker
 	peerStates               map[Endpoint]*retryState
 	expBackoff               backoff.Backoff
-	forwardDelay             prometheus.Histogram
+	forwardDelay             *prometheus.HistogramVec
 	asyncForwardWorkersCount uint
 	replicationProtocol      ReplicationProtocol
 	maxArtificialDelay       time.Duration
@@ -1506,6 +1644,7 @@ func (p *peerGroup) close(endpoint Endpoint) error {
 		return nil
 	}
 
+	p.forwardDelay.Delete(prometheus.Labels{"worker": endpoint.Address})
 	p.connections[endpoint].wp.Close()
 	delete(p.connections, endpoint)
 	if err := c.client.Close(); err != nil {
@@ -1560,7 +1699,7 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 		delay = p.maxArtificialDelay
 	}
 
-	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay, p.asyncForwardWorkersCount, delay)
+	p.connections[endpoint] = newPeerWorker(client, p.forwardDelay.WithLabelValues(endpoint.Address), p.asyncForwardWorkersCount, delay)
 	return p.connections[endpoint], nil
 }
 

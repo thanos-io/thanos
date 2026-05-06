@@ -181,6 +181,15 @@ func (c *endpointSetNodeCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- c.connectionsDesc
 }
 
+const noExtLabelsPlaceholder = "no_external_labels"
+
+func someExternalLabels(lbls string) string {
+	if lbls == "" {
+		return noExtLabelsPlaceholder
+	}
+	return lbls
+}
+
 func (c *endpointSetNodeCollector) hash(e endpointStat) uint64 {
 	h := c.hasherPool.Get().(*xxhash.Digest)
 	defer func() {
@@ -192,7 +201,7 @@ func (c *endpointSetNodeCollector) hash(e endpointStat) uint64 {
 		_, _ = h.Write([]byte(e.ip))
 	}
 	if _, ok := c.labelsMap[string(ExternalLabels)]; ok {
-		_, _ = h.Write([]byte(e.extLset))
+		_, _ = h.Write([]byte(someExternalLabels(e.extLset)))
 	}
 	if _, ok := c.labelsMap[string(StoreType)]; ok {
 		_, _ = h.Write([]byte(e.component))
@@ -210,14 +219,21 @@ func (c *endpointSetNodeCollector) Collect(ch chan<- prometheus.Metric) {
 		h := c.hash(e)
 		occurrences[h]++
 	}
+	var alreadySeen = make(map[uint64]struct{}, len(occurrences))
 
 	for _, n := range c.storeNodes {
 		h := c.hash(n)
+		_, seen := alreadySeen[h]
+		if seen {
+			continue
+		}
+		alreadySeen[h] = struct{}{}
+
 		lbls := make([]string, 0, len(c.labels))
 		for _, lbl := range c.labels {
 			switch lbl {
 			case string(ExternalLabels):
-				lbls = append(lbls, n.extLset)
+				lbls = append(lbls, someExternalLabels(n.extLset))
 			case string(StoreType):
 				lbls = append(lbls, n.component)
 			case string(IPPort):
@@ -340,7 +356,6 @@ func (e *EndpointSet) Update(ctx context.Context) {
 	)
 
 	for _, spec := range e.endpointSpecs() {
-
 		if er, existingRef := e.endpoints[spec.Addr()]; existingRef {
 			wg.Add(1)
 			go func(spec *GRPCEndpointSpec) {
@@ -515,6 +530,8 @@ func (e *EndpointSet) GetStoreClients() []store.Client {
 				addr:        er.addr,
 				metadata:    er.metadata,
 				status:      er.status,
+				mtx:         er.mtx,
+				logger:      er.logger,
 			})
 			er.mtx.RUnlock()
 		}
@@ -583,8 +600,9 @@ func (e *EndpointSet) GetExemplarsStores() []*exemplarspb.ExemplarStore {
 	for _, er := range endpoints {
 		if er.HasExemplarsAPI() {
 			exemplarStores = append(exemplarStores, &exemplarspb.ExemplarStore{
-				ExemplarsClient: exemplarspb.NewExemplarsClient(er.cc),
-				LabelSets:       labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				ExemplarsClient:        exemplarspb.NewExemplarsClient(er.cc),
+				LabelSets:              labelpb.ZLabelSetsToPromLabelSets(er.metadata.LabelSets...),
+				SupportsExternalLabels: er.ComponentType() == component.Query,
 			})
 		}
 	}
@@ -620,12 +638,8 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 
 	statuses := make([]EndpointStatus, 0, len(e.endpoints))
 	for _, v := range e.endpoints {
-		v.mtx.RLock()
-		defer v.mtx.RUnlock()
-
-		status := v.status
-		if status != nil {
-			statuses = append(statuses, *status)
+		if status, ok := v.Status(); ok {
+			statuses = append(statuses, status)
 		}
 	}
 
@@ -638,7 +652,7 @@ func (e *EndpointSet) GetEndpointStatus() []EndpointStatus {
 type endpointRef struct {
 	storepb.StoreClient
 
-	mtx      sync.RWMutex
+	mtx      *sync.RWMutex
 	cc       *grpc.ClientConn
 	addr     string
 	isStrict bool
@@ -664,6 +678,7 @@ func (e *EndpointSet) newEndpointRef(spec *GRPCEndpointSpec) (*endpointRef, erro
 		addr:     spec.Addr(),
 		isStrict: spec.isStrictStatic,
 		cc:       conn,
+		mtx:      &sync.RWMutex{},
 	}, nil
 }
 
@@ -780,6 +795,16 @@ func (er *endpointRef) HasStatusAPI() bool {
 	defer er.mtx.RUnlock()
 
 	return er.metadata != nil && er.metadata.Status != nil
+}
+
+func (er *endpointRef) Status() (EndpointStatus, bool) {
+	er.mtx.RLock()
+	defer er.mtx.RUnlock()
+
+	if er.status == nil {
+		return EndpointStatus{}, false
+	}
+	return *er.status, true
 }
 
 func (er *endpointRef) LabelSets() []labels.Labels {

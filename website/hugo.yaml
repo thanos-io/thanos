@@ -28,6 +28,9 @@ permalinks:
   # TODO(bwplotka): Move to mdox + fixes to ensure we don't need to manually do this.
   # For now we added few entries for advance.
   tip: "/:sections/:filename.md"
+  v0.41: "/:sections/:filename.md"
+  v0.40: "/:sections/:filename.md"
+  v0.39: "/:sections/:filename.md"
   v0.38: "/:sections/:filename.md"
   v0.37: "/:sections/:filename.md"
   v0.36: "/:sections/:filename.md"
@@ -80,4 +83,4 @@ markup:
       # We want to be able to put our own HTML.
       unsafe: true
 
-summaryLength: 50      
+summaryLength: 50

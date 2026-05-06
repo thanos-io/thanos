@@ -16,8 +16,12 @@ type WorkerPool interface {
 	// Init initializes the worker pool.
 	Init()
 
-	// Go waits until the next worker becomes available and executes the given work.
-	Go(work Work)
+	// Go waits until the next worker becomes available or the context is canceled.
+	// Returns ctx.Err() if the context is canceled before a worker slot is available.
+	Go(ctx context.Context, work Work) error
+
+	// TryGo submits work without blocking. Returns false if the pool is at capacity.
+	TryGo(work Work) bool
 
 	// Close cancels all workers and waits for them to finish.
 	Close()
@@ -60,9 +64,24 @@ func (p *workerPool) Init() {
 	})
 }
 
-func (p *workerPool) Go(work Work) {
+func (p *workerPool) Go(ctx context.Context, work Work) error {
 	p.Init()
-	p.workCh <- work
+	select {
+	case p.workCh <- work:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (p *workerPool) TryGo(work Work) bool {
+	p.Init()
+	select {
+	case p.workCh <- work:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *workerPool) Close() {

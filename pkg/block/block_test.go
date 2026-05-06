@@ -144,7 +144,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 
 		m := &metadata.Meta{}
@@ -166,7 +166,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, Upload(ctx, log.NewNopLogger(), bkt, path.Join(tmpDir, "test", b1.String()), metadata.NoneFunc))
 		testutil.Equals(t, 3, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b1.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b1.String(), IndexFilename)]))
 		testutil.Equals(t, true, 600 < len(bkt.Objects()[path.Join(b1.String(), MetaFilename)]))
 	}
 	{
@@ -198,7 +198,7 @@ func TestUpload(t *testing.T) {
 		testutil.Ok(t, err)
 		testutil.Equals(t, 6, len(bkt.Objects()))
 		testutil.Equals(t, 3727, len(bkt.Objects()[path.Join(b2.String(), ChunksDirname, "000001")]))
-		testutil.Equals(t, 401, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
+		testutil.Equals(t, 327, len(bkt.Objects()[path.Join(b2.String(), IndexFilename)]))
 
 		m := &metadata.Meta{}
 		testutil.Ok(t, json.Unmarshal(bkt.Objects()[path.Join(b2.String(), MetaFilename)], m))
@@ -255,6 +255,22 @@ func TestDelete(t *testing.T) {
 		// Remove meta.json and check if delete can delete it.
 		testutil.Ok(t, bkt.Delete(ctx, path.Join(b2.String(), MetaFilename)))
 		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b2))
+		testutil.Equals(t, 0, len(bkt.Objects()))
+	}
+	{
+		b3 := ulid.MustNew(3, nil)
+
+		// Upload explicit directory markers.
+		dirName := b3.String() + objstore.DirDelim
+		testutil.Ok(t, bkt.Upload(ctx, dirName, bytes.NewReader([]byte{})))
+
+		chunksDirName := path.Join(b3.String(), ChunksDirname) + objstore.DirDelim
+		testutil.Ok(t, bkt.Upload(ctx, chunksDirName, bytes.NewReader([]byte{})))
+
+		testutil.Equals(t, 2, len(bkt.Objects()))
+
+		// Check if delete also deletes the directory markers.
+		testutil.Ok(t, Delete(ctx, log.NewNopLogger(), bkt, b3))
 		testutil.Equals(t, 0, len(bkt.Objects()))
 	}
 }

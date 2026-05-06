@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -278,6 +277,29 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedConnMetrics: metricsMeta +
 				`
 			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			`,
+		},
+		{
+			name: "no extlset on 2 endpoints",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						return labelpb.ZLabelSetsFromPromLabels()
+					},
+				},
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						return labelpb.ZLabelSetsFromPromLabels()
+					},
+				},
+			},
+
+			expectedEndpoints: 2,
+			expectedConnMetrics: metricsMeta +
+				`
+			thanos_store_nodes_grpc_connections{external_labels="no_external_labels",store_type="sidecar"} 2
 			`,
 		},
 		{
@@ -1543,6 +1565,7 @@ func TestUpdateEndpointStateLastError(t *testing.T) {
 			metadata: &endpointMetadata{
 				&infopb.InfoResponse{},
 			},
+			mtx: &sync.RWMutex{},
 		}
 
 		mockEndpointRef.update(time.Now, mockEndpointRef.metadata, tc.InputError)
@@ -1561,6 +1584,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
+		mtx: &sync.RWMutex{},
 	}
 
 	mockEndpointRef.update(time.Now, mockEndpointRef.metadata, errors.New("test err"))
@@ -1578,7 +1602,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 }
 
 func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, log.NewLogfmtLogger(os.Stderr), nil,
+	endpointSet := NewEndpointSet(now, log.NewNopLogger(), nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict, testGRPCOpts...))
@@ -1642,6 +1666,7 @@ func TestDeadlockLocking(t *testing.T) {
 		metadata: &endpointMetadata{
 			&infopb.InfoResponse{},
 		},
+		mtx: &sync.RWMutex{},
 	}
 
 	g := &errgroup.Group{}
@@ -1663,6 +1688,42 @@ func TestDeadlockLocking(t *testing.T) {
 			mockEndpointRef.HasMetricMetadataAPI()
 			mockEndpointRef.HasRulesAPI()
 			mockEndpointRef.HasTargetsAPI()
+		}
+		return nil
+	})
+
+	testutil.Ok(t, g.Wait())
+}
+
+func TestUpdateVsGetEndpointStatusDeadlock(t *testing.T) {
+	t.Parallel()
+
+	endpoints, err := startTestEndpoints(makeInfoResponses(10))
+	testutil.Ok(t, err)
+	defer endpoints.Close()
+
+	discoveredEndpointAddr := endpoints.EndpointAddresses()
+	endpointSet := makeEndpointSet(discoveredEndpointAddr, false, time.Now)
+	defer endpointSet.Close()
+
+	endpointSet.Update(context.Background())
+	testutil.Equals(t, 10, len(endpointSet.GetEndpointStatus()))
+
+	g := &errgroup.Group{}
+	deadline := time.Now().Add(3 * time.Second)
+
+	for range 3 {
+		g.Go(func() error {
+			for !time.Now().After(deadline) {
+				_ = endpointSet.GetEndpointStatus()
+			}
+			return nil
+		})
+	}
+
+	g.Go(func() error {
+		for !time.Now().After(deadline) {
+			endpointSet.Update(context.Background())
 		}
 		return nil
 	})

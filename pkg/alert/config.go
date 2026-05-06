@@ -146,5 +146,10 @@ func LoadRelabelConfigs(confYaml []byte) ([]*relabel.Config, error) {
 	if err := yaml.UnmarshalStrict(confYaml, &cfg); err != nil {
 		return nil, err
 	}
+	for _, c := range cfg {
+		if err := c.Validate(model.UTF8Validation); err != nil {
+			return nil, errors.Wrap(err, "validate relabel config")
+		}
+	}
 	return cfg, nil
 }

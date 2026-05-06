@@ -6,9 +6,11 @@ package queryrange
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/jpillora/backoff"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/weaveworks/common/httpgrpc"
@@ -60,6 +62,13 @@ func (r retry) Do(ctx context.Context, req Request) (Response, error) {
 	tries := 0
 	defer func() { r.metrics.retriesCount.Observe(float64(tries)) }()
 
+	b := &backoff.Backoff{
+		Min:    200 * time.Millisecond,
+		Max:    2 * time.Second,
+		Factor: 2,
+		Jitter: true,
+	}
+
 	var lastErr error
 	for ; tries < r.maxRetries; tries++ {
 		if ctx.Err() != nil {
@@ -78,7 +87,13 @@ func (r retry) Do(ctx context.Context, req Request) (Response, error) {
 		httpResp, ok := httpgrpc.HTTPResponseFromError(err)
 		if !ok || httpResp.Code/100 == 5 {
 			lastErr = err
-			level.Error(util_log.WithContext(ctx, r.log)).Log("msg", "error processing request", "try", tries, "err", err)
+			waitTime := b.Duration()
+			level.Error(util_log.WithContext(ctx, r.log)).Log("msg", "error processing request", "try", tries, "err", err, "wait_time", waitTime)
+			select {
+			case <-time.After(waitTime):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 			continue
 		}
 

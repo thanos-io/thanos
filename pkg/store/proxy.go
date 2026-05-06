@@ -271,7 +271,9 @@ func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
 	return infos
 }
 
-func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv storepb.Store_SeriesServer) error {
+	srv := newBatchableServer(seriesSrv, int(originalRequest.ResponseBatchSize))
+
 	// TODO(bwplotka): This should be part of request logger, otherwise it does not make much sense. Also, could be
 	// triggered by tracing span to reduce cognitive load.
 	reqLogger := log.With(s.logger, "component", "proxy")
@@ -324,6 +326,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		ShardInfo:               originalRequest.ShardInfo,
 		WithoutReplicaLabels:    originalRequest.WithoutReplicaLabels,
+		ResponseBatchSize:       originalRequest.ResponseBatchSize,
 	}
 
 	storeResponses := make([]respSet, 0, len(stores))
@@ -333,7 +336,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
-			if !r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_WARN {
+			if !r.PartialResponseDisabled && r.PartialResponseStrategy != storepb.PartialResponseStrategy_ABORT {
 				if err := srv.Send(storepb.NewWarnSeriesResponse(err)); err != nil {
 					return err
 				}
@@ -346,7 +349,6 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 		storeResponses = append(storeResponses, respSet)
 		defer respSet.Close()
 	}
-
 	level.Debug(reqLogger).Log("msg", "Series: started fanout streams", "status", strings.Join(storeDebugMsgs, ";"))
 
 	var respHeap seriesStream = NewProxyResponseLoserTree(storeResponses...)
@@ -370,6 +372,11 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, srv storepb.
 			level.Error(reqLogger).Log("msg", "failed to stream response", "error", err)
 			return status.Error(codes.Unknown, errors.Wrap(err, "send series response").Error())
 		}
+	}
+
+	// Flush any remaining buffered series from the batchable server.
+	if f, ok := srv.(flushableServer); ok {
+		return f.Flush()
 	}
 
 	return nil
@@ -412,6 +419,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	storeMatchers, _ := storepb.PromMatchersToMatchers(matchers...) // Error would be returned by matchesExternalLabels, so skip check.
 	r := &storepb.LabelNamesRequest{
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		Start:                   originalRequest.Start,
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
@@ -438,7 +446,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 			resp, err := st.LabelNames(spanCtx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
-				if r.PartialResponseDisabled {
+				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 					return err
 				}
 
@@ -515,6 +523,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	r := &storepb.LabelValuesRequest{
 		Label:                   originalRequest.Label,
 		PartialResponseDisabled: originalRequest.PartialResponseDisabled,
+		PartialResponseStrategy: originalRequest.PartialResponseStrategy,
 		Start:                   originalRequest.Start,
 		End:                     originalRequest.End,
 		Matchers:                append(storeMatchers, MatchersForLabelSets(storeLabelSets)...),
@@ -542,7 +551,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 			resp, err := st.LabelValues(spanCtx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", st)
-				if r.PartialResponseDisabled {
+				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
 					return err
 				}
 
