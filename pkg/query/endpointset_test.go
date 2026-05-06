@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -278,6 +277,29 @@ func TestEndpointSetUpdate(t *testing.T) {
 			expectedConnMetrics: metricsMeta +
 				`
 			thanos_store_nodes_grpc_connections{store_type="sidecar"} 1
+			`,
+		},
+		{
+			name: "no extlset on 2 endpoints",
+			endpoints: []testEndpointMeta{
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						return labelpb.ZLabelSetsFromPromLabels()
+					},
+				},
+				{
+					InfoResponse: sidecarInfo,
+					extlsetFn: func(addr string) []labelpb.ZLabelSet {
+						return labelpb.ZLabelSetsFromPromLabels()
+					},
+				},
+			},
+
+			expectedEndpoints: 2,
+			expectedConnMetrics: metricsMeta +
+				`
+			thanos_store_nodes_grpc_connections{external_labels="no_external_labels",store_type="sidecar"} 2
 			`,
 		},
 		{
@@ -1578,7 +1600,7 @@ func TestUpdateEndpointStateForgetsPreviousErrors(t *testing.T) {
 }
 
 func makeEndpointSet(discoveredEndpointAddr []string, strict bool, now nowFunc, metricLabels ...string) *EndpointSet {
-	endpointSet := NewEndpointSet(now, log.NewLogfmtLogger(os.Stderr), nil,
+	endpointSet := NewEndpointSet(now, log.NewNopLogger(), nil,
 		func() (specs []*GRPCEndpointSpec) {
 			for _, addr := range discoveredEndpointAddr {
 				specs = append(specs, NewGRPCEndpointSpec(addr, strict, testGRPCOpts...))
