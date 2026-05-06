@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
+	promstats "github.com/prometheus/prometheus/util/stats"
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
@@ -197,6 +198,8 @@ func (q queryStub) Exec(context.Context) *promql.Result {
 	return &promql.Result{Err: q.err, Warnings: q.warns, Value: q.result}
 }
 
+func (q queryStub) Stats() *promstats.Statistics { return nil }
+
 type queryServer struct {
 	querypb.Query_QueryServer
 
@@ -235,6 +238,97 @@ func (q *queryRangeServer) Send(r *querypb.QueryRangeResponse) error {
 
 func (q *queryRangeServer) Context() context.Context {
 	return q.ctx
+}
+
+// statsQueryStub is a promql.Query whose Stats() returns a pre-populated
+// *stats.Statistics so extractQueryStats can be tested without running the engine.
+type statsQueryStub struct {
+	promql.Query
+	stats *promstats.Statistics
+}
+
+func (q statsQueryStub) Stats() *promstats.Statistics { return q.stats }
+func (q statsQueryStub) Close()                       {}
+
+func TestExtractQueryStats_Timings(t *testing.T) {
+	timers := promstats.NewQueryTimers()
+
+	for _, qt := range []promstats.QueryTiming{
+		promstats.EvalTotalTime,
+		promstats.ResultSortTime,
+		promstats.QueryPreparationTime,
+		promstats.InnerEvalTime,
+		promstats.ExecQueueTime,
+		promstats.ExecTotalTime,
+	} {
+		tm := timers.GetTimer(qt)
+		tm.Start()
+		time.Sleep(2 * time.Millisecond)
+		tm.Stop()
+	}
+
+	qry := statsQueryStub{stats: &promstats.Statistics{Timers: timers}}
+	got := extractQueryStats(qry)
+
+	testutil.Assert(t, got.EvalTotalTimeMs > 0, "EvalTotalTimeMs should be > 0, got %d", got.EvalTotalTimeMs)
+	testutil.Assert(t, got.ResultSortTimeMs > 0, "ResultSortTimeMs should be > 0, got %d", got.ResultSortTimeMs)
+	testutil.Assert(t, got.QueryPreparationTimeMs > 0, "QueryPreparationTimeMs should be > 0, got %d", got.QueryPreparationTimeMs)
+	testutil.Assert(t, got.InnerEvalTimeMs > 0, "InnerEvalTimeMs should be > 0, got %d", got.InnerEvalTimeMs)
+	testutil.Assert(t, got.ExecQueueTimeMs > 0, "ExecQueueTimeMs should be > 0, got %d", got.ExecQueueTimeMs)
+	testutil.Assert(t, got.ExecTotalTimeMs > 0, "ExecTotalTimeMs should be > 0, got %d", got.ExecTotalTimeMs)
+}
+
+// TestGRPCQueryAPIStatsOptIn verifies that QueryStats responses are only sent
+// when the request opts in via EnableStats.
+func TestGRPCQueryAPIStatsOptIn(t *testing.T) {
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	proxy := store.NewProxyStore(logger, reg, func() []store.Client { return nil }, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty, 1)
+	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
+	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
+
+	hasStats := func(in any) bool {
+		switch r := in.(type) {
+		case []querypb.QueryResponse:
+			for _, resp := range r {
+				if resp.GetStats() != nil {
+					return true
+				}
+			}
+		case []querypb.QueryRangeResponse:
+			for _, resp := range r {
+				if resp.GetStats() != nil {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	for _, enable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("Query enable_stats=%v", enable), func(t *testing.T) {
+			api := NewGRPCAPI(time.Now, nil, queryableCreator, remoteEndpointsCreator, queryCreatorStub{result: makeVector(1)}, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+			srv := newQueryServer(context.Background())
+			err := api.Query(&querypb.QueryRequest{Query: "metric", EnableStats: enable}, srv)
+			testutil.Ok(t, err)
+			testutil.Equals(t, enable, hasStats(srv.responses))
+		})
+
+		t.Run(fmt.Sprintf("QueryRange enable_stats=%v", enable), func(t *testing.T) {
+			api := NewGRPCAPI(time.Now, nil, queryableCreator, remoteEndpointsCreator, queryCreatorStub{result: makeMatrix(1, 1)}, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+			srv := newQueryRangeServer(context.Background())
+			err := api.QueryRange(&querypb.QueryRangeRequest{
+				Query:            "metric",
+				StartTimeSeconds: 0,
+				EndTimeSeconds:   300,
+				IntervalSeconds:  10,
+				EnableStats:      enable,
+			}, srv)
+			testutil.Ok(t, err)
+			testutil.Equals(t, enable, hasStats(srv.responses))
+		})
+	}
 }
 
 // makeVector creates a test promql.Vector with the given number of samples.

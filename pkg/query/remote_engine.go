@@ -350,6 +350,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
 			ResponseBatchSize:     store.DefaultResponseBatchSize,
+			EnableStats:           true,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -429,6 +430,8 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
 		ResponseBatchSize:     store.DefaultResponseBatchSize,
+		// Required so remote engines populate samplesStats consumed below to feed into Stats().
+		EnableStats: true,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
