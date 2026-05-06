@@ -1043,6 +1043,81 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 	}
 }
 
+func TestReceiveTenantValidation(t *testing.T) {
+	t.Parallel()
+
+	const tenantLabelName = "thanos_tenant_id"
+
+	for _, tc := range []struct {
+		name         string
+		tenantHeader string
+		tenantLabel  string
+		status       int
+	}{
+		{
+			name:         "Tenant from label validation fails",
+			tenantHeader: "tenant-a",
+			tenantLabel:  "../malicious",
+			status:       http.StatusBadRequest,
+		},
+		{
+			name:         "Tenant from header validation fails",
+			tenantHeader: "../malicious",
+			status:       http.StatusBadRequest,
+		},
+		{
+			name:         "Valid tenant from header and label succeeds",
+			tenantHeader: "tenant-a",
+			tenantLabel:  "tenant-b",
+			status:       http.StatusOK,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+
+			appendables := []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			}
+
+			handlers, _, closeFunc, err := newTestHandlerHashring(tc.name, appendables, 1, AlgorithmHashmod, false)
+			if err != nil {
+				t.Fatalf("unable to create test handler: %v", err)
+			}
+			defer func() {
+				testutil.Ok(t, closeFunc())
+				// Wait a few milliseconds for peer workers to process the queue.
+				time.AfterFunc(50*time.Millisecond, func() {
+					for _, h := range handlers {
+						h.Close()
+					}
+				})
+			}()
+
+			h := handlers[0]
+			h.splitTenantLabelName = tenantLabelName
+
+			wreq := &prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{Name: "__name__", Value: "test_metric"},
+							{Name: tenantLabelName, Value: tc.tenantLabel},
+						},
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: time.Now().UnixMilli()},
+						},
+					},
+				},
+			}
+
+			rec, err := makeRequest(h, tc.tenantHeader, wreq)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.status, rec.Code)
+		})
+	}
+}
+
 // endpointHit is a helper to determine if a given endpoint in a hashring would be selected
 // for a given time series, tenant, and replication factor.
 func endpointHit(t *testing.T, h Hashring, rf uint64, endpoint, tenant string, timeSeries *prompb.TimeSeries) bool {
@@ -1431,17 +1506,17 @@ func TestIsTenantValid(t *testing.T) {
 		{
 			name:        "test malicious tenant",
 			tenant:      "/etc/foo",
-			expectedErr: errors.New("Tenant name not valid"),
+			expectedErr: errors.New("tenant name not valid"),
 		},
 		{
 			name:        "test malicious tenant going out of receiver directory",
 			tenant:      "./../../hacker_dir",
-			expectedErr: errors.New("Tenant name not valid"),
+			expectedErr: errors.New("tenant name not valid"),
 		},
 		{
 			name:        "test slash-only tenant",
 			tenant:      "///",
-			expectedErr: errors.New("Tenant name not valid"),
+			expectedErr: errors.New("tenant name not valid"),
 		},
 		{
 			name:   "test default tenant",
