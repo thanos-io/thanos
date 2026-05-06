@@ -87,6 +87,8 @@ var (
 	errBadReplica  = errors.New("request replica exceeds receiver replication factor")
 	errNotReady    = errors.New("target not ready")
 	errUnavailable = errors.New("target not available")
+
+	errValidation = errors.New("validation error")
 )
 
 type WriteableStoreAsyncClient interface {
@@ -640,6 +642,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			responseStatusCode = http.StatusConflict
 		case errBadReplica:
 			responseStatusCode = http.StatusBadRequest
+		case errValidation:
+			responseStatusCode = http.StatusBadRequest
 		default:
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
@@ -907,6 +911,9 @@ func (h *Handler) distributeTimeseriesToReplicas(
 
 			tenantLabel := lbls.Get(h.splitTenantLabelName)
 			if tenantLabel != "" {
+				if err := tenancy.IsTenantValid(tenantLabel); err != nil {
+					return nil, nil, errors.Wrap(errValidation, err.Error())
+				}
 				tenant = tenantLabel
 
 				newLabels := labels.NewBuilder(lbls)

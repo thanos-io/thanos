@@ -22,6 +22,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8128](https://github.com/thanos-io/thanos/issues/8128): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
 - [#8720](https://github.com/thanos-io/thanos/issues/8720): Receive: Fix 503 errors during restarts in some cases.
 - [#8799](https://github.com/thanos-io/thanos/pull/8799): *: Set a `KeepaliveEnforcementPolicy` with `MinTime: 10s` on all gRPC servers, matching the client keepalive interval.
+- [#8806](https://github.com/thanos-io/thanos/pull/8806): Receive: Validate tenant IDs extracted from split-tenant labels to prevent path traversal.
 
 ### Added
 
