@@ -790,24 +790,21 @@ func runRule(
 
 					// Check if external labels match the provided matchers.
 					extLabels := conf.lset
-					if len(matchers) > 0 {
-						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
-						if err != nil {
-							return nil, errors.Wrap(err, "failed to convert matchers")
-						}
-						for _, matcher := range promMatchers {
-							if !matcher.Matches(extLabels.Get(matcher.Name)) {
-								// External labels don't match, return empty result.
-								return nil, nil
-							}
+					promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to convert matchers")
+					}
+					for _, matcher := range promMatchers {
+						if !matcher.Matches(extLabels.Get(matcher.Name)) {
+							// External labels don't match, return empty result.
+							return nil, nil
 						}
 					}
 
 					stats := tsdbDB.Head().Stats(labels.MetricName, limit)
-					result := map[string]tsdb.Stats{
+					return map[string]tsdb.Stats{
 						"": *stats,
-					}
-					return result, nil
+					}, nil
 				}),
 			),
 		)

@@ -365,16 +365,14 @@ func runSidecar(
 
 					// Check if external labels match the provided matchers.
 					extLabels := m.Labels()
-					if len(matchers) > 0 {
-						promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
-						if err != nil {
-							return nil, errors.Wrap(err, "failed to convert matchers")
-						}
-						for _, matcher := range promMatchers {
-							if !matcher.Matches(extLabels.Get(matcher.Name)) {
-								// External labels don't match, return empty result.
-								return nil, nil
-							}
+					promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to convert matchers")
+					}
+					for _, matcher := range promMatchers {
+						if !matcher.Matches(extLabels.Get(matcher.Name)) {
+							// External labels don't match, return empty result.
+							return nil, nil
 						}
 					}
 
@@ -383,10 +381,9 @@ func runSidecar(
 						return nil, errors.Wrap(err, "failed to get tsdb status from prometheus")
 					}
 
-					result := map[string]tsdb.Stats{
+					return map[string]tsdb.Stats{
 						"": statsEntry.ToTSDBStats(limit),
-					}
-					return result, nil
+					}, nil
 				}),
 			),
 		)
