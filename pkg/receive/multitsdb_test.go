@@ -541,6 +541,71 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 
 }
 
+// synctest.Test controls fake time so t.Parallel() is not used.
+func TestPeriodicHeadCompaction(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+
+		maxBlockDuration := (2 * time.Hour).Milliseconds()
+
+		m := NewMultiTSDB(dir, log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+			&tsdb.Options{
+				MinBlockDuration:  maxBlockDuration,
+				MaxBlockDuration:  maxBlockDuration,
+				RetentionDuration: (24 * time.Hour).Milliseconds(),
+			},
+			labels.FromStrings("replica", "test"),
+			"tenant_id",
+			nil,
+			false,
+			false,
+			metadata.NoneFunc,
+			WithGCImmediately(),
+		)
+		defer m.Close()
+
+		// Write 10 hours of samples upfront, simulating a large head
+		// backlog (e.g. WAL replay after a long downtime).
+		now := time.Now()
+		for step := time.Duration(0); step <= 10*time.Hour; step += time.Minute {
+			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step)))
+		}
+
+		tenant := m.testGetTenant("test-tenant")
+		db := tenant.readyStorage().Get()
+		testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+		// Precondition: head must contain the full 10h of data before
+		// we advance time, otherwise the test could pass vacuously.
+		headSpanBefore := db.Head().MaxTime() - db.Head().MinTime()
+		testutil.Assert(t, headSpanBefore >= (10*time.Hour).Milliseconds(),
+			"precondition: head should span at least 10h, got %dms", headSpanBefore)
+
+		// Advance time to let the periodic compaction ticker fire.
+		// The ticker interval is 2*maxBlockDuration (4h) with a random
+		// initial delay up to 10% of maxBlockDuration (~12min). After
+		// 8h, 1-2 ticks will have fired. A correct implementation
+		// should drain the full backlog within a single tick.
+		time.Sleep(8 * time.Hour)
+		synctest.Wait()
+
+		head := db.Head()
+		headSpanMs := head.MaxTime() - head.MinTime()
+		maxAcceptableHeadSpanMs := 2 * maxBlockDuration
+
+		testutil.Assert(t, headSpanMs <= maxAcceptableHeadSpanMs,
+			"head span is %dms, expected at most %dms",
+			headSpanMs, maxAcceptableHeadSpanMs)
+
+		// 10h of data with 2h blocks should produce at least 3 on-disk
+		// blocks. The exact count depends on the random compaction delay
+		// and how many ticks fired within the 8h window.
+		testutil.Assert(t, len(db.Blocks()) >= 3,
+			"expected at least 3 blocks, got %d",
+			len(db.Blocks()))
+	})
+}
+
 func TestMultiTSDBAddNewTenant(t *testing.T) {
 	if testing.
 		Short() {
