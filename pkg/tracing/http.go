@@ -4,6 +4,7 @@
 package tracing
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	bridge "go.opentelemetry.io/otel/bridge/opentracing"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tracing/migration"
@@ -64,9 +67,47 @@ func HTTPMiddleware(tracer opentracing.Tracer, name string, logger log.Logger, n
 			}
 		}
 
-		next.ServeHTTP(w, r.WithContext(opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)))
+		ctx := opentracing.ContextWithSpan(ContextWithTracer(r.Context(), tracer), span)
+		if isSpanSampled(span) {
+			cw := &countingResponseWriter{ResponseWriter: w}
+			next.ServeHTTP(cw, r.WithContext(ctx))
+			span.SetTag(wireBytesTagKey, cw.bytes)
+		} else {
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
 		span.Finish()
 	}
+}
+
+// countingResponseWriter wraps http.ResponseWriter to count response body bytes.
+type countingResponseWriter struct {
+	http.ResponseWriter
+	bytes int
+}
+
+func (w *countingResponseWriter) Write(b []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(b)
+	w.bytes += n
+	return n, err
+}
+
+func (w *countingResponseWriter) Flush() {
+	if f, ok := w.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// isSpanSampled reports whether the given OpenTracing span is sampled.
+// For OTEL bridge spans it checks the OTEL sampling flag; for other
+// tracers (mock, stackdriver) it conservatively returns true.
+func isSpanSampled(span opentracing.Span) bool {
+	ctx := bridge.NewBridgeTracer().ContextWithSpanHook(context.Background(), span)
+	otelSpan := trace.SpanFromContext(ctx)
+	sc := otelSpan.SpanContext()
+	if sc.IsValid() {
+		return sc.IsSampled()
+	}
+	return true
 }
 
 type tripperware struct {

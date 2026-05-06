@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -65,6 +66,10 @@ func RegisterQueryServer(queryServer querypb.QueryServer) func(*grpc.Server) {
 
 func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_QueryServer) error {
 	ctx := server.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("query.expr", request.Query)
+	}
 
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
@@ -134,9 +139,12 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		}
 	}
 
+	var numSeries, numSamples int64
 	batchSize := request.ResponseBatchSize
 	switch vector := result.Value.(type) {
 	case promql.Scalar:
+		numSeries = 1
+		numSamples = 1
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: vector.V, Timestamp: vector.T}},
 		}
@@ -144,6 +152,8 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 			return err
 		}
 	case promql.Vector:
+		numSeries = int64(len(vector))
+		numSamples = int64(len(vector))
 		if batchSize <= 1 {
 			for _, sample := range vector {
 				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
@@ -184,11 +194,21 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 		return err
 	}
 
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("result.series", numSeries)
+		span.SetTag("result.samples", numSamples)
+	}
+
 	return nil
 }
 
 func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Query_QueryRangeServer) error {
 	ctx := srv.Context()
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("query.expr", request.Query)
+	}
+
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
 		timeout := time.Duration(request.TimeoutSeconds) * time.Second
@@ -251,9 +271,14 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 		}
 	}
 
+	var numSeries, numSamples int64
 	batchSize := request.ResponseBatchSize
 	switch value := result.Value.(type) {
 	case promql.Matrix:
+		numSeries = int64(len(value))
+		for _, s := range value {
+			numSamples += int64(len(s.Floats) + len(s.Histograms))
+		}
 		if batchSize <= 1 {
 			for _, series := range value {
 				floats, histograms := prompb.SamplesFromPromqlSeries(series)
@@ -290,6 +315,8 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 			}
 		}
 	case promql.Vector:
+		numSeries = int64(len(value))
+		numSamples = int64(len(value))
 		if batchSize <= 1 {
 			for _, sample := range value {
 				floats, histograms := prompb.SamplesFromPromqlSamples(sample)
@@ -326,6 +353,8 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 			}
 		}
 	case promql.Scalar:
+		numSeries = 1
+		numSamples = 1
 		series := &prompb.TimeSeries{
 			Samples: []prompb.Sample{{Value: value.V, Timestamp: value.T}},
 		}
@@ -335,6 +364,11 @@ func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Que
 	}
 	if err := srv.Send(querypb.NewQueryRangeStatsResponse(extractQueryStats(qry))); err != nil {
 		return err
+	}
+
+	if span := opentracing.SpanFromContext(ctx); span != nil {
+		span.SetTag("result.series", numSeries)
+		span.SetTag("result.samples", numSamples)
 	}
 
 	return nil

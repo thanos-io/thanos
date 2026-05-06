@@ -91,6 +91,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			grpc_recovery.UnaryServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.UnaryServerInterceptor(),
 			tracing.UnaryServerInterceptor(tracer),
+			tracing.UnaryServerWireBytesInterceptor(),
 			selector.UnaryServerInterceptor(grpc_logging.UnaryServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
 				//if RequestConfig.GRPC.Config was provided
 				return slices.Contains(logFilterMethods, c.FullMethod())
@@ -109,6 +110,7 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 			grpc_recovery.StreamServerInterceptor(grpc_recovery.WithRecoveryHandler(grpcPanicRecoveryHandler)),
 			met.StreamServerInterceptor(),
 			tracing.StreamServerInterceptor(tracer),
+			tracing.StreamServerWireBytesInterceptor(),
 			selector.StreamServerInterceptor(grpc_logging.StreamServerInterceptor(logging_mw.InterceptorLogger(logger), logOpts...), selector.MatchFunc(func(ctx context.Context, c interceptors.CallMeta) bool {
 				return slices.Contains(logFilterMethods, c.FullMethod())
 			})),
