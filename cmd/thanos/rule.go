@@ -1011,7 +1011,9 @@ func queryFuncCreator(
 			if grpcEndpointSet != nil {
 				queryAPIClients := grpcEndpointSet.GetQueryAPIClients()
 				for _, i := range rand.Perm(len(queryAPIClients)) {
-					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{})
+					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{
+						PartialResponse: partialResponseStrategy == storepb.PartialResponseStrategy_WARN,
+					})
 					expr, err := extpromql.ParseExpr(qs)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
