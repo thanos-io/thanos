@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -401,18 +402,48 @@ func runReceive(
 		statusSrv := status.NewServer(
 			component.Receive.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
+					promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to convert matchers")
+					}
+
+					// Build the list of tenant IDs if the request matches
+					// against exact tenant values only.
 					var tenantIDs []string
-					if tenantID != "" {
-						tenantIDs = append(tenantIDs, tenantID)
+					for _, promMatcher := range promMatchers {
+						if promMatcher.Name != conf.tenantLabelName {
+							continue
+						}
+
+						if promMatcher.Type != labels.MatchEqual {
+							tenantIDs = nil
+							break
+						}
+
+						tenantIDs = append(tenantIDs, promMatcher.Value)
 					}
 
 					stats := map[string]tsdb.Stats{}
+					// Get stats for all tenants and filter based on external labels matching.
 					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+						extLabels := labels.NewBuilder(lset).Set(conf.tenantLabelName, ts.Tenant).Labels()
+
+						var skip bool
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								skip = true
+								break
+							}
+						}
+						if skip {
+							continue
+						}
+
 						stats[ts.Tenant] = *ts.Stats
 					}
 
