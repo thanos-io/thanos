@@ -34,6 +34,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8770](https://github.com/thanos-io/thanos/pull/8770): Receive: add `--remote-write.server-tls-curves` to configure curves for the HTTP server.
 - [#8808](https://github.com/thanos-io/thanos/pull/8808): ruler, sidecar: Add TSDB stats endpoint to gRPC server.
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration.
+- [#8807](https://github.com/thanos-io/thanos/pull/8807): Rule: enable grpc client flags
 
 ### Changed
 

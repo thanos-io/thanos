@@ -86,10 +86,11 @@ import (
 )
 
 type ruleConfig struct {
-	http    httpConfig
-	grpc    grpcConfig
-	web     webConfig
-	shipper shipperConfig
+	http       httpConfig
+	grpc       grpcConfig
+	grpcClient grpcClientConfig
+	web        webConfig
+	shipper    shipperConfig
 
 	query              queryConfig
 	queryConfigYAML    []byte
@@ -127,6 +128,7 @@ type Expression struct {
 func (rc *ruleConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.http.registerFlag(cmd)
 	rc.grpc.registerFlag(cmd)
+	rc.grpcClient.registerFlag(cmd)
 	rc.web.registerFlag(cmd)
 	rc.shipper.registerFlag(cmd)
 	rc.query.registerFlag(cmd)
@@ -418,22 +420,33 @@ func runRule(
 	}
 
 	if len(grpcEndpoints) > 0 {
-		dialOpts, err := extgrpc.StoreClientGRPCOpts(
+		dialOpts, err := conf.grpcClient.dialOptions(logger, reg, tracer)
+		if err != nil {
+			return err
+		}
+
+		tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(
 			logger,
-			reg,
-			tracer,
+			conf.grpcClient.secure,
+			conf.grpcClient.skipVerify,
+			conf.grpcClient.cert,
+			conf.grpcClient.key,
+			conf.grpcClient.caCert,
+			conf.grpcClient.serverName,
+			conf.grpcClient.minTLSVersion,
 		)
 		if err != nil {
 			return err
 		}
 
-		tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, false, false, "", "", "", "", "")
-		if err != nil {
-			return err
+		grpcTLSConfig := &tlsConfig{
+			Enabled:                  &conf.grpcClient.secure,
+			InsecureSkipVerification: &conf.grpcClient.skipVerify,
+			CertFile:                 &conf.grpcClient.cert,
+			KeyFile:                  &conf.grpcClient.key,
+			CAFile:                   &conf.grpcClient.caCert,
+			MinVersion:               &conf.grpcClient.minTLSVersion,
 		}
-
-		// No TLS config for rule component
-		noTLSConfig := &tlsConfig{}
 
 		grpcEndpointSet, err = setupEndpointSet(
 			g,
@@ -454,9 +467,9 @@ func runRule(
 			5*time.Second,
 			conf.evalInterval,
 			dialOpts,
-			noTLSConfig,
+			grpcTLSConfig,
 			tlsDialOpts,
-			"", // no global compression
+			conf.grpcClient.compression,
 			[]string{},
 		)
 		if err != nil {
