@@ -191,6 +191,21 @@
   background: var(--level-6);
 }
 
+.sourceLabels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: 8vw;
+}
+
+.labelBadge {
+  font-size: 0.7em;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .blockInput {
   margin-bottom: 12px;
 }

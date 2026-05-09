@@ -1,5 +1,5 @@
-import React, { FC } from 'react';
-import { Block, BlocksPool } from './block';
+import React, { FC, useMemo } from 'react';
+import { Block, BlocksPool, LabelSet } from './block';
 import { BlockSpan } from './BlockSpan';
 import styles from './blocks.module.css';
 import { getBlockByUlid, getBlocksByCompactionLevel, humanizeBytes, sumBlockSizeStats } from './helpers';
@@ -34,6 +34,18 @@ export interface SourceViewProps {
   compactionLevel: number;
 }
 
+const getLabelsFromPool = (data: BlocksPool): LabelSet => {
+  for (const key of Object.keys(data)) {
+    const rows = data[key];
+    for (const row of rows) {
+      if (row.length > 0) {
+        return row[0].thanos.labels;
+      }
+    }
+  }
+  return {};
+};
+
 export const SourceView: FC<SourceViewProps> = ({
   data,
   title,
@@ -44,12 +56,22 @@ export const SourceView: FC<SourceViewProps> = ({
   compactionLevel,
 }) => {
   const blockSizeStats = sumBlockSizeStats(data, compactionLevel);
+  const labels = useMemo(() => getLabelsFromPool(data), [data]);
   return (
     <>
       <div className={styles.source}>
         <div className={styles.title} title={title}>
           <span>{title}</span>
           <span title={blockSizeStats.totalBytes + ' Bytes'}>{humanizeBytes(blockSizeStats.totalBytes)}</span>
+          {Object.keys(labels).length > 0 && (
+            <span className={styles.sourceLabels}>
+              {Object.entries(labels).map(([key, value]) => (
+                <span key={key} className={styles.labelBadge}>
+                  {key}=&quot;{value}&quot;
+                </span>
+              ))}
+            </span>
+          )}
         </div>
         <div className={styles.rowsContainer}>
           {Object.keys(data).map((k) => (

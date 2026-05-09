@@ -22,12 +22,14 @@ describe('Blocks SourceView', () => {
 
   const sourceView = mount(<SourceView {...defaultProps} />);
 
-  it('renders a paragraph with title and size', () => {
-    const title = sourceView.find('div > span');
-    expect(title).toHaveLength(2);
+  it('renders a paragraph with title, size, and labels', () => {
+    const spans = sourceView.find('div > span');
+    expect(spans.length).toBeGreaterThanOrEqual(2);
 
-    expect(title.find('span').at(0).text()).toEqual(source);
-    expect(title.find('span').at(1).text()).toEqual('3.50 GiB');
+    expect(spans.at(0).text()).toEqual(source);
+    expect(spans.at(1).text()).toEqual('3.50 GiB');
+    // Labels should be visible on each source row
+    expect(sourceView.text()).toContain('monitor');
   });
 
   it('renders a row for each unique resolution and compaction level pair', () => {
