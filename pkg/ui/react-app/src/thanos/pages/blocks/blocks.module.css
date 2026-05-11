@@ -200,7 +200,7 @@
 
 .labelBadge {
   font-size: 0.7em;
-  color: #555;
+  color: #aaa;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
