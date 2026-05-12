@@ -420,8 +420,7 @@ func (t *tenant) generateCompactionDelay() time.Duration {
 }
 
 func (t *tenant) startPeriodicHeadCompaction() {
-	// NOTE(GiedriusS): from the old cmd/thanos/receive.go.
-	var interval = 2 * time.Duration(t.maxBlockDuration) * time.Millisecond
+	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
 	doIter := func() error {
 		db := t.readyS.Get()
