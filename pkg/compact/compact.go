@@ -1662,68 +1662,18 @@ func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*me
 
 // Filter passes all metas, while gathering no compact markers.
 func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
-	var localNoCompactMapMtx sync.Mutex
-
-	noCompactMarkedMap := make(map[ulid.ULID]*metadata.NoCompactMark)
-
-	// Make a copy of block IDs to check, in order to avoid concurrency issues
-	// between the scheduler and workers.
-	blockIDs := make([]ulid.ULID, 0, len(metas))
-	for id := range metas {
-		blockIDs = append(blockIDs, id)
-	}
-
-	var (
-		eg errgroup.Group
-		ch = make(chan ulid.ULID, f.concurrency)
+	noCompactMarkedMap, err := block.GatherMarkedBlocks(
+		ctx,
+		f.logger,
+		f.bkt,
+		metas,
+		f.concurrency,
+		func() *metadata.NoCompactMark { return &metadata.NoCompactMark{} },
+		metadata.NoCompactMarkFilename,
+		synced,
+		block.MarkedForNoCompactionMeta,
 	)
-
-	for i := 0; i < f.concurrency; i++ {
-		eg.Go(func() error {
-			var lastErr error
-			for id := range ch {
-				m := &metadata.NoCompactMark{}
-				// TODO(bwplotka): Hook up bucket cache here + reset API so we don't introduce API calls .
-				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
-					if errors.Cause(err) == metadata.ErrorMarkerNotFound {
-						continue
-					}
-					if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
-						level.Warn(f.logger).Log("msg", "found partial no-compact-mark.json; if we will see it happening often for the same block, consider manually deleting no-compact-mark.json from the object storage", "block", id, "err", err)
-						continue
-					}
-					// Remember the last error and continue draining the channel.
-					lastErr = err
-					continue
-				}
-
-				localNoCompactMapMtx.Lock()
-				noCompactMarkedMap[id] = m
-				localNoCompactMapMtx.Unlock()
-				synced.WithLabelValues(block.MarkedForNoCompactionMeta).Inc()
-			}
-
-			return lastErr
-		})
-	}
-
-	// Workers scheduled, distribute blocks.
-	eg.Go(func() error {
-		defer close(ch)
-
-		for _, id := range blockIDs {
-			select {
-			case ch <- id:
-				// Nothing to do.
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-
-		return nil
-	})
-
-	if err := eg.Wait(); err != nil {
+	if err != nil {
 		return errors.Wrap(err, "filter blocks marked for no compaction")
 	}
 
