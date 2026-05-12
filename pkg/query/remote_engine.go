@@ -34,6 +34,7 @@ import (
 type RemoteEndpointsCreator func(
 	replicaLabels []string,
 	partialResponse bool,
+	start, end time.Time,
 ) api.RemoteEndpoints
 
 func NewRemoteEndpointsCreator(
@@ -47,8 +48,9 @@ func NewRemoteEndpointsCreator(
 	return func(
 		replicaLabels []string,
 		partialResponse bool,
+		start, end time.Time,
 	) api.RemoteEndpoints {
-		return NewRemoteEndpoints(logger, getEndpoints, Opts{
+		return NewRemoteEndpoints(logger, getEndpoints, start, end, Opts{
 			AutoDownsample:                          autoDownsample,
 			PartialResponse:                         partialResponse,
 			ReplicaLabels:                           replicaLabels,
@@ -94,13 +96,16 @@ func (c Client) LabelSets() []labels.Labels {
 type remoteEndpoints struct {
 	logger     log.Logger
 	getClients func() []Client
+	start, end time.Time
 	opts       Opts
 }
 
-func NewRemoteEndpoints(logger log.Logger, getClients func() []Client, opts Opts) api.RemoteEndpoints {
+func NewRemoteEndpoints(logger log.Logger, getClients func() []Client, start, end time.Time, opts Opts) api.RemoteEndpoints {
 	return remoteEndpoints{
 		logger:     logger,
 		getClients: getClients,
+		start:      start,
+		end:        end,
 		opts:       opts,
 	}
 }
@@ -111,6 +116,33 @@ func (r remoteEndpoints) Engines() []api.RemoteEngine {
 	for i := range clients {
 		engines[i] = NewRemoteEngine(r.logger, clients[i], r.opts)
 	}
+
+	// NOTE(Aleksandr Krivoshchekov):
+	//     This is a hack for now. I'll find a more elegant approach later.
+
+	// Prune TSDBInfos.
+	start := r.start.UnixMilli()
+	end := r.end.UnixMilli()
+	for _, engine := range engines {
+		e := engine.(*remoteEngine)
+
+		tsdbInfos := e.client.tsdbInfos
+
+		newClient := e.client
+		newClient.tsdbInfos = make(infopb.TSDBInfos, 0)
+
+		for _, tsdbInfo := range tsdbInfos {
+			includesStart := tsdbInfo.MinTime <= start && start <= tsdbInfo.MaxTime
+			includesEnd := tsdbInfo.MinTime <= end && end <= tsdbInfo.MaxTime
+
+			if includesStart || includesEnd {
+				newClient.tsdbInfos = append(newClient.tsdbInfos, tsdbInfo)
+			}
+		}
+
+		e.client = newClient
+	}
+
 	return engines
 }
 
