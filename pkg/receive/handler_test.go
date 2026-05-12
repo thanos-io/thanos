@@ -44,6 +44,8 @@ import (
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
@@ -1114,6 +1116,82 @@ func TestReceiveTenantValidation(t *testing.T) {
 			rec, err := makeRequest(h, tc.tenantHeader, wreq)
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.status, rec.Code)
+		})
+	}
+}
+
+func TestReceiveGRPCTenantValidation(t *testing.T) {
+	t.Parallel()
+
+	h := NewHandler(log.NewNopLogger(), &Options{
+		DefaultTenantID: tenancy.DefaultTenant,
+		ReceiverMode:    IngestorOnly,
+		Writer: NewWriter(
+			log.NewNopLogger(),
+			newFakeTenantAppendable(&fakeAppendable{
+				appender: newFakeAppender(nil, nil, nil),
+			}),
+			&WriterOptions{},
+		),
+	})
+	t.Cleanup(h.Close)
+
+	_, err := h.RemoteWrite(context.Background(), &storepb.WriteRequest{
+		Tenant:     "../malicious",
+		Timeseries: makeSeriesWithValues(1),
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, err.Error(), "tenant name not valid")
+}
+
+func TestTenantFromWriteRequest(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		defaultTenantID string
+		req             *storepb.WriteRequest
+		expected        string
+		expectedErr     string
+	}{
+		{
+			name:     "valid tenant",
+			req:      &storepb.WriteRequest{Tenant: "tenant-a"},
+			expected: "tenant-a",
+		},
+		{
+			name:            "empty tenant uses configured default",
+			defaultTenantID: tenancy.DefaultTenant,
+			req:             &storepb.WriteRequest{},
+			expected:        tenancy.DefaultTenant,
+		},
+		{
+			name:     "empty tenant uses package default",
+			req:      &storepb.WriteRequest{},
+			expected: tenancy.DefaultTenant,
+		},
+		{
+			name:        "invalid tenant",
+			req:         &storepb.WriteRequest{Tenant: "../malicious"},
+			expectedErr: "tenant name not valid",
+		},
+		{
+			name:        "nil request",
+			expectedErr: "write request is nil",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			h := &Handler{options: &Options{DefaultTenantID: tc.defaultTenantID}}
+			tenant, err := h.tenantFromWriteRequest(tc.req)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, tenant)
 		})
 	}
 }

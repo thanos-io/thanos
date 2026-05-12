@@ -1168,6 +1168,12 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
+	tenant, err := h.tenantFromWriteRequest(r)
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "invalid tenant in write request", "err", err)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
 
@@ -1175,7 +1181,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	// This skips distributeTimeseriesToReplicas and sendLocalWrite since
 	// the Router already determined this data belongs to this node.
 	if h.receiverMode == IngestorOnly {
-		err := h.writer.Write(ctx, r.Tenant, r.Timeseries)
+		err := h.writer.Write(ctx, tenant, r.Timeseries)
 		if err != nil {
 			level.Debug(h.logger).Log("msg", "failed to write to local TSDB", "err", err)
 		}
@@ -1193,7 +1199,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		}
 	}
 
-	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	_, err = h.handleRequest(ctx, uint64(r.Replica), tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -1211,6 +1217,23 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+}
+
+func (h *Handler) tenantFromWriteRequest(r *storepb.WriteRequest) (string, error) {
+	if r == nil {
+		return "", errors.New("write request is nil")
+	}
+	tenant := r.Tenant
+	if tenant == "" {
+		tenant = h.options.DefaultTenantID
+	}
+	if tenant == "" {
+		tenant = tenancy.DefaultTenant
+	}
+	if err := tenancy.IsTenantValid(tenant); err != nil {
+		return "", err
+	}
+	return tenant, nil
 }
 
 // relabel relabels the time series labels in the remote write request.
