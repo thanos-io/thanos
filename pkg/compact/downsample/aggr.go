@@ -23,6 +23,7 @@ type AggrChunk []byte
 func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
 	var b []byte
 	buf := [8]byte{}
+	lastNil := chks[AggrCounter] == nil
 
 	for _, c := range chks {
 		// Unset aggregates are marked with a zero length entry.
@@ -36,6 +37,11 @@ func EncodeAggrChunk(chks [5]chunkenc.Chunk) *AggrChunk {
 		b = append(b, buf[:n]...)
 		b = append(b, byte(c.Encoding()))
 		b = append(b, c.Bytes()...)
+	}
+	// Keep one trailing byte when the last aggregate is missing so decoders that
+	// validate size before handling zero-length entries don't fail on the final field.
+	if lastNil {
+		b = append(b, 0)
 	}
 	chk := AggrChunk(b)
 	return &chk
