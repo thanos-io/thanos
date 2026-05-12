@@ -754,7 +754,7 @@ func createBlockSeries(bDir string, inputSeries []seriesSamples) (err error) {
 				return err
 			}
 			for _, sa := range chk {
-				a.Append(sa.t, sa.v)
+				a.Append(0, sa.t, sa.v)
 			}
 			chks = append(chks, chunks.Meta{Chunk: x, MinTime: chk[0].t, MaxTime: chk[len(chk)-1].t})
 		}

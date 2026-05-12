@@ -290,6 +290,10 @@ func (p *delSeriesIterator) AtT() int64 {
 	return t
 }
 
+func (p *delSeriesIterator) AtST() int64 {
+	return 0
+}
+
 func (p *delSeriesIterator) Err() error {
 	if err := p.delGenericSeriesIterator.Err(); err != nil {
 		return err
@@ -337,11 +341,11 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 	t, v := p.currDelIter.At()
 	p.curr.MinTime = t
-	app.Append(t, v)
+	app.Append(0, t, v)
 
 	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
-		app.Append(t, v)
+		app.Append(0, t, v)
 	}
 	if err := p.currDelIter.Err(); err != nil {
 		p.err = errors.Wrap(err, "iterate chunk while re-encoding")
@@ -373,9 +377,11 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 		lbls := s.Labels()
 		chksIter := s.Iterator(nil)
 
-		// The labels have to be copied because `relabel.Process` is now overwriting the original
-		// labels to same memory. This happens since Prometheus v2.39.0.
-		if processedLabels, _ := relabel.Process(lbls.Copy(), d.relabels...); processedLabels.IsEmpty() {
+		// Use a labels.Builder for relabel.ProcessBuilder.
+		lb := labels.NewBuilder(lbls.Copy())
+		keep := relabel.ProcessBuilder(lb, d.relabels...)
+		processedLabels := lb.Labels()
+		if !keep || processedLabels.IsEmpty() {
 			// Special case: Delete whole series if no labels are present.
 			var (
 				minT int64 = math.MaxInt64

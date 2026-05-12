@@ -20,6 +20,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"gopkg.in/yaml.v2"
 
@@ -264,7 +265,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	set[g.group.Name] = struct{}{}
 
 	for i, r := range g.group.Rules {
-		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation) {
+		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation, parser.NewParser(parser.Options{})) {
 			var ruleName string
 			if r.Alert != "" {
 				ruleName = r.Alert
