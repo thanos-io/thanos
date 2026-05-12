@@ -420,8 +420,7 @@ func (t *tenant) generateCompactionDelay() time.Duration {
 }
 
 func (t *tenant) startPeriodicHeadCompaction() {
-	// NOTE(GiedriusS): from the old cmd/thanos/receive.go.
-	var interval = 2 * time.Duration(t.maxBlockDuration) * time.Millisecond
+	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
 	doIter := func() error {
 		db := t.readyS.Get()
@@ -432,18 +431,34 @@ func (t *tenant) startPeriodicHeadCompaction() {
 		if head.MinTime() < 0 {
 			return nil
 		}
-		sinceOldestDataMillis := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
 
-		// NOTE(GiedriusS): this is what Prometheus does. 0.5 is an extra appending window.
+		// Wall-clock time determines whether the head is old enough to compact,
+		// ensuring tenants that stopped receiving samples still get flushed.
+		// The head's data span (MaxTime - MinTime) determines how many blocks
+		// to produce, compacting until the span drops below the threshold.
 		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
-		if sinceOldestDataMillis > compactionThreshold {
+		sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+		if sinceOldestSampleMs <= compactionThreshold {
+			return nil
+		}
+
+		for {
+			select {
+			case <-t.doneC:
+				return nil
+			default:
+			}
+
 			if err := t.compactHead(db); err != nil {
 				return fmt.Errorf("compact head: %w", err)
 			}
 			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
-		}
 
-		return nil
+			head = db.Head()
+			if head.MaxTime()-head.MinTime() <= compactionThreshold {
+				return nil
+			}
+		}
 	}
 
 	compactionDelay := t.generateCompactionDelay()
