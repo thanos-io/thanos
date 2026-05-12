@@ -102,18 +102,19 @@ type ruleConfig struct {
 
 	rwConfig *extflag.PathOrContent
 
-	resendDelay        time.Duration
-	evalInterval       time.Duration
-	queryOffset        time.Duration
-	outageTolerance    time.Duration
-	forGracePeriod     time.Duration
-	ruleFiles          []string
-	objStoreConfig     *extflag.PathOrContent
-	dataDir            string
-	lset               labels.Labels
-	ignoredLabelNames  []string
-	storeRateLimits    store.SeriesSelectLimits
-	ruleConcurrentEval int64
+	resendDelay          time.Duration
+	evalInterval         time.Duration
+	queryOffset          time.Duration
+	outageTolerance      time.Duration
+	forGracePeriod       time.Duration
+	ruleFiles            []string
+	objStoreConfig       *extflag.PathOrContent
+	dataDir              string
+	lset                 labels.Labels
+	ignoredLabelNames    []string
+	storeRateLimits      store.SeriesSelectLimits
+	ruleConcurrentEval   int64
+	restoreNewRuleGroups bool
 
 	extendedFunctionsEnabled   bool
 	EnableFeatures             []string
@@ -167,6 +168,8 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
 	cmd.Flag("rule-concurrent-evaluation", "How many rules can be evaluated concurrently. Default is 1.").Default("1").Int64Var(&conf.ruleConcurrentEval)
+	cmd.Flag("restore-new-rule-groups", "Enable restoring the 'for' state of new rule groups added via config reload by querying ALERTS_FOR_STATE series.").
+		Default("false").BoolVar(&conf.restoreNewRuleGroups)
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
@@ -646,6 +649,7 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
+			RestoreNewRuleGroups:   conf.restoreNewRuleGroups,
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
