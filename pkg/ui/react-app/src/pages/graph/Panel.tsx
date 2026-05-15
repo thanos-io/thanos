@@ -19,6 +19,7 @@ import Select from 'react-select';
 import moment from 'moment-timezone';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
+import FanoutTable from '../../components/FanoutTable';
 import { ExplainTree } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
@@ -647,9 +648,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row hidden={!(options.analyze && this.state.analysis)}>
           <Col>
+            <h5>Engine telemetry</h5>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
               <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
             </Alert>
+          </Col>
+        </Row>
+        <Row hidden={!(options.analyze && this.state.analysis)}>
+          <Col>
+            <FanoutTable node={this.state.analysis} />
           </Col>
         </Row>
         <Row hidden={!(this.props.options.engine === 'thanos' && this.state.explainOutput)}>

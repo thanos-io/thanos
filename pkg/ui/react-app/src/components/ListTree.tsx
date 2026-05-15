@@ -2,11 +2,23 @@ import React, { useState } from 'react';
 import { InputProps, Collapse, ListGroupItem, ListGroup, Tooltip } from 'reactstrap';
 import { ExplainTree } from '../pages/graph/ExpressionInput';
 
+export interface FanoutEntry {
+  endpointAddr?: string;
+  duration?: string;
+  bytesProcessed?: number;
+  numResponses?: number;
+  series?: number;
+  chunks?: number;
+  samples?: number;
+}
+
 export interface QueryTree {
   name: string;
   executionTime?: string;
   peakSamples?: number;
   totalSamples?: number;
+  operatorId?: number;
+  fanout?: FanoutEntry[];
   children?: QueryTree[];
 }
 

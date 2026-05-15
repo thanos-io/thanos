@@ -1722,6 +1722,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
 						nil,
+						nil,
 					)
 				} else {
 					resp = newLazyRespSet(
@@ -1735,6 +1736,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
 						max(s.lazyRetrievalMaxBufferedResponses, 1),
+						nil,
 					)
 				}
 

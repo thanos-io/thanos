@@ -70,7 +70,7 @@ require (
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488
-	github.com/thanos-io/promql-engine v0.0.0-20260119085929-dd5223783674
+	github.com/thanos-io/promql-engine v0.0.0-20260513095632-c5f6038078e3
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/vimeo/galaxycache v1.3.1
 	github.com/weaveworks/common v0.0.0-20230728070032-dd9e68f319d5
