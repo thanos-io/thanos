@@ -2874,3 +2874,174 @@ func TestDownsampleNHCutNewChunk(t *testing.T) {
 	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncFloatHistogram))
 	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncHistogram))
 }
+
+// Helper function to create a raw block with histograms (no downsampling).
+func createBlockWithHistograms(t *testing.T, histograms []histogram.FloatHistogram) *memBlock {
+	var ts int64 = 0
+	samples := make([]sample, 0, len(histograms))
+	for _, fh := range histograms {
+		samples = append(samples, sample{t: ts, fh: &fh})
+		ts += 30_000
+	}
+
+	return blockFromChunks(chunksFromHistogramSamples(t, samples))
+}
+
+// TestDownsampleCustomBucketHistograms tests downsampling of native histograms with custom buckets (NHCB).
+func TestDownsampleCustomBucketHistograms(t *testing.T) {
+	tests := []struct {
+		name string
+		take int // Number of histograms to generate and test
+	}{
+		{
+			name: "2 histograms",
+			take: 2,
+		},
+		{
+			name: "5 histograms",
+			take: 5,
+		},
+		{
+			name: "10 histograms",
+			take: 10,
+		},
+		{
+			name: "1 histogram",
+			take: 1,
+		},
+		{
+			name: "20 histograms",
+			take: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			logger := log.NewLogfmtLogger(os.Stderr)
+
+			// Create a raw block with custom bucket histograms using tsdbutil helpers.
+			gens := tsdbutil.GenerateTestCustomBucketsFloatHistograms(tt.take)
+			inputHistograms := make([]histogram.FloatHistogram, tt.take)
+			for i := 0; i < tt.take; i++ {
+				inputHistograms[i] = *gens[i]
+			}
+			mb := createBlockWithHistograms(t, inputHistograms)
+
+			fakeMeta := &metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					MinTime: 0,
+					MaxTime: int64((tt.take - 1) * 30_000),
+				},
+			}
+
+			// Downsample to 5m resolution.
+			resLevel1, err := Downsample(context.Background(), logger, fakeMeta, mb, dir, ResLevel1)
+			testutil.Ok(t, err)
+
+			// Verify downsampled values at 5m resolution.
+			_, lbls, chks := GetMetaLabelsAndChunks(t, dir, resLevel1)
+			testutil.Equals(t, 1, len(lbls))
+			testutil.Assert(t, len(chks) > 0, "expected at least one chunk")
+
+			// Read and verify the downsampled counter aggregate.
+			chunkr, err := chunks.NewDirReader(filepath.Join(dir, resLevel1.String(), block.ChunksDirname), NewPool())
+			testutil.Ok(t, err)
+			defer chunkr.Close()
+
+			c, _, err := chunkr.ChunkOrIterable(chks[0][0])
+			testutil.Ok(t, err)
+			aggrChunk := c.(*AggrChunk)
+
+			// Verify counter aggregate - should accumulate all histograms.
+			counterChunk, err := aggrChunk.Get(AggrCounter)
+			testutil.Ok(t, err)
+
+			var counterSamples []sample
+			testutil.Ok(t, expandChunkIterator(counterChunk.Iterator(nil), counterChunk.Encoding(), &counterSamples))
+			testutil.Assert(t, len(counterSamples) > 0, "expected at least one counter sample")
+
+			// Counter should be accumulated: sum of all histograms.
+			expectedCounter := inputHistograms[0].Copy()
+			for i := 1; i < tt.take; i++ {
+				_, _, _, err = expectedCounter.Add(&inputHistograms[i])
+				testutil.Ok(t, err)
+			}
+
+			// Verify schema preserved.
+			testutil.Equals(t, histogram.CustomBucketsSchema, counterSamples[len(counterSamples)-1].fh.Schema)
+			// Verify custom values preserved.
+			testutil.Equals(t, inputHistograms[0].CustomValues, counterSamples[len(counterSamples)-1].fh.CustomValues)
+			// Verify count accumulated.
+			testutil.Equals(t, expectedCounter.Count, counterSamples[len(counterSamples)-1].fh.Count)
+			// Verify sum accumulated.
+			testutil.Equals(t, expectedCounter.Sum, counterSamples[len(counterSamples)-1].fh.Sum)
+
+			// Downsample to 1h resolution.
+			meta, err := metadata.ReadFromDir(filepath.Join(dir, resLevel1.String()))
+			testutil.Ok(t, err)
+
+			blk, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(dir, resLevel1.String()), NewPool(), tsdb.DefaultPostingsDecoderFactory)
+			testutil.Ok(t, err)
+			defer blk.Close()
+
+			_, err = Downsample(context.Background(), logger, meta, blk, dir, ResLevel2)
+			testutil.Ok(t, err)
+		})
+	}
+}
+
+// TestDownsampleMixedExponentialAndCustomBucketHistograms tests downsampling when mixing
+// exponential bucket histograms with custom bucket histograms.
+func TestDownsampleMixedExponentialAndCustomBucketHistograms(t *testing.T) {
+	dir := t.TempDir()
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	// Create a raw block with mixed histogram types.
+	mb := createBlockWithHistograms(t, []histogram.FloatHistogram{
+		// Exponential bucket histogram
+		{
+			CounterResetHint: histogram.NotCounterReset,
+			Count:            13,
+			Sum:              3897.1,
+			Schema:           3, // Exponential buckets
+			PositiveSpans: []histogram.Span{
+				{Offset: 0, Length: 2},
+				{Offset: 1, Length: 2},
+			},
+			PositiveBuckets: []float64{1, 2, 3, 4},
+		},
+		// Custom bucket histogram
+		{
+			CounterResetHint: histogram.NotCounterReset,
+			Count:            15,
+			Sum:              4000.0,
+			Schema:           -53,                                      // Custom buckets
+			PositiveSpans:    []histogram.Span{{Offset: 0, Length: 6}}, // One span covering all 6 buckets
+			CustomValues:     []float64{1, 2, 3, 4, 5, 6, 7},           // 7 boundaries = 6 buckets
+			PositiveBuckets:  []float64{1, 3, 3, 4, 3, 1},              // 6 bucket counts
+		},
+	})
+
+	fakeMeta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			MinTime: 0,
+			MaxTime: 30_000,
+		},
+	}
+
+	// Downsample to 5m resolution.
+	resLevel1, err := Downsample(context.Background(), logger, fakeMeta, mb, dir, ResLevel1)
+	testutil.Ok(t, err)
+
+	// Downsample to 1h resolution.
+	meta, err := metadata.ReadFromDir(filepath.Join(dir, resLevel1.String()))
+	testutil.Ok(t, err)
+
+	blk, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), filepath.Join(dir, resLevel1.String()), NewPool(), tsdb.DefaultPostingsDecoderFactory)
+	testutil.Ok(t, err)
+	defer blk.Close()
+
+	_, err = Downsample(context.Background(), logger, meta, blk, dir, ResLevel2)
+	testutil.Ok(t, err)
+}
