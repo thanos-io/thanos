@@ -217,7 +217,7 @@ Flags:
                                  (mutually exclusive). Content of YAML file
                                  with tracing configuration. See format details:
                                  https://thanos.io/tip/thanos/tracing.md/#configuration
-      --[no-]enable-auto-gomemlimi
+      --[no-]enable-auto-gomemlimit
                                  Enable go runtime to automatically limit memory
                                  consumption.
       --auto-gomemlimit.ratio=0.9
@@ -239,9 +239,9 @@ Flags:
                                  disable TLS
       --grpc-server-tls-client-ca=""
                                  TLS CA to verify clients against. If no
-                                 client CA is specified, there is no clien
+                                 client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
@@ -269,7 +269,7 @@ Flags:
       --[no-]query-range.align-range-with-step
                                  Mutate incoming queries to align their
                                  start and end with their step for better
-                                 cache-ability. Note: Grafana dashboards do tha
+                                 cache-ability. Note: Grafana dashboards do that
                                  by default.
       --[no-]query-range.request-downsampled
                                  Make additional query for downsampled data in
@@ -285,7 +285,7 @@ Flags:
                                  interval in query-range.horizontal-shards
                                  requests of equal range. Using
                                  this parameter is not allowed with
-                                 query-range.split-interval. One should also se
+                                 query-range.split-interval. One should also set
                                  query-range.split-min-horizontal-shards to a
                                  value greater than 1 to enable splitting.
       --query-range.max-split-interval=0
@@ -302,7 +302,7 @@ Flags:
                                  range request; beyond this, the downstream
                                  error is returned.
       --query.max-retries-per-request=5
-                                 Maximum number of retries for a single instan
+                                 Maximum number of retries for a single instant
                                  query request; beyond this, the downstream
                                  error is returned.
       --[no-]query-frontend.enable-x-functions
@@ -322,7 +322,7 @@ Flags:
                                  scheduled in parallel by the Frontend.
       --query-range.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for query
-                                 range requests, to prevent caching very recen
+                                 range requests, to prevent caching very recent
                                  results that might still be in flux.
       --[no-]query-range.partial-response
                                  Enable partial response for query range
@@ -335,7 +335,7 @@ Flags:
       --query-range.response-cache-config=<content>
                                  Alternative to
                                  'query-range.response-cache-config-file' flag
-                                 (mutually exclusive). Content of YAML file tha
+                                 (mutually exclusive). Content of YAML file that
                                  contains response cache configuration.
       --labels.split-interval=24h
                                  Split labels requests by an interval and
@@ -351,7 +351,7 @@ Flags:
                                  scheduled in parallel by the Frontend.
       --labels.response-cache-max-freshness=1m
                                  Most recent allowed cacheable result for
-                                 labels requests, to prevent caching very recen
+                                 labels requests, to prevent caching very recent
                                  results that might still be in flux.
       --[no-]labels.partial-response
                                  Enable partial response for labels requests
@@ -367,7 +367,7 @@ Flags:
       --labels.response-cache-config=<content>
                                  Alternative to
                                  'labels.response-cache-config-file' flag
-                                 (mutually exclusive). Content of YAML file tha
+                                 (mutually exclusive). Content of YAML file that
                                  contains response cache configuration.
       --cache-compression-type=""
                                  Use compression in results cache.
@@ -380,7 +380,7 @@ Flags:
                                  Path to YAML file that contains downstream
                                  tripper configuration. If your downstream URL
                                  is localhost or 127.0.0.1 then it is highly
-                                 recommended to increase max_idle_conns_per_hos
+                                 recommended to increase max_idle_conns_per_host
                                  to at least 100.
       --query-frontend.downstream-tripper-config=<content>
                                  Alternative to
@@ -389,7 +389,7 @@ Flags:
                                  that contains downstream tripper configuration.
                                  If your downstream URL is localhost or
                                  127.0.0.1 then it is highly recommended to
-                                 increase max_idle_conns_per_host to at leas
+                                 increase max_idle_conns_per_host to at least
                                  100.
       --[no-]query-frontend.compress-responses
                                  Compress HTTP responses.
@@ -433,7 +433,7 @@ Flags:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
       --request.logging-config=<content>
                                  Alternative to 'request.logging-config-file'
-                                 flag (mutually exclusive). Conten
+                                 flag (mutually exclusive). Content
                                  of YAML file with request logging
                                  configuration. See format details:
                                  https://thanos.io/tip/thanos/logging.md/#configuration
