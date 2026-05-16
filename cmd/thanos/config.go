@@ -42,9 +42,15 @@ type grpcConfig struct {
 }
 
 func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
+	return gc.registerFlagWithDefaultAddress(cmd, "0.0.0.0:10901")
+}
+
+// registerFlagWithDefaultAddress registers gRPC server flags with a configurable default bind address.
+// Use an empty string as defaultAddr to disable the gRPC server by default.
+func (gc *grpcConfig) registerFlagWithDefaultAddress(cmd extkingpin.FlagClause, defaultAddr string) *grpcConfig {
 	cmd.Flag("grpc-address",
 		"Listen ip:port address for gRPC endpoints (StoreAPI). Make sure this address is routable from other components.").
-		Default("0.0.0.0:10901").StringVar(&gc.bindAddress)
+		Default(defaultAddr).StringVar(&gc.bindAddress)
 	cmd.Flag("grpc-server-tls-cert",
 		"TLS Certificate for gRPC server, leave blank to disable TLS").
 		Default("").StringVar(&gc.tlsSrvCert)
