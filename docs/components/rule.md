@@ -485,7 +485,7 @@ Flags:
                                  Can be in glob format (repeated). Changes
                                  are detected automatically via filesystem
                                  notifications; SIGHUP and HTTP POST /-/reload
-                                 remain supported as manual triggers.
+                                 can be used to manually trigger.
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
       --eval-interval=1m         The default evaluation interval to use.
