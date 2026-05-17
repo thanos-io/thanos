@@ -152,7 +152,7 @@ func registerRule(app *extkingpin.App) {
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	cmd.Flag("data-dir", "data directory").Default("data/").StringVar(&conf.dataDir)
-	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Changes are detected automatically via filesystem notifications; SIGHUP and HTTP POST /-/reload remain supported as manual triggers.").
+	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Changes are detected automatically via filesystem notifications; SIGHUP and HTTP POST /-/reload can be used to manually trigger.").
 		Default("rules/").StringsVar(&conf.ruleFiles)
 	cmd.Flag("resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
 		Default("1m").DurationVar(&conf.resendDelay)
