@@ -167,3 +167,37 @@ func TestFileWatcher_DeletedFileFoldedIntoHash(t *testing.T) {
 
 	testutil.Equals(t, true, waitForSignal(t, w, 3*time.Second), "expected notification when a matched file is removed")
 }
+
+// TestFileWatcher_NoNotifyWhenFileUnreadable asserts that a watched file
+// becoming unreadable does NOT trigger a reload, since the rule manager
+// would otherwise be asked to reload from an inconsistent snapshot. Once
+// readability is restored and content changes, reloads resume normally.
+func TestFileWatcher_NoNotifyWhenFileUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "rules.yaml")
+	testutil.Ok(t, os.WriteFile(file, []byte("groups: []\n"), 0644))
+
+	// Short interval so the periodic safety-net tick exercises the
+	// unreadable-file path within the test timeout.
+	w := newTestWatcher(t, []string{file}, 200*time.Millisecond)
+
+	testutil.Ok(t, os.Chmod(file, 0o000))
+	defer func() { _ = os.Chmod(file, 0o644) }()
+
+	// Sanity check: if the test process can still read the file with mode
+	// 0o000 (e.g. running as root), the unreadable-file path is not
+	// actually exercised. Skip rather than report a false positive.
+	if _, err := os.ReadFile(file); err == nil {
+		t.Skip("test process can still read file with mode 0o000; skipping")
+	}
+
+	testutil.Equals(t, false, waitForSignal(t, w, 1*time.Second),
+		"expected no notification while a watched file is unreadable")
+
+	// Restore readability and change content; reloads should resume.
+	testutil.Ok(t, os.Chmod(file, 0o644))
+	testutil.Ok(t, os.WriteFile(file, []byte("groups:\n- name: g1\n"), 0644))
+
+	testutil.Equals(t, true, waitForSignal(t, w, 3*time.Second),
+		"expected notification after readability restored and content changed")
+}

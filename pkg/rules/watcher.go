@@ -78,7 +78,7 @@ func NewFileWatcher(logger log.Logger, reg prometheus.Registerer, patterns []str
 		}),
 		errorCounter: promauto.With(reg).NewCounter(prometheus.CounterOpts{
 			Name: "thanos_rule_config_files_errors_total",
-			Help: "The number of errors encountered while watching rule files.",
+			Help: "The number of errors encountered while watching or reading rule files.",
 		}),
 	}
 	// Resolve once and thread the result through refreshWatchedDirs and
@@ -91,7 +91,16 @@ func NewFileWatcher(logger log.Logger, reg prometheus.Registerer, patterns []str
 	// Seeding here (rather than in Run) means changes that happen between
 	// construction and Run starting are still detected via the fsnotify
 	// events that have queued up in the meantime.
-	fw.lastHash = fw.computeHash(files)
+	//
+	// If a watched file is currently unreadable, seeding fails. We do not
+	// fail construction over that: the periodic tick will retry, and at most
+	// one spurious notification may fire on the first successful read (the
+	// underlying reloadRules path is idempotent, so this is benign).
+	if hash, err := fw.computeHash(files); err != nil {
+		level.Warn(fw.logger).Log("msg", "could not seed rule file hash; will retry from the watcher loop", "err", err)
+	} else {
+		fw.lastHash = hash
+	}
 	return fw, nil
 }
 
@@ -213,27 +222,26 @@ func (w *FileWatcher) refreshWatchedDirs(files []string) {
 }
 
 // computeHash returns a hash deterministic over the resolved rule file set
-// and the contents of those files. Read errors are folded into the hash so
-// transient failures do not repeatedly fire change notifications. The caller
-// passes in the result of a single resolveFiles() call so this and
-// refreshWatchedDirs operate on the same filesystem snapshot.
-func (w *FileWatcher) computeHash(files []string) uint64 {
+// and the contents of those files. If any file cannot be read, the function
+// returns the error without producing a partial hash; callers must not signal
+// a reload in that case, so the rule manager is never asked to reload from
+// an inconsistent snapshot of the filesystem. The caller passes in the result
+// of a single resolveFiles() call so this and refreshWatchedDirs operate on
+// the same filesystem snapshot.
+func (w *FileWatcher) computeHash(files []string) (uint64, error) {
 	h := sha256.New()
 	for _, f := range files {
 		_, _ = h.Write([]byte(f))
 		_, _ = h.Write([]byte{0})
 		b, err := os.ReadFile(filepath.Clean(f))
 		if err != nil {
-			_, _ = h.Write([]byte("error:"))
-			_, _ = h.Write([]byte(err.Error()))
-			_, _ = h.Write([]byte{0})
-			continue
+			return 0, errors.Wrapf(err, "reading rule file %s", f)
 		}
 		_, _ = h.Write(b)
 		_, _ = h.Write([]byte{0})
 	}
 	sum := h.Sum(nil)
-	return binary.LittleEndian.Uint64(sum[:8])
+	return binary.LittleEndian.Uint64(sum[:8]), nil
 }
 
 // maybeNotify emits a signal on C() if the rule file state has changed since
@@ -241,8 +249,18 @@ func (w *FileWatcher) computeHash(files []string) uint64 {
 // successive changes coalesce into a single signal. The caller passes in the
 // result of a single resolveFiles() call so this and refreshWatchedDirs
 // operate on the same filesystem snapshot.
+//
+// If computeHash fails (a watched file is unreadable), no signal is emitted
+// and the error counter is incremented. lastHash is preserved so that a
+// successful read in a later tick correctly compares against the last good
+// snapshot and detects any real change that happened during the outage.
 func (w *FileWatcher) maybeNotify(files []string) {
-	cur := w.computeHash(files)
+	cur, err := w.computeHash(files)
+	if err != nil {
+		w.errorCounter.Inc()
+		level.Warn(w.logger).Log("msg", "skipping rule reload due to file read error", "err", err)
+		return
+	}
 	if cur == w.lastHash {
 		return
 	}
