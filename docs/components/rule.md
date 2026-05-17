@@ -481,11 +481,11 @@ Flags:
       --[no-]tsdb.wal-compression
                                  Compress the tsdb WAL.
       --data-dir="data/"         data directory
-      --rule-file=rules/ ...     Rule files that should be used by rule
-                                 manager. Can be in glob format (repeated).
-                                 Note that rules are not automatically detected,
-                                 use SIGHUP or do HTTP POST /-/reload to re-read
-                                 them.
+      --rule-file=rules/ ...     Rule files that should be used by rule manager.
+                                 Can be in glob format (repeated). Changes
+                                 are detected automatically via filesystem
+                                 notifications; SIGHUP and HTTP POST /-/reload
+                                 remain supported as manual triggers.
       --resend-delay=1m          Minimum amount of time to wait before resending
                                  an alert to Alertmanager.
       --eval-interval=1m         The default evaluation interval to use.
