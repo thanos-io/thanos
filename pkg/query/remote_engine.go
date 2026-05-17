@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/util/annotations"
 	"github.com/prometheus/prometheus/util/stats"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
@@ -338,6 +339,13 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 
 	r.samplesStats = stats.NewQuerySamples(false)
 
+	var requestTenant string
+	if tenant := ctx.Value(tenancy.TenantKey); tenant != nil {
+		if tenantStr, ok := tenant.(string); ok {
+			requestTenant = tenantStr
+		}
+	}
+
 	// Instant query.
 	if r.start.Equal(r.end) {
 		request := &querypb.QueryRequest{
@@ -350,6 +358,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			MaxResolutionSeconds:  maxResolution,
 			EnableDedup:           true,
 			ResponseBatchSize:     store.DefaultResponseBatchSize,
+			Tenant:                requestTenant,
 		}
 
 		qry, err := r.client.Query(qctx, request)
@@ -429,6 +438,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		MaxResolutionSeconds:  maxResolution,
 		EnableDedup:           true,
 		ResponseBatchSize:     store.DefaultResponseBatchSize,
+		Tenant:                requestTenant,
 	}
 	qry, err := r.client.QueryRange(qctx, request)
 	if err != nil {
