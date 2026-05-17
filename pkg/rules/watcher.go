@@ -81,13 +81,17 @@ func NewFileWatcher(logger log.Logger, reg prometheus.Registerer, patterns []str
 			Help: "The number of errors encountered while watching rule files.",
 		}),
 	}
-	fw.refreshWatchedDirs()
+	// Resolve once and thread the result through refreshWatchedDirs and
+	// computeHash so the watched directory set and the seeded hash are
+	// derived from a single consistent snapshot of the filesystem.
+	files := fw.resolveFiles()
+	fw.refreshWatchedDirs(files)
 	// Seed lastHash so the initial reloadRules() call by the consumer is not
 	// immediately followed by a redundant reload triggered by this watcher.
 	// Seeding here (rather than in Run) means changes that happen between
 	// construction and Run starting are still detected via the fsnotify
 	// events that have queued up in the meantime.
-	fw.lastHash = fw.computeHash()
+	fw.lastHash = fw.computeHash(files)
 	return fw, nil
 }
 
@@ -116,14 +120,18 @@ func (w *FileWatcher) Run(ctx context.Context) {
 			if event.Op^fsnotify.Chmod == 0 {
 				continue
 			}
-			w.refreshWatchedDirs()
-			w.maybeNotify()
+			// Resolve once per tick so refreshWatchedDirs and maybeNotify
+			// see the same filesystem snapshot.
+			files := w.resolveFiles()
+			w.refreshWatchedDirs(files)
+			w.maybeNotify(files)
 
 		case <-ticker.C:
 			// Safety net: re-add directories dropped after a remove and
 			// catch changes that fsnotify did not report.
-			w.refreshWatchedDirs()
-			w.maybeNotify()
+			files := w.resolveFiles()
+			w.refreshWatchedDirs(files)
+			w.maybeNotify(files)
 
 		case err := <-w.watcher.Errors:
 			if err != nil {
@@ -159,8 +167,10 @@ func (w *FileWatcher) resolveFiles() []string {
 
 // refreshWatchedDirs registers fsnotify against the parent directory of every
 // currently-resolved rule file, plus the directory of each configured glob
-// pattern. Directories that no longer match are removed.
-func (w *FileWatcher) refreshWatchedDirs() {
+// pattern. Directories that no longer match are removed. The caller is
+// expected to pass the result of a single resolveFiles() call so that this
+// function and a subsequent maybeNotify() operate on the same snapshot.
+func (w *FileWatcher) refreshWatchedDirs(files []string) {
 	desired := make(map[string]struct{})
 
 	add := func(path string) {
@@ -174,7 +184,7 @@ func (w *FileWatcher) refreshWatchedDirs() {
 	for _, pat := range w.patterns {
 		add(pat)
 	}
-	for _, f := range w.resolveFiles() {
+	for _, f := range files {
 		add(f)
 	}
 
@@ -204,10 +214,12 @@ func (w *FileWatcher) refreshWatchedDirs() {
 
 // computeHash returns a hash deterministic over the resolved rule file set
 // and the contents of those files. Read errors are folded into the hash so
-// transient failures do not repeatedly fire change notifications.
-func (w *FileWatcher) computeHash() uint64 {
+// transient failures do not repeatedly fire change notifications. The caller
+// passes in the result of a single resolveFiles() call so this and
+// refreshWatchedDirs operate on the same filesystem snapshot.
+func (w *FileWatcher) computeHash(files []string) uint64 {
 	h := sha256.New()
-	for _, f := range w.resolveFiles() {
+	for _, f := range files {
 		_, _ = h.Write([]byte(f))
 		_, _ = h.Write([]byte{0})
 		b, err := os.ReadFile(filepath.Clean(f))
@@ -226,9 +238,11 @@ func (w *FileWatcher) computeHash() uint64 {
 
 // maybeNotify emits a signal on C() if the rule file state has changed since
 // the previous notification. The channel is buffered (size 1) so that rapid
-// successive changes coalesce into a single signal.
-func (w *FileWatcher) maybeNotify() {
-	cur := w.computeHash()
+// successive changes coalesce into a single signal. The caller passes in the
+// result of a single resolveFiles() call so this and refreshWatchedDirs
+// operate on the same filesystem snapshot.
+func (w *FileWatcher) maybeNotify(files []string) {
+	cur := w.computeHash(files)
 	if cur == w.lastHash {
 		return
 	}
