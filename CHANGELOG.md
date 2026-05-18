@@ -14,6 +14,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#8823](https://github.com/thanos-io/thanos/issues/8823) Receive: fix panic "Invalid name validation scheme requested: unset" when using `--receive.relabel-config-file`
+
 ### Added
 
 ### Changed
