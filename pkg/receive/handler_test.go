@@ -1715,6 +1715,54 @@ func TestRelabel(t *testing.T) {
 	}
 }
 
+// parseRelabelYAML is a helper that unmarshals a YAML relabel config.
+func parseRelabelYAML(t *testing.T, raw string) []*relabel.Config {
+	t.Helper()
+	var cfgs []*relabel.Config
+	require.NoError(t, yaml.Unmarshal([]byte(raw), &cfgs))
+	return cfgs
+}
+
+// relabelYAMLFixture is a replace-action config parsed from YAML.
+// NameValidationScheme will be zero (UnsetValidation) after unmarshaling.
+const relabelYAMLFixture = `
+- source_labels: [src]
+  regex: "(.+)"
+  target_label: dst
+  action: replace
+`
+
+func TestRelabelFromYAMLConfigPanicsWithoutFix(t *testing.T) {
+	t.Parallel()
+
+	cfgs := parseRelabelYAML(t, relabelYAMLFixture)
+	require.Equal(t, model.UnsetValidation, cfgs[0].NameValidationScheme)
+
+	// Without the fix: relabel.Process panics because NameValidationScheme is unset.
+	lbls := labels.FromStrings("__name__", "m", "src", "v")
+	require.Panics(t, func() {
+		relabel.Process(lbls, cfgs...)
+	})
+}
+
+func TestRelabelFromYAMLConfigWithFix(t *testing.T) {
+	t.Parallel()
+
+	cfgs := parseRelabelYAML(t, relabelYAMLFixture)
+
+	// NewHandler applies the fix.
+	h := NewHandler(nil, &Options{RelabelConfigs: cfgs})
+	require.Equal(t, model.UTF8Validation, h.options.RelabelConfigs[0].NameValidationScheme)
+
+	// With the fix: no panic, relabeling works.
+	lbls := labels.FromStrings("__name__", "m", "src", "v")
+	require.NotPanics(t, func() {
+		ret, keep := relabel.Process(lbls, h.options.RelabelConfigs...)
+		require.True(t, keep)
+		require.Equal(t, "v", ret.Get("dst"))
+	})
+}
+
 func TestGetStatsLimitParameter(t *testing.T) {
 	t.Parallel()
 
