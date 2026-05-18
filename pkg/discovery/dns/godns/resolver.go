@@ -6,6 +6,7 @@ package godns
 import (
 	"context"
 	"net"
+	"net/netip"
 
 	"github.com/pkg/errors"
 )
@@ -20,9 +21,15 @@ func (r *Resolver) LookupIPAddrByNetwork(ctx context.Context, network, host stri
 	if err != nil {
 		return nil, err
 	}
+	// LookupIP returns bare IPs, so preserve the zone from scoped IP literals.
+	var zone string
+	if addr, err := netip.ParseAddr(host); err == nil {
+		zone = addr.Zone()
+	}
+
 	result := make([]net.IPAddr, len(ips))
 	for i, ip := range ips {
-		result[i] = net.IPAddr{IP: ip}
+		result[i] = net.IPAddr{IP: ip, Zone: zone}
 	}
 	return result, nil
 }
