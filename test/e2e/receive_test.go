@@ -1331,3 +1331,36 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 
 	testutil.Ok(t, i1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
 }
+
+// TestReceiveWithRelabelConfigSmoke tests that receive boots successfully
+// with --receive.relabel-config flag set. Regression test for issue #8823
+// where NameValidationScheme was not set on YAML-parsed relabel configs.
+func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("recv-relabel")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Relabel config with replace action - this would panic without the fix
+	// because NameValidationScheme defaults to UnsetValidation when parsed from YAML.
+	relabelConfigs := []*relabel.Config{
+		{
+			SourceLabels: model.LabelNames{"src_label"},
+			Regex:        relabel.MustNewRegexp("(.+)"),
+			TargetLabel:  "dst_label",
+			Replacement:  "replaced_${1}",
+			Action:       relabel.Replace,
+		},
+	}
+
+	// Setup receive with relabel config - should boot without panic.
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithRelabelConfigs(relabelConfigs).
+		Init()
+
+	// This will fail if receive panics during startup (issue #8823).
+	// StartAndWaitReady waits for the ready probe which confirms receive is healthy.
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+}
