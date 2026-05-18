@@ -13,6 +13,8 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/pkg/errors"
+
+	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
 type QType string
@@ -136,28 +138,25 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			return nil, errors.Errorf("missing port in address given for dnsdualstack lookup: %v", name)
 		}
 		var ips []net.IPAddr
-		var lastErr error
+		lookupErrs := errutil.MultiError{}
 
 		for _, network := range []string{"ip6", "ip4"} {
 			addrs, err := s.resolver.LookupIPAddrByNetwork(ctx, network, host)
 			if err != nil {
 				if !s.resolver.IsNotFound(err) {
-					lastErr = err
+					lookupErrs.Add(err)
 				}
 				continue
 			}
 			ips = append(ips, addrs...)
 		}
 
-		if len(ips) == 0 && lastErr != nil {
-			return nil, errors.Wrapf(lastErr, "lookup IP addresses (dual-stack) %q", host)
+		if err := lookupErrs.Err(); len(ips) == 0 && err != nil {
+			return nil, errors.Wrapf(err, "lookup IP addresses (dual-stack) %q", host)
 		}
 
 		for _, ip := range ips {
 			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
-		}
-		if len(ips) == 0 {
-			level.Error(s.logger).Log("msg", "found no IP addresses (dual-stack)", "host", host)
 		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)

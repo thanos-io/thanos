@@ -69,19 +69,19 @@ func (r *Resolver) LookupIPAddr(_ context.Context, host string) ([]net.IPAddr, e
 }
 
 func (r *Resolver) LookupIPAddrByNetwork(ctx context.Context, network, host string) ([]net.IPAddr, error) {
-	var qtype uint16
+	var qtype dns.Type
 	switch network {
 	case "ip6":
-		qtype = dns.TypeAAAA
+		qtype = dns.Type(dns.TypeAAAA)
 	case "ip4":
-		qtype = dns.TypeA
+		qtype = dns.Type(dns.TypeA)
 	default:
 		return nil, errors.Errorf("unsupported network %q", network)
 	}
 	return r.lookupIPAddrByNetwork(ctx, host, qtype, 1, 8)
 }
 
-func (r *Resolver) lookupIPAddrByNetwork(ctx context.Context, host string, qtype uint16, currIteration, maxIterations int) ([]net.IPAddr, error) {
+func (r *Resolver) lookupIPAddrByNetwork(ctx context.Context, host string, qtype dns.Type, currIteration, maxIterations int) ([]net.IPAddr, error) {
 	if currIteration > maxIterations {
 		return nil, errors.Errorf("maximum number of recursive iterations reached (%d)", maxIterations)
 	}
@@ -92,7 +92,7 @@ func (r *Resolver) lookupIPAddrByNetwork(ctx context.Context, host string, qtype
 	default:
 	}
 
-	response, err := r.lookupWithSearchPath(host, dns.Type(qtype))
+	response, err := r.lookupWithSearchPath(host, qtype)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (r *Resolver) lookupIPAddrByNetwork(ctx context.Context, host string, qtype
 		case *dns.CNAME:
 			addrs, err := r.lookupIPAddrByNetwork(ctx, addr.Target, qtype, currIteration+1, maxIterations)
 			if err != nil {
-				continue
+				return nil, errors.Wrapf(err, "recursively resolve %s", addr.Target)
 			}
 			result = append(result, addrs...)
 		}
