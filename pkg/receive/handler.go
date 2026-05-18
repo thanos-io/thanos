@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -153,6 +154,12 @@ type Handler struct {
 func NewHandler(logger log.Logger, o *Options) *Handler {
 	if logger == nil {
 		logger = log.NewNopLogger()
+	}
+
+	for _, rc := range o.RelabelConfigs {
+		if rc.NameValidationScheme == model.UnsetValidation {
+			rc.NameValidationScheme = model.UTF8Validation
+		}
 	}
 
 	var registerer prometheus.Registerer = nil
