@@ -94,8 +94,8 @@ const DefaultServiceConfig = `{
     }
   }],
   "retryThrottling": {
-    "maxTokens": 10,
-    "tokenRatio": 0.1
+    "maxTokens": 100,
+    "tokenRatio": 1.0
   }
 }`
 
@@ -149,12 +149,12 @@ func WithCompression(compression string) StoreClientGRPCOption {
 }
 
 // WithKeepaliveParams overrides the client keepalive parameters.
-// A zero time or timeout falls back to the package default (10s / 5s).
-// Note: grpc-go silently clamps Time below 10s up to 10s.
-func WithKeepaliveParams(time, timeout time.Duration, permitWithoutStream bool) StoreClientGRPCOption {
+// A zero keepaliveTime or keepaliveTimeout falls back to the package default
+// (10s / 5s). Note: grpc-go silently clamps keepaliveTime below 10s up to 10s.
+func WithKeepaliveParams(keepaliveTime, keepaliveTimeout time.Duration, permitWithoutStream bool) StoreClientGRPCOption {
 	return func(o *storeClientGRPCOpts) {
-		o.keepaliveTime = time
-		o.keepaliveTimeout = timeout
+		o.keepaliveTime = keepaliveTime
+		o.keepaliveTimeout = keepaliveTimeout
 		o.keepalivePermitWithoutStream = permitWithoutStream
 	}
 }

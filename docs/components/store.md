@@ -99,9 +99,12 @@ Flags:
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
-      --grpc-server-keepalive-time=2h
+      --grpc-server-keepalive-time=30m
                                  How often the gRPC server sends a keepalive
-                                 ping to an idle client.
+                                 ping to an idle client. Should be lower than
+                                 --grpc-server-max-connection-age (default
+                                 60m) for keepalive to be reachable before the
+                                 connection is recycled.
       --grpc-server-keepalive-timeout=20s
                                  How long the gRPC server waits for a keepalive
                                  ping ack from the client before declaring the

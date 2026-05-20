@@ -93,12 +93,12 @@ func WithMaxConnAge(t time.Duration) Option {
 }
 
 // WithKeepaliveParams sets the gRPC server keepalive parameters
-// (ServerParameters.Time and Timeout). Time controls how often the server
-// pings an idle client; Timeout is the ack deadline for that ping.
-func WithKeepaliveParams(time, timeout time.Duration) Option {
+// (ServerParameters.Time and Timeout). keepaliveTime controls how often the
+// server pings an idle client; keepaliveTimeout is the ack deadline for that ping.
+func WithKeepaliveParams(keepaliveTime, keepaliveTimeout time.Duration) Option {
 	return optionFunc(func(o *options) {
-		o.keepaliveTime = time
-		o.keepaliveTimeout = timeout
+		o.keepaliveTime = keepaliveTime
+		o.keepaliveTimeout = keepaliveTimeout
 	})
 }
 

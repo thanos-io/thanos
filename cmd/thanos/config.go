@@ -61,8 +61,8 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
 	cmd.Flag("grpc-server-keepalive-time",
-		"How often the gRPC server sends a keepalive ping to an idle client.").
-		Default("2h").DurationVar(&gc.keepaliveTime)
+		"How often the gRPC server sends a keepalive ping to an idle client. Should be lower than --grpc-server-max-connection-age (default 60m) for keepalive to be reachable before the connection is recycled.").
+		Default("30m").DurationVar(&gc.keepaliveTime)
 	cmd.Flag("grpc-server-keepalive-timeout",
 		"How long the gRPC server waits for a keepalive ping ack from the client before declaring the connection dead.").
 		Default("20s").DurationVar(&gc.keepaliveTimeout)
