@@ -78,33 +78,110 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 	return mem.BufferSlice{mem.NewBuffer(&bufExact, pool)}, nil
 }
 
-// EndpointGroupGRPCOpts creates gRPC dial options for connecting to endpoint groups.
+// DefaultServiceConfig is the default gRPC service config applied to all client connections.
+// It enables round-robin load balancing and retries on transient UNAVAILABLE errors.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
-func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
-	if serviceConfig == "" {
-		serviceConfig = `
-{
-  "loadBalancingPolicy":"round_robin",
-  "retryPolicy": {
-    "maxAttempts": 3,
-    "initialBackoff": "0.1s",
-    "backoffMultiplier": 2,
-    "retryableStatusCodes": [
-  	  "UNAVAILABLE"
-    ]
+const DefaultServiceConfig = `{
+  "loadBalancingPolicy": "round_robin",
+  "methodConfig": [{
+    "name": [{}],
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "initialBackoff": "0.1s",
+      "maxBackoff": "1s",
+      "backoffMultiplier": 2,
+      "retryableStatusCodes": ["UNAVAILABLE"]
+    }
+  }],
+  "retryThrottling": {
+    "maxTokens": 100,
+    "tokenRatio": 1.0
   }
 }`
-	}
 
-	return []grpc.DialOption{
-		grpc.WithDefaultServiceConfig(serviceConfig),
-		grpc.WithDisableServiceConfig(),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+// StoreClientGRPCOption is a functional option for StoreClientGRPCOpts.
+type StoreClientGRPCOption func(*storeClientGRPCOpts)
+
+type storeClientGRPCOpts struct {
+	serviceConfig                string
+	secure                       bool
+	skipVerify                   bool
+	cert                         string
+	key                          string
+	caCert                       string
+	serverName                   string
+	compression                  string
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+}
+
+// WithTLS enables TLS for the gRPC client connection.
+// Presence of this option implies secure=true.
+// Empty cert/key/caCert/serverName values are valid and result in TLS with system CA pool.
+func WithTLS(cert, key, caCert, serverName string, skipVerify bool) StoreClientGRPCOption {
+	return func(o *storeClientGRPCOpts) {
+		o.secure = true
+		o.cert = cert
+		o.key = key
+		o.caCert = caCert
+		o.serverName = serverName
+		o.skipVerify = skipVerify
+	}
+}
+
+// WithServiceConfig overrides the default gRPC service config. No-op if empty.
+func WithServiceConfig(serviceConfig string) StoreClientGRPCOption {
+	return func(o *storeClientGRPCOpts) {
+		if serviceConfig != "" {
+			o.serviceConfig = serviceConfig
+		}
+	}
+}
+
+// WithCompression enables gRPC compression with the given algorithm. No-op if empty or "none".
+func WithCompression(compression string) StoreClientGRPCOption {
+	return func(o *storeClientGRPCOpts) {
+		if compression != "" && compression != "none" {
+			o.compression = compression
+		}
+	}
+}
+
+// WithKeepaliveParams overrides the client keepalive parameters.
+// A zero keepaliveTime or keepaliveTimeout falls back to the package default
+// (10s / 5s). Note: grpc-go silently clamps keepaliveTime below 10s up to 10s.
+func WithKeepaliveParams(keepaliveTime, keepaliveTimeout time.Duration, permitWithoutStream bool) StoreClientGRPCOption {
+	return func(o *storeClientGRPCOpts) {
+		o.keepaliveTime = keepaliveTime
+		o.keepaliveTimeout = keepaliveTimeout
+		o.keepalivePermitWithoutStream = permitWithoutStream
 	}
 }
 
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
-func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, secure, skipVerify bool, cert, key, caCert, serverName string) ([]grpc.DialOption, error) {
+// By default, DefaultServiceConfig is applied and connections are insecure.
+// Use WithTLS, WithServiceConfig, and WithCompression to customize.
+func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer, options ...StoreClientGRPCOption) ([]grpc.DialOption, error) {
+	o := &storeClientGRPCOpts{}
+	for _, opt := range options {
+		opt(o)
+	}
+
+	serviceConfig := o.serviceConfig
+	if serviceConfig == "" {
+		serviceConfig = DefaultServiceConfig
+	}
+
+	keepaliveTime := o.keepaliveTime
+	if keepaliveTime == 0 {
+		keepaliveTime = 10 * time.Second
+	}
+	keepaliveTimeout := o.keepaliveTimeout
+	if keepaliveTimeout == 0 {
+		keepaliveTimeout = 5 * time.Second
+	}
+
 	grpcMets := grpc_prometheus.NewClientMetrics(
 		grpc_prometheus.WithClientHandlingTimeHistogram(grpc_prometheus.WithHistogramOpts(
 			&prometheus.HistogramOpts{
@@ -130,19 +207,28 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 			grpcMets.StreamClientInterceptor(),
 			tracing.StreamClientInterceptor(tracer),
 		),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                keepaliveTime,
+			Timeout:             keepaliveTimeout,
+			PermitWithoutStream: o.keepalivePermitWithoutStream,
+		}),
+		grpc.WithDefaultServiceConfig(serviceConfig),
+		grpc.WithDisableServiceConfig(),
+	}
+	if o.compression != "" {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(o.compression)))
 	}
 	if reg != nil {
 		reg.MustRegister(grpcMets)
 	}
 
-	if !secure {
+	if !o.secure {
 		return append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials())), nil
 	}
 
 	level.Info(logger).Log("msg", "enabling client to server TLS")
 
-	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName, skipVerify)
+	tlsCfg, err := tls.NewClientConfig(logger, o.cert, o.key, o.caCert, o.serverName, o.skipVerify)
 	if err != nil {
 		return nil, err
 	}

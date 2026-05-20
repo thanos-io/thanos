@@ -71,21 +71,21 @@ func TestInfo(t *testing.T) {
 	expected := map[string][]query.EndpointStatus{
 		"sidecar": {
 			{
-				Name:      "e2e-test-info-sidecar-alone1:9091",
+				Name:      "passthrough:///e2e-test-info-sidecar-alone1:9091",
 				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone1", "replica", "0")},
 			},
 			{
-				Name:      "e2e-test-info-sidecar-alone2:9091",
+				Name:      "passthrough:///e2e-test-info-sidecar-alone2:9091",
 				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone2", "replica", "0")},
 			},
 			{
-				Name:      "e2e-test-info-sidecar-alone3:9091",
+				Name:      "passthrough:///e2e-test-info-sidecar-alone3:9091",
 				LabelSets: []labels.Labels{labels.FromStrings("prometheus", "prom-alone3", "replica", "0")},
 			},
 		},
 		"store": {
 			{
-				Name:      "e2e-test-info-store-gw-1:9091",
+				Name:      "passthrough:///e2e-test-info-store-gw-1:9091",
 				LabelSets: []labels.Labels{},
 			},
 		},

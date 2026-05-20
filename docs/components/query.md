@@ -350,6 +350,23 @@ Flags:
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
+      --grpc-server-keepalive-time=30m
+                                 How often the gRPC server sends a keepalive
+                                 ping to an idle client. Should be lower than
+                                 --grpc-server-max-connection-age (default
+                                 60m) for keepalive to be reachable before the
+                                 connection is recycled.
+      --grpc-server-keepalive-timeout=20s
+                                 How long the gRPC server waits for a keepalive
+                                 ping ack from the client before declaring the
+                                 connection dead.
+      --[no-]grpc-server-keepalive-permit-without-stream
+                                 If true, allow keepalive pings from
+                                 clients even when no RPCs are active.
+                                 Required when peer clients run with
+                                 --grpc-client-keepalive-permit-without-stream=true;
+                                 otherwise the server responds with GOAWAY
+                                 ENHANCE_YOUR_CALM and closes the connection.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --[no-]grpc-client-tls-secure
@@ -368,6 +385,22 @@ Flags:
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
+      --grpc-service-config=""   gRPC service configuration in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
+      --grpc-client-keepalive-time=10s
+                                 How often the client sends keepalive pings on
+                                 the gRPC connection. grpc-go silently clamps
+                                 values below 10s up to 10s.
+      --grpc-client-keepalive-timeout=5s
+                                 How long the client waits for a keepalive ping
+                                 ack before declaring the connection dead.
+      --[no-]grpc-client-keepalive-permit-without-stream
+                                 If true, the client sends keepalive
+                                 pings even when no RPCs are active.
+                                 The receiving server must have
+                                 --grpc-server-keepalive-permit-without-stream=true,
+                                 otherwise the server will respond with GOAWAY
+                                 ENHANCE_YOUR_CALM and close the connection.
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.

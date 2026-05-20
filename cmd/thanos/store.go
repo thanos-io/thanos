@@ -557,6 +557,8 @@ func runStore(
 			grpcserver.WithListen(conf.grpcConfig.bindAddress),
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
+			grpcserver.WithKeepaliveParams(conf.grpcConfig.keepaliveTime, conf.grpcConfig.keepaliveTimeout),
+			grpcserver.WithKeepaliveEnforcement(conf.grpcConfig.keepalivePermitWithoutStream),
 			grpcserver.WithTLSConfig(tlsCfg),
 		)
 

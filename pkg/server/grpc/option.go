@@ -13,10 +13,13 @@ import (
 type options struct {
 	registerServerFuncs []registerServerFunc
 
-	gracePeriod time.Duration
-	maxConnAge  time.Duration
-	listen      string
-	network     string
+	gracePeriod                  time.Duration
+	maxConnAge                   time.Duration
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
+	listen                       string
+	network                      string
 
 	tlsConfig *tls.Config
 
@@ -86,5 +89,24 @@ func WithTLSConfig(cfg *tls.Config) Option {
 func WithMaxConnAge(t time.Duration) Option {
 	return optionFunc(func(o *options) {
 		o.maxConnAge = t
+	})
+}
+
+// WithKeepaliveParams sets the gRPC server keepalive parameters
+// (ServerParameters.Time and Timeout). keepaliveTime controls how often the
+// server pings an idle client; keepaliveTimeout is the ack deadline for that ping.
+func WithKeepaliveParams(keepaliveTime, keepaliveTimeout time.Duration) Option {
+	return optionFunc(func(o *options) {
+		o.keepaliveTime = keepaliveTime
+		o.keepaliveTimeout = keepaliveTimeout
+	})
+}
+
+// WithKeepaliveEnforcement sets the gRPC server keepalive enforcement policy's
+// PermitWithoutStream flag. EnforcementPolicy.MinTime is fixed at 5s, which is
+// safely below the 10s client clamp imposed by grpc-go.
+func WithKeepaliveEnforcement(permitWithoutStream bool) Option {
+	return optionFunc(func(o *options) {
+		o.keepalivePermitWithoutStream = permitWithoutStream
 	})
 }

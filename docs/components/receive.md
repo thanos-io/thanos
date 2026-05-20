@@ -446,6 +446,23 @@ Flags:
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
+      --grpc-server-keepalive-time=30m
+                                 How often the gRPC server sends a keepalive
+                                 ping to an idle client. Should be lower than
+                                 --grpc-server-max-connection-age (default
+                                 60m) for keepalive to be reachable before the
+                                 connection is recycled.
+      --grpc-server-keepalive-timeout=20s
+                                 How long the gRPC server waits for a keepalive
+                                 ping ack from the client before declaring the
+                                 connection dead.
+      --[no-]grpc-server-keepalive-permit-without-stream
+                                 If true, allow keepalive pings from
+                                 clients even when no RPCs are active.
+                                 Required when peer clients run with
+                                 --grpc-client-keepalive-permit-without-stream=true;
+                                 otherwise the server responds with GOAWAY
+                                 ENHANCE_YOUR_CALM and closes the connection.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --store.limits.request-series=0
@@ -475,23 +492,45 @@ Flags:
                                  TLS version for the gRPC server, leave blank
                                  to default to TLS 1.3, allow values: ["1.0",
                                  "1.1", "1.2", "1.3"]
-      --remote-write.client-tls-cert=""
-                                 TLS Certificates to use to identify this client
-                                 to the server.
-      --remote-write.client-tls-key=""
-                                 TLS Key for the client's certificate.
       --[no-]remote-write.client-tls-secure
                                  Use TLS when talking to the other receivers.
       --[no-]remote-write.client-tls-skip-verify
                                  Disable TLS certificate verification when
                                  talking to the other receivers i.e self signed,
                                  signed by fake CA.
+      --remote-write.client-tls-cert=""
+                                 TLS Certificates to use to identify this client
+                                 to the server.
+      --remote-write.client-tls-key=""
+                                 TLS Key for the client's certificate.
       --remote-write.client-tls-ca=""
                                  TLS CA Certificates to use to verify servers.
       --remote-write.client-server-name=""
                                  Server name to verify the hostname
                                  on the returned TLS certificates. See
                                  https://tools.ietf.org/html/rfc4366#section-3.1
+      --receive.grpc-compression=snappy
+                                 Compression algorithm to use for gRPC requests
+                                 to other receivers. Must be one of: snappy,
+                                 none
+      --receive.grpc-service-config=<content>
+                                 gRPC service configuration file
+                                 or content in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
+      --remote-write.client-keepalive-time=10s
+                                 How often the receiver sends keepalive pings to
+                                 other receivers on the gRPC connection. grpc-go
+                                 silently clamps values below 10s up to 10s.
+      --remote-write.client-keepalive-timeout=5s
+                                 How long the receiver waits for a keepalive
+                                 ping ack before declaring the connection dead.
+      --[no-]remote-write.client-keepalive-permit-without-stream
+                                 If true, the receiver sends keepalive pings
+                                 to other receivers even when no RPCs are
+                                 active. The receiving server must have
+                                 --grpc-server-keepalive-permit-without-stream=true,
+                                 otherwise the server will respond with GOAWAY
+                                 ENHANCE_YOUR_CALM and close the connection.
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
@@ -562,10 +601,6 @@ Flags:
       --receive.forward.async-workers=5
                                  Number of concurrent workers processing
                                  forwarding of remote-write requests.
-      --receive.grpc-compression=snappy
-                                 Compression algorithm to use for gRPC requests
-                                 to other receivers. Must be one of: snappy,
-                                 none
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.
@@ -575,10 +610,6 @@ Flags:
                                  capnproto
       --receive.capnproto-address="0.0.0.0:19391"
                                  Address for the Cap'n Proto server.
-      --receive.grpc-service-config=<content>
-                                 gRPC service configuration file
-                                 or content in JSON format. See
-                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.relabel-config-file=<file-path>
                                  Path to YAML file that contains relabeling
                                  configuration.
@@ -634,6 +665,9 @@ Flags:
                                  ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
+      --[no-]tsdb.flush-blocks-on-shutdown
+                                 If true, receive will flush TSDB blocks to disk
+                                 on shutdown.
       --[no-]tsdb.enable-native-histograms
                                  (Deprecated) Enables the ingestion of native
                                  histograms. This flag is a no-op now and will
