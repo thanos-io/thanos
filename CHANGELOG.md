@@ -40,6 +40,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 - [#8670](https://github.com/thanos-io/thanos/pull/8670): Receive: *breaking :warning:* removed `--shipper.ignore-unequal-block-size`. TSDB now delays compaction until blocks have been uploaded by the shipper, allowing compaction while uploading without risking data loss.
 - [#8802](https://github.com/thanos-io/thanos/pull/8802): Cache: add `SendToReplicas` option while initializing Rueidis client to allow sending read-only requests to Redis replica instances.
+- [#8804](https://github.com/thanos-io/thanos/pull/8804): Receive: `thanos_receive_hashrings_file_refreshes_total` now increments only when the hashrings file content actually changes (or on the initial load), not on every periodic safety-net tick. This is a side-effect of sharing the new file-change primitive with Ruler; operators using this counter as a heartbeat should rely on `up{}` or process-level liveness metrics instead.
 
 ### Removed
 
