@@ -73,6 +73,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/runutil/filewatch"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
@@ -703,7 +704,21 @@ func runRule(
 
 	// Watch rule files for changes so updates (e.g. ConfigMap edits) are
 	// applied without requiring SIGHUP or POST /-/reload.
-	fileWatcher, err := thanosrules.NewFileWatcher(logger, reg, conf.ruleFiles, thanosrules.DefaultFileWatcherInterval)
+	fileWatcherChanges := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_config_files_changes_total",
+		Help: "The number of times the rule files have been detected as changed by the file watcher.",
+	})
+	fileWatcherErrors := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_config_files_errors_total",
+		Help: "The number of errors encountered while watching or reading rule files.",
+	})
+	fileWatcher, err := filewatch.New(filewatch.Options{
+		Logger:         logger,
+		Patterns:       conf.ruleFiles,
+		Interval:       filewatch.DefaultInterval,
+		ChangesCounter: fileWatcherChanges,
+		ErrorsCounter:  fileWatcherErrors,
+	})
 	if err != nil {
 		return errors.Wrap(err, "create rule file watcher")
 	}
