@@ -154,6 +154,15 @@ type Handler struct {
 	Limiter *Limiter
 }
 
+type writeRequestTenantHeader string
+
+func (h writeRequestTenantHeader) Get(header string) string {
+	if header == tenancy.DefaultTenantHeader {
+		return string(h)
+	}
+	return ""
+}
+
 func NewHandler(logger log.Logger, o *Options) *Handler {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -1228,9 +1237,7 @@ func (h *Handler) tenantFromWriteRequest(r *storepb.WriteRequest) (string, error
 		defaultTenantID = tenancy.DefaultTenant
 	}
 
-	header := http.Header{}
-	header.Set(tenancy.DefaultTenantHeader, r.Tenant)
-	return tenancy.GetTenantFromHTTP(header, nil, tenancy.DefaultTenantHeader, defaultTenantID, "")
+	return tenancy.GetTenantFromHTTP(writeRequestTenantHeader(r.Tenant), nil, tenancy.DefaultTenantHeader, defaultTenantID, "")
 }
 
 // relabel relabels the time series labels in the remote write request.

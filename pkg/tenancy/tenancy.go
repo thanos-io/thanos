@@ -46,8 +46,13 @@ func IsTenantValid(tenant string) error {
 	return nil
 }
 
+// HeaderGetter is the minimal header access needed for tenant extraction.
+type HeaderGetter interface {
+	Get(string) string
+}
+
 // GetTenantFromHTTP extracts the tenant from HTTP-compatible headers or client certificates.
-func GetTenantFromHTTP(header interface{ Get(string) string }, tlsState *tls.ConnectionState, tenantHeader string, defaultTenantID string, certTenantField string) (string, error) {
+func GetTenantFromHTTP(header HeaderGetter, tlsState *tls.ConnectionState, tenantHeader string, defaultTenantID string, certTenantField string) (string, error) {
 	var err error
 	var tenant string
 	if header != nil {
