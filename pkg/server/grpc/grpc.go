@@ -9,6 +9,7 @@ import (
 	"net"
 	"runtime/debug"
 	"slices"
+	"time"
 
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
@@ -35,6 +36,13 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
+
+// keepaliveServerMinTime is the EnforcementPolicy.MinTime applied to all Thanos
+// gRPC servers. grpc-go silently clamps the client keepalive ping interval to a
+// minimum of 10s (see google.golang.org/grpc/internal.KeepaliveMinPingTime), so
+// 5s on the server side comfortably accommodates every legitimate Thanos client
+// and never triggers under default configuration.
+const keepaliveServerMinTime = 5 * time.Second
 
 // A Server defines parameters to serve RPC requests, a wrapper around grpc.Server.
 type Server struct {
@@ -123,9 +131,17 @@ func New(logger log.Logger, reg prometheus.Registerer, tracer opentracing.Tracer
 	if options.tlsConfig != nil {
 		options.grpcOpts = append(options.grpcOpts, grpc.Creds(credentials.NewTLS(options.tlsConfig)))
 	}
-	if options.maxConnAge > 0 {
-		options.grpcOpts = append(options.grpcOpts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: options.maxConnAge}))
-	}
+	options.grpcOpts = append(options.grpcOpts,
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionAge: options.maxConnAge,
+			Time:             options.keepaliveTime,
+			Timeout:          options.keepaliveTimeout,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             keepaliveServerMinTime,
+			PermitWithoutStream: options.keepalivePermitWithoutStream,
+		}),
+	)
 	s := grpc.NewServer(options.grpcOpts...)
 
 	// Register all configured servers.

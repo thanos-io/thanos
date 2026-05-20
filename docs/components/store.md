@@ -99,6 +99,20 @@ Flags:
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
+      --grpc-server-keepalive-time=2h
+                                 How often the gRPC server sends a keepalive
+                                 ping to an idle client.
+      --grpc-server-keepalive-timeout=20s
+                                 How long the gRPC server waits for a keepalive
+                                 ping ack from the client before declaring the
+                                 connection dead.
+      --[no-]grpc-server-keepalive-permit-without-stream
+                                 If true, allow keepalive pings from
+                                 clients even when no RPCs are active.
+                                 Required when peer clients run with
+                                 --grpc-client-keepalive-permit-without-stream=true;
+                                 otherwise the server responds with GOAWAY
+                                 ENHANCE_YOUR_CALM and closes the connection.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --store.limits.request-series=0

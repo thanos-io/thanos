@@ -30,13 +30,16 @@ import (
 )
 
 type grpcConfig struct {
-	bindAddress      string
-	tlsSrvCert       string
-	tlsSrvKey        string
-	tlsSrvClientCA   string
-	tlsMinVersion    string
-	gracePeriod      time.Duration
-	maxConnectionAge time.Duration
+	bindAddress                  string
+	tlsSrvCert                   string
+	tlsSrvKey                    string
+	tlsSrvClientCA               string
+	tlsMinVersion                string
+	gracePeriod                  time.Duration
+	maxConnectionAge             time.Duration
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
 }
 
 func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
@@ -57,6 +60,15 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 		Default("1.3").StringVar(&gc.tlsMinVersion)
 	cmd.Flag("grpc-server-max-connection-age", "The grpc server max connection age. This controls how often to re-establish connections and redo TLS handshakes.").
 		Default("60m").DurationVar(&gc.maxConnectionAge)
+	cmd.Flag("grpc-server-keepalive-time",
+		"How often the gRPC server sends a keepalive ping to an idle client.").
+		Default("2h").DurationVar(&gc.keepaliveTime)
+	cmd.Flag("grpc-server-keepalive-timeout",
+		"How long the gRPC server waits for a keepalive ping ack from the client before declaring the connection dead.").
+		Default("20s").DurationVar(&gc.keepaliveTimeout)
+	cmd.Flag("grpc-server-keepalive-permit-without-stream",
+		"If true, allow keepalive pings from clients even when no RPCs are active. Required when peer clients run with --grpc-client-keepalive-permit-without-stream=true; otherwise the server responds with GOAWAY ENHANCE_YOUR_CALM and closes the connection.").
+		Default("false").BoolVar(&gc.keepalivePermitWithoutStream)
 	cmd.Flag("grpc-grace-period",
 		"Time to wait after an interrupt received for GRPC Server.").
 		Default("2m").DurationVar(&gc.gracePeriod)
@@ -65,12 +77,15 @@ func (gc *grpcConfig) registerFlag(cmd extkingpin.FlagClause) *grpcConfig {
 }
 
 type grpcClientConfig struct {
-	secure            bool
-	skipVerify        bool
-	cert, key, caCert string
-	serverName        string
-	compression       string
-	serviceConfig     string
+	secure                       bool
+	skipVerify                   bool
+	cert, key, caCert            string
+	serverName                   string
+	compression                  string
+	serviceConfig                string
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
 }
 
 func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientConfig {
@@ -83,6 +98,9 @@ func (gc *grpcClientConfig) registerFlag(cmd extkingpin.FlagClause) *grpcClientC
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
 	cmd.Flag("grpc-compression", "Compression algorithm to use for gRPC requests to other clients. Must be one of: "+compressionOptions).Default(compressionNone).EnumVar(&gc.compression, snappy.Name, compressionNone)
 	cmd.Flag("grpc-service-config", "gRPC service configuration in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").Default("").StringVar(&gc.serviceConfig)
+	cmd.Flag("grpc-client-keepalive-time", "How often the client sends keepalive pings on the gRPC connection. grpc-go silently clamps values below 10s up to 10s.").Default("10s").DurationVar(&gc.keepaliveTime)
+	cmd.Flag("grpc-client-keepalive-timeout", "How long the client waits for a keepalive ping ack before declaring the connection dead.").Default("5s").DurationVar(&gc.keepaliveTimeout)
+	cmd.Flag("grpc-client-keepalive-permit-without-stream", "If true, the client sends keepalive pings even when no RPCs are active. The receiving server must have --grpc-server-keepalive-permit-without-stream=true, otherwise the server will respond with GOAWAY ENHANCE_YOUR_CALM and close the connection.").Default("false").BoolVar(&gc.keepalivePermitWithoutStream)
 
 	return gc
 }
@@ -97,6 +115,9 @@ func (gc *grpcClientConfig) registerReceiverFlag(cmd extkingpin.FlagClause) *grp
 	compressionOptions := strings.Join([]string{snappy.Name, compressionNone}, ", ")
 	cmd.Flag("receive.grpc-compression", "Compression algorithm to use for gRPC requests to other receivers. Must be one of: "+compressionOptions).Default(snappy.Name).EnumVar(&gc.compression, snappy.Name, compressionNone)
 	cmd.Flag("receive.grpc-service-config", "gRPC service configuration file or content in JSON format. See https://github.com/grpc/grpc/blob/master/doc/service_config.md").PlaceHolder("<content>").Default("").StringVar(&gc.serviceConfig)
+	cmd.Flag("remote-write.client-keepalive-time", "How often the receiver sends keepalive pings to other receivers on the gRPC connection. grpc-go silently clamps values below 10s up to 10s.").Default("10s").DurationVar(&gc.keepaliveTime)
+	cmd.Flag("remote-write.client-keepalive-timeout", "How long the receiver waits for a keepalive ping ack before declaring the connection dead.").Default("5s").DurationVar(&gc.keepaliveTimeout)
+	cmd.Flag("remote-write.client-keepalive-permit-without-stream", "If true, the receiver sends keepalive pings to other receivers even when no RPCs are active. The receiving server must have --grpc-server-keepalive-permit-without-stream=true, otherwise the server will respond with GOAWAY ENHANCE_YOUR_CALM and close the connection.").Default("false").BoolVar(&gc.keepalivePermitWithoutStream)
 
 	return gc
 }
@@ -105,6 +126,7 @@ func (gc *grpcClientConfig) dialOptions(logger log.Logger, reg prometheus.Regist
 	opts := []extgrpc.StoreClientGRPCOption{
 		extgrpc.WithCompression(gc.compression),
 		extgrpc.WithServiceConfig(gc.serviceConfig),
+		extgrpc.WithKeepaliveParams(gc.keepaliveTime, gc.keepaliveTimeout, gc.keepalivePermitWithoutStream),
 	}
 	if gc.secure {
 		opts = append(opts, extgrpc.WithTLS(gc.cert, gc.key, gc.caCert, gc.serverName, gc.skipVerify))

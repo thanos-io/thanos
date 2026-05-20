@@ -103,14 +103,17 @@ const DefaultServiceConfig = `{
 type StoreClientGRPCOption func(*storeClientGRPCOpts)
 
 type storeClientGRPCOpts struct {
-	serviceConfig string
-	secure        bool
-	skipVerify    bool
-	cert          string
-	key           string
-	caCert        string
-	serverName    string
-	compression   string
+	serviceConfig                string
+	secure                       bool
+	skipVerify                   bool
+	cert                         string
+	key                          string
+	caCert                       string
+	serverName                   string
+	compression                  string
+	keepaliveTime                time.Duration
+	keepaliveTimeout             time.Duration
+	keepalivePermitWithoutStream bool
 }
 
 // WithTLS enables TLS for the gRPC client connection.
@@ -145,6 +148,17 @@ func WithCompression(compression string) StoreClientGRPCOption {
 	}
 }
 
+// WithKeepaliveParams overrides the client keepalive parameters.
+// A zero time or timeout falls back to the package default (10s / 5s).
+// Note: grpc-go silently clamps Time below 10s up to 10s.
+func WithKeepaliveParams(time, timeout time.Duration, permitWithoutStream bool) StoreClientGRPCOption {
+	return func(o *storeClientGRPCOpts) {
+		o.keepaliveTime = time
+		o.keepaliveTimeout = timeout
+		o.keepalivePermitWithoutStream = permitWithoutStream
+	}
+}
+
 // StoreClientGRPCOpts creates gRPC dial options for connecting to a store client.
 // By default, DefaultServiceConfig is applied and connections are insecure.
 // Use WithTLS, WithServiceConfig, and WithCompression to customize.
@@ -157,6 +171,15 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 	serviceConfig := o.serviceConfig
 	if serviceConfig == "" {
 		serviceConfig = DefaultServiceConfig
+	}
+
+	keepaliveTime := o.keepaliveTime
+	if keepaliveTime == 0 {
+		keepaliveTime = 10 * time.Second
+	}
+	keepaliveTimeout := o.keepaliveTimeout
+	if keepaliveTimeout == 0 {
+		keepaliveTimeout = 5 * time.Second
 	}
 
 	grpcMets := grpc_prometheus.NewClientMetrics(
@@ -184,7 +207,11 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 			grpcMets.StreamClientInterceptor(),
 			tracing.StreamClientInterceptor(tracer),
 		),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 10 * time.Second, Timeout: 5 * time.Second}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                keepaliveTime,
+			Timeout:             keepaliveTimeout,
+			PermitWithoutStream: o.keepalivePermitWithoutStream,
+		}),
 		grpc.WithDefaultServiceConfig(serviceConfig),
 		grpc.WithDisableServiceConfig(),
 	}

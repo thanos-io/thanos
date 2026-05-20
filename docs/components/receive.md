@@ -446,6 +446,20 @@ Flags:
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
                                  and redo TLS handshakes.
+      --grpc-server-keepalive-time=2h
+                                 How often the gRPC server sends a keepalive
+                                 ping to an idle client.
+      --grpc-server-keepalive-timeout=20s
+                                 How long the gRPC server waits for a keepalive
+                                 ping ack from the client before declaring the
+                                 connection dead.
+      --[no-]grpc-server-keepalive-permit-without-stream
+                                 If true, allow keepalive pings from
+                                 clients even when no RPCs are active.
+                                 Required when peer clients run with
+                                 --grpc-client-keepalive-permit-without-stream=true;
+                                 otherwise the server responds with GOAWAY
+                                 ENHANCE_YOUR_CALM and closes the connection.
       --grpc-grace-period=2m     Time to wait after an interrupt received for
                                  GRPC Server.
       --store.limits.request-series=0
@@ -500,6 +514,20 @@ Flags:
                                  gRPC service configuration file
                                  or content in JSON format. See
                                  https://github.com/grpc/grpc/blob/master/doc/service_config.md
+      --remote-write.client-keepalive-time=10s
+                                 How often the receiver sends keepalive pings to
+                                 other receivers on the gRPC connection. grpc-go
+                                 silently clamps values below 10s up to 10s.
+      --remote-write.client-keepalive-timeout=5s
+                                 How long the receiver waits for a keepalive
+                                 ping ack before declaring the connection dead.
+      --[no-]remote-write.client-keepalive-permit-without-stream
+                                 If true, the receiver sends keepalive pings
+                                 to other receivers even when no RPCs are
+                                 active. The receiving server must have
+                                 --grpc-server-keepalive-permit-without-stream=true,
+                                 otherwise the server will respond with GOAWAY
+                                 ENHANCE_YOUR_CALM and close the connection.
       --tsdb.path="./data"       Data directory of TSDB.
       --label=key="value" ...    External labels to announce. This flag will be
                                  removed in the future when handling multiple
@@ -634,6 +662,9 @@ Flags:
                                  ingesting a new exemplar will evict the oldest
                                  exemplar from storage. 0 (or less) value of
                                  this flag disables exemplars storage.
+      --[no-]tsdb.flush-blocks-on-shutdown
+                                 If true, receive will flush TSDB blocks to disk
+                                 on shutdown.
       --[no-]tsdb.enable-native-histograms
                                  (Deprecated) Enables the ingestion of native
                                  histograms. This flag is a no-op now and will
