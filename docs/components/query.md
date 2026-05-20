@@ -368,6 +368,8 @@ Flags:
                                  https://tools.ietf.org/html/rfc4366#section-3.1
       --grpc-compression=none    Compression algorithm to use for gRPC requests
                                  to other clients. Must be one of: snappy, none
+      --grpc-service-config=""   gRPC service configuration in JSON format. See
+                                 https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --web.route-prefix=""      Prefix for API and UI endpoints. This allows
                                  thanos UI to be served on a sub-path.
                                  Defaults to the value of --web.external-prefix.
