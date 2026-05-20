@@ -56,9 +56,9 @@ type Options struct {
 	// metric names that fit their existing observability surface. May be
 	// nil if the caller prefers to count changes from its own wrapper logic
 	// (e.g. only after downstream parsing succeeds, to preserve the original
-	// "successful reload" semantics of a pre-existing metric); in that case
-	// the primitive falls back to an internal unregistered counter so the
-	// hot path never has to nil-check.
+	// "successful reload" semantics of a pre-existing metric); the primitive
+	// nil-checks at the single call site rather than substituting a
+	// placeholder, so the change is not observed at this layer in that case.
 	ChangesCounter prometheus.Counter
 	// ErrorsCounter is incremented on fsnotify errors and file-read errors.
 	// Callers may also increment it from their own wrapper logic (e.g. for
@@ -112,17 +112,9 @@ func New(opts Options) (*Watcher, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "creating file watcher")
 	}
-	changes := opts.ChangesCounter
-	if changes == nil {
-		// Unregistered placeholder so the hot path never has to nil-check.
-		// Callers that pass nil are explicitly opting out of "change
-		// detected" observability at this layer (typically because their
-		// wrapper exposes a more meaningful counter, e.g. successful
-		// reloads).
-		changes = prometheus.NewCounter(prometheus.CounterOpts{
-			Name: "filewatch_internal_changes_unobserved",
-		})
-	}
+	// changesCounter may be nil; it is nil-checked at the single call site
+	// in maybeNotify rather than substituted with a placeholder, so we do
+	// not have to register a counter just to discard its increments.
 	w := &Watcher{
 		patterns:       append([]string(nil), opts.Patterns...),
 		interval:       interval,
@@ -130,7 +122,7 @@ func New(opts Options) (*Watcher, error) {
 		watcher:        fsw,
 		ch:             make(chan []string, 1),
 		watchedDirs:    make(map[string]struct{}),
-		changesCounter: changes,
+		changesCounter: opts.ChangesCounter,
 		errorCounter:   opts.ErrorsCounter,
 	}
 
@@ -307,7 +299,9 @@ func (w *Watcher) maybeNotify(files []string) {
 		return
 	}
 	w.lastHash = cur
-	w.changesCounter.Inc()
+	if w.changesCounter != nil {
+		w.changesCounter.Inc()
+	}
 	select {
 	case w.ch <- files:
 	default:
