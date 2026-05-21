@@ -10,6 +10,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/symboltable"
 )
 
 func Marshal(tenant string, tsreq []prompb.TimeSeries) ([]byte, error) {
@@ -55,7 +56,7 @@ func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error 
 	if err != nil {
 		return err
 	}
-	builder := newSymbolsBuilder()
+	builder := symboltable.NewBuilder()
 	for i, ts := range tsreq {
 		tsc := series.At(i)
 
@@ -87,26 +88,26 @@ func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error 
 	return nil
 }
 
-func marshalSymbols(builder *symbolsBuilder, symbols Symbols) error {
-	offsets, err := symbols.NewOffsets(builder.len())
+func marshalSymbols(builder *symboltable.Builder, symbols Symbols) error {
+	offsets, err := symbols.NewOffsets(builder.Len())
 	if err != nil {
 		return err
 	}
-	data := make([]byte, builder.symbolsSize)
-	for k, entry := range builder.table {
-		end := entry.start + uint32(len(k))
-		copy(data[entry.start:end], k)
-		offsets.Set(int(entry.index), end)
+	data := make([]byte, builder.SymbolsSize)
+	for k, entry := range builder.Table {
+		end := entry.Start + uint32(len(k))
+		copy(data[entry.Start:end], k)
+		offsets.Set(int(entry.Index), end)
 	}
 
 	return symbols.SetData(data)
 }
 
-func marshalLabels(lbls Label_List, pbLbls []labelpb.ZLabel, symbols *symbolsBuilder) error {
+func marshalLabels(lbls Label_List, pbLbls []labelpb.ZLabel, symbols *symboltable.Builder) error {
 	for i, pbLbl := range pbLbls {
 		lbl := lbls.At(i)
-		lbl.SetName(symbols.addEntry(pbLbl.Name))
-		lbl.SetValue(symbols.addEntry(pbLbl.Value))
+		lbl.SetName(symbols.AddEntry(pbLbl.Name))
+		lbl.SetValue(symbols.AddEntry(pbLbl.Value))
 	}
 	return nil
 }
@@ -214,7 +215,7 @@ func marshalSpans(spans BucketSpan_List, pbSpans []prompb.BucketSpan) error {
 	return nil
 }
 
-func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *symbolsBuilder) error {
+func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *symboltable.Builder) error {
 	if len(pbExemplars) == 0 {
 		return nil
 	}
@@ -249,38 +250,4 @@ func marshalFloat64List(list capnp.Float64List, ints []float64) {
 	for j, d := range ints {
 		list.Set(j, d)
 	}
-}
-
-type symbolsBuilder struct {
-	table       map[string]tableEntry
-	symbolsSize uint32
-}
-
-func newSymbolsBuilder() *symbolsBuilder {
-	return &symbolsBuilder{
-		table: make(map[string]tableEntry),
-	}
-}
-
-func (s *symbolsBuilder) addEntry(item string) uint32 {
-	entry, ok := s.table[item]
-	if ok {
-		return entry.index
-	}
-	entry = tableEntry{
-		index: uint32(len(s.table)),
-		start: s.symbolsSize,
-	}
-	s.symbolsSize += uint32(len(item))
-	s.table[item] = entry
-	return entry.index
-}
-
-func (s *symbolsBuilder) len() int32 {
-	return int32(len(s.table))
-}
-
-type tableEntry struct {
-	index uint32
-	start uint32
 }
