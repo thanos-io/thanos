@@ -31,3 +31,18 @@ message LabelSet {
 message ZLabelSet {
     repeated Label labels = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ZLabel"];
 }
+
+// SymTableLabel is one label encoded as two references into a SymbolTable.
+message SymTableLabel {
+    uint32 name_ref  = 1;
+    uint32 value_ref = 2;
+}
+
+// SymbolTable is the dedup table used by SymTableLabel. The bytes of every
+// interned symbol are packed end-to-end; offsets[i] is the end
+// offset of symbol `i`, so symbol `i` is `table[offsets[i-1]:offsets[i]]`
+// (with offsets[-1] := 0).
+message SymbolTable {
+    repeated uint32 offsets = 1;
+    bytes table = 2;
+}
