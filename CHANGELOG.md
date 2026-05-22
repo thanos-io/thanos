@@ -39,6 +39,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 - [#8670](https://github.com/thanos-io/thanos/pull/8670): Receive: *breaking :warning:* removed `--shipper.ignore-unequal-block-size`. TSDB now delays compaction until blocks have been uploaded by the shipper, allowing compaction while uploading without risking data loss.
 - [#8802](https://github.com/thanos-io/thanos/pull/8802): Cache: add `SendToReplicas` option while initializing Rueidis client to allow sending read-only requests to Redis replica instances.
+- [#8831](https://github.com/thanos-io/thanos/pull/8830): Query-Frontend: change `time_taken` field to `time_taken_ms` for consistent JSON output for easier parsing by the log collector.
 
 ### Removed
 

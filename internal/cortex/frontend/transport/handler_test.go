@@ -45,7 +45,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/query?query=absent(up)&start=1714262400&end=1714266000",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/query",
 				"param_query=absent(up)",
 				"param_start=1714262400",
@@ -57,7 +57,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/series?match[]={__name__=~\"up\"}",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/series",
 			},
 		},
@@ -66,7 +66,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/query_range?query=rate(http_requests_total[5m])&start=1714262400&end=1714266000&step=15",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/query_range",
 				"param_query=rate(http_requests_total[5m])",
 				"param_start=1714262400",
@@ -79,7 +79,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/external-prefix/api/v1/query?query=absent(up)&start=1714262400&end=1714266000",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/external-prefix/api/v1/query",
 				"param_query=absent(up)",
 				"param_start=1714262400",
@@ -145,7 +145,7 @@ func TestHandler_SlowQueryLogOnError(t *testing.T) {
 
 	// Verify slow query is logged even when round-tripper returns an error
 	require.Contains(t, logWriter.String(), "slow query detected")
-	require.Contains(t, logWriter.String(), "time_taken=")
+	require.Contains(t, logWriter.String(), "time_taken_ms=")
 	require.Contains(t, logWriter.String(), "path=/api/v1/query")
 	require.Contains(t, logWriter.String(), "param_query=up")
 }
