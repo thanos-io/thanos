@@ -171,6 +171,10 @@ func (srv *Server) TSDBStatistics(r *statuspb.TSDBStatisticsRequest, s statuspb.
 
 	stats := map[string]*statuspb.TSDBStatisticsEntry{}
 	for tenant, stat := range tsdbStats {
+		if r.Tenant != "" && r.Tenant != tenant { //nolint:staticcheck
+			continue
+		}
+
 		tenantStats, found := stats[tenant]
 		if !found {
 			tenantStats = &statuspb.TSDBStatisticsEntry{}
