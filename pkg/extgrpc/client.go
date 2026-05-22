@@ -38,18 +38,17 @@ func (n *nonPoolingCodec) Name() string {
 	return "proto"
 }
 
-var nopPool = mem.NopBufferPool{}
-
 func (n *nonPoolingCodec) Unmarshal(data mem.BufferSlice, v any) error {
 	gmsg, ok := v.(gogoMsg)
 	if !ok {
 		return n.CodecV2.Unmarshal(data, v)
 	}
 
-	// TODO(GiedriusS): we use unsafe code around labels so we cannot use pooling here.
-	buf := data.MaterializeToBuffer(nopPool)
-
-	return gmsg.Unmarshal(buf.ReadOnlyData())
+	buf, free := materializeForUnmarshal(data)
+	if free != nil {
+		defer free()
+	}
+	return gmsg.Unmarshal(buf)
 }
 
 type gogoMsg interface {
