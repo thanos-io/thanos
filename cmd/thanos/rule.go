@@ -73,6 +73,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/runutil/filewatch"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/shipper"
@@ -152,7 +153,7 @@ func registerRule(app *extkingpin.App) {
 	walCompression := cmd.Flag("tsdb.wal-compression", "Compress the tsdb WAL.").Default("true").Bool()
 
 	cmd.Flag("data-dir", "data directory").Default("data/").StringVar(&conf.dataDir)
-	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Note that rules are not automatically detected, use SIGHUP or do HTTP POST /-/reload to re-read them.").
+	cmd.Flag("rule-file", "Rule files that should be used by rule manager. Can be in glob format (repeated). Changes are detected automatically via filesystem notifications; SIGHUP and HTTP POST /-/reload can be used to manually trigger.").
 		Default("rules/").StringsVar(&conf.ruleFiles)
 	cmd.Flag("resend-delay", "Minimum amount of time to wait before resending an alert to Alertmanager.").
 		Default("1m").DurationVar(&conf.resendDelay)
@@ -701,6 +702,36 @@ func runRule(
 		})
 	}
 
+	// Watch rule files for changes so updates (e.g. ConfigMap edits) are
+	// applied without requiring SIGHUP or POST /-/reload.
+	fileWatcherChanges := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_config_files_changes_total",
+		Help: "The number of times the rule files have been detected as changed by the file watcher.",
+	})
+	fileWatcherErrors := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_rule_config_files_errors_total",
+		Help: "The number of errors encountered while watching or reading rule files.",
+	})
+	fileWatcher, err := filewatch.New(filewatch.Options{
+		Logger:         logger,
+		Patterns:       conf.ruleFiles,
+		Interval:       filewatch.DefaultInterval,
+		ChangesCounter: fileWatcherChanges,
+		ErrorsCounter:  fileWatcherErrors,
+	})
+	if err != nil {
+		return errors.Wrap(err, "create rule file watcher")
+	}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			fileWatcher.Run(ctx)
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
+
 	// Handle reload and termination interrupts.
 	reloadWebhandler := make(chan chan error)
 	{
@@ -716,6 +747,13 @@ func runRule(
 				case <-reloadSignal:
 					if err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics); err != nil {
 						level.Error(logger).Log("msg", "reload rules by sighup failed", "err", err)
+					}
+				case _, ok := <-fileWatcher.C():
+					if !ok {
+						return errors.New("rule file watcher stopped unexpectedly")
+					}
+					if err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics); err != nil {
+						level.Error(logger).Log("msg", "reload rules by file watcher failed", "err", err)
 					}
 				case reloadMsg := <-reloadWebhandler:
 					err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics)
