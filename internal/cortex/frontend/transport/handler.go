@@ -220,7 +220,7 @@ func (f *Handler) reportSlowQuery(
 		"path", r.URL.Path,
 		"remote_user", remoteUser,
 		"remote_addr", r.RemoteAddr,
-		"time_taken", queryResponseTime.String(),
+		"time_taken_ms", queryResponseTime.Milliseconds(),
 		"grafana_dashboard_uid", grafanaDashboardUID,
 		"grafana_panel_id", grafanaPanelID,
 		"trace_id", thanosTraceID,
