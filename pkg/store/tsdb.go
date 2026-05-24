@@ -90,6 +90,14 @@ func RegisterWritableStoreServer(storeSrv storepb.WriteableStoreServer) func(*gr
 	}
 }
 
+// RegisterWritableStoreServerPooled registers with zero-allocation unmarshaling.
+// Only safe when all request processing is synchronous (e.g., IngestorOnly mode).
+func RegisterWritableStoreServerPooled(storeSrv storepb.WriteableStoreServerPooled) func(*grpc.Server) {
+	return func(s *grpc.Server) {
+		storepb.RegisterWriteableStoreServerPooled(s, storeSrv)
+	}
+}
+
 // ReadWriteTSDBStore is a TSDBStore that can also be written to.
 type ReadWriteTSDBStore struct {
 	storepb.StoreServer
