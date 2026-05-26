@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
+	_ "google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
 
@@ -79,10 +80,13 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 }
 
 // DefaultServiceConfig is the default gRPC service config applied to all client connections.
-// It enables round-robin load balancing and retries on transient UNAVAILABLE errors.
+// It enables round-robin load balancing, client-side health checking, and retries on transient UNAVAILABLE errors.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
 const DefaultServiceConfig = `{
   "loadBalancingPolicy": "round_robin",
+  "healthCheckConfig": {
+    "serviceName": ""
+  },
   "methodConfig": [{
     "name": [{}],
     "retryPolicy": {
