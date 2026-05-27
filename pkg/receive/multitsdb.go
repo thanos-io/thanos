@@ -400,7 +400,7 @@ func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
+	if err := os.MkdirAll(t.dataDir, 0o750); err != nil {
 		return err
 	}
 
@@ -763,7 +763,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	var expandedPostingsCache expandedpostingscache.ExpandedPostingsCache
 	if t.headExpandedPostingsCacheSize > 0 || t.blockExpandedPostingsCacheSize > 0 {
-		var expandedPostingsCacheMetrics = expandedpostingscache.NewPostingCacheMetrics(extprom.WrapRegistererWithPrefix("thanos_", reg))
+		expandedPostingsCacheMetrics := expandedpostingscache.NewPostingCacheMetrics(extprom.WrapRegistererWithPrefix("thanos_", reg))
 
 		expandedPostingsCache = expandedpostingscache.NewBlocksPostingsForMatchersCache(expandedPostingsCacheMetrics, t.headExpandedPostingsCacheSize, t.blockExpandedPostingsCacheSize, 0)
 	}
@@ -808,8 +808,11 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		return !ok
 	}
 
-	// We don't do scrapes ourselves so this only gives us a performance penalty.
-	opts.IsolationDisabled = true
+	// Isolation is important and needs to be enabled!
+	// Without isolation queries can read series from partially committed transaction, which means that
+	// if we're writing a classic histogram that is built using multiple series then without isolation
+	// we'll return some buckets from current append and some from previous append.
+	opts.IsolationDisabled = false
 
 	s, err := tsdb.Open(
 		dataDir,
