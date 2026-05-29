@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
 
+	"github.com/thanos-io/thanos/pkg/extgrpc/lb/p2c"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -80,7 +81,7 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 }
 
 // DefaultServiceConfig is the default gRPC service config applied to all client connections.
-// It enables round-robin load balancing, client-side health checking, and retries on transient UNAVAILABLE errors.
+// It enables round-robin load balancing and retries on transient UNAVAILABLE errors.
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
 const DefaultServiceConfig = `{
   "loadBalancingPolicy": "round_robin",
@@ -171,6 +172,10 @@ func StoreClientGRPCOpts(logger log.Logger, reg prometheus.Registerer, tracer op
 	for _, opt := range options {
 		opt(o)
 	}
+
+	// Register the p2c balancer with the provided logger so diagnostics
+	// flow through the same logger as the rest of the component.
+	p2c.RegisterBalancer(logger)
 
 	serviceConfig := o.serviceConfig
 	if serviceConfig == "" {
