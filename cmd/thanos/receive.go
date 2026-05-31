@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -153,7 +154,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion, conf.rwServerTlsCiphers, conf.rwServerTlsCurves)
 	if err != nil {
 		return err
 	}
@@ -162,16 +163,17 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.rwClientSecure,
-		conf.rwClientSkipVerify,
-		conf.rwClientCert,
-		conf.rwClientKey,
-		conf.rwClientServerCA,
-		conf.rwClientServerName,
 	)
 	if err != nil {
 		return err
 	}
+
+	tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, conf.rwClientSecure, conf.rwClientSkipVerify, conf.rwClientCert, conf.rwClientKey, conf.rwClientServerCA, conf.rwClientServerName, conf.rwClientTlsMinVersion)
+	if err != nil {
+		return err
+	}
+	dialOpts = append(dialOpts, tlsDialOpts)
+
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
@@ -346,7 +348,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion, conf.grpcConfig.tlsCiphers, conf.grpcConfig.tlsCurves)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -400,18 +402,48 @@ func runReceive(
 		statusSrv := status.NewServer(
 			component.Receive.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
+					promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to convert matchers")
+					}
+
+					// Build the list of tenant IDs if the request matches
+					// against exact tenant values only.
 					var tenantIDs []string
-					if tenantID != "" {
-						tenantIDs = append(tenantIDs, tenantID)
+					for _, promMatcher := range promMatchers {
+						if promMatcher.Name != conf.tenantLabelName {
+							continue
+						}
+
+						if promMatcher.Type != labels.MatchEqual {
+							tenantIDs = nil
+							break
+						}
+
+						tenantIDs = append(tenantIDs, promMatcher.Value)
 					}
 
 					stats := map[string]tsdb.Stats{}
+					// Get stats for all tenants and filter based on external labels matching.
 					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+						extLabels := labels.NewBuilder(lset).Set(conf.tenantLabelName, ts.Tenant).Labels()
+
+						var skip bool
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								skip = true
+								break
+							}
+						}
+						if skip {
+							continue
+						}
+
 						stats[ts.Tenant] = *ts.Stats
 					}
 
@@ -851,6 +883,9 @@ type receiveConfig struct {
 	rwClientServerName    string
 	rwClientSkipVerify    bool
 	rwServerTlsMinVersion string
+	rwClientTlsMinVersion string
+	rwServerTlsCiphers    []string
+	rwServerTlsCurves     []string
 
 	dataDir   string
 	labelStrs []string
@@ -935,8 +970,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
-	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the HTTP server, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwServerTlsMinVersion, tls.AllowedTLSVersions...)
 
+	cmd.Flag("remote-write.server-tls-ciphers", "TLS cipher suites for the HTTP server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").StringsVar(&rc.rwServerTlsCiphers)
+
+	cmd.Flag("remote-write.server-tls-curves", "TLS curves for the HTTP server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").StringsVar(&rc.rwServerTlsCurves)
+
+	// For historical reasons Thanos Receive uses its own `--remote-write.client-tls-` options
+	// flags for gRPC client TLS configuration, separate to the --grpc-client-tls- options in cmd/thanos/config.go.
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 
 	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
@@ -948,6 +989,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&rc.rwClientServerCA)
 
 	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&rc.rwClientServerName)
+
+	cmd.Flag("remote-write.client-tls-min-version", "TLS version for the gRPC client, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwClientTlsMinVersion, tls.AllowedTLSVersions...)
 
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").StringVar(&rc.dataDir)

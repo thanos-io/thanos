@@ -6,6 +6,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	equery "github.com/thanos-io/promql-engine/query"
+	"go.uber.org/atomic"
 
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -29,6 +31,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
 
 func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
@@ -364,4 +368,71 @@ func benchmarkQueryRangeGRPCBatching(b *testing.B, seriesCount, samplesPerSeries
 			b.Fatal(err)
 		}
 	}
+}
+
+// TestGRPCQueryAPIMaxResolutionConversion verifies that MaxResolutionSeconds (in seconds)
+// from the gRPC request is correctly converted to milliseconds before being forwarded to
+// the store as MaxResolutionWindow.
+func TestGRPCQueryAPIMaxResolutionConversion(t *testing.T) {
+	const resolutionSeconds = int64(300)
+	const expectedMillis = resolutionSeconds * 1000
+
+	captureStore := &resolutionCapturingStore{}
+
+	logger := log.NewNopLogger()
+	reg := prometheus.NewRegistry()
+	proxy := store.NewProxyStore(
+		logger, reg,
+		func() []store.Client {
+			return []store.Client{
+				&storetestutil.TestClient{
+					Name:        "test",
+					StoreClient: storepb.ServerAsClient(captureStore, atomic.Bool{}),
+					MinTime:     math.MinInt64,
+					MaxTime:     math.MaxInt64,
+				},
+			}
+		},
+		component.Store,
+		labels.EmptyLabels(),
+		1*time.Minute,
+		store.EagerRetrieval,
+	)
+	queryableCreator := query.NewQueryableCreator(logger, reg, proxy, 1, 1*time.Minute, dedup.AlgorithmPenalty, 1)
+	remoteEndpointsCreator := query.NewRemoteEndpointsCreator(logger, func() []query.Client { return nil }, nil, 1*time.Minute, true, true)
+	lookbackDeltaFunc := func(i int64) time.Duration { return 5 * time.Minute }
+	grpcAPI := NewGRPCAPI(time.Now, nil, queryableCreator, remoteEndpointsCreator, queryFactory, querypb.EngineType_thanos, lookbackDeltaFunc, 0)
+
+	t.Run("QueryRange", func(t *testing.T) {
+		captureStore.capturedMaxResolution = 0
+		err := grpcAPI.QueryRange(&querypb.QueryRangeRequest{
+			Query:                "metric",
+			StartTimeSeconds:     0,
+			IntervalSeconds:      10,
+			EndTimeSeconds:       300,
+			MaxResolutionSeconds: resolutionSeconds,
+		}, newQueryRangeServer(context.Background()))
+		testutil.Ok(t, err)
+		testutil.Equals(t, expectedMillis, captureStore.capturedMaxResolution)
+	})
+
+	t.Run("Query", func(t *testing.T) {
+		captureStore.capturedMaxResolution = 0
+		err := grpcAPI.Query(&querypb.QueryRequest{
+			Query:                "metric",
+			MaxResolutionSeconds: resolutionSeconds,
+		}, newQueryServer(context.Background()))
+		testutil.Ok(t, err)
+		testutil.Equals(t, expectedMillis, captureStore.capturedMaxResolution)
+	})
+}
+
+type resolutionCapturingStore struct {
+	storepb.UnimplementedStoreServer
+	capturedMaxResolution int64
+}
+
+func (s *resolutionCapturingStore) Series(req *storepb.SeriesRequest, _ storepb.Store_SeriesServer) error {
+	s.capturedMaxResolution = req.MaxResolutionWindow
+	return nil
 }

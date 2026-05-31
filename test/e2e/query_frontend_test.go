@@ -1101,7 +1101,7 @@ func TestQueryFrontendAnalyze(t *testing.T) {
 func TestQueryFrontendReadyOnlyIfDownstreamIsAvailable(t *testing.T) {
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("qfe-analyze")
+	e, err := e2e.NewDockerEnvironment("qfe-analyzeds")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 

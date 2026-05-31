@@ -135,6 +135,7 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+    min_version: ""
   cache_size: 0
   master_name: ""
   max_async_buffer_size: 10000

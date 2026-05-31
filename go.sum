@@ -3923,8 +3923,8 @@ github.com/thanos-community/grpc-go v0.0.0-20260331083222-a7315f1dfb76 h1:RheGOR
 github.com/thanos-community/grpc-go v0.0.0-20260331083222-a7315f1dfb76/go.mod h1:YnIHHmJ2ND31zdEiJmIw5W6dtr05o2clL82wnWwFnn0=
 github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488 h1:khBsQLLRoF1KzXgTlwFZa6mC32bwYUUAu/AeP49V7UM=
 github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488/go.mod h1:uDHLkMKOGDAnlN75EAz8VrRzob1+VbgYSuUleatWuF0=
-github.com/thanos-io/promql-engine v0.0.0-20260119085929-dd5223783674 h1:C5yBEuIZCaeLh90lcUGfnGepmwDfGGYLu6+w7RxR7og=
-github.com/thanos-io/promql-engine v0.0.0-20260119085929-dd5223783674/go.mod h1:uzn40oZHPXvfdP498h+MiRL2fN7RF519gNaV3LyhChc=
+github.com/thanos-io/promql-engine v0.0.0-20260513095632-c5f6038078e3 h1:vO9SBpSzzp7jlDaWqJ34Y7zumD5OrPTcCZcWgDgzC6M=
+github.com/thanos-io/promql-engine v0.0.0-20260513095632-c5f6038078e3/go.mod h1:uzn40oZHPXvfdP498h+MiRL2fN7RF519gNaV3LyhChc=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab h1:7ZR3hmisBWw77ZpO1/o86g+JV3VKlk3d48jopJxzTjU=
 github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab/go.mod h1:eheTFp954zcWZXCU8d0AT76ftsQOTo4DTqkN/h3k1MY=
 github.com/tidwall/gjson v1.14.2/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=

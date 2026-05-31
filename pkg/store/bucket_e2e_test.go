@@ -172,7 +172,6 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 		bytesLimiterFactory,
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		true,

@@ -23,8 +23,11 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	enginemodel "github.com/thanos-io/promql-engine/execution/model"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/query/fanout"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -329,10 +332,29 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		ResponseBatchSize:       originalRequest.ResponseBatchSize,
 	}
 
+	tracker := fanout.FromContext(ctx)
+	opID, opIDOK := enginemodel.OperatorIDFromContext(ctx)
+
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
+		var reporter statsReporter
 
-		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses)
+		if tracker != nil && opIDOK {
+			_, storeAddr, _ := storeInfo(st)
+			reporter = func(rs RespSetStats) {
+				tracker.AddStore(opID, fanout.StoreFanout{
+					EndpointAddr:   storeAddr,
+					Duration:       rs.Duration,
+					BytesProcessed: rs.BytesProcessed,
+					NumResponses:   rs.NumResponses,
+					Series:         rs.Series,
+					Chunks:         rs.Chunks,
+					Samples:        rs.Samples,
+				})
+			}
+		}
+
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses, reporter)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 

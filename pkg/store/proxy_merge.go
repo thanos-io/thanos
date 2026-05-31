@@ -34,6 +34,30 @@ type seriesStream interface {
 	At() *storepb.SeriesResponse
 }
 
+// RespSetStats captures per-store telemetry collected while streaming a
+// Series response from a single StoreAPI endpoint. It is reported once, at
+// the end of the stream, via the optional statsReporter passed to
+// newLazyRespSet / newEagerRespSet.
+type RespSetStats struct {
+	Duration       time.Duration
+	BytesProcessed int64
+	NumResponses   int64
+	Series         int64
+	Chunks         int64
+	Samples        int64
+}
+
+// statsReporter is an optional callback invoked once per StoreAPI fan-out when
+// streaming finishes. A nil reporter is a no-op.
+type statsReporter func(RespSetStats)
+
+func reportStats(r statsReporter, s RespSetStats) {
+	if r == nil {
+		return
+	}
+	r(s)
+}
+
 type responseDeduplicator struct {
 	h seriesStream
 
@@ -393,6 +417,7 @@ func newLazyRespSet(
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
 	fixedBufferSize int,
+	reportStatsFn statsReporter,
 ) respSet {
 	bufferedResponsesMtx := &sync.Mutex{}
 
@@ -420,8 +445,10 @@ func newLazyRespSet(
 	}
 
 	go func(st string, l *lazyRespSet) {
+		startTime := time.Now()
 		bytesProcessed := 0
 		seriesStats := &storepb.SeriesStatsCounter{}
+		numResponses := 0
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
@@ -430,10 +457,18 @@ func newLazyRespSet(
 			l.span.SetTag("processed.bytes", bytesProcessed)
 			l.span.Finish()
 
+			reportStats(reportStatsFn, RespSetStats{
+				Duration:       time.Since(startTime),
+				BytesProcessed: int64(bytesProcessed),
+				NumResponses:   int64(numResponses),
+				Series:         int64(seriesStats.Series),
+				Chunks:         int64(seriesStats.Chunks),
+				Samples:        int64(seriesStats.Samples),
+			})
+
 			close(l.donec)
 		}()
 
-		numResponses := 0
 		defer func() {
 			if numResponses == 0 {
 				emptyStreamResponses.Inc()
@@ -555,6 +590,7 @@ func newAsyncRespSet(
 	logger log.Logger,
 	emptyStreamResponses prometheus.Counter,
 	lazyRetrievalMaxBufferedResponses int,
+	reportStatsFn statsReporter,
 ) (respSet, error) {
 
 	var (
@@ -622,6 +658,7 @@ func newAsyncRespSet(
 			applySharding,
 			emptyStreamResponses,
 			lazyRetrievalMaxBufferedResponses,
+			reportStatsFn,
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
@@ -635,6 +672,7 @@ func newAsyncRespSet(
 			applySharding,
 			emptyStreamResponses,
 			labelsToRemove,
+			reportStatsFn,
 		), nil
 	default:
 		panic(fmt.Sprintf("unsupported retrieval strategy %s", retrievalStrategy))
@@ -676,6 +714,7 @@ func newEagerRespSet(
 	applySharding bool,
 	emptyStreamResponses prometheus.Counter,
 	removeLabels map[string]struct{},
+	reportStatsFn statsReporter,
 ) respSet {
 	ret := &eagerRespSet{
 		span:              span,
@@ -700,8 +739,10 @@ func newEagerRespSet(
 
 	// Start a goroutine and immediately buffer everything.
 	go func(l *eagerRespSet) {
+		startTime := time.Now()
 		seriesStats := &storepb.SeriesStatsCounter{}
 		bytesProcessed := 0
+		numResponses := 0
 
 		defer func() {
 			l.span.SetTag("processed.series", seriesStats.Series)
@@ -709,10 +750,19 @@ func newEagerRespSet(
 			l.span.SetTag("processed.samples", seriesStats.Samples)
 			l.span.SetTag("processed.bytes", bytesProcessed)
 			l.span.Finish()
+
+			reportStats(reportStatsFn, RespSetStats{
+				Duration:       time.Since(startTime),
+				BytesProcessed: int64(bytesProcessed),
+				NumResponses:   int64(numResponses),
+				Series:         int64(seriesStats.Series),
+				Chunks:         int64(seriesStats.Chunks),
+				Samples:        int64(seriesStats.Samples),
+			})
+
 			ret.wg.Done()
 		}()
 
-		numResponses := 0
 		defer func() {
 			if numResponses == 0 {
 				emptyStreamResponses.Inc()

@@ -286,6 +286,7 @@ func TestProxyResponseTreeSortWithBatchResponses(t *testing.T) {
 		false,
 		promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("%s-1", t.Name())}),
 		nil,
+		nil,
 	)
 	respSet2 := newEagerRespSet(
 		noopSpan{},
@@ -297,6 +298,7 @@ func TestProxyResponseTreeSortWithBatchResponses(t *testing.T) {
 		shardInfo.Matcher(nil),
 		false,
 		promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("%s-2", t.Name())}),
+		nil,
 		nil,
 	)
 
@@ -382,6 +384,7 @@ func TestLazyRespSetUnpacksBatchResponses(t *testing.T) {
 		false,
 		promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("%s-1", t.Name())}),
 		10,
+		nil,
 	)
 	respSet2 := newLazyRespSet(
 		noopSpan{},
@@ -394,6 +397,7 @@ func TestLazyRespSetUnpacksBatchResponses(t *testing.T) {
 		false,
 		promauto.NewCounter(prometheus.CounterOpts{Name: fmt.Sprintf("%s-2", t.Name())}),
 		10,
+		nil,
 	)
 
 	h := NewProxyResponseLoserTree(respSet1, respSet2)

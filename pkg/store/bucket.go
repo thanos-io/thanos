@@ -90,18 +90,6 @@ const (
 	chunkBytesPoolMinSize = 64 * 1024        // 64 KiB
 	chunkBytesPoolMaxSize = 64 * 1024 * 1024 // 64 MiB
 
-	// CompatibilityTypeLabelName is an artificial label that Store Gateway can optionally advertise. This is required for compatibility
-	// with pre v0.8.0 Querier. Previous Queriers was strict about duplicated external labels of all StoreAPIs that had any labels.
-	// Now with newer Store Gateway advertising all the external labels it has access to, there was simple case where
-	// Querier was blocking Store Gateway as duplicate with sidecar.
-	//
-	// Newer Queriers are not strict, no duplicated external labels check is there anymore.
-	// Additionally newer Queriers removes/ignore this exact labels from UI and querying.
-	//
-	// This label name is intentionally against Prometheus label style.
-	// TODO(bwplotka): Remove it at some point.
-	CompatibilityTypeLabelName = "@thanos_compatibility_store_type"
-
 	// DefaultPostingOffsetInMemorySampling represents default value for --store.index-header-posting-offsets-in-mem-sampling.
 	// 32 value is chosen as it's a good balance for common setups. Sampling that is not too large (too many CPU cycles) and
 	// not too small (too much memory).
@@ -430,9 +418,8 @@ type BucketStore struct {
 
 	partitioner Partitioner
 
-	filterConfig             *FilterConfig
-	advLabelSets             []labelpb.ZLabelSet
-	enableCompatibilityLabel bool
+	filterConfig *FilterConfig
+	advLabelSets []labelpb.ZLabelSet
 
 	// Every how many posting offset entry we pool in heap memory. Default in Prometheus is 32.
 	postingOffsetsInMemSampling int
@@ -654,7 +641,6 @@ func NewBucketStore(
 	bytesLimiterFactory BytesLimiterFactory,
 	partitioner Partitioner,
 	blockSyncConcurrency int,
-	enableCompatibilityLabel bool,
 	postingOffsetsInMemSampling int,
 	enableSeriesResponseHints bool, // TODO(pracucci) Thanos 0.12 and below doesn't gracefully handle new fields in SeriesResponse. Drop this flag and always enable hints once we can drop backward compatibility.
 	lazyIndexReaderEnabled bool,
@@ -681,7 +667,6 @@ func NewBucketStore(
 		seriesLimiterFactory:            seriesLimiterFactory,
 		bytesLimiterFactory:             bytesLimiterFactory,
 		partitioner:                     partitioner,
-		enableCompatibilityLabel:        enableCompatibilityLabel,
 		postingOffsetsInMemSampling:     postingOffsetsInMemSampling,
 		enableSeriesResponseHints:       enableSeriesResponseHints,
 		enableChunkHashCalculation:      enableChunkHashCalculation,
@@ -1024,14 +1009,9 @@ func (s *BucketStore) TSDBInfos() []infopb.TSDBInfo {
 
 func (s *BucketStore) LabelSet() []labelpb.ZLabelSet {
 	s.mtx.RLock()
-	labelSets := s.advLabelSets
-	s.mtx.RUnlock()
+	defer s.mtx.RUnlock()
 
-	if s.enableCompatibilityLabel && len(labelSets) > 0 {
-		labelSets = append(labelSets, labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: CompatibilityTypeLabelName, Value: "store"}}})
-	}
-
-	return labelSets
+	return s.advLabelSets
 }
 
 func (s *BucketStore) limitMinTime(mint int64) int64 {
@@ -1722,6 +1702,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
 						nil,
+						nil,
 					)
 				} else {
 					resp = newLazyRespSet(
@@ -1735,6 +1716,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 						false,
 						s.metrics.emptyPostingCount.WithLabelValues(tenant),
 						max(s.lazyRetrievalMaxBufferedResponses, 1),
+						nil,
 					)
 				}
 

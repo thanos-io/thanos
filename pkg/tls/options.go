@@ -19,8 +19,11 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AllowedTLSVersions is for global lists the TLS versions allowed to be used.
+var AllowedTLSVersions = []string{"1.0", "1.1", "1.2", "1.3"}
+
 // NewServerConfig provides new server TLS configuration.
-func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string) (*tls.Config, error) {
+func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersion string, ciphers []string, curves []string) (*tls.Config, error) {
 	if keyPath == "" && certPath == "" {
 		if clientCA != "" {
 			return nil, errors.New("when a client CA is used a server key and certificate must also be provided")
@@ -36,7 +39,7 @@ func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersi
 		return nil, errors.New("both server key and certificate must be provided")
 	}
 
-	minTlsVersion, err := getTlsVersion(tlsMinVersion)
+	minTlsVersion, err := GetTlsVersion(tlsMinVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -44,6 +47,19 @@ func NewServerConfig(logger log.Logger, certPath, keyPath, clientCA, tlsMinVersi
 	tlsCfg := &tls.Config{
 		MinVersion: minTlsVersion,
 	}
+
+	cipherSuiteIDs, err := getCipherSuiteIDs(ciphers)
+	if err != nil {
+		return nil, err
+	}
+	tlsCfg.CipherSuites = cipherSuiteIDs
+
+	curveIDs, err := getCurveIDs(curves)
+	if err != nil {
+		return nil, err
+	}
+	tlsCfg.CurvePreferences = curveIDs
+
 	// Certificate is loaded during server startup to check for any errors.
 	certificate, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
@@ -113,7 +129,8 @@ func (m *serverTLSManager) getCertificate(clientHello *tls.ClientHelloInfo) (*tl
 }
 
 // NewClientConfig provides new client TLS configuration.
-func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool) (*tls.Config, error) {
+// minTLSVersion must be one of 1.0, 1.1, 1.2, 1.3 per GetTlsVersion().
+func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, skipVerify bool, minTLSVersion string) (*tls.Config, error) {
 	var certPool *x509.CertPool
 	if caCert != "" {
 		caPEM, err := os.ReadFile(filepath.Clean(caCert))
@@ -135,8 +152,21 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		level.Info(logger).Log("msg", "TLS client using system certificate pool")
 	}
 
+	var (
+		mtlsVersion uint16
+		err         error
+	)
+
+	if minTLSVersion != "" {
+		mtlsVersion, err = GetTlsVersion(minTLSVersion)
+		if err != nil {
+			return nil, err
+		}
+		level.Info(logger).Log("msg", fmt.Sprintf("setting minimum TLS version to %s", minTLSVersion))
+	}
 	tlsCfg := &tls.Config{
-		RootCAs: certPool,
+		RootCAs:    certPool,
+		MinVersion: mtlsVersion,
 	}
 
 	if serverName != "" {
@@ -213,7 +243,66 @@ func (validOption validOption) joinString() string {
 	return strings.Join(keys, ", ")
 }
 
-func getTlsVersion(tlsMinVersion string) (uint16, error) {
+func getCipherSuiteIDs(ciphers []string) ([]uint16, error) {
+	if len(ciphers) == 0 {
+		return nil, nil
+	}
+
+	supported := tls.CipherSuites()
+	cipherMap := make(map[string]uint16, len(supported))
+	for _, cs := range supported {
+		cipherMap[cs.Name] = cs.ID
+	}
+	validNames := make([]string, 0, len(cipherMap))
+	for n := range cipherMap {
+		validNames = append(validNames, n)
+	}
+	sort.Strings(validNames)
+
+	ids := make([]uint16, 0, len(ciphers))
+	for _, name := range ciphers {
+		id, ok := cipherMap[name]
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("invalid cipher suite: %s, valid values are %s", name, strings.Join(validNames, ", ")))
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func getCurveIDs(curves []string) ([]tls.CurveID, error) {
+	if len(curves) == 0 {
+		return nil, nil
+	}
+
+	// Manual mapping since crypto/tls doesn't provide enumeration
+	curveMap := map[string]tls.CurveID{
+		"CurveP256":          tls.CurveP256,
+		"CurveP384":          tls.CurveP384,
+		"CurveP521":          tls.CurveP521,
+		"X25519":             tls.X25519,
+		"X25519MLKEM768":     tls.X25519MLKEM768,
+		"SecP256r1MLKEM768":  tls.SecP256r1MLKEM768,
+		"SecP384r1MLKEM1024": tls.SecP384r1MLKEM1024,
+	}
+	validNames := make([]string, 0, len(curveMap))
+	for n := range curveMap {
+		validNames = append(validNames, n)
+	}
+	sort.Strings(validNames)
+
+	ids := make([]tls.CurveID, 0, len(curves))
+	for _, name := range curves {
+		id, ok := curveMap[name]
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("invalid curve: %s, valid values are %s", name, strings.Join(validNames, ", ")))
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+func GetTlsVersion(tlsMinVersion string) (uint16, error) {
 
 	validOption := validOption{
 		tlsOption: map[string]uint16{

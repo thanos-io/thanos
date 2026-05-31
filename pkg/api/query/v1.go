@@ -56,6 +56,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/metadata"
 	"github.com/thanos-io/thanos/pkg/metadata/metadatapb"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/query/fanout"
 	"github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/runutil"
@@ -272,7 +273,20 @@ type queryTelemetry struct {
 	Execution    string           `json:"executionTime,omitempty"`
 	PeakSamples  int64            `json:"peakSamples,omitempty"`
 	TotalSamples int64            `json:"totalSamples,omitempty"`
+	Fanout       []fanoutEntry    `json:"fanout,omitempty"`
 	Children     []queryTelemetry `json:"children,omitempty"`
+}
+
+// fanoutEntry is the JSON representation of a single StoreAPI fan-out for an
+// operator that fetches data from storage.
+type fanoutEntry struct {
+	EndpointAddr   string `json:"endpointAddr,omitempty"`
+	Duration       string `json:"duration,omitempty"`
+	BytesProcessed int64  `json:"bytesProcessed,omitempty"`
+	NumResponses   int64  `json:"numResponses,omitempty"`
+	Series         int64  `json:"series,omitempty"`
+	Chunks         int64  `json:"chunks,omitempty"`
+	Samples        int64  `json:"samples,omitempty"`
 }
 
 func (qapi *QueryAPI) parseEnableDedupParam(r *http.Request) (enableDeduplication bool, _ *api.ApiError) {
@@ -427,10 +441,10 @@ func (qapi *QueryAPI) parseQueryAnalyzeParam(r *http.Request) bool {
 	return (r.FormValue(QueryAnalyzeParam) == "true" || r.FormValue(QueryAnalyzeParam) == "1")
 }
 
-func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryTelemetry, error) {
+func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType, tracker *fanout.Tracker) (queryTelemetry, error) {
 	if eq, ok := query.(engine.ExplainableQuery); ok {
 		if analyze := eq.Analyze(); analyze != nil {
-			return processAnalysis(analyze), nil
+			return processAnalysis(analyze, tracker), nil
 		} else {
 			return queryTelemetry{}, errors.Errorf("Query: %v not analyzable", query)
 		}
@@ -446,14 +460,28 @@ func analyzeQueryOutput(query promql.Query, engineType PromqlEngineType) (queryT
 	return queryTelemetry{}, warning
 }
 
-func processAnalysis(a *engine.AnalyzeOutputNode) queryTelemetry {
+func processAnalysis(a *engine.AnalyzeOutputNode, tracker *fanout.Tracker) queryTelemetry {
 	var analysis queryTelemetry
 	analysis.OperatorName = a.OperatorTelemetry.String()
 	analysis.Execution = a.OperatorTelemetry.ExecutionTimeTaken().String()
 	analysis.PeakSamples = a.PeakSamples()
 	analysis.TotalSamples = a.TotalSamples()
+	if stores := tracker.Get(a.OperatorID); len(stores) > 0 {
+		analysis.Fanout = make([]fanoutEntry, 0, len(stores))
+		for _, s := range stores {
+			analysis.Fanout = append(analysis.Fanout, fanoutEntry{
+				EndpointAddr:   s.EndpointAddr,
+				Duration:       s.Duration.String(),
+				BytesProcessed: s.BytesProcessed,
+				NumResponses:   s.NumResponses,
+				Series:         s.Series,
+				Chunks:         s.Chunks,
+				Samples:        s.Samples,
+			})
+		}
+	}
 	for _, c := range a.Children {
-		analysis.Children = append(analysis.Children, processAnalysis(c))
+		analysis.Children = append(analysis.Children, processAnalysis(c, tracker))
 	}
 	return analysis
 }
@@ -674,6 +702,12 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 	defer qapi.gate.Done()
 	beforeRange := time.Now()
 
+	var fanoutTracker *fanout.Tracker
+	if qapi.parseQueryAnalyzeParam(r) {
+		fanoutTracker = fanout.NewTracker()
+		ctx = fanout.NewContext(ctx, fanoutTracker)
+	}
+
 	var res *promql.Result
 	tracing.DoInSpan(ctx, "instant_query_exec", func(ctx context.Context) {
 		res = qry.Exec(ctx)
@@ -694,8 +728,8 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 	warnings = append(warnings, safeWarnings.AsErrors()...)
 
 	var analysis queryTelemetry
-	if qapi.parseQueryAnalyzeParam(r) {
-		analysis, err = analyzeQueryOutput(qry, engineParam)
+	if fanoutTracker != nil {
+		analysis, err = analyzeQueryOutput(qry, engineParam, fanoutTracker)
 		if err != nil {
 			warnings = append(warnings, err)
 		}
@@ -986,6 +1020,12 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 	}
 	defer qapi.gate.Done()
 
+	var fanoutTracker *fanout.Tracker
+	if qapi.parseQueryAnalyzeParam(r) {
+		fanoutTracker = fanout.NewTracker()
+		ctx = fanout.NewContext(ctx, fanoutTracker)
+	}
+
 	var res *promql.Result
 	tracing.DoInSpan(ctx, "range_query_exec", func(ctx context.Context) {
 		res = qry.Exec(ctx)
@@ -1005,8 +1045,8 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 	warnings = append(warnings, safeWarnings.AsErrors()...)
 
 	var analysis queryTelemetry
-	if qapi.parseQueryAnalyzeParam(r) {
-		analysis, err = analyzeQueryOutput(qry, engineParam)
+	if fanoutTracker != nil {
+		analysis, err = analyzeQueryOutput(qry, engineParam, fanoutTracker)
 		if err != nil {
 			warnings = append(warnings, err)
 		}
@@ -1648,6 +1688,10 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 	span, ctx := tracing.StartSpan(r.Context(), "tsdb_statistics_query_request")
 	defer span.Finish()
 
+	if err := r.ParseForm(); err != nil {
+		return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(err, "parse form")}, func() {}
+	}
+
 	ps := storepb.PartialResponseStrategy_ABORT
 	if qapi.enableStatusPartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
@@ -1668,11 +1712,34 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 		limit = 10
 	}
 
+	// Parse user-provided matchers from URL parameters.
+	// This is a Thanos-only parameter, built as a superset of the same Prometheus API.
+	var matchers []storepb.LabelMatcher
+	for _, s := range r.Form[MatcherParam] {
+		ms, err := extpromql.ParseMetricSelector(s)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		parsed, err := storepb.PromMatchersToMatchers(ms...)
+		if err != nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		matchers = append(matchers, parsed...)
+	}
+
+	// Append tenant matcher when tenancy is enabled.
 	var tenant string
 	if qapi.enforceTenancy {
 		tenant, err = tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+		}
+		if tenant != "" {
+			matchers = append(matchers, storepb.LabelMatcher{
+				Type:  storepb.LabelMatcher_EQ,
+				Name:  qapi.tenantLabel,
+				Value: tenant,
+			})
 		}
 	}
 
@@ -1680,7 +1747,7 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("limit %d overflows int32", limit)}, func() {}
 	}
 	req := &statuspb.TSDBStatisticsRequest{
-		Tenant:                  tenant,
+		Matchers:                matchers,
 		Limit:                   int32(limit),
 		PartialResponseStrategy: ps,
 	}

@@ -403,14 +403,24 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 
 const compactionDelayPercentBlockLength = 10
 
+// lostFoundDir is the directory name that ext4 (and some other filesystems)
+// create automatically at the root of every partition. When a receiver's
+// --tsdb.path points directly at a mount point, the directory scan in Open()
+// and RemoveLockFilesIfAny() would otherwise treat it as a tenant name and
+// attempt to open or clean a TSDB for it, producing spurious errors on
+// startup. A name-based skip is the simplest cross-platform fix; checking the
+// inode or filesystem type would require platform-specific syscalls and adds
+// complexity without meaningful safety benefit, since a tenant legitimately
+// named "lost+found" is not a realistic concern.
+const lostFoundDir = "lost+found"
+
 // generateCompactionDelay() generates a time.Duration of up to compactionDelayPercentBlockLength% of the block range. Used to stagger compactions & uploads.
 func (t *tenant) generateCompactionDelay() time.Duration {
 	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
 }
 
 func (t *tenant) startPeriodicHeadCompaction() {
-	// NOTE(GiedriusS): from the old cmd/thanos/receive.go.
-	var interval = 2 * time.Duration(t.maxBlockDuration) * time.Millisecond
+	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
 	doIter := func() error {
 		db := t.readyS.Get()
@@ -421,18 +431,34 @@ func (t *tenant) startPeriodicHeadCompaction() {
 		if head.MinTime() < 0 {
 			return nil
 		}
-		sinceOldestDataMillis := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
 
-		// NOTE(GiedriusS): this is what Prometheus does. 0.5 is an extra appending window.
+		// Wall-clock time determines whether the head is old enough to compact,
+		// ensuring tenants that stopped receiving samples still get flushed.
+		// The head's data span (MaxTime - MinTime) determines how many blocks
+		// to produce, compacting until the span drops below the threshold.
 		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
-		if sinceOldestDataMillis > compactionThreshold {
+		sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+		if sinceOldestSampleMs <= compactionThreshold {
+			return nil
+		}
+
+		for {
+			select {
+			case <-t.doneC:
+				return nil
+			default:
+			}
+
 			if err := t.compactHead(db); err != nil {
 				return fmt.Errorf("compact head: %w", err)
 			}
 			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
-		}
 
-		return nil
+			head = db.Head()
+			if head.MaxTime()-head.MinTime() <= compactionThreshold {
+				return nil
+			}
+		}
 	}
 
 	compactionDelay := t.generateCompactionDelay()
@@ -626,6 +652,9 @@ func (t *MultiTSDB) Open() error {
 		if !f.IsDir() {
 			continue
 		}
+		if f.Name() == lostFoundDir {
+			continue
+		}
 
 		g.Go(func() error {
 			_, err := t.getOrLoadTenant(f.Name())
@@ -808,6 +837,9 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 	merr := errutil.MultiError{}
 	for _, fi := range fis {
 		if !fi.IsDir() {
+			continue
+		}
+		if fi.Name() == lostFoundDir {
 			continue
 		}
 		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
