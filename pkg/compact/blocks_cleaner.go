@@ -20,6 +20,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
+const deleteBlockMaxAttempts = 3
+
 // BlocksCleaner is a struct that deletes blocks from bucket which are marked for deletion.
 type BlocksCleaner struct {
 	logger                   log.Logger
@@ -65,7 +67,7 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]s
 					return
 				}
 				if time.Since(time.Unix(deletionMark.DeletionTime, 0)).Seconds() > s.deleteDelay.Seconds() {
-					if err := block.Delete(ctx, s.logger, s.bkt, deletionMark.ID); err != nil {
+					if err := s.deleteBlockWithRetry(ctx, deletionMark.ID); err != nil {
 						s.blockCleanupFailures.Inc()
 						merr.Add(errors.Wrap(err, "delete block"))
 						continue
@@ -94,4 +96,27 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]s
 
 	level.Info(s.logger).Log("msg", "cleaning of blocks marked for deletion done")
 	return deletedBlocks, merr.Err()
+}
+
+func (s *BlocksCleaner) deleteBlockWithRetry(ctx context.Context, id ulid.ULID) error {
+	var err error
+	for attempt := range deleteBlockMaxAttempts {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		err = block.Delete(ctx, s.logger, s.bkt, id)
+		if err == nil {
+			return nil
+		}
+		if attempt == deleteBlockMaxAttempts-1 {
+			break
+		}
+		level.Warn(s.logger).Log("msg", "delete block failed, retrying", "block", id, "attempt", attempt+1, "err", err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second << attempt): // exponential backoff
+		}
+	}
+	return err
 }

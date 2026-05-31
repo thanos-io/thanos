@@ -24,6 +24,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8799](https://github.com/thanos-io/thanos/pull/8799): *: Set a `KeepaliveEnforcementPolicy` with `MinTime: 10s` on all gRPC servers, matching the client keepalive interval.
 - [#8806](https://github.com/thanos-io/thanos/pull/8806): Receive: Validate tenant IDs extracted from split-tenant labels to prevent path traversal.
 - [#8810](https://github.com/thanos-io/thanos/pull/8810): Ruler: correctly pass query partial response for gRPC.
+- [#TBD](https://github.com/thanos-io/thanos/pull/TBD): Compactor: Retry block deletion on transient object-store errors during cleanup.
 
 ### Added
 
