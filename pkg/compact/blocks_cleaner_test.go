@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/thanos-io/objstore"
+	"go.uber.org/atomic"
 
 	"github.com/efficientgo/core/testutil"
 
