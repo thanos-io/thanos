@@ -11,7 +11,9 @@ interface StatusIndicatorProps {
 }
 
 export const withStatusIndicator =
-  <T,>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> =>
+  <T extends Record<string, any>>(
+    Component: ComponentType<T>
+  ): FC<Omit<React.ComponentProps<typeof Component>, keyof StatusIndicatorProps> & StatusIndicatorProps> =>
   ({ error, isLoading, customErrorMsg, componentTitle, ...rest }: StatusIndicatorProps) => {
     if (error) {
       return (
@@ -38,5 +40,6 @@ export const withStatusIndicator =
         />
       );
     }
-    return <Component {...(rest as any)} />;
+
+    return <Component {...(rest as T)} />;
   };
