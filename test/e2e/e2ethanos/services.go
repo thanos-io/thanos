@@ -815,6 +815,7 @@ type RulerBuilder struct {
 	evalInterval         string
 	forGracePeriod       string
 	restoreIgnoredLabels []string
+	restoreNewRuleGroups bool
 	nativeHistograms     bool
 }
 
@@ -863,6 +864,11 @@ func (r *RulerBuilder) WithForGracePeriod(forGracePeriod string) *RulerBuilder {
 
 func (r *RulerBuilder) WithRestoreIgnoredLabels(labels ...string) *RulerBuilder {
 	r.restoreIgnoredLabels = labels
+	return r
+}
+
+func (r *RulerBuilder) WithRestoreNewRuleGroups() *RulerBuilder {
+	r.restoreNewRuleGroups = true
 	return r
 }
 
@@ -936,6 +942,10 @@ func (r *RulerBuilder) initRule(internalRuleDir string, queryCfg []clientconfig.
 			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate remote write config: %v", remoteWriteCfg))}
 		}
 		ruleArgs["--remote-write.config"] = string(rwCfgBytes)
+	}
+
+	if r.restoreNewRuleGroups {
+		ruleArgs["--restore-new-rule-groups"] = ""
 	}
 
 	if r.nativeHistograms {
