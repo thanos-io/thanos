@@ -1331,3 +1331,65 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 
 	testutil.Ok(t, i1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
 }
+
+// TestReceiveWithRelabelConfigSmoke verifies that a receiver configured with a
+// source_labels relabel rule does not panic when it actually receives a metric
+// whose labels match the relabel regex. Previously the e2e test booted the
+// receiver but never sent a matching metric, so the relabel code path was never
+// exercised and the bug (UnsetValidation causing a panic) went undetected.
+func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
+	t.Parallel()
+	e, err := e2e.NewDockerEnvironment("receive-relabel-smoke")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Boot an ingestor with a relabel config that reads source_labels.
+	// This is the config that previously triggered the panic when
+	// NameValidationScheme was left as UnsetValidation (0) after YAML
+	// unmarshalling.
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithRelabelConfigs([]*relabel.Config{
+			{
+				SourceLabels: []model.LabelName{"src_label"},
+				Regex:        relabel.MustNewRegexp("(.+)"),
+				TargetLabel:  "dst_label",
+				Action:       relabel.Replace,
+			},
+		}).Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// Send a metric that matches the relabel config's source_labels to trigger
+	// the relabel code path. Without the fix this causes a panic because
+	// NameValidationScheme is UnsetValidation (0).
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, ctx.Done(), func() error {
+		return storeWriteRequest(context.Background(), "http://"+i.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "__name__", Value: "test_metric"},
+						{Name: "src_label", Value: "test_value"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	// Verify the ingestor received the write without panicking.
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(
+		e2emon.Equals(0),
+		[]string{"prometheus_tsdb_blocks_loaded"},
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")),
+		e2emon.WaitMissingMetrics(),
+	))
+}
