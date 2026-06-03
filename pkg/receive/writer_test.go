@@ -436,7 +436,7 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+	m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 		MinBlockDuration:      (2 * time.Hour).Milliseconds(),
 		MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
 		RetentionDuration:     (6 * time.Hour).Milliseconds(),
@@ -501,7 +501,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	dir := b.TempDir()
 	logger := log.NewNopLogger()
 
-	m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+	m := NewMultiTSDB(openTestRoot(b, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 		MinBlockDuration:      (2 * time.Hour).Milliseconds(),
 		MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
 		RetentionDuration:     (6 * time.Hour).Milliseconds(),
