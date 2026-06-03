@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"sort"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid/v2"
+	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,7 +53,7 @@ type TSDBStats interface {
 }
 
 type MultiTSDB struct {
-	dataDir         string
+	dataDir         *os.Root
 	logger          log.Logger
 	reg             prometheus.Registerer
 	tsdbOpts        *tsdb.Options
@@ -152,7 +152,7 @@ Invariants:
 - Any object storage operations must not block reading or writing new samples.
 */
 func NewMultiTSDB(
-	dataDir string,
+	dataDir *os.Root,
 	l log.Logger,
 	reg prometheus.Registerer,
 	tsdbOpts *tsdb.Options,
@@ -583,6 +583,12 @@ func (t *tenant) close(cd closeDelete) {
 			}
 		}
 
+		if t.ship != nil {
+			if err := t.ship.Close(); err != nil {
+				level.Error(t.logger).Log("msg", "failed closing tenant's shipper", "tenant", t.tenantName, "err", err)
+			}
+		}
+
 		t.readyS.set(nil)
 		t.setComponents(nil, nil, nil, nil, nil)
 	})
@@ -638,11 +644,13 @@ func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
+	dir, err := t.dataDir.Open(".")
+	if err != nil {
 		return err
 	}
+	defer dir.Close()
 
-	files, err := os.ReadDir(t.dataDir)
+	files, err := dir.ReadDir(-1)
 	if err != nil {
 		return err
 	}
@@ -721,6 +729,7 @@ func (t *MultiTSDB) Close() {
 	for _, tenant := range t.tenants {
 		tenant.close(KEEP_DATA)
 	}
+	runutil.CloseWithLogOnErr(t.logger, t.dataDir, "mtsdb data dir")
 }
 
 func (t *MultiTSDB) maybeDeleteTenant(tenant *tenant) {
@@ -826,7 +835,13 @@ func (t *MultiTSDB) SyncAllTenants(ctx context.Context) (int, error) {
 }
 
 func (t *MultiTSDB) RemoveLockFilesIfAny() error {
-	fis, err := os.ReadDir(t.dataDir)
+	dir, err := t.dataDir.Open(".")
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+
+	fis, err := dir.ReadDir(-1)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -842,7 +857,7 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 		if fi.Name() == lostFoundDir {
 			continue
 		}
-		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
+		if err := t.dataDir.Remove(path.Join(fi.Name(), "lock")); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -919,7 +934,8 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	lset := t.extractTenantsLabels(tenantID, initialLset)
-	dataDir := t.defaultTenantDataDir(tenantID)
+
+	dataDir := path.Join(t.dataDir.Name(), tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
 
@@ -974,6 +990,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	// We don't do scrapes ourselves so this only gives us a performance penalty.
 	opts.IsolationDisabled = true
 
+	// TODO(guidonguido): open creates a new Dir with no check on the path
 	s, err := tsdb.Open(
 		dataDir,
 		logutil.GoKitLogToSlog(logger),
@@ -993,9 +1010,14 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	var ship *shipper.Shipper
 	if t.bucket != nil {
+		// shipDataDir must be closed together with tenant
+		shipDataDir, err := os.OpenRoot(dataDir)
+		if err != nil {
+			return err
+		}
 		ship = shipper.New(
 			t.bucket,
-			dataDir,
+			shipDataDir,
 			shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.ReceiveSource),
@@ -1018,10 +1040,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
-}
-
-func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
-	return path.Join(t.dataDir, tenantID)
 }
 
 func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
