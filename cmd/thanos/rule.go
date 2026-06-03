@@ -902,7 +902,7 @@ func runRule(
 		if err != nil {
 			return errors.Wrap(err, "open data dir")
 		}
-		defer dataDir.Close()
+		defer runutil.CloseWithLogOnErr(logger, dataDir, "data dir")
 
 		s := shipper.New(
 			bkt,

@@ -526,7 +526,7 @@ func (s *Shipper) blockMetasFromOldest() (metas []*metadata.Meta, failedBlocks [
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "open dir")
 	}
-	defer dir.Close()
+	defer runutil.CloseWithLogOnErr(s.logger, dir, "shipper dir")
 
 	fis, err := dir.ReadDir(-1)
 	if err != nil {

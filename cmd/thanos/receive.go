@@ -206,7 +206,6 @@ func runReceive(
 		}
 	}
 
-	// TODO(guidonguido): check that. Do we need to create the default storage dir?
 	if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
 		return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
 	}
@@ -853,7 +852,6 @@ func startTSDBAndUpload(g *run.Group,
 }
 
 func createDefautTenantTSDB(logger log.Logger, defaultTenantID string, dataDir *os.Root) error {
-
 	if _, err := dataDir.Stat(defaultTenantID); !os.IsNotExist(err) {
 		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
 		return nil

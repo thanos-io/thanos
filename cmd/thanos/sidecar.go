@@ -461,7 +461,7 @@ func runSidecar(
 			if err != nil {
 				return errors.Wrap(err, "opening tsdb directory")
 			}
-			defer dataDir.Close()
+			defer runutil.CloseWithLogOnErr(logger, dataDir, "tsdb directory")
 
 			s := shipper.New(
 				bkt,

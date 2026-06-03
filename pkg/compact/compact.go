@@ -1491,7 +1491,7 @@ func (c *BucketCompactor) Compact(ctx context.Context) (rerr error) {
 	}
 
 	defer func() {
-		dir.Close()
+		runutil.CloseWithLogOnErr(c.logger, dir, "compact root directory")
 		// Do not remove the compactDir if an error has occurred
 		// because potentially on the next run we would not have to download
 		// everything again.
