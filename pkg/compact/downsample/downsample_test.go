@@ -14,7 +14,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/oklog/ulid/v2"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
@@ -26,6 +28,7 @@ import (
 	"github.com/prometheus/prometheus/tsdb/tombstones"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -38,6 +41,30 @@ import (
 
 func TestMain(m *testing.M) {
 	custom.TolerantVerifyLeakMain(m)
+}
+
+func TestGatherNoDownsampleMarkFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+	bkt := objstore.NewInMemBucket()
+
+	markedID := ulid.MustNew(1, nil)
+	unmarkedID := ulid.MustNew(2, nil)
+	metas := map[ulid.ULID]*metadata.Meta{
+		markedID:   {},
+		unmarkedID: {},
+	}
+
+	testutil.Ok(t, block.MarkForNoDownsample(ctx, logger, bkt, markedID, metadata.ManualNoDownsampleReason, "details", prometheus.NewCounter(prometheus.CounterOpts{})))
+
+	filter := NewGatherNoDownsampleMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
+	testutil.Ok(t, filter.Filter(ctx, metas, nil, nil))
+
+	markedBlocks := filter.NoDownsampleMarkedBlocks()
+	testutil.Equals(t, 1, len(markedBlocks))
+	testutil.Equals(t, metadata.ManualNoDownsampleReason, markedBlocks[markedID].Reason)
 }
 
 func TestDownsampleNativeHistograms(t *testing.T) {

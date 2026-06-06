@@ -552,6 +552,30 @@ func TestDownsampleProgressCalculate(t *testing.T) {
 	}
 }
 
+func TestGatherNoCompactionMarkFilter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+	bkt := objstore.NewInMemBucket()
+
+	markedID := ulid.MustNew(1, nil)
+	unmarkedID := ulid.MustNew(2, nil)
+	metas := map[ulid.ULID]*metadata.Meta{
+		markedID:   {},
+		unmarkedID: {},
+	}
+
+	testutil.Ok(t, block.MarkForNoCompact(ctx, logger, bkt, markedID, metadata.ManualNoCompactReason, "details", prometheus.NewCounter(prometheus.CounterOpts{})))
+
+	filter := NewGatherNoCompactionMarkFilter(logger, objstore.WithNoopInstr(bkt), 2)
+	testutil.Ok(t, filter.Filter(ctx, metas, nil, nil))
+
+	markedBlocks := filter.NoCompactMarkedBlocks()
+	testutil.Equals(t, 1, len(markedBlocks))
+	testutil.Equals(t, metadata.ManualNoCompactReason, markedBlocks[markedID].Reason)
+}
+
 func TestNoMarkFilterAtomic(t *testing.T) {
 	if testing.
 		Short() {
