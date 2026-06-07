@@ -43,6 +43,7 @@ import (
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/logutil"
+	"github.com/thanos-io/thanos/pkg/parquet"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -355,6 +356,7 @@ func runCompact(
 	var (
 		compactDir      = path.Join(conf.dataDir, "compact")
 		downsamplingDir = path.Join(conf.dataDir, "downsample")
+		parquetTempDir  = path.Join(conf.dataDir, "parquet-temp")
 	)
 
 	if err := os.MkdirAll(compactDir, os.ModePerm); err != nil {
@@ -363,6 +365,12 @@ func runCompact(
 
 	if err := os.MkdirAll(downsamplingDir, os.ModePerm); err != nil {
 		return errors.Wrap(err, "create working downsample directory")
+	}
+
+	if conf.parquet.enabled {
+		if err := os.MkdirAll(parquetTempDir, os.ModePerm); err != nil {
+			return errors.Wrap(err, "create working Parquet temp directory")
+		}
 	}
 
 	grouper := compact.NewDefaultGrouper(
@@ -393,12 +401,72 @@ func runCompact(
 		planner = largeIndexFilterPlanner
 	}
 	blocksCleaner := compact.NewBlocksCleaner(logger, insBkt, ignoreDeletionMarkFilter, deleteDelay, compactMetrics.blocksCleaned, compactMetrics.blockCleanupFailures)
-	compactor, err := compact.NewBucketCompactor(
+
+	// Setup Parquet writer if enabled
+	var compactionCallback compact.CompactionLifecycleCallback
+	compactionCallback = compact.DefaultCompactionLifecycleCallback{}
+	var parquetWriter parquet.Writer // Keep writer in scope for reconciliation
+
+	if conf.parquet.enabled {
+		// Setup Parquet bucket (could be same as TSDB bucket or separate)
+		var parquetBkt objstore.Bucket
+		if conf.parquet.objStoreFile != "" {
+			// Separate bucket configured - read config file
+			parquetConfContentYaml, err := os.ReadFile(conf.parquet.objStoreFile)
+			if err != nil {
+				return errors.Wrap(err, "read Parquet bucket configuration file")
+			}
+			parquetBkt, err = client.NewBucket(logger, parquetConfContentYaml, "parquet", nil)
+			if err != nil {
+				return errors.Wrap(err, "create Parquet bucket")
+			}
+			parquetBkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(parquetBkt, extprom.WrapRegistererWithPrefix("thanos_", reg), parquetBkt.Name()))
+		} else {
+			parquetBkt = insBkt // Use same bucket as TSDB
+		}
+
+		// Create Parquet writer
+		parquetWriter, err = parquet.New(
+			parquet.Config{
+				Enabled:              true,
+				TSDBBucket:           insBkt,
+				ParquetBucket:        parquetBkt,
+				BasePath:             conf.parquet.basePath,
+				ShardingEnabled:      conf.parquet.enableSharding,
+				TargetSeriesPerShard: conf.parquet.targetSeriesPerShard,
+				SortLabels:           conf.parquet.sortLabels,
+				CompressionCodec:     conf.parquet.compressionCodec,
+				RowGroupSize:         conf.parquet.rowGroupSize,
+				DownloadConcurrency:  conf.blockFilesConcurrency,
+				EncodingConcurrency:  conf.parquet.encodingConcurrency,
+				UploadConcurrency:    conf.blockFilesConcurrency,
+				TempDir:              parquetTempDir,
+			},
+			log.With(logger, "component", "parquet-writer"),
+			reg,
+		)
+		if err != nil {
+			return errors.Wrap(err, "create Parquet writer")
+		}
+
+		compactionCallback = compact.NewParquetCompactionLifecycleCallback(
+			compactionCallback,
+			parquetWriter,
+			conf.parquet.async,
+		)
+
+		level.Info(logger).Log("msg", "Parquet writing enabled", "async", conf.parquet.async)
+	}
+
+	// Create compactor with our callback
+	compactor, err := compact.NewBucketCompactorWithCheckerAndCallback(
 		logger,
 		sy,
 		grouper,
 		planner,
 		comp,
+		compact.DefaultBlockDeletableChecker{},
+		compactionCallback,
 		compactDir,
 		insBkt,
 		conf.compactionConcurrency,
@@ -531,8 +599,49 @@ func runCompact(
 		return cleanPartialMarked()
 	}
 
+	// Parquet reconciliation function to convert any unconverted 8h blocks
+	parquetReconcileFn := func() error {
+		if parquetWriter == nil {
+			return nil
+		}
+
+		level.Info(logger).Log("msg", "starting Parquet reconciliation")
+
+		// Sync metadata to get current blocks
+		if err := sy.SyncMetas(ctx); err != nil {
+			return errors.Wrap(err, "sync metas for Parquet reconciliation")
+		}
+
+		// Get all current blocks
+		allBlocks := sy.Metas()
+
+		// Run reconciliation
+		converted, err := parquetWriter.Reconcile(ctx, allBlocks)
+		if err != nil {
+			level.Error(logger).Log("msg", "Parquet reconciliation failed", "err", err, "converted", converted)
+			return errors.Wrap(err, "Parquet reconciliation")
+		}
+
+		if converted > 0 {
+			level.Info(logger).Log("msg", "Parquet reconciliation completed", "blocks_converted", converted)
+		} else {
+			level.Debug(logger).Log("msg", "Parquet reconciliation completed, no blocks needed conversion")
+		}
+
+		return nil
+	}
+
 	g.Add(func() error {
 		defer runutil.CloseWithLogOnErr(logger, insBkt, "bucket client")
+
+		// Run Parquet reconciliation on startup if enabled
+		if conf.parquet.enabled && conf.parquet.reconcileOnStartup {
+			level.Info(logger).Log("msg", "running Parquet reconciliation on startup")
+			if err := parquetReconcileFn(); err != nil {
+				level.Warn(logger).Log("msg", "startup Parquet reconciliation failed", "err", err)
+				// Don't fail startup, just log the error
+			}
+		}
 
 		if !conf.wait {
 			return compactMainFn()
@@ -572,6 +681,22 @@ func runCompact(
 	}, func(error) {
 		cancel()
 	})
+
+	// Add periodic Parquet reconciliation goroutine if interval is set
+	if conf.parquet.enabled && conf.parquet.reconcileInterval > 0 {
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "starting periodic Parquet reconciliation", "interval", conf.parquet.reconcileInterval)
+			return runutil.Repeat(conf.parquet.reconcileInterval, ctx.Done(), func() error {
+				if err := parquetReconcileFn(); err != nil {
+					level.Warn(logger).Log("msg", "periodic Parquet reconciliation failed", "err", err)
+					// Don't fail the goroutine, just log the error and continue
+				}
+				return nil
+			})
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	if conf.wait {
 		if !conf.disableWeb {
@@ -742,6 +867,22 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
+	parquet                                        parquetConfig
+}
+
+type parquetConfig struct {
+	enabled              bool
+	async                bool
+	objStoreFile         string
+	basePath             string
+	enableSharding       bool
+	targetSeriesPerShard int
+	sortLabels           []string
+	encodingConcurrency  int
+	rowGroupSize         int
+	compressionCodec     string
+	reconcileOnStartup   bool
+	reconcileInterval    time.Duration
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -856,4 +997,53 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("bucket-web-label", "External block label to use as group title in the bucket web UI").StringVar(&cc.label)
 
 	cmd.Flag("disable-admin-operations", "Disable UI/API admin operations like marking blocks for deletion and no compaction.").Default("false").BoolVar(&cc.disableAdminOperations)
+
+	// Parquet flags
+	cmd.Flag("parquet.write",
+		"Enable Parquet writing for 8-hour compacted blocks.").
+		Default("false").BoolVar(&cc.parquet.enabled)
+
+	cmd.Flag("parquet.async",
+		"Run Parquet conversions in background goroutines to avoid blocking compaction.").
+		Default("true").BoolVar(&cc.parquet.async)
+
+	cmd.Flag("parquet.objstore-config-file",
+		"Path to YAML file with object storage configuration for Parquet files. If empty, uses same bucket as TSDB blocks. See format details: https://thanos.io/tip/thanos/storage.md/#configuration").
+		PlaceHolder("<file-path>").StringVar(&cc.parquet.objStoreFile)
+
+	cmd.Flag("parquet.base-path",
+		"Base path within bucket for Parquet files.").
+		Default("parquet/").StringVar(&cc.parquet.basePath)
+
+	cmd.Flag("parquet.enable-sharding",
+		"Enable label-based sharding for high-cardinality data.").
+		Default("true").BoolVar(&cc.parquet.enableSharding)
+
+	cmd.Flag("parquet.target-series-per-shard",
+		"Target number of series per Parquet shard.").
+		Default("1000000").IntVar(&cc.parquet.targetSeriesPerShard)
+
+	cmd.Flag("parquet.sort-label",
+		"Labels to sort by in Parquet files. Can be repeated.").
+		Default("__name__").StringsVar(&cc.parquet.sortLabels)
+
+	cmd.Flag("parquet.encoding-concurrency",
+		"Concurrency level for Parquet encoding.").
+		Default("4").IntVar(&cc.parquet.encodingConcurrency)
+
+	cmd.Flag("parquet.row-group-size",
+		"Rows per Parquet row group.").
+		Default("1000000").IntVar(&cc.parquet.rowGroupSize)
+
+	cmd.Flag("parquet.compression",
+		"Compression codec for Parquet files.").
+		Default("zstd").EnumVar(&cc.parquet.compressionCodec, "zstd", "snappy", "none")
+
+	cmd.Flag("parquet.reconcile-on-startup",
+		"Run Parquet reconciliation on startup to convert any existing 8h blocks missing Parquet files. Recommended for disaster recovery.").
+		Default("true").BoolVar(&cc.parquet.reconcileOnStartup)
+
+	cmd.Flag("parquet.reconcile-interval",
+		"Interval for periodic Parquet reconciliation. Set to 0 to disable periodic reconciliation.").
+		Default("6h").DurationVar(&cc.parquet.reconcileInterval)
 }
