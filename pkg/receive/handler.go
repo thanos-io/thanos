@@ -154,6 +154,15 @@ type Handler struct {
 	Limiter *Limiter
 }
 
+type writeRequestTenantHeader string
+
+func (h writeRequestTenantHeader) Get(header string) string {
+	if header == tenancy.DefaultTenantHeader {
+		return string(h)
+	}
+	return ""
+}
+
 func NewHandler(logger log.Logger, o *Options) *Handler {
 	if logger == nil {
 		logger = log.NewNopLogger()
@@ -515,7 +524,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	span.SetTag("receiver.mode", string(h.receiverMode))
 	defer span.Finish()
 
-	tenantHTTP, err := tenancy.GetTenantFromHTTP(r, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
+	tenantHTTP, err := tenancy.GetTenantFromHTTP(r.Header, r.TLS, h.options.TenantHeader, h.options.DefaultTenantID, h.options.TenantField)
 	if err != nil {
 		level.Error(h.logger).Log("msg", "error getting tenant from HTTP", "err", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1168,6 +1177,12 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	span, ctx := tracing.StartSpan(ctx, "receive_grpc")
 	defer span.Finish()
 
+	tenant, err := h.tenantFromWriteRequest(r)
+	if err != nil {
+		level.Debug(h.logger).Log("msg", "invalid tenant in write request", "err", err)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	h.pendingWriteRequests.Set(float64(h.pendingWriteRequestsCounter.Add(1)))
 	defer h.pendingWriteRequestsCounter.Add(-1)
 
@@ -1175,7 +1190,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	// This skips distributeTimeseriesToReplicas and sendLocalWrite since
 	// the Router already determined this data belongs to this node.
 	if h.receiverMode == IngestorOnly {
-		err := h.writer.Write(ctx, r.Tenant, r.Timeseries)
+		err := h.writer.Write(ctx, tenant, r.Timeseries)
 		if err != nil {
 			level.Debug(h.logger).Log("msg", "failed to write to local TSDB", "err", err)
 		}
@@ -1193,7 +1208,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		}
 	}
 
-	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	_, err = h.handleRequest(ctx, uint64(r.Replica), tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -1211,6 +1226,18 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 	default:
 		return nil, status.Error(codes.Internal, err.Error())
 	}
+}
+
+func (h *Handler) tenantFromWriteRequest(r *storepb.WriteRequest) (string, error) {
+	if r == nil {
+		return "", errors.New("write request is nil")
+	}
+	defaultTenantID := h.options.DefaultTenantID
+	if defaultTenantID == "" {
+		defaultTenantID = tenancy.DefaultTenant
+	}
+
+	return tenancy.GetTenantFromHTTP(writeRequestTenantHeader(r.Tenant), nil, tenancy.DefaultTenantHeader, defaultTenantID, "")
 }
 
 // relabel relabels the time series labels in the remote write request.

@@ -1730,7 +1730,7 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 	// Append tenant matcher when tenancy is enabled.
 	var tenant string
 	if qapi.enforceTenancy {
-		tenant, err = tenancy.GetTenantFromHTTP(r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
+		tenant, err = tenancy.GetTenantFromHTTP(r.Header, r.TLS, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField)
 		if err != nil {
 			return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 		}

@@ -5,6 +5,10 @@ package tenancy_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"net/http"
 	"testing"
 	"time"
 
@@ -50,6 +54,67 @@ func (s *storeSeriesServer) Context() context.Context {
 }
 
 const testTenant = "test-tenant"
+
+func TestGetTenantFromHTTP(t *testing.T) {
+	t.Run("custom-header", func(t *testing.T) {
+		header := http.Header{}
+		header.Set("X-Scope-OrgID", "custom-tenant")
+		header.Set(tenancy.DefaultTenantHeader, "internal-tenant")
+
+		tenant, err := tenancy.GetTenantFromHTTP(header, nil, "X-Scope-OrgID", "fallback-tenant", "")
+		testutil.Ok(t, err)
+		testutil.Equals(t, "custom-tenant", tenant)
+	})
+
+	t.Run("fallback-to-default-header", func(t *testing.T) {
+		header := http.Header{}
+		header.Set(tenancy.DefaultTenantHeader, "internal-tenant")
+
+		tenant, err := tenancy.GetTenantFromHTTP(header, nil, "X-Scope-OrgID", "fallback-tenant", "")
+		testutil.Ok(t, err)
+		testutil.Equals(t, "internal-tenant", tenant)
+	})
+
+	t.Run("fallback-to-default-tenant", func(t *testing.T) {
+		tenant, err := tenancy.GetTenantFromHTTP(http.Header{}, nil, "X-Scope-OrgID", "fallback-tenant", "")
+		testutil.Ok(t, err)
+		testutil.Equals(t, "fallback-tenant", tenant)
+	})
+
+	t.Run("invalid-tenant", func(t *testing.T) {
+		header := http.Header{}
+		header.Set(tenancy.DefaultTenantHeader, "../malicious")
+
+		_, err := tenancy.GetTenantFromHTTP(header, nil, tenancy.DefaultTenantHeader, tenancy.DefaultTenant, "")
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("certificate-overrides-header", func(t *testing.T) {
+		header := http.Header{}
+		header.Set(tenancy.DefaultTenantHeader, "header-tenant")
+		tlsState := &tls.ConnectionState{
+			PeerCertificates: []*x509.Certificate{
+				{
+					Subject: pkix.Name{
+						OrganizationalUnit: []string{"cert-tenant"},
+					},
+				},
+			},
+		}
+
+		tenant, err := tenancy.GetTenantFromHTTP(header, tlsState, tenancy.DefaultTenantHeader, tenancy.DefaultTenant, tenancy.CertificateFieldOrganizationalUnit)
+		testutil.Ok(t, err)
+		testutil.Equals(t, "cert-tenant", tenant)
+	})
+
+	t.Run("missing-certificate", func(t *testing.T) {
+		header := http.Header{}
+		header.Set(tenancy.DefaultTenantHeader, "header-tenant")
+
+		_, err := tenancy.GetTenantFromHTTP(header, nil, tenancy.DefaultTenantHeader, tenancy.DefaultTenant, tenancy.CertificateFieldCommonName)
+		testutil.NotOk(t, err)
+	})
+}
 
 func getAndAssertTenant(ctx context.Context, t *testing.T) {
 	md, ok := metadata.FromOutgoingContext(ctx)
