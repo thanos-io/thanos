@@ -272,7 +272,7 @@ func TestOverlapSplitSet(t *testing.T) {
 		},
 	}
 
-	got := toChunkedSeriesSlice(t, NewOverlapSplit(newChunkedSeriesSet(input)))
+	got := toChunkedSeriesSlice(t, NewOverlapSplit(newChunkedSeriesSet(input), ""))
 	testutil.Equals(t, exp, got)
 }
 
