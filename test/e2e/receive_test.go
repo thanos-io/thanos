@@ -1339,7 +1339,7 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 // exercised and the bug (UnsetValidation causing a panic) went undetected.
 func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
 	t.Parallel()
-	e, err := e2e.NewDockerEnvironment("receive-relabel-smoke")
+	e, err := e2e.NewDockerEnvironment("recv-relabel")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
