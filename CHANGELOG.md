@@ -44,6 +44,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8808](https://github.com/thanos-io/thanos/pull/8808): ruler, sidecar: Add TSDB stats endpoint to gRPC server.
 - [#8797](https://github.com/thanos-io/thanos/pull/8797): Receive, Compact, Sidecar: Use `os.Root` API to confine filesystem access to the service data directory.
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration.
+- [#8847](https://github.com/thanos-io/thanos/pull/8847): Receive: add `--receive.tenant-relabel-config` and `--receive.tenant-relabel-config-file` flags to configure per-tenant relabeling. The config maps a tenant ID to a list of relabel configs; per-tenant configs take precedence over the global `--receive.relabel-config` for matching tenants.
 
 ### Changed
 
