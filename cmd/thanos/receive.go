@@ -229,6 +229,15 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	tenantRelabelContentYaml, err := conf.tenantRelabelConfigPath.Content()
+	if err != nil {
+		return errors.Wrap(err, "get content of per-tenant relabel configuration")
+	}
+	var tenantRelabelConfig map[string][]*relabel.Config
+	if err := yaml.Unmarshal(tenantRelabelContentYaml, &tenantRelabelConfig); err != nil {
+		return errors.Wrap(err, "parse per-tenant relabel configuration")
+	}
+
 	var cache = storecache.NoopMatchersCache
 	if conf.matcherCacheSize > 0 {
 		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
@@ -285,6 +294,7 @@ func runReceive(
 		ReplicaHeader:        conf.replicaHeader,
 		ReplicationFactor:    conf.replicationFactor,
 		RelabelConfigs:       relabelConfig,
+		TenantRelabelConfigs: tenantRelabelConfig,
 		ReceiverMode:         receiveMode,
 		Tracer:               tracer,
 		TLSConfig:            rwTLSConfig,
@@ -937,8 +947,9 @@ type receiveConfig struct {
 	skipCorruptedBlocks   bool
 	uploadConcurrency     int
 
-	reqLogConfig      *extflag.PathOrContent
-	relabelConfigPath *extflag.PathOrContent
+	reqLogConfig            *extflag.PathOrContent
+	relabelConfigPath       *extflag.PathOrContent
+	tenantRelabelConfigPath *extflag.PathOrContent
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -1051,6 +1062,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
 	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
+
+	rc.tenantRelabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.tenant-relabel-config", "YAML file that contains per-tenant relabeling configuration. The format is a map of tenant ID to relabel configs. Per-tenant configs take precedence over the global relabel config.", extflag.WithEnvSubstitution())
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
