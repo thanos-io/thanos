@@ -118,6 +118,7 @@ The default redis config is:
 type: REDIS
 config:
   addr: ""
+  prefix: ""
   username: ""
   password: ""
   db: 0

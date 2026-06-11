@@ -456,6 +456,7 @@ The `redis` index cache allows to use [Redis](https://redis.io) as cache backend
 type: REDIS
 config:
   addr: ""
+  prefix: ""
   username: ""
   password: ""
   db: 0
