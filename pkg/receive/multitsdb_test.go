@@ -558,9 +558,10 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 
 		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 			&tsdb.Options{
-				MinBlockDuration:  maxBlockDuration,
-				MaxBlockDuration:  maxBlockDuration,
-				RetentionDuration: (24 * time.Hour).Milliseconds(),
+				MinBlockDuration:     maxBlockDuration,
+				MaxBlockDuration:     maxBlockDuration,
+				RetentionDuration:    (24 * time.Hour).Milliseconds(),
+				OutOfOrderTimeWindow: (4 * time.Hour).Milliseconds(),
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -579,9 +580,16 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step)))
 		}
 
+		// OOO samples.
+		for step := 7 * time.Hour; step <= 8*time.Hour; step += time.Minute {
+			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step+30*time.Second)))
+		}
+
 		tenant := m.testGetTenant("test-tenant")
 		db := tenant.readyStorage().Get()
 		testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+		testutil.Assert(t, db.Head().MaxOOOTime() > 0)
 
 		// Precondition: head must contain the full 10h of data before
 		// we advance time, otherwise the test could pass vacuously.
@@ -611,6 +619,15 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 		testutil.Assert(t, len(db.Blocks()) >= 3,
 			"expected at least 3 blocks, got %d",
 			len(db.Blocks()))
+
+		oooBlocks := 0
+		for _, b := range db.Blocks() {
+			meta := b.Meta()
+			if meta.Compaction.FromOutOfOrder() {
+				oooBlocks++
+			}
+		}
+		testutil.Assert(t, oooBlocks > 0)
 	})
 }
 

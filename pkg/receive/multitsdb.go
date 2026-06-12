@@ -456,9 +456,14 @@ func (t *tenant) startPeriodicHeadCompaction() {
 
 			head = db.Head()
 			if head.MaxTime()-head.MinTime() <= compactionThreshold {
-				return nil
+				break
 			}
 		}
+
+		if err := db.CompactOOOHead(context.Background()); err != nil {
+			return fmt.Errorf("compact ooo head: %w", err)
+		}
+		return nil
 	}
 
 	compactionDelay := t.generateCompactionDelay()
