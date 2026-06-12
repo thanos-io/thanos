@@ -229,6 +229,15 @@ func runReceive(
 		return errors.Wrap(err, "parse relabel configuration")
 	}
 
+	// After unmarshalling, NameValidationScheme is left as UnsetValidation (0)
+	// because the field is tagged `yaml:"-"`. We must call Validate() to
+	// initialize it; otherwise relabel.Process() panics on an unknown scheme.
+	for _, cfg := range relabelConfig {
+		if err := cfg.Validate(model.LegacyValidation); err != nil {
+			return errors.Wrap(err, "invalid relabel config")
+		}
+	}
+
 	var cache = storecache.NoopMatchersCache
 	if conf.matcherCacheSize > 0 {
 		cache, err = storecache.NewMatchersCache(storecache.WithSize(conf.matcherCacheSize), storecache.WithPromRegistry(reg))
