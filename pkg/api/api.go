@@ -122,6 +122,7 @@ type response struct {
 	ErrorType ErrorType `json:"errorType,omitempty"`
 	Error     string    `json:"error,omitempty"`
 	Warnings  []string  `json:"warnings,omitempty"`
+	Infos     []string  `json:"infos,omitempty"`
 }
 
 type TenantStats struct {
@@ -277,7 +278,11 @@ func Respond(w http.ResponseWriter, data any, warnings []error, logger log.Logge
 		Data:   data,
 	}
 	for _, warn := range warnings {
-		resp.Warnings = append(resp.Warnings, warn.Error())
+		if extannotations.IsPromQLInfo(warn.Error()) {
+			resp.Infos = append(resp.Infos, warn.Error())
+		} else {
+			resp.Warnings = append(resp.Warnings, warn.Error())
+		}
 	}
 
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
