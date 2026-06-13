@@ -631,6 +631,90 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 	})
 }
 
+// TestWallClockCompactionBug reproduces the bug where wall-clock check prevents
+// compaction for active tenants after restart.
+//
+// - Tenant restarts/initializes at T0
+// - Samples arrive continuously from T0 to T0+2.5h (2.5 hours of data)
+// - Data span is 2.5h > 1.5h threshold (should compact!)
+// - But wall-clock time since MinTime is only 2.5h < 3h threshold
+// - With wall-clock check, compaction is blocked incorrectly
+func TestWallClockCompactionBug(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	maxBlockDuration := (2 * time.Hour).Milliseconds()
+	compactionThreshold := int64(1.5 * float64(maxBlockDuration)) // 3 hours
+
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  maxBlockDuration,
+			MaxBlockDuration:  maxBlockDuration,
+			RetentionDuration: (24 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	defer m.Close()
+
+	// first sample arrives at "now"
+	now := time.Now()
+
+	// This creates 3.5 hours of data span, which exceeds the 3h threshold
+	for step := time.Duration(0); step <= 210*time.Minute; step += time.Minute {
+		testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step)))
+	}
+
+	tenant := m.testGetTenant("test-tenant")
+	db := tenant.readyStorage().Get()
+	testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+	head := db.Head()
+
+	dataSpanMs := head.MaxTime() - head.MinTime()
+	testutil.Assert(t, dataSpanMs > compactionThreshold,
+		"data span should exceed threshold: got %dms, threshold %dms", dataSpanMs, compactionThreshold)
+
+	// We have 3.5 hours of DATA (data span > 3h threshold) so it should compact
+	// But wall-clock time since MinTime is ~0 seconds (just appended now) < 3h threshold
+	sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+	testutil.Assert(t, sinceOldestSampleMs < compactionThreshold,
+		"wall-clock time should be less than threshold: got %dms, threshold %dms",
+		sinceOldestSampleMs, compactionThreshold)
+
+	t.Logf("Data span: %dms (%.1fh), threshold: %dms (%.1fh) should compact",
+		dataSpanMs, float64(dataSpanMs)/3600000, compactionThreshold, float64(compactionThreshold)/3600000)
+	t.Logf("Wall-clock since MinTime: %dms, which means we just skip compaction",
+		sinceOldestSampleMs)
+
+	initialBlocks := len(db.Blocks())
+	initialHeadMinTime := head.MinTime()
+
+	err := tenant.tryCompactHead()
+	testutil.Ok(t, err)
+
+	// Blocks were created
+	// Head MinTime advanced
+	head = db.Head()
+	testutil.Assert(t, len(db.Blocks()) > initialBlocks,
+		"compaction should have created blocks: before=%d, after=%d",
+		initialBlocks, len(db.Blocks()))
+
+	testutil.Assert(t, head.MinTime() > initialHeadMinTime,
+		"head MinTime should have advanced after truncation: before=%d, after=%d",
+		initialHeadMinTime, head.MinTime())
+
+	// Verify that data span is now below threshold (compaction worked)
+	newDataSpan := head.MaxTime() - head.MinTime()
+	testutil.Assert(t, newDataSpan <= compactionThreshold,
+		"data span should be below threshold after compaction: got %dms, threshold %dms",
+		newDataSpan, compactionThreshold)
+}
+
 func TestMultiTSDBAddNewTenant(t *testing.T) {
 	if testing.
 		Short() {
