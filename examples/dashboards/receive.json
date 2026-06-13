@@ -14,31 +14,43 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of incoming requests.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 1,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/1../",
@@ -61,10 +73,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, handler, code) (rate(http_requests_total{job=~\"$job\", handler=\"receive\"}[$interval]))",
@@ -74,75 +84,55 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled incoming requests.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 2,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, code) (rate(http_requests_total{job=~\"$job\", handler=\"receive\",code=~\"5..\"}[$interval])) / ignoring (code) group_left() sum by (job) (rate(http_requests_total{job=~\"$job\", handler=\"receive\"}[$interval]))",
@@ -151,23 +141,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -188,31 +166,42 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle incoming requests in quantiles.",
-               "fill": 1,
-               "id": 3,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 3,
                "links": [ ],
                "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "p99",
@@ -233,10 +222,7 @@
                      "fillGradient": 0
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket{job=~\"$job\", handler=\"receive\"}[$interval]))) * 1",
@@ -269,23 +255,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Duration",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -318,232 +292,154 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 4,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 4,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate of write requests (by tenant and code)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 5,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 5,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (tenant, code) (rate(http_requests_total{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Number of errors (by tenant and code)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 6,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 6,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, tenant) (rate(http_request_duration_seconds_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\"}[$__rate_interval])) / sum by (job, tenant) (http_request_duration_seconds_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\"})",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Average request duration (by tenant)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             }
          ],
          "repeat": null,
@@ -558,232 +454,154 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 7,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 7,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$__rate_interval])) / sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code=~\"2..\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Average successful HTTP request size (per tenant and code, only 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 8,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 8,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, tenant) (rate(http_request_size_bytes_sum{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$__rate_interval])) / sum by (job, tenant) (rate(http_request_size_bytes_count{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\", code!~\"2..\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Average failed HTTP request size (per tenant and code, non 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 9,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 9,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, tenant, method) (http_inflight_requests{job=~\"$job\", tenant=~\"$tenant\", handler=\"receive\"})",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{method}} - {{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Inflight requests (per tenant and method)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             }
          ],
          "repeat": null,
@@ -798,308 +616,204 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 10,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 10,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 3,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum(rate(thanos_receive_write_timeseries_sum{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$__rate_interval])) by (job, tenant) ",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate of series received (per tenant, only 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 11,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 11,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 3,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum(rate(thanos_receive_write_timeseries_sum{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$__rate_interval])) by (tenant, code) ",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate of series not written (per tenant and code, non 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 12,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 12,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 3,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum(rate(thanos_receive_write_samples_sum{job=~\"$job\", tenant=~\"$tenant\", code=~\"2..\"}[$__rate_interval])) by (job, tenant) ",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate of samples received (per tenant, only 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 13,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 13,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 3,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum(rate(thanos_receive_write_samples_sum{job=~\"$job\", tenant=~\"$tenant\", code!~\"2..\"}[$__rate_interval])) by (tenant, code) ",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{code}} - {{tenant}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate of samples not written (per tenant and code, non 2XX)",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             }
          ],
          "repeat": null,
@@ -1114,115 +828,99 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of replications to other receive nodes.",
-               "fill": 1,
-               "id": 14,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 14,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_receive_replications_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "all {{job}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of replications to other receive nodes.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 15,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_receive_replications_total{job=~\"$job\", result=\"error\"}[$interval])) / sum by (job) (rate(thanos_receive_replications_total{job=~\"$job\"}[$interval]))",
@@ -1232,23 +930,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1281,115 +967,99 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of forwarded requests to other receive nodes.",
-               "fill": 1,
-               "id": 16,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 16,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_receive_forward_requests_total{job=~\"$job\"}[$__rate_interval]))",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "all {{job}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of forwarded requests to other receive nodes.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 17,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 6,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job) (rate(thanos_receive_forward_requests_total{job=~\"$job\", result=\"error\"}[$interval])) / sum by (job) (rate(thanos_receive_forward_requests_total{job=~\"$job\"}[$interval]))",
@@ -1399,23 +1069,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1448,31 +1106,43 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 18,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/Aborted/",
@@ -1547,10 +1217,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
@@ -1560,75 +1228,55 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 19,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=~\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval])) / ignoring (grpc_code) group_left() sum by (job) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))",
@@ -1637,23 +1285,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -1674,31 +1310,42 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
-               "fill": 1,
-               "id": 20,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 20,
                "links": [ ],
                "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "p99",
@@ -1719,10 +1366,7 @@
                      "fillGradient": 0
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=~\"$job\", grpc_type=\"unary\", grpc_method=\"RemoteWrite\"}[$interval]))) * 1",
@@ -1755,23 +1399,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Duration",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -1804,31 +1436,43 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of handled Unary gRPC requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 21,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/Aborted/",
@@ -1903,10 +1547,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
@@ -1916,75 +1558,55 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 22,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=~\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval])) / ignoring (grpc_code) group_left() sum by (job) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))",
@@ -1993,23 +1615,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -2030,31 +1640,42 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
-               "fill": 1,
-               "id": 23,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 23,
                "links": [ ],
                "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "p99",
@@ -2075,10 +1696,7 @@
                      "fillGradient": 0
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=~\"$job\", grpc_type=\"unary\", grpc_method!=\"RemoteWrite\"}[$interval]))) * 1",
@@ -2111,23 +1729,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Duration",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -2160,31 +1766,43 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows rate of handled Streamed gRPC requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 24,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "/Aborted/",
@@ -2259,10 +1877,8 @@
                      "color": "#C4162A"
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_method, grpc_code) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"server_stream\"}[$interval]))",
@@ -2272,75 +1888,55 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Rate",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
                "aliasColors": {
                   "error": "#E24D42"
                },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows ratio of errors compared to the total number of handled requests from queriers.",
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
+               },
                "fill": 10,
                "id": 25,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
-               },
-               "lines": true,
                "linewidth": 0,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
                "stack": true,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "sum by (job, grpc_code) (rate(grpc_server_handled_total{grpc_code=~\"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss\",job=~\"$job\", grpc_type=\"server_stream\"}[$interval])) / ignoring (grpc_code) group_left() sum by (job) (rate(grpc_server_handled_total{job=~\"$job\", grpc_type=\"server_stream\"}[$interval]))",
@@ -2349,23 +1945,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Errors",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "percentunit",
@@ -2386,31 +1970,42 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows how long has it taken to handle requests from queriers, in quantiles.",
-               "fill": 1,
-               "id": 26,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 26,
                "links": [ ],
                "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "seriesOverrides": [
                   {
                      "alias": "p99",
@@ -2431,10 +2026,7 @@
                      "fillGradient": 0
                   }
                ],
-               "spaceLength": 10,
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "histogram_quantile(0.50, sum by (job, le) (rate(grpc_server_handling_seconds_bucket{job=~\"$job\", grpc_type=\"server_stream\"}[$interval]))) * 1",
@@ -2467,23 +2059,11 @@
                      "step": 10
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Duration",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "s",
@@ -2516,36 +2096,42 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
                "description": "Shows the relative time of last successful upload to the object-store bucket.",
-               "fill": 1,
-               "id": 27,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 27,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 12,
-               "stack": false,
-               "steppedLine": false,
                "styles": [
                   {
                      "alias": "Time",
@@ -2585,48 +2171,16 @@
                      "expr": "time() - max by (job, bucket) (thanos_objstore_bucket_last_successful_upload_time{job=~\"$job\"})",
                      "format": "table",
                      "instant": true,
-                     "intervalFactor": 2,
                      "legendFormat": "",
-                     "refId": "A",
-                     "step": 10
+                     "refId": "A"
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Successful Upload",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
                "transform": "table",
-               "type": "table",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "table"
             }
          ],
          "repeat": null,
@@ -2641,102 +2195,84 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 28,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 28,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "go_memstats_alloc_bytes{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "alloc all {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "go_memstats_heap_alloc_bytes{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "alloc heap {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "rate(go_memstats_alloc_bytes_total{job=~\"$job\"}[30s])",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "alloc rate all {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "rate(go_memstats_heap_alloc_bytes{job=~\"$job\"}[30s])",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "alloc rate heap {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "go_memstats_stack_inuse_bytes{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "inuse heap {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "go_memstats_heap_inuse_bytes{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "inuse stack {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Memory Used",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
+               "type": "timeseries",
                "yaxes": [
                   {
                      "format": "bytes",
@@ -2757,156 +2293,104 @@
                ]
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 29,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 29,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "go_goroutines{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "Goroutines",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             },
             {
-               "aliasColors": { },
-               "bars": false,
-               "dashLength": 10,
-               "dashes": false,
                "datasource": "$datasource",
-               "fill": 1,
-               "id": 30,
-               "legend": {
-                  "avg": false,
-                  "current": false,
-                  "max": false,
-                  "min": false,
-                  "show": true,
-                  "total": false,
-                  "values": false
+               "fieldConfig": {
+                  "defaults": {
+                     "custom": {
+                        "drawStyle": "line",
+                        "fillOpacity": 1,
+                        "lineWidth": 1,
+                        "pointSize": 5,
+                        "showPoints": "never",
+                        "spanNulls": false,
+                        "stacking": {
+                           "group": "A",
+                           "mode": "none"
+                        }
+                     },
+                     "thresholds": {
+                        "mode": "absolute",
+                        "steps": [ ]
+                     },
+                     "unit": "s"
+                  },
+                  "overrides": [ ]
                },
-               "lines": true,
-               "linewidth": 1,
+               "id": 30,
                "links": [ ],
-               "nullPointMode": "null as zero",
-               "percentage": false,
-               "pointradius": 5,
-               "points": false,
-               "renderer": "flot",
-               "seriesOverrides": [ ],
-               "spaceLength": 10,
+               "options": {
+                  "legend": {
+                     "showLegend": true
+                  },
+                  "tooltip": {
+                     "mode": "single",
+                     "sort": "none"
+                  }
+               },
                "span": 4,
-               "stack": false,
-               "steppedLine": false,
                "targets": [
                   {
                      "expr": "go_gc_duration_seconds{job=~\"$job\"}",
                      "format": "time_series",
-                     "intervalFactor": 2,
                      "legendFormat": "{{quantile}} {{instance}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
-               "thresholds": [ ],
-               "timeFrom": null,
-               "timeShift": null,
                "title": "GC Time Quantiles",
                "tooltip": {
-                  "shared": false,
-                  "sort": 0,
-                  "value_type": "individual"
+                  "shared": false
                },
-               "type": "graph",
-               "xaxis": {
-                  "buckets": null,
-                  "mode": "time",
-                  "name": null,
-                  "show": true,
-                  "values": [ ]
-               },
-               "yaxes": [
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": 0,
-                     "show": true
-                  },
-                  {
-                     "format": "short",
-                     "label": null,
-                     "logBase": 1,
-                     "max": null,
-                     "min": null,
-                     "show": false
-                  }
-               ]
+               "type": "timeseries"
             }
          ],
          "repeat": null,
@@ -2930,7 +2414,7 @@
                "value": "default"
             },
             "hide": 0,
-            "label": null,
+            "label": "Data source",
             "name": "datasource",
             "options": [ ],
             "query": "prometheus",
