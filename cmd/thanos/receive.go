@@ -31,8 +31,8 @@ import (
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/compressutil"
@@ -220,7 +220,7 @@ func runReceive(
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
-	relabelConfig, err := conf.relabelCfg.RelabelConfig()
+	relabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
 	if err != nil {
 		return errors.Wrap(err, "get relabel configuration")
 	}
@@ -958,22 +958,12 @@ type relabelCfg struct {
 	*extflag.PathOrContent
 }
 
-func (r *relabelCfg) RelabelConfig() ([]*relabel.Config, error) {
+func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
 	relabelContentYaml, err := r.Content()
 	if err != nil {
 		return []*relabel.Config{}, errors.Wrap(err, "get content of relabel configuration")
 	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return []*relabel.Config{}, errors.Wrap(err, "parse relabel configuration")
-	}
-	for _, cfg := range relabelConfig {
-		if err := cfg.Validate(model.LegacyValidation); err != nil {
-			return []*relabel.Config{}, errors.Wrap(err, "invalid relabel config")
-		}
-	}
-
-	return relabelConfig, nil
+	return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
