@@ -220,13 +220,9 @@ func runReceive(
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabelConfig, err := conf.relabelCfg.RelabelConfig()
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
+		return errors.Wrap(err, "get relabel configuration")
 	}
 
 	var cache = storecache.NoopMatchersCache
@@ -937,8 +933,8 @@ type receiveConfig struct {
 	skipCorruptedBlocks   bool
 	uploadConcurrency     int
 
-	reqLogConfig      *extflag.PathOrContent
-	relabelConfigPath *extflag.PathOrContent
+	reqLogConfig *extflag.PathOrContent
+	relabelCfg   *relabelCfg
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -956,6 +952,28 @@ type receiveConfig struct {
 	compactedBlocksExpandedPostingsCacheSize uint64
 	otlpEnableTargetInfo                     bool
 	otlpResourceAttributes                   []string
+}
+
+type relabelCfg struct {
+	*extflag.PathOrContent
+}
+
+func (r *relabelCfg) RelabelConfig() ([]*relabel.Config, error) {
+	relabelContentYaml, err := r.Content()
+	if err != nil {
+		return []*relabel.Config{}, errors.Wrap(err, "get content of relabel configuration")
+	}
+	var relabelConfig []*relabel.Config
+	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
+		return []*relabel.Config{}, errors.Wrap(err, "parse relabel configuration")
+	}
+	for _, cfg := range relabelConfig {
+		if err := cfg.Validate(model.LegacyValidation); err != nil {
+			return []*relabel.Config{}, errors.Wrap(err, "invalid relabel config")
+		}
+	}
+
+	return relabelConfig, nil
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1050,7 +1068,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
