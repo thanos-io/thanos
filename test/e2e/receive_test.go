@@ -1334,9 +1334,7 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 
 // TestReceiveWithRelabelConfigSmoke verifies that a receiver configured with a
 // source_labels relabel rule does not panic when it actually receives a metric
-// whose labels match the relabel regex. Previously the e2e test booted the
-// receiver but never sent a matching metric, so the relabel code path was never
-// exercised and the bug (UnsetValidation causing a panic) went undetected.
+// whose labels match the relabel regex.
 func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
 	t.Parallel()
 	e, err := e2e.NewDockerEnvironment("recv-relabel")
@@ -1385,7 +1383,6 @@ func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
 		})
 	}))
 
-	// Verify the ingestor received the write without panicking.
 	testutil.Ok(t, i.WaitSumMetricsWithOptions(
 		e2emon.Equals(0),
 		[]string{"prometheus_tsdb_blocks_loaded"},
