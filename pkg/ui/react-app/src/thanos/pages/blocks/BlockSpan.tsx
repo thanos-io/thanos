@@ -9,6 +9,13 @@ interface BlockSpanProps {
   selectBlock: React.Dispatch<React.SetStateAction<Block | undefined>>;
 }
 
+const blockTooltip = (block: Block): string => {
+  const labels = Object.entries(block.thanos.labels)
+    .map(([k, v]) => `${k}="${v}"`)
+    .join(', ');
+  return `${block.ulid}${labels ? '\n{' + labels + '}' : ''}`;
+};
+
 export const BlockSpan: FC<BlockSpanProps> = ({ block, gridMaxTime, gridMinTime, selectBlock }) => {
   const viewWidth = gridMaxTime - gridMinTime;
   const spanWidth = ((block.maxTime - block.minTime) / viewWidth) * 100;
@@ -17,6 +24,7 @@ export const BlockSpan: FC<BlockSpanProps> = ({ block, gridMaxTime, gridMinTime,
   return (
     <button
       onClick={(): void => selectBlock(block)}
+      title={blockTooltip(block)}
       className={`${styles.blockSpan} ${styles[`res-${block.thanos.downsample.resolution}`]} ${
         styles[`level-${block.compaction.level}`]
       }`}
