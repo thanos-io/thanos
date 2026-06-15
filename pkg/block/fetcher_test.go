@@ -405,6 +405,41 @@ func TestLabelShardedMetaFilter_Filter_Basic(t *testing.T) {
 
 }
 
+func TestLabelShardedMetaFilter_Filter_DedupReplicaLabel(t *testing.T) {
+	relabelContentYaml := `
+    - action: keep
+      regex: "r1"
+      source_labels:
+      - replica
+    `
+	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml), SelectorSupportedRelabelActions)
+	testutil.Ok(t, err)
+
+	metas := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"cluster": "A", "replica": "r1"}}},
+		ULID(2): {Thanos: metadata.Thanos{Labels: map[string]string{"cluster": "A", "replica": "r2"}}},
+	}
+	newInput := func() map[ulid.ULID]*metadata.Meta {
+		return map[ulid.ULID]*metadata.Meta{ULID(1): metas[ULID(1)], ULID(2): metas[ULID(2)]}
+	}
+
+	{
+		input := newInput()
+		m := newTestFetcherMetrics()
+		testutil.Ok(t, NewLabelShardedMetaFilter(relabelConfig).Filter(t.Context(), input, m.Synced, nil))
+		testutil.Equals(t, map[ulid.ULID]*metadata.Meta{ULID(1): metas[ULID(1)]}, input)
+		testutil.Equals(t, 1.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+	}
+
+	{
+		input := newInput()
+		m := newTestFetcherMetrics()
+		testutil.Ok(t, NewLabelShardedMetaFilter(relabelConfig, "replica").Filter(t.Context(), input, m.Synced, nil))
+		testutil.Equals(t, map[ulid.ULID]*metadata.Meta{}, input)
+		testutil.Equals(t, 2.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+	}
+}
+
 func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
