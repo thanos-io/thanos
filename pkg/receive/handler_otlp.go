@@ -121,7 +121,7 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply relabeling configs (per-tenant configs take precedence over global).
+	// Apply relabeling configs.
 	h.relabel(&wreq, tenant)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")

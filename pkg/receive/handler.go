@@ -625,7 +625,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Apply relabeling configs (per-tenant configs take precedence over global).
+	// Apply relabeling configs.
 	h.relabel(&wreq, tenantHTTP)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
@@ -1164,7 +1164,6 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
 		}
 	}
 
-	// Use RelabelConfigs if there is no specific config for the tenant, or if the tenant is empty.
 	if len(relabelConfigs) == 0 {
 		if len(h.options.RelabelConfigs) == 0 {
 			return
