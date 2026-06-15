@@ -142,14 +142,14 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		if !certPool.AppendCertsFromPEM(caPEM) {
 			return nil, errors.Wrap(err, "building client CA")
 		}
-		level.Info(logger).Log("msg", "TLS client using provided certificate pool")
+		level.Debug(logger).Log("msg", "TLS client using provided certificate pool")
 	} else {
 		var err error
 		certPool, err = x509.SystemCertPool()
 		if err != nil {
 			return nil, errors.Wrap(err, "reading system certificate pool")
 		}
-		level.Info(logger).Log("msg", "TLS client using system certificate pool")
+		level.Debug(logger).Log("msg", "TLS client using system certificate pool")
 	}
 
 	var (
@@ -162,7 +162,7 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		if err != nil {
 			return nil, err
 		}
-		level.Info(logger).Log("msg", fmt.Sprintf("setting minimum TLS version to %s", minTLSVersion))
+		level.Debug(logger).Log("msg", fmt.Sprintf("setting minimum TLS version to %s", minTLSVersion))
 	}
 	tlsCfg := &tls.Config{
 		RootCAs:    certPool,
@@ -188,7 +188,7 @@ func NewClientConfig(logger log.Logger, cert, key, caCert, serverName string, sk
 		}
 		tlsCfg.GetClientCertificate = mngr.getClientCertificate
 
-		level.Info(logger).Log("msg", "TLS client authentication enabled")
+		level.Debug(logger).Log("msg", "TLS client authentication enabled")
 	}
 	return tlsCfg, nil
 }

@@ -144,7 +144,7 @@ func StoreClientTLSCredentials(logger log.Logger, secure, skipVerify bool, cert,
 		return grpc.WithTransportCredentials(insecure.NewCredentials()), nil
 	}
 
-	level.Info(logger).Log("msg", "enabling client to server TLS")
+	level.Debug(logger).Log("msg", "enabling client to server TLS")
 
 	tlsCfg, err := tls.NewClientConfig(logger, cert, key, caCert, serverName, skipVerify, minTLSVersion)
 	if err != nil {
