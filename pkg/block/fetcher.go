@@ -776,12 +776,24 @@ var _ MetadataFilter = &LabelShardedMetaFilter{}
 // LabelShardedMetaFilter represents struct that allows sharding.
 // Not go-routine safe.
 type LabelShardedMetaFilter struct {
-	relabelConfig []*relabel.Config
+	relabelConfig      []*relabel.Config
+	dedupReplicaLabels map[string]struct{}
 }
 
-// NewLabelShardedMetaFilter creates LabelShardedMetaFilter.
-func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config) *LabelShardedMetaFilter {
-	return &LabelShardedMetaFilter{relabelConfig: relabelConfig}
+// NewLabelShardedMetaFilter creates LabelShardedMetaFilter. Dedup replica labels are here
+// to remove a footgun. For example, imagine that some tenant in Receiver is replicated to two
+// nodes (repllica factor of 2). There are also two Compactors where dedup replica labels are also
+// used in hashmod calculations to shard the work across two instances. Then, without this hashmod
+// separates two streams of the same (replicated) tenant_id data into multiple compactors. Later on, they
+// remove replica labels and then they get picked up by vertical compaction. This leads to a lot of extra
+// work and "error mark already exists". So, to remove this footgun we should just remove dedup replica
+// labels here.
+func NewLabelShardedMetaFilter(relabelConfig []*relabel.Config, dedupReplicaLabels ...string) *LabelShardedMetaFilter {
+	dedup := make(map[string]struct{}, len(dedupReplicaLabels))
+	for _, l := range dedupReplicaLabels {
+		dedup[l] = struct{}{}
+	}
+	return &LabelShardedMetaFilter{relabelConfig: relabelConfig, dedupReplicaLabels: dedup}
 }
 
 // Special label that will have an ULID of the meta.json being referenced to.
@@ -795,6 +807,9 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 		b.Set(BlockIDLabel, id.String())
 
 		for k, v := range m.Thanos.Labels {
+			if _, ok := f.dedupReplicaLabels[k]; ok {
+				continue
+			}
 			b.Set(k, v)
 		}
 
