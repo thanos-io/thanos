@@ -12,6 +12,8 @@ All clients can be configured using `--objstore.config-file` to reference to the
 
 **You can either pass YAML file defined below in `--objstore.config-file` or pass the YAML content directly using `--objstore.config`** We recommend the latter as it gives an explicit static view of configuration for each component. It also saves you the fuss of creating and managing additional file.
 
+NOTE: Each Thanos component reads a single object store bucket from `--objstore.config` / `--objstore.config-file`. There is no way to configure multiple buckets for one component this way: if you pass a multi-document YAML (documents separated by `---`), only the first document is used and the rest are silently ignored. To use different buckets for different components, run a separate instance of each component, each with its own object store configuration.
+
 Don't be afraid of multiline flags!
 
 In Kubernetes it is as easy as (on Thanos sidecar example):
