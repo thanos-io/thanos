@@ -16,6 +16,7 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 
 ### Fixed
 
+- [#7327](https://github.com/thanos-io/thanos/issues/7327): Rule: Add external labels to the individual alert instances returned over the Rules API. Previously Thanos enriched the alerting rule definition labels with external labels but not the active alert instances, so alerts surfaced via the sidecar Rules API were missing external labels such as `cluster`/`replica`.
 - [#8702](https://github.com/thanos-io/thanos/issues/8702): Query: Fix exemplar proxy stripping external label matchers in multi-tier query topologies. In Query A → Query B → Sidecar setups, external label matchers are now preserved when forwarding to downstream Query nodes so they can route to the correct stores.
 - [#8726](https://github.com/thanos-io/thanos/pull/8726): *: Bump `thanos-community/grpc-go` fork to fix CVE-2026-33186 (CVSS 9.1), an authorization bypass via malformed `:path` headers that could bypass path-based "deny" rules in `grpc/authz` interceptors.
 - [#8714](https://github.com/thanos-io/thanos/pull/8714): Tracing: Fix `tls_config` fields (`ca_file`, `cert_file`, `key_file`) being silently ignored when using the OTLP gRPC exporter. Previously, deployments using a private CA or mTLS client certificates had to work around this via `OTEL_EXPORTER_OTLP_CERTIFICATE` and related environment variables.
