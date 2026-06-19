@@ -220,18 +220,9 @@ func runReceive(
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
-	relabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
+	relabelConfig, tenantRelabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
 	if err != nil {
 		return errors.Wrap(err, "get relabel configuration")
-	}
-
-	tenantRelabelContentYaml, err := conf.tenantRelabelConfigPath.Content()
-	if err != nil {
-		return errors.Wrap(err, "get content of per-tenant relabel configuration")
-	}
-	var tenantRelabelConfig map[string][]*relabel.Config
-	if err := yaml.Unmarshal(tenantRelabelContentYaml, &tenantRelabelConfig); err != nil {
-		return errors.Wrap(err, "parse per-tenant relabel configuration")
 	}
 
 	var cache = storecache.NoopMatchersCache
@@ -943,9 +934,8 @@ type receiveConfig struct {
 	skipCorruptedBlocks   bool
 	uploadConcurrency     int
 
-	reqLogConfig     *extflag.PathOrContent
-	relabelCfg       *relabelCfg
-	tenantRelabelCfg *relabelCfg
+	reqLogConfig *extflag.PathOrContent
+	relabelCfg   *relabelCfg
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -969,12 +959,46 @@ type relabelCfg struct {
 	*extflag.PathOrContent
 }
 
-func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
+func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
 	relabelContentYaml, err := r.Content()
 	if err != nil {
-		return []*relabel.Config{}, errors.Wrap(err, "get content of relabel configuration")
+		return nil, nil, errors.Wrap(err, "get content of relabel configuration")
 	}
-	return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
+
+	// return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
+	return parseRelabelConfig(relabelContentYaml)
+}
+
+func parseRelabelConfig(relabelContentYaml []byte) ([]*relabel.Config, map[string][]*relabel.Config, error) {
+	if len(relabelContentYaml) == 0 {
+		return nil, nil, nil
+	}
+
+	// Try the global format first.
+	var global []*relabel.Config
+	if err := yaml.Unmarshal(relabelContentYaml, &global); err == nil {
+		for _, cfg := range global {
+			if err := cfg.Validate(model.LegacyValidation); err != nil {
+				return nil, nil, errors.Wrap(err, "invalid relabel config")
+			}
+		}
+		return global, nil, nil
+	}
+
+	// Fall back to the per-tenant format.
+	var perTenant map[string][]*relabel.Config
+	if err := yaml.Unmarshal(relabelContentYaml, &perTenant); err != nil {
+		return nil, nil, errors.Wrap(err, "parse relabel configuration")
+	}
+	for tenant, cfgs := range perTenant {
+		for _, cfg := range cfgs {
+			if err := cfg.Validate(model.LegacyValidation); err != nil {
+				return nil, nil, errors.Wrapf(err, "invalid relabel config for tenant %q", tenant)
+			}
+		}
+	}
+
+	return nil, perTenant, nil
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1069,9 +1093,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())}
-
-	rc.tenantRelabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.tenant-relabel-config", "YAML file that contains per-tenant relabeling configuration. The format is a map of tenant ID to relabel configs. Per-tenant configs take precedence over the global relabel config.", extflag.WithEnvSubstitution())}
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration. It supports two formats: a list of relabel configs applied to all tenants, or a map of tenant ID to relabel configs for per-tenant relabeling. Per-tenant configs take precedence over the default tenantLa limite config for matching tenants.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 

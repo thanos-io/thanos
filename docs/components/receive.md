@@ -607,11 +607,21 @@ Flags:
                                  https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.relabel-config-file=<file-path>
                                  Path to YAML file that contains relabeling
-                                 configuration.
+                                 configuration. It supports two formats: a list
+                                 of relabel configs applied to all tenants,
+                                 or a map of tenant ID to relabel configs for
+                                 per-tenant relabeling. Per-tenant configs take
+                                 precedence over the global config for matching
+                                 tenants.
       --receive.relabel-config=<content>
-                                 Alternative to 'receive.relabel-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 that contains relabeling configuration.
+                                 Alternative to 'receive.relabel-config-file' 
+                                 flag (mutually exclusive). Content of YAML
+                                 file that contains relabeling configuration. It
+                                 supports two formats: a list of relabel configs
+                                 applied to all tenants, or a map of tenant ID
+                                 to relabel configs for per-tenant relabeling.
+                                 Per-tenant configs take precedence over the
+                                 global config for matching tenants.
       --tsdb.too-far-in-future.time-window=0s
                                  Configures the allowed time window for
                                  ingesting samples too far in the future.
