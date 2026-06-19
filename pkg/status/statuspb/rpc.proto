@@ -29,9 +29,11 @@ service Status {
 }
 
 message TSDBStatisticsRequest {
+  // Deprecated: use matchers instead.
   string tenant = 1;
   int32 limit = 2;
   PartialResponseStrategy partial_response_strategy = 3;
+  repeated thanos.LabelMatcher matchers = 4 [(gogoproto.nullable) = false];
 }
 
 message TSDBStatisticsResponse {

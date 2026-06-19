@@ -213,12 +213,7 @@ func runCompact(
 	}
 	insBkt := objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-	relabelContentYaml, err := conf.selectorRelabelConf.Content()
-	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
-	}
-
-	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+	relabelConfig, err := conf.selectorRelabel.RelabelConfig(block.SelectorSupportedRelabelActions)
 	if err != nil {
 		return err
 	}
@@ -237,7 +232,7 @@ func runCompact(
 	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
 	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
 	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
-	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig)
+	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig, conf.dedupReplicaLabels...)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
 
@@ -730,7 +725,7 @@ type compactConfig struct {
 	compactBlocksFetchConcurrency                  int
 	deleteDelay                                    model.Duration
 	dedupReplicaLabels                             []string
-	selectorRelabelConf                            extflag.PathOrContent
+	selectorRelabel                                *relabelCfg
 	disableWeb                                     bool
 	webConf                                        webConfig
 	label                                          string
@@ -849,7 +844,7 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("web.disable", "Disable Block Viewer UI.").Default("false").BoolVar(&cc.disableWeb)
 
-	cc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+	cc.selectorRelabel = &relabelCfg{PathOrContent: extkingpin.RegisterSelectorRelabelFlags(cmd)}
 
 	cc.webConf.registerFlag(cmd)
 

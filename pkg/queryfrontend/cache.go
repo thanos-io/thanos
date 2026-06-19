@@ -5,6 +5,8 @@ package queryfrontend
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
@@ -22,7 +24,6 @@ func newThanosCacheKeyGenerator() thanosCacheKeyGenerator {
 }
 
 // GenerateCacheKey generates a cache key based on the Request and interval.
-// TODO(yeya24): Add other request params as request key.
 func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Request) string {
 	if sr, ok := r.(SplitRequest); ok {
 		splitInterval := sr.GetSplitInterval().Milliseconds()
@@ -34,7 +35,10 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Re
 			for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 			}
 			shardInfoKey := generateShardInfoKey(tr)
-			return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s", userID, tr.Query, tr.Step, splitInterval, currentInterval, i, shardInfoKey, tr.LookbackDelta, tr.Engine)
+			sort.Strings(tr.ReplicaLabels)
+			return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s:%t:%s:%t",
+				userID, tr.Query, tr.Step, splitInterval, currentInterval, i, shardInfoKey,
+				tr.LookbackDelta, tr.Engine, tr.PartialResponse, strings.Join(tr.ReplicaLabels, ","), tr.Analyze)
 		case *ThanosLabelsRequest:
 			return fmt.Sprintf("fe:%s:%s:%s:%d:%d", userID, tr.Label, tr.Matchers, splitInterval, currentInterval)
 		case *ThanosSeriesRequest:

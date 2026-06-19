@@ -213,7 +213,7 @@ func TestAddingExternalLabelsForTenants(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := initializeMultiTSDB(t.TempDir())
+			m := initializeMultiTSDB(t, t.TempDir())
 
 			err := m.SetHashringConfig(tc.cfg)
 			require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestLabelSetsOfTenantsWhenAddingTenants(t *testing.T) {
 	}
 
 	t.Run("Adding tenants", func(t *testing.T) {
-		m := initializeMultiTSDB(t.TempDir())
+		m := initializeMultiTSDB(t, t.TempDir())
 
 		err := m.SetHashringConfig(initialConfig)
 		require.NoError(t, err)
@@ -540,7 +540,7 @@ func TestLabelSetsOfTenantsWhenChangingLabels(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := initializeMultiTSDB(t.TempDir())
+			m := initializeMultiTSDB(t, t.TempDir())
 
 			err := m.SetHashringConfig(initialConfig)
 			require.NoError(t, err)
@@ -714,7 +714,7 @@ func TestAddingLabelsWhenTenantAppearsInMultipleHashrings(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := initializeMultiTSDB(t.TempDir())
+			m := initializeMultiTSDB(t, t.TempDir())
 
 			err := m.SetHashringConfig(initialConfig)
 			require.NoError(t, err)
@@ -787,7 +787,7 @@ func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 	}
 
 	t.Run("Receiver's labels not overwritten by external labels", func(t *testing.T) {
-		m := initializeMultiTSDB(t.TempDir())
+		m := initializeMultiTSDB(t, t.TempDir())
 
 		err := m.SetHashringConfig(cfg)
 		require.NoError(t, err)
@@ -821,10 +821,10 @@ func TestReceiverLabelsNotOverwrittenByExternalLabels(t *testing.T) {
 	})
 }
 
-func initializeMultiTSDB(dir string) *MultiTSDB {
+func initializeMultiTSDB(t testing.TB, dir string) *MultiTSDB {
 	var bucket objstore.Bucket
 
-	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 		&tsdb.Options{
 			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -966,6 +966,11 @@ func (s *stubAsyncClient) RemoteWriteAsync(ctx context.Context, in *storepb.Writ
 	responses <- newWriteResponse(seriesIDs, err, er)
 
 	cb(err)
+}
+
+func (s *stubAsyncClient) TryRemoteWriteAsync(ctx context.Context, in *storepb.WriteRequest, er endpointReplica, seriesIDs []int, responses chan writeResponse, cb func(error)) bool {
+	s.RemoteWriteAsync(ctx, in, er, seriesIDs, responses, cb)
+	return true
 }
 
 func (s *stubAsyncClient) Close() error { return nil }

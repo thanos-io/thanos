@@ -89,8 +89,7 @@ type storeConfig struct {
 	blockSyncConcurrency          int
 	blockMetaFetchConcurrency     int
 	filterConf                    *store.FilterConfig
-	selectorRelabelConf           extflag.PathOrContent
-	advertiseCompatibilityLabel   bool
+	selectorRelabel               *relabelCfg
 	consistencyDelay              commonmodel.Duration
 	ignoreDeletionMarksDelay      commonmodel.Duration
 	disableWeb                    bool
@@ -181,10 +180,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("max-time", "End of time range limit to serve. Thanos Store will serve only blocks, which happened earlier than this value. Option can be a constant time in RFC3339 format or time duration relative to current time, such as -1d or 2h45m. Valid duration units are ms, s, m, h, d, w, y.").
 		Default("9999-12-31T23:59:59Z").SetValue(&sc.filterConf.MaxTime)
 
-	cmd.Flag("debug.advertise-compatibility-label", "If true, Store Gateway in addition to other labels, will advertise special \"@thanos_compatibility_store_type=store\" label set. This makes store Gateway compatible with Querier before 0.8.0").
-		Hidden().Default("true").BoolVar(&sc.advertiseCompatibilityLabel)
-
-	sc.selectorRelabelConf = *extkingpin.RegisterSelectorRelabelFlags(cmd)
+	sc.selectorRelabel = &relabelCfg{PathOrContent: extkingpin.RegisterSelectorRelabelFlags(cmd)}
 
 	cmd.Flag("store.index-header-posting-offsets-in-mem-sampling", "Controls what is the ratio of postings offsets store will hold in memory. "+
 		"Larger value will keep less offsets, which will increase CPU cycles needed for query touching those postings. It's meant for setups that want low baseline memory pressure and where less traffic is expected. "+
@@ -352,12 +348,7 @@ func runStore(
 		}
 	}
 
-	relabelContentYaml, err := conf.selectorRelabelConf.Content()
-	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
-	}
-
-	relabelConfig, err := block.ParseRelabelConfig(relabelContentYaml, block.SelectorSupportedRelabelActions)
+	relabelConfig, err := conf.selectorRelabel.RelabelConfig(block.SelectorSupportedRelabelActions)
 	if err != nil {
 		return err
 	}
@@ -481,7 +472,6 @@ func runStore(
 		store.NewBytesLimiterFactory(conf.maxDownloadedBytes),
 		store.NewGapBasedPartitioner(store.PartitionerMaxGapSize),
 		conf.blockSyncConcurrency,
-		conf.advertiseCompatibilityLabel,
 		conf.postingOffsetsInMemSampling,
 		false,
 		conf.lazyIndexReaderEnabled,
@@ -555,7 +545,7 @@ func runStore(
 
 	// Start query (proxy) gRPC StoreAPI.
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion, conf.grpcConfig.tlsCiphers, conf.grpcConfig.tlsCurves)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}

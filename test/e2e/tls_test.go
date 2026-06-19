@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -44,6 +45,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	caClt := filepath.Join(tmpDirClt, "ca")
 	certClt := filepath.Join(tmpDirClt, "cert")
 	keyClt := filepath.Join(tmpDirClt, "key")
+	tlsMinVersionClt := "1.3"
 
 	tmpDirSrv := t.TempDir()
 	caSrv := filepath.Join(tmpDirSrv, "ca")
@@ -54,7 +56,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	genCerts(t, certSrv, keySrv, caClt)
 	genCerts(t, certClt, keyClt, caSrv)
 
-	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion)
+	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, nil, nil)
 	testutil.Ok(t, err)
 
 	srv := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 1 * time.Millisecond}), grpc.Creds(credentials.NewTLS(configSrv)))
@@ -73,7 +75,7 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
 
 	// Setup the connection and the client.
-	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false)
+	configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, tlsMinVersionClt)
 	testutil.Ok(t, err)
 	conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
 	testutil.Ok(t, err)
@@ -94,6 +96,186 @@ func TestGRPCServerCertAutoRotate(t *testing.T) {
 	resp, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
 	testutil.Ok(t, err)
 	testutil.Equals(t, expMessage, resp.Message)
+}
+
+func TestGRPCServerTLSCiphersAndVersions(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)() // To see whether any goroutines leaked.
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+	expMessage := "hello world"
+
+	tmpDirClt := t.TempDir()
+	caClt := filepath.Join(tmpDirClt, "ca")
+	certClt := filepath.Join(tmpDirClt, "cert")
+	keyClt := filepath.Join(tmpDirClt, "key")
+
+	tmpDirSrv := t.TempDir()
+	caSrv := filepath.Join(tmpDirSrv, "ca")
+	certSrv := filepath.Join(tmpDirSrv, "cert")
+	keySrv := filepath.Join(tmpDirSrv, "key")
+	tlsMinVersion := "1.2"
+
+	genCerts(t, certSrv, keySrv, caClt)
+	genCerts(t, certClt, keyClt, caSrv)
+
+	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}, nil)
+	testutil.Ok(t, err)
+
+	srv := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 1 * time.Millisecond}), grpc.Creds(credentials.NewTLS(configSrv)))
+
+	pb.RegisterEchoServer(srv, &ecServer{})
+	p, err := e2eutil.FreePort()
+	testutil.Ok(t, err)
+	addr := fmt.Sprint("localhost:", p)
+	lis, err := net.Listen("tcp", addr)
+	testutil.Ok(t, err)
+
+	go func() {
+		testutil.Ok(t, srv.Serve(lis))
+	}()
+	defer func() { srv.Stop() }()
+	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
+
+	t.Run("compatible configurations", func(t *testing.T) {
+		// Setup the connection and the client.
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
+		testutil.Ok(t, err)
+
+		// Configure TLS version 1.2 only with a cipher suite supported by the server.
+		configClt.MinVersion = tls.VersionTLS12
+		configClt.MaxVersion = tls.VersionTLS12
+		configClt.CipherSuites = []uint16{tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384}
+
+		conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, conn.Close())
+		}()
+		clt := pb.NewEchoClient(conn)
+
+		// Check a good state.
+		resp, err := clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
+		testutil.Ok(t, err)
+		testutil.Equals(t, expMessage, resp.Message)
+	})
+
+	t.Run("cipher suite mismatch", func(t *testing.T) {
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
+		testutil.Ok(t, err)
+
+		// Configure TLS version 1.2 only with a cipher suite NOT supported by the server.
+		configClt.MinVersion = tls.VersionTLS12
+		configClt.MaxVersion = tls.VersionTLS12
+		configClt.CipherSuites = []uint16{tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256}
+
+		conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, conn.Close())
+		}()
+		clt := pb.NewEchoClient(conn)
+
+		// Check a bad state.
+		_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("TLS version mismatch", func(t *testing.T) {
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
+		testutil.Ok(t, err)
+
+		// Configure TLS version 1.1 only.
+		configClt.MinVersion = tls.VersionTLS11
+		configClt.MaxVersion = tls.VersionTLS11
+
+		conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, conn.Close())
+		}()
+		clt := pb.NewEchoClient(conn)
+
+		// Check a bad state.
+		_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
+		testutil.NotOk(t, err)
+	})
+}
+
+func TestGRPCServerTLSCurves(t *testing.T) {
+	defer leaktest.CheckTimeout(t, 10*time.Second)() // To see whether any goroutines leaked.
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+	expMessage := "hello world"
+
+	tmpDirClt := t.TempDir()
+	caClt := filepath.Join(tmpDirClt, "ca")
+	certClt := filepath.Join(tmpDirClt, "cert")
+	keyClt := filepath.Join(tmpDirClt, "key")
+
+	tmpDirSrv := t.TempDir()
+	caSrv := filepath.Join(tmpDirSrv, "ca")
+	certSrv := filepath.Join(tmpDirSrv, "cert")
+	keySrv := filepath.Join(tmpDirSrv, "key")
+	tlsMinVersion := "1.2"
+
+	genCerts(t, certSrv, keySrv, caClt)
+	genCerts(t, certClt, keyClt, caSrv)
+
+	configSrv, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, nil, []string{"X25519", "CurveP521"})
+	testutil.Ok(t, err)
+
+	srv := grpc.NewServer(grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: 1 * time.Millisecond}), grpc.Creds(credentials.NewTLS(configSrv)))
+
+	pb.RegisterEchoServer(srv, &ecServer{})
+	p, err := e2eutil.FreePort()
+	testutil.Ok(t, err)
+	addr := fmt.Sprint("localhost:", p)
+	lis, err := net.Listen("tcp", addr)
+	testutil.Ok(t, err)
+
+	go func() {
+		testutil.Ok(t, srv.Serve(lis))
+	}()
+	defer func() { srv.Stop() }()
+	time.Sleep(50 * time.Millisecond) // Wait for the server to start.
+
+	t.Run("compatible configurations", func(t *testing.T) {
+		// Setup the connection and the client.
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
+		testutil.Ok(t, err)
+
+		configClt.CurvePreferences = []tls.CurveID{tls.CurveP521}
+
+		conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, conn.Close())
+		}()
+		clt := pb.NewEchoClient(conn)
+
+		// Check a good state.
+		resp, err := clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
+		testutil.Ok(t, err)
+		testutil.Equals(t, expMessage, resp.Message)
+	})
+
+	t.Run("curves mismatch", func(t *testing.T) {
+		configClt, err := thTLS.NewClientConfig(logger, certClt, keyClt, caClt, serverName, false, "1.3")
+		testutil.Ok(t, err)
+
+		configClt.CurvePreferences = []tls.CurveID{tls.CurveP256}
+
+		conn, err := grpc.NewClient(addr, grpc.WithConnectParams(grpc.ConnectParams{MinConnectTimeout: 1 * time.Minute}), grpc.WithTransportCredentials(credentials.NewTLS(configClt)))
+		testutil.Ok(t, err)
+		defer func() {
+			testutil.Ok(t, conn.Close())
+		}()
+		clt := pb.NewEchoClient(conn)
+
+		// Check a bad state.
+		_, err = clt.UnaryEcho(context.Background(), &pb.EchoRequest{Message: expMessage})
+		testutil.NotOk(t, err)
+	})
 }
 
 var caRoot = &x509.Certificate{
@@ -190,6 +372,6 @@ func TestInvalidCertAndKey(t *testing.T) {
 	keySrv := filepath.Join(tmpDirSrv, "key")
 	tlsMinVersion := "1.3"
 	// Certificate and key are not present in the above path
-	_, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion)
+	_, err := thTLS.NewServerConfig(logger, certSrv, keySrv, caSrv, tlsMinVersion, nil, nil)
 	testutil.NotOk(t, err)
 }

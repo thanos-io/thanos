@@ -90,11 +90,22 @@ Flags:
                                  TLS CA to verify clients against. If no
                                  client CA is specified, there is no client
                                  verification on server side. (tls.NoClientCert)
-      --grpc-server-tls-min-version="1.3"
+      --grpc-server-tls-min-version=1.3
                                  TLS supported minimum version for gRPC server.
                                  If no version is specified, it'll default to
                                  1.3. Allowed values: ["1.0", "1.1", "1.2",
                                  "1.3"]
+      --grpc-server-tls-ciphers=GRPC-SERVER-TLS-CIPHERS ...
+                                 TLS cipher suites for gRPC server
+                                 (repeatable). If not specified,
+                                 the default Go cipher suites are used.
+                                 See https://pkg.go.dev/crypto/tls#pkg-constants
+                                 for valid values.
+      --grpc-server-tls-curves=GRPC-SERVER-TLS-CURVES ...
+                                 TLS curves for gRPC server (repeatable). If
+                                 not specified, the default Go curves are used.
+                                 Valid values: CurveP256, CurveP384, CurveP521,
+                                 X25519.
       --grpc-server-max-connection-age=60m
                                  The grpc server max connection age. This
                                  controls how often to re-establish connections
@@ -445,6 +456,7 @@ The `redis` index cache allows to use [Redis](https://redis.io) as cache backend
 type: REDIS
 config:
   addr: ""
+  prefix: ""
   username: ""
   password: ""
   db: 0
@@ -462,6 +474,7 @@ config:
     key_file: ""
     server_name: ""
     insecure_skip_verify: false
+    min_version: ""
   cache_size: 0
   master_name: ""
   max_async_buffer_size: 10000
@@ -654,6 +667,12 @@ Parquet is vulnerable to the latter but not the former. It still contains the "b
 The Parquet data format is also amenable to concurrent decompression & processing through row groups & pages.
 
 So far, the code lives under a different [repository](https://github.com/thanos-io/thanos-parquet-gateway). Docker images are available on [quay](https://quay.io/repository/thanos/thanos-parquet-gateway?tab=tags). We plan to migrate it to the main repository in the (near) future.
+
+If you prefer reading the documentation in a video format, we would suggest watching these videos:
+
+- https://www.youtube.com/watch?v=V8Y4VuUwg8I
+- https://www.youtube.com/watch?v=eg1FaJ9UuWs
+- https://www.youtube.com/watch?v=PySEmqtrvL8
 
 Here's how the schema looks like:
 

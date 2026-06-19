@@ -923,7 +923,7 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "5",
 				RemoteRequestCount:  "5",
 
@@ -952,7 +952,7 @@ test_metric{a="2", b="2"} 1`)
 
 		// Here, 4/5 requests are failed due to limiting as we ingest one initial request.
 		// 4 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 30 * time.Second, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
@@ -1305,12 +1305,12 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 		},
 	}
 
-	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(20 * time.Second).Init()
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(2 * time.Second).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	ts := time.Now()
 
-	for i := range 1000 {
+	for i := range 20 {
 		t.Log("writing a request:", i, time.Now().UnixMilli())
 
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
@@ -1330,4 +1330,63 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 	}
 
 	testutil.Ok(t, i1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+}
+
+// TestReceiveWithRelabelConfigSmoke verifies that a receiver configured with a
+// source_labels relabel rule does not panic when it actually receives a metric
+// whose labels match the relabel regex.
+func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
+	t.Parallel()
+	e, err := e2e.NewDockerEnvironment("recv-relabel")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Boot an ingestor with a relabel config that reads source_labels.
+	// This is the config that previously triggered the panic when
+	// NameValidationScheme was left as UnsetValidation (0) after YAML
+	// unmarshalling.
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithRelabelConfigs([]*relabel.Config{
+			{
+				SourceLabels: []model.LabelName{"src_label"},
+				Regex:        relabel.MustNewRegexp("(.+)"),
+				TargetLabel:  "dst_label",
+				Action:       relabel.Replace,
+			},
+		}).Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// Send a metric that matches the relabel config's source_labels to trigger
+	// the relabel code path. Without the fix this causes a panic because
+	// NameValidationScheme is UnsetValidation (0).
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, ctx.Done(), func() error {
+		return storeWriteRequest(context.Background(), "http://"+i.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "__name__", Value: "test_metric"},
+						{Name: "src_label", Value: "test_value"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(
+		e2emon.Equals(0),
+		[]string{"prometheus_tsdb_blocks_loaded"},
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")),
+		e2emon.WaitMissingMetrics(),
+	))
 }

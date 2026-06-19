@@ -61,4 +61,10 @@ validators:
     type: 'ignore'
   - regex: 'codeburst\.io'
     type: 'ignore'
+  # Promtail docs removed after EOL (March 2026).
+  - regex: 'grafana\.com\/docs\/loki\/latest\/clients\/promtail'
+    type: 'ignore'
+  # Frequent DNS/timeout issues from CI.
+  - regex: 'db\.cs\.cmu\.edu'
+    type: 'ignore'
 
