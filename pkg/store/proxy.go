@@ -467,13 +467,13 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 			defer span.Finish()
 			resp, err := st.LabelNames(spanCtx, r)
 			if err != nil {
-				err = errors.Wrapf(err, "fetch label names from store %s", st)
-				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
-					return err
+				warn, fatal := storeWarnOrErr("fetch label names", st, err, r.PartialResponseDisabled, r.PartialResponseStrategy)
+				if fatal != nil {
+					return fatal
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, err.Error())
+				warnings = append(warnings, warn)
 				mtx.Unlock()
 				return nil
 			}
@@ -572,13 +572,13 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 
 			resp, err := st.LabelValues(spanCtx, r)
 			if err != nil {
-				err = errors.Wrapf(err, "fetch label values from store %s", st)
-				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
-					return err
+				warn, fatal := storeWarnOrErr("fetch label values", st, err, r.PartialResponseDisabled, r.PartialResponseStrategy)
+				if fatal != nil {
+					return fatal
 				}
 
 				mtx.Lock()
-				warnings = append(warnings, err.Error())
+				warnings = append(warnings, warn)
 				mtx.Unlock()
 				return nil
 			}
@@ -603,6 +603,19 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		Values:   vals,
 		Warnings: warnings,
 	}, nil
+}
+
+// storeWarnOrErr annotates err with the operation and store, then decides how a
+// fan-out goroutine should surface it given the request's partial-response settings.
+// When partial responses are disabled or the strategy is ABORT it returns the
+// annotated error, signalling the caller to fail the whole request. Otherwise it
+// returns the error text as a warning to be appended to the response.
+func storeWarnOrErr(op string, st Client, err error, partialDisabled bool, strategy storepb.PartialResponseStrategy) (warning string, fatal error) {
+	err = errors.Wrapf(err, "%s from store %s", op, st)
+	if partialDisabled || strategy == storepb.PartialResponseStrategy_ABORT {
+		return "", err
+	}
+	return err.Error(), nil
 }
 
 func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) {
