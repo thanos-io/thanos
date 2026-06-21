@@ -299,11 +299,12 @@ func (c *InMemoryIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v 
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits [][]byte, misses []uint64) {
 	timer := prometheus.NewTimer(c.commonMetrics.FetchLatency.WithLabelValues(CacheTypePostings, tenant))
 	defer timer.ObserveDuration()
 
-	hits = map[labels.Label][]byte{}
+	hits = make([][]byte, len(keys))
+	misses = make([]uint64, 0, len(keys))
 
 	blockIDKey := blockID.String()
 	requests := 0
@@ -319,15 +320,20 @@ func (c *InMemoryIndexCache) FetchMultiPostings(ctx context.Context, blockID uli
 		requests++
 		if b, ok := c.get(CacheKey{blockIDKey, CacheKeyPostings(key), ""}); ok {
 			hit++
-			hits[key] = b
+			hits[i] = b
 			continue
 		}
 
-		misses = append(misses, key)
+		misses = append(misses, uint64(i))
 	}
 	c.commonMetrics.RequestTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(requests))
 	c.commonMetrics.HitsTotal.WithLabelValues(CacheTypePostings, tenant).Add(float64(hit))
-
+	if hit == 0 {
+		return hits, misses
+	}
+	if len(misses) == 0 {
+		return hits, nil
+	}
 	return hits, misses
 }
 
