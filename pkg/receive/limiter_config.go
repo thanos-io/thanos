@@ -107,9 +107,10 @@ func (w *WriteLimitConfig) SetHeadSeriesLimit(val uint64) *WriteLimitConfig {
 }
 
 type requestLimitsConfig struct {
-	SizeBytesLimit *int64 `yaml:"size_bytes_limit"`
-	SeriesLimit    *int64 `yaml:"series_limit"`
-	SamplesLimit   *int64 `yaml:"samples_limit"`
+	SizeBytesLimit              *int64 `yaml:"size_bytes_limit"`
+	SeriesLimit                 *int64 `yaml:"series_limit"`
+	SamplesLimit                *int64 `yaml:"samples_limit"`
+	NativeHistogramBucketsLimit *int64 `yaml:"native_histogram_buckets_limit"`
 }
 
 func NewEmptyRequestLimitsConfig() *requestLimitsConfig {
@@ -131,6 +132,11 @@ func (rl *requestLimitsConfig) SetSamplesLimit(value int64) *requestLimitsConfig
 	return rl
 }
 
+func (rl *requestLimitsConfig) SetNativeHistogramBucketsLimit(value int64) *requestLimitsConfig {
+	rl.NativeHistogramBucketsLimit = &value
+	return rl
+}
+
 // OverlayWith overlays the current configuration with another one. This means
 // that limit values that are not set (have a nil value) will be overwritten in
 // the caller.
@@ -143,6 +149,9 @@ func (rl *requestLimitsConfig) OverlayWith(other *requestLimitsConfig) *requestL
 	}
 	if rl.SizeBytesLimit == nil {
 		rl.SizeBytesLimit = other.SizeBytesLimit
+	}
+	if rl.NativeHistogramBucketsLimit == nil {
+		rl.NativeHistogramBucketsLimit = other.NativeHistogramBucketsLimit
 	}
 	return rl
 }
