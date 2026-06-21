@@ -40,7 +40,7 @@
     "react-select": "^4.1.0",
     "react-test-renderer": "^16.14.0",
     "reactstrap": "^8.9.0",
-    "sanitize-html": "^2.3.2",
+    "sanitize-html": "^2.12.1",
     "sass": "^1.32.13",
     "tempusdominus-bootstrap-4": "^5.39.0",
     "tempusdominus-core": "^5.19.0",
