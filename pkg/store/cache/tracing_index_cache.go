@@ -5,6 +5,7 @@ package storecache
 
 import (
 	"context"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -25,8 +26,8 @@ func NewTracingIndexCache(name string, cache IndexCache) *TracingIndexCache {
 }
 
 // StorePostings stores postings for a single series.
-func (c *TracingIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
-	c.cache.StorePostings(blockID, l, v, tenant)
+func (c *TracingIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string, ttl time.Duration) {
+	c.cache.StorePostings(blockID, l, v, tenant, ttl)
 }
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
@@ -49,8 +50,8 @@ func (c *TracingIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid
 }
 
 // StoreExpandedPostings stores expanded postings for a set of label matchers.
-func (c *TracingIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string) {
-	c.cache.StoreExpandedPostings(blockID, matchers, v, tenant)
+func (c *TracingIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string, ttl time.Duration) {
+	c.cache.StoreExpandedPostings(blockID, matchers, v, tenant, ttl)
 }
 
 // FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
@@ -69,8 +70,8 @@ func (c *TracingIndexCache) FetchExpandedPostings(ctx context.Context, blockID u
 
 // StoreSeries stores a single series. Skip instrumenting this method
 // excessive spans as a single request can store millions of series.
-func (c *TracingIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
-	c.cache.StoreSeries(blockID, id, v, tenant)
+func (c *TracingIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string, ttl time.Duration) {
+	c.cache.StoreSeries(blockID, id, v, tenant, ttl)
 }
 
 // FetchMultiSeries fetches multiple series - each identified by ID - from the cache
