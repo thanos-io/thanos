@@ -20,14 +20,14 @@ type ChunksLimiter interface {
 	// Reserve num chunks out of the total number of chunks enforced by the limiter.
 	// Returns an error if the limit has been exceeded. This function must be
 	// goroutine safe.
-	Reserve(num uint64) error
+	Reserve(numberOfChunks uint64) error
 }
 
 type SeriesLimiter interface {
 	// Reserve num series out of the total number of series enforced by the limiter.
 	// Returns an error if the limit has been exceeded. This function must be
 	// goroutine safe.
-	Reserve(num uint64) error
+	Reserve(numberOfSeries uint64) error
 }
 
 type BytesLimiter interface {
@@ -121,16 +121,16 @@ var _ storepb.StoreServer = &limitedStoreServer{}
 type limitedStoreServer struct {
 	storepb.StoreServer
 	newSeriesLimiter      SeriesLimiterFactory
-	newSamplesLimiter     ChunksLimiterFactory
+	newChunksLimiter      ChunksLimiterFactory
 	failedRequestsCounter *prometheus.CounterVec
 }
 
 // NewLimitedStoreServer creates a new limitedStoreServer.
 func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, selectLimits SeriesSelectLimits) storepb.StoreServer {
 	return &limitedStoreServer{
-		StoreServer:       store,
-		newSeriesLimiter:  NewSeriesLimiterFactory(selectLimits.SeriesPerRequest),
-		newSamplesLimiter: NewChunksLimiterFactory(selectLimits.SamplesPerRequest),
+		StoreServer:      store,
+		newSeriesLimiter: NewSeriesLimiterFactory(selectLimits.SeriesPerRequest),
+		newChunksLimiter: NewChunksLimiterFactory(selectLimits.SamplesPerRequest / MaxSamplesPerChunk), // The samples limit is an approximation based on the max number of samples per chunk.
 		failedRequestsCounter: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_store_selects_dropped_total",
 			Help: "Number of select queries that were dropped due to configured limits.",
@@ -140,7 +140,7 @@ func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer,
 
 func (s *limitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	seriesLimiter := s.newSeriesLimiter(s.failedRequestsCounter.WithLabelValues("series"))
-	chunksLimiter := s.newSamplesLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
+	chunksLimiter := s.newChunksLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
 	limitedSrv := newLimitedServer(srv, seriesLimiter, chunksLimiter)
 	if err := s.StoreServer.Series(req, limitedSrv); err != nil {
 		return err
@@ -175,7 +175,7 @@ func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
 	if err := i.seriesLimiter.Reserve(1); err != nil {
 		return errors.Wrapf(err, "failed to send series")
 	}
-	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
+	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks))); err != nil {
 		return errors.Wrapf(err, "failed to send samples")
 	}
 
