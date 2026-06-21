@@ -263,7 +263,7 @@ func getCipherSuiteIDs(ciphers []string) ([]uint16, error) {
 	for _, name := range ciphers {
 		id, ok := cipherMap[name]
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("invalid cipher suite: %s, valid values are %s", name, strings.Join(validNames, ", ")))
+			return nil, errors.Errorf("invalid cipher suite: %s, valid values are %s", name, strings.Join(validNames, ", "))
 		}
 		ids = append(ids, id)
 	}
@@ -295,7 +295,7 @@ func getCurveIDs(curves []string) ([]tls.CurveID, error) {
 	for _, name := range curves {
 		id, ok := curveMap[name]
 		if !ok {
-			return nil, errors.New(fmt.Sprintf("invalid curve: %s, valid values are %s", name, strings.Join(validNames, ", ")))
+			return nil, errors.Errorf("invalid curve: %s, valid values are %s", name, strings.Join(validNames, ", "))
 		}
 		ids = append(ids, id)
 	}
@@ -314,7 +314,7 @@ func GetTlsVersion(tlsMinVersion string) (uint16, error) {
 	}
 
 	if _, ok := validOption.tlsOption[tlsMinVersion]; !ok {
-		return 0, errors.New(fmt.Sprintf("invalid TLS version: %s, valid values are %s", tlsMinVersion, validOption.joinString()))
+		return 0, errors.Errorf("invalid TLS version: %s, valid values are %s", tlsMinVersion, validOption.joinString())
 	}
 
 	return validOption.tlsOption[tlsMinVersion], nil
