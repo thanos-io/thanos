@@ -1,11 +1,11 @@
 import React, { FC } from 'react';
 import { UncontrolledAlert } from 'reactstrap';
 import Graph from './Graph';
-import { QueryParams } from '../../types/types';
+import { QueryParams, Metric, SampleValue, SampleHistogram } from '../../types/types';
 import { isPresent } from '../../utils';
 
 interface GraphTabContentProps {
-  data: any;
+  data: { resultType: string; result: Array<{ metric: Metric; values: SampleValue[]; histograms?: SampleHistogram[] }> };
   stacked: boolean;
   useLocalTime: boolean;
   handleTimeRangeSelection: (startTime: number, endTime: number) => void;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import moment from 'moment-timezone';
 
 import { PanelOptions, PanelType, PanelDefaultOptions } from '../pages/graph/Panel';

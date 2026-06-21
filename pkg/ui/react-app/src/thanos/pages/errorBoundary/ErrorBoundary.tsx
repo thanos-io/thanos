@@ -2,13 +2,16 @@ import React, { ErrorInfo } from 'react';
 import { Container, UncontrolledCollapse, Button } from 'reactstrap';
 import styles from './ErrorBoundary.module.css';
 
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
 interface ErrorState {
   error: Error | null;
   errorInfo: ErrorInfo | null;
 }
 
-class ErrorBoundary extends React.Component<any, ErrorState> {
-  constructor(props: any) {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
       error: null,
