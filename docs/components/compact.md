@@ -501,3 +501,45 @@ Flags:
                                 blocks for deletion and no compaction.
 
 ```
+
+## Metrics
+
+### List of Metrics Exported By Compactor
+
+| Metric Name                                                    | Type      | Description                                                                                                                |
+|----------------------------------------------------------------|-----------|----------------------------------------------------------------------------------------------------------------------------|
+| thanos_bucket_uiblocks_meta_modified                           | gauge     | Number of blocks whose metadata changed.                                                                                   |
+| thanos_bucket_uiblocks_meta_sync_duration_seconds              | histogram | Duration of the blocks metadata synchronization in seconds.                                                                |
+| thanos_bucket_uiblocks_meta_sync_failures                      | counter   | Total blocks metadata synchronization failures.                                                                            |
+| thanos_bucket_uiblocks_meta_synced                             | gauge     | Number of block metadata synced.                                                                                           |
+| thanos_bucket_uiblocks_meta_syncs                              | counter   | Total blocks metadata synchronization attempts.                                                                            |
+| thanos_compact_halted                                          | gauge     | Set to 1 if the compactor halted due to an unexpected error.                                                               |
+| thanos_compact_retries_total                                   | counter   | Total number of retries after retriable compactor error.                                                                   |
+| thanos_compact_iterations_total                                | counter   | Total number of iterations that were executed successfully.                                                                |
+| thanos_compact_block_cleanup_loops_total                       | counter   | Total number of concurrent cleanup loops of partially uploaded blocks and marked blocks that were executed successfully.   |
+| thanos_compact_aborted_partial_uploads_deletion_attempts_total | counter   | Total number of started deletions of blocks that are assumed aborted and only partially uploaded.                          |
+| thanos_compact_block_cleanup_failures_total                    | counter   | Failures encountered while deleting blocks in compactor.                                                                   |
+| thanos_compact_blocks_cleaned_total                            | counter   | Total number of blocks deleted in compactor.                                                                               |
+| thanos_compact_blocks_marked_total                             | counter   | Total number of blocks marked in compactor.                                                                                |
+| thanos_compact_downsample                                      | counter   | Total number of downsampling attempts.                                                                                     |
+| thanos_compact_downsample_failures                             | counter   | Total number of failed downsampling attempts.                                                                              |
+| thanos_compact_garbage_collected_blocks_total                  | counter   | Total number of blocks marked for deletion by compactor.                                                                   |
+| thanos_compact_garbage_collection                              | counter   | Total number of garbage collection operations.                                                                             |
+| thanos_compact_garbage_collection_duration_seconds             | histogram | Time it took to perform garbage collection iteration.                                                                      |
+| thanos_compact_garbage_collection_failures                     | counter   | Total number of failed garbage collection operations.                                                                      |
+| thanos_compact_group_compaction_runs_completed                 | counter   | Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction. |
+| thanos_compact_group_compaction_runs_started                   | counter   | Total number of group compaction attempts.                                                                                 |
+| thanos_compact_group_compactions                               | counter   | Total number of group compaction attempts that resulted in a new block.                                                    |
+| thanos_compact_group_compactions_failures                      | counter   | Total number of failed group compactions.                                                                                  |
+| thanos_compact_group_vertical_compactions                      | counter   | Total number of group compaction attempts that resulted in a new block based on overlapping blocks.                        |
+| thanos_compact_garbage_collection_total                        | counter   | Total number of garbage collection operations.                                                                             |
+| thanos_compact_garbage_collection_failures_total               | counter   | Total number of failed garbage collection operations.                                                                      |
+| thanos_compact_group_compactions_total                         | counter   | Total number of group compaction attempts that resulted in a new block.                                                    |
+| thanos_compact_group_compaction_runs_started_total             | counter   | Total number of group compaction attempts.                                                                                 |
+| thanos_compact_group_compaction_runs_completed_total           | counter   | Total number of group completed compaction runs. This also includes compactor group runs that resulted with no compaction. |
+| thanos_compact_group_compactions_failures_total                | counter   | Total number of failed group compactions.                                                                                  |
+| thanos_compact_group_vertical_compactions_total                | counter   | Total number of group compaction attempts that resulted in a new block based on overlapping blocks.                        |
+| thanos_compact_todo_compactions                                | gauge     | number of compactions to be done.                                                                                          |
+| thanos_compact_todo_compaction_blocks                          | gauge     | number of blocks planned to be compacted.                                                                                  |
+| thanos_compact_todo_downsample_blocks                          | gauge     | number of blocks to be downsampled.                                                                                        |
+| thanos_compact_todo_deletion_blocks                            | gauge     | number of blocks that have crossed their retention period.                                                                 |
