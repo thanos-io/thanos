@@ -31,8 +31,8 @@ import (
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/compressutil"
@@ -206,18 +206,23 @@ func runReceive(
 		}
 	}
 
+	if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
+		return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
+	}
+
+	dataDir, err := os.OpenRoot(conf.dataDir)
+	if err != nil {
+		return errors.Wrap(err, "open storage dir")
+	}
+
 	// Create TSDB for the default tenant.
-	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
+	if err := createDefautTenantTSDB(logger, conf.defaultTenantID, dataDir); err != nil {
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
+		return errors.Wrap(err, "get relabel configuration")
 	}
 
 	var cache = storecache.NoopMatchersCache
@@ -232,7 +237,7 @@ func runReceive(
 	multiTSDBOptions = append(multiTSDBOptions, receive.WithUploadConcurrency(conf.uploadConcurrency))
 
 	dbs := receive.NewMultiTSDB(
-		conf.dataDir,
+		dataDir,
 		logger,
 		reg,
 		tsdbOpts,
@@ -842,23 +847,16 @@ func startTSDBAndUpload(g *run.Group,
 	return nil
 }
 
-func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
-	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
-
-	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
+func createDefautTenantTSDB(logger log.Logger, defaultTenantID string, dataDir *os.Root) error {
+	if _, err := dataDir.Stat(defaultTenantID); !os.IsNotExist(err) {
 		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
-		return nil
-	}
-
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "no existing storage found, not creating default tenant data dir")
 		return nil
 	}
 
 	level.Info(logger).Log("msg", "default tenant data dir not found, creating", "defaultTenantID", defaultTenantID)
 
-	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
-		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
+	if err := dataDir.MkdirAll(defaultTenantID, 0750); err != nil {
+		return errors.Wrapf(err, "create default tenant data dir: %v", path.Join(dataDir.Name(), defaultTenantID))
 	}
 
 	return nil
@@ -935,8 +933,8 @@ type receiveConfig struct {
 	skipCorruptedBlocks   bool
 	uploadConcurrency     int
 
-	reqLogConfig      *extflag.PathOrContent
-	relabelConfigPath *extflag.PathOrContent
+	reqLogConfig *extflag.PathOrContent
+	relabelCfg   *relabelCfg
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -954,6 +952,18 @@ type receiveConfig struct {
 	compactedBlocksExpandedPostingsCacheSize uint64
 	otlpEnableTargetInfo                     bool
 	otlpResourceAttributes                   []string
+}
+
+type relabelCfg struct {
+	*extflag.PathOrContent
+}
+
+func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
+	relabelContentYaml, err := r.Content()
+	if err != nil {
+		return []*relabel.Config{}, errors.Wrap(err, "get content of relabel configuration")
+	}
+	return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
 }
 
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -1048,7 +1058,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 

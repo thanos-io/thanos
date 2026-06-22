@@ -456,6 +456,7 @@ The `redis` index cache allows to use [Redis](https://redis.io) as cache backend
 type: REDIS
 config:
   addr: ""
+  prefix: ""
   username: ""
   password: ""
   db: 0
@@ -666,6 +667,12 @@ Parquet is vulnerable to the latter but not the former. It still contains the "b
 The Parquet data format is also amenable to concurrent decompression & processing through row groups & pages.
 
 So far, the code lives under a different [repository](https://github.com/thanos-io/thanos-parquet-gateway). Docker images are available on [quay](https://quay.io/repository/thanos/thanos-parquet-gateway?tab=tags). We plan to migrate it to the main repository in the (near) future.
+
+If you prefer reading the documentation in a video format, we would suggest watching these videos:
+
+- https://www.youtube.com/watch?v=V8Y4VuUwg8I
+- https://www.youtube.com/watch?v=eg1FaJ9UuWs
+- https://www.youtube.com/watch?v=PySEmqtrvL8
 
 Here's how the schema looks like:
 

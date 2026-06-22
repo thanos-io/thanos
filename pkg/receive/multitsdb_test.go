@@ -41,6 +41,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+func openTestRoot(t testing.TB, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { root.Close() })
+	return root
+}
+
 func TestMultiTSDB(t *testing.T) {
 	t.Parallel()
 
@@ -49,7 +57,7 @@ func TestMultiTSDB(t *testing.T) {
 	logger := log.NewLogfmtLogger(os.Stderr)
 
 	t.Run("run fresh", func(t *testing.T) {
-		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
 			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
 			RetentionDuration:     (6 * time.Hour).Milliseconds(),
@@ -129,7 +137,7 @@ func TestMultiTSDB(t *testing.T) {
 	})
 	t.Run("run on existing storage", func(t *testing.T) {
 		m := NewMultiTSDB(
-			dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+			openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 				RetentionDuration: (6 * time.Hour).Milliseconds(),
@@ -174,7 +182,7 @@ func TestMultiTSDB(t *testing.T) {
 		lostFound := filepath.Join(dir, "lost+found")
 		testutil.Ok(t, os.MkdirAll(lostFound, 0750))
 
-		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 			RetentionDuration: (6 * time.Hour).Milliseconds(),
@@ -188,7 +196,7 @@ func TestMultiTSDB(t *testing.T) {
 
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
-		m := NewMultiTSDB(dir, logger, prometheus.NewRegistry(), &tsdb.Options{
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
 			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 			RetentionDuration: (6 * time.Hour).Milliseconds(),
@@ -453,7 +461,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 			dir := t.TempDir()
 
 			synctest.Test(t, func(t *testing.T) {
-				m := NewMultiTSDB(dir, log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+				m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 					&tsdb.Options{
 						MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 						MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -513,7 +521,7 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
 
-		m := NewMultiTSDB(dir, log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 			&tsdb.Options{
 				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -548,11 +556,12 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 
 		maxBlockDuration := (2 * time.Hour).Milliseconds()
 
-		m := NewMultiTSDB(dir, log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 			&tsdb.Options{
-				MinBlockDuration:  maxBlockDuration,
-				MaxBlockDuration:  maxBlockDuration,
-				RetentionDuration: (24 * time.Hour).Milliseconds(),
+				MinBlockDuration:     maxBlockDuration,
+				MaxBlockDuration:     maxBlockDuration,
+				RetentionDuration:    (24 * time.Hour).Milliseconds(),
+				OutOfOrderTimeWindow: (4 * time.Hour).Milliseconds(),
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -571,9 +580,16 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step)))
 		}
 
+		// OOO samples.
+		for step := 7 * time.Hour; step <= 8*time.Hour; step += time.Minute {
+			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step+30*time.Second)))
+		}
+
 		tenant := m.testGetTenant("test-tenant")
 		db := tenant.readyStorage().Get()
 		testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+		testutil.Assert(t, db.Head().MaxOOOTime() > 0)
 
 		// Precondition: head must contain the full 10h of data before
 		// we advance time, otherwise the test could pass vacuously.
@@ -603,6 +619,15 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 		testutil.Assert(t, len(db.Blocks()) >= 3,
 			"expected at least 3 blocks, got %d",
 			len(db.Blocks()))
+
+		oooBlocks := 0
+		for _, b := range db.Blocks() {
+			meta := b.Meta()
+			if meta.Compaction.FromOutOfOrder() {
+				oooBlocks++
+			}
+		}
+		testutil.Assert(t, oooBlocks > 0)
 	})
 }
 
@@ -618,7 +643,7 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 	for i := range iterations {
 		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
 			dir := t.TempDir()
-			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
 					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -694,7 +719,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
 
-			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
 					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -722,7 +747,7 @@ func TestAlignedHeadFlush(t *testing.T) {
 			var shippedBlocks int
 			var maxts []int64
 			testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
-				meta, err := metadata.ReadFromDir(path.Join(m.dataDir, "test-tenant", s))
+				meta, err := metadata.ReadFromDir(path.Join(m.dataDir.Name(), "test-tenant", s))
 				testutil.Ok(t, err)
 
 				maxts = append(maxts, meta.MaxTime)
@@ -769,7 +794,7 @@ func TestMultiTSDBStats(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
 
-			m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
 					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -801,7 +826,7 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 
 	dir := t.TempDir()
 
-	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(),
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 		&tsdb.Options{
 			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
@@ -844,7 +869,7 @@ func TestProxyLabelValues(t *testing.T) {
 
 	dir := t.TempDir()
 	m := NewMultiTSDB(
-		dir, nil, prometheus.NewRegistry(), &tsdb.Options{
+		openTestRoot(t, dir), nil, prometheus.NewRegistry(), &tsdb.Options{
 			RetentionDuration: 10 * time.Minute.Milliseconds(),
 			MinBlockDuration:  5 * time.Minute.Milliseconds(),
 			MaxBlockDuration:  5 * time.Minute.Milliseconds(),
@@ -938,7 +963,7 @@ func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
 func BenchmarkMultiTSDB(b *testing.B) {
 	dir := b.TempDir()
 
-	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+	m := NewMultiTSDB(openTestRoot(b, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
 		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 		RetentionDuration: (6 * time.Hour).Milliseconds(),
@@ -1029,7 +1054,7 @@ func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
 
 		tenant.ship = shipper.New(
 			nil,
-			td,
+			openTestRoot(t, td),
 			shipper.WithLogger(log.NewNopLogger()),
 			shipper.WithSource(metadata.BucketUploadSource),
 			shipper.WithHashFunc(metadata.NoneFunc),
@@ -1050,7 +1075,7 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 
 	dir := t.TempDir()
 
-	m := NewMultiTSDB(dir, log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
 		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 		RetentionDuration: (6 * time.Hour).Milliseconds(),
