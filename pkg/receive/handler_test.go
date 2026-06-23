@@ -229,6 +229,24 @@ func (g *fakePeersGroup) getConnection(_ context.Context, endpoint Endpoint) (Wr
 
 var _ = (peersContainer)(&fakePeersGroup{})
 
+// localTestWriter mirrors production's localAsyncWriter (writes straight to the
+// local TSDB, wrapping errors with errors.Wrap so conflict classification works)
+// but resolves the handler's writer at call time. Some tests swap handler.writer
+// after the harness is built (e.g. the MultiTSDB benchmark), and the old local
+// write path read h.writer dynamically, so we preserve that behavior here.
+type localTestWriter struct {
+	h *Handler
+}
+
+func (w *localTestWriter) Close() error { return nil }
+
+func (w *localTestWriter) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	if err := w.h.writer.Write(ctx, in.Tenant, in.Timeseries); err != nil {
+		return nil, errors.Wrap(err, "writing locally")
+	}
+	return &storepb.WriteResponse{}, nil
+}
+
 func newTestHandlerHashring(
 	debugName string,
 	appendables []*fakeAppendable,
@@ -241,9 +259,6 @@ func newTestHandlerHashring(
 		handlers []*Handler
 		wOpts    = &WriterOptions{}
 	)
-	fakePeers := &fakePeersGroup{
-		clients: map[Endpoint]*peerWorker{},
-	}
 
 	var (
 		closers = make([]func() error, 0)
@@ -251,6 +266,14 @@ func newTestHandlerHashring(
 		logger, _  = logging.NewLogger("debug", "logfmt", debugName)
 		limiter, _ = NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
 	)
+
+	// remoteClients models delivery of a write to the handler that owns an
+	// endpoint. It is only ever used by *other* handlers: a handler's own
+	// endpoint is served by a local writer below (mirroring production's
+	// localAsyncWriter), so that local writes terminate at the TSDB instead of
+	// looping back into the same handler's worker pool and deadlocking.
+	endpoints := make([]Endpoint, len(appendables))
+	remoteClients := make(map[Endpoint]*peerWorker, len(appendables))
 	for i := range appendables {
 		h := NewHandler(logger, &Options{
 			TenantHeader:      tenancy.DefaultTenantHeader,
@@ -261,9 +284,9 @@ func newTestHandlerHashring(
 			Limiter:           limiter,
 		})
 		handlers = append(handlers, h)
-		h.peers = fakePeers
 		endpoint := newUniqueEndpoint()
 		h.options.Endpoint = endpoint.Address
+		endpoints[i] = endpoint
 		cfg[0].Endpoints = append(cfg[0].Endpoints, endpoint)
 
 		var peer *peerWorker
@@ -284,8 +307,23 @@ func newTestHandlerHashring(
 		} else {
 			peer = newPeerWorker(&fakeRemoteWriteGRPCServer{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0)
 		}
-		fakePeers.clients[endpoint] = peer
+		remoteClients[endpoint] = peer
 	}
+
+	// Give each handler its own peers view: its own endpoint resolves to a local
+	// writer, every other endpoint resolves to the shared remote-delivery worker.
+	for i, h := range handlers {
+		clients := make(map[Endpoint]*peerWorker, len(endpoints))
+		for j, endpoint := range endpoints {
+			if i == j {
+				clients[endpoint] = newPeerWorker(&localTestWriter{h: h}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0)
+			} else {
+				clients[endpoint] = remoteClients[endpoint]
+			}
+		}
+		h.peers = &fakePeersGroup{clients: clients}
+	}
+
 	// Use hashmod as default.
 	if hashringAlgo == "" {
 		hashringAlgo = AlgorithmHashmod
@@ -736,34 +774,31 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 				}
 			}
 
-			if withConsistencyDelay {
-				time.Sleep(50 * time.Millisecond)
-			}
+			// Replicas beyond quorum are written best-effort and land asynchronously
+			// after the HTTP response returns, so poll until every fake DB holds the
+			// expected number of samples rather than checking exactly once.
+			verify := func() error {
+				var errs []error
+				for _, ts := range tc.wreq.Timeseries {
+					lset := labelpb.ZLabelsToPromLabels(ts.Labels)
+					for j, a := range tc.appendables {
+						got := uint64(len(a.appender.(*fakeAppender).Get(lset)))
+						hit := a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts)
+						if withConsistencyDelay && tc.status == http.StatusOK {
+							var expected int
+							if hit {
+								// We have len(handlers) copies of each sample because the test case
+								// is run once for each handler and they all use the same appender.
+								expected = len(handlers) * len(ts.Samples)
+							}
+							if uint64(expected) != got {
+								errs = append(errs, fmt.Errorf("handler: %d, labels %q: expected %d samples, got %d", j, lset.String(), expected, got))
+							}
+							continue
+						}
 
-			// Test that each time series is stored
-			// the correct amount of times in each fake DB.
-			for _, ts := range tc.wreq.Timeseries {
-				lset := labelpb.ZLabelsToPromLabels(ts.Labels)
-				for j, a := range tc.appendables {
-					if withConsistencyDelay && tc.status == http.StatusOK {
-						var expected int
-						n := a.appender.(*fakeAppender).Get(lset)
-						got := uint64(len(n))
-						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
-							// We have len(handlers) copies of each sample because the test case
-							// is run once for each handler and they all use the same appender.
-							expected = len(handlers) * len(ts.Samples)
-						}
-						if uint64(expected) != got {
-							t.Errorf("handler: %d, labels %q: expected %d samples, got %d", j, lset.String(), expected, got)
-						}
-					} else {
 						var expectedMin int
-						n := a.appender.(*fakeAppender).Get(lset)
-						got := uint64(len(n))
-						if a.appenderErr == nil && endpointHit(t, hashring, tc.replicationFactor, handlers[j].options.Endpoint, tenant, &ts) {
-							// We have len(handlers) copies of each sample because the test case
-							// is run once for each handler and they all use the same appender.
+						if hit {
 							expectedMin = int((tc.replicationFactor/2)+1) * len(ts.Samples)
 							if tc.randomNode {
 								expectedMin = len(ts.Samples)
@@ -776,11 +811,17 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 							}
 						}
 						if uint64(expectedMin) > got {
-							t.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got)
+							errs = append(errs, fmt.Errorf("handler: %d, labels %q: expected minimum of %d samples, got %d", j, lset.String(), expectedMin, got))
 						}
 					}
-
 				}
+				return goerrors.Join(errs...)
+			}
+
+			verifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := runutil.Retry(50*time.Millisecond, verifyCtx.Done(), verify); err != nil {
+				t.Error(err)
 			}
 		})
 	}
@@ -1315,6 +1356,9 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	}
 	defer func() {
 		testutil.Ok(b, closeFunc())
+		for _, h := range handlers {
+			h.Close()
+		}
 	}()
 	handler := handlers[0]
 
@@ -2104,7 +2148,7 @@ func TestDistributeSeries(t *testing.T) {
 	hr := &hashringSeenTenants{Hashring: hashring}
 	h.Hashring(hr)
 
-	_, remote, err := h.distributeTimeseriesToReplicas(
+	writes, err := h.distributeTimeseriesToReplicas(
 		"foo",
 		[]uint64{0},
 		[]prompb.TimeSeries{
@@ -2117,12 +2161,12 @@ func TestDistributeSeries(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Len(t, remote, 1)
-	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries, 1)
-	require.Len(t, remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries, 1)
+	require.Len(t, writes, 1)
+	require.Len(t, writes[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries, 1)
+	require.Len(t, writes[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries, 1)
 
-	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries[0].Labels).Len())
-	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(remote[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(writes[endpointReplica{endpoint: endpoint, replica: 0}]["bar"].timeSeries[0].Labels).Len())
+	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(writes[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries[0].Labels).Len())
 
 	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
 }
@@ -2146,6 +2190,9 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 			&WriterOptions{},
 		),
 	})
+	// Local writes now flow through the peer worker pool, so the handler must be
+	// closed to stop its workers.
+	t.Cleanup(h.Close)
 
 	// initialize hashring with a single local endpoint matching the handler endpoint to force
 	// using local write

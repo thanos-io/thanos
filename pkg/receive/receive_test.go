@@ -899,7 +899,7 @@ func TestSendRemoteWriteMarksPeerUnavailableOnAnyError(t *testing.T) {
 
 			cl.sendUnavailable = sendUnavailable
 
-			h.sendRemoteWrite(ctx, "tenant-a", endpointReplica{
+			h.sendWrite(ctx, "tenant-a", endpointReplica{
 				endpoint: endpoint,
 				replica:  0,
 			}, trackedSeries{
