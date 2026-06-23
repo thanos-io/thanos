@@ -10,6 +10,14 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
+### Added
+
+### Fixed
+
+### Changed
+
+## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)
+
 It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
 
 - [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
