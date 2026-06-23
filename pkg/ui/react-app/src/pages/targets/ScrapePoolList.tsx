@@ -8,7 +8,7 @@ import { useLocalStorage } from '../../hooks/useLocalStorage';
 import { ToggleMoreLess } from '../../components/ToggleMoreLess';
 import { KVSearch } from '@nexucis/kvsearch';
 import styles from './ScrapePoolPanel.module.css';
-import { Col, Collapse, Row } from 'reactstrap';
+import { Col, Collapse, Row, UncontrolledAlert } from 'reactstrap';
 import SearchBar from '../../components/SearchBar';
 import { ScrapePoolContent } from './ScrapePoolContent';
 
@@ -113,15 +113,24 @@ const ScrapePoolListWithStatusIndicator = withStatusIndicator(ScrapePoolListCont
 
 const ScrapePoolList: FC<PathPrefixProps> = ({ pathPrefix }) => {
   const { response, error, isLoading } = useFetch<ScrapePoolListProps>(`${pathPrefix}/api/v1/targets?state=active`);
-  const { status: responseStatus } = response;
+  const { status: responseStatus, warnings } = response;
   const badResponse = responseStatus !== 'success' && responseStatus !== 'start fetching';
   return (
-    <ScrapePoolListWithStatusIndicator
-      {...response.data}
-      error={badResponse ? new Error(responseStatus) : error}
-      isLoading={isLoading}
-      componentTitle="Targets information"
-    />
+    <>
+      {warnings && warnings.length > 0 && (
+        <UncontrolledAlert color="warning">
+          {warnings.map((w, i) => (
+            <div key={i}>{w}</div>
+          ))}
+        </UncontrolledAlert>
+      )}
+      <ScrapePoolListWithStatusIndicator
+        {...response.data}
+        error={badResponse ? new Error(responseStatus) : error}
+        isLoading={isLoading}
+        componentTitle="Targets information"
+      />
+    </>
   );
 };
 
