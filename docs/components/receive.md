@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1077,1087p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1078,1088p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -610,18 +610,14 @@ Flags:
                                  configuration. It supports two formats: a list
                                  of relabel configs applied to all tenants,
                                  or a map of tenant ID to relabel configs for
-                                 per-tenant relabeling. Per-tenant configs take
-                                 precedence over the global config for matching
-                                 tenants.
+                                 per-tenant relabeling.
       --receive.relabel-config=<content>
-                                 Alternative to 'receive.relabel-config-file' 
+                                 Alternative to 'receive.relabel-config-file'
                                  flag (mutually exclusive). Content of YAML
                                  file that contains relabeling configuration. It
                                  supports two formats: a list of relabel configs
                                  applied to all tenants, or a map of tenant ID
                                  to relabel configs for per-tenant relabeling.
-                                 Per-tenant configs take precedence over the
-                                 global config for matching tenants.
       --tsdb.too-far-in-future.time-window=0s
                                  Configures the allowed time window for
                                  ingesting samples too far in the future.

@@ -1045,7 +1045,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration. It supports two formats: a list of relabel configs applied to all tenants, or a map of tenant ID to relabel configs for per-tenant relabeling. Per-tenant configs take precedence over the default tenant for matching tenants.", extflag.WithEnvSubstitution())}
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration. It supports two formats: a list of relabel configs applied to all tenants, or a map of tenant ID to relabel configs for per-tenant relabeling.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 

@@ -1155,20 +1155,13 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-// Per-tenant relabel configs take precedence over global configs.
 func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
-	var relabelConfigs []*relabel.Config
+	relabelConfigs := h.options.RelabelConfigs
+
 	if tenant != "" && len(h.options.TenantRelabelConfigs) > 0 {
 		if tenantRelabelConfigs, ok := h.options.TenantRelabelConfigs[tenant]; ok {
 			relabelConfigs = tenantRelabelConfigs
 		}
-	}
-
-	if len(relabelConfigs) == 0 {
-		if len(h.options.RelabelConfigs) == 0 {
-			return
-		}
-		relabelConfigs = h.options.RelabelConfigs
 	}
 
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
