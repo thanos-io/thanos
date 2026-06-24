@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
 - [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
 - [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
+- [#8229](https://github.com/thanos-io/thanos/issues/8229): Rule: Log PromQL info annotations (e.g. "metric might not be a counter") at debug level instead of warn, to avoid log spam on every rule evaluation.
 
 ### Changed
 
