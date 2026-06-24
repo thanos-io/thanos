@@ -1156,7 +1156,11 @@ func filterOutPromQLWarnings(warns []string, logger log.Logger, query string) []
 	storeWarnings := make([]string, 0, len(warns))
 	for _, warn := range warns {
 		if extannotations.IsPromQLAnnotation(warn) {
-			level.Warn(logger).Log("warning", warn, "query", query)
+			if extannotations.IsPromQLInfoAnnotation(warn) {
+				level.Debug(logger).Log("warning", warn, "query", query)
+			} else {
+				level.Warn(logger).Log("warning", warn, "query", query)
+			}
 			continue
 		}
 		storeWarnings = append(storeWarnings, warn)
