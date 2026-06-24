@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8229](https://github.com/thanos-io/thanos/issues/8229): Rule: Log PromQL info annotations (e.g. "metric might not be a counter") at debug level instead of warn, to avoid log spam on every rule evaluation.
+
 ### Changed
 
 ## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)

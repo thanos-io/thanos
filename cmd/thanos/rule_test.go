@@ -4,6 +4,8 @@
 package main
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -157,4 +159,26 @@ func TestFilterOutPromQLWarnings(t *testing.T) {
 			testutil.Equals(t, tc.expected, output)
 		})
 	}
+}
+
+func TestFilterOutPromQLWarnings_LogLevel(t *testing.T) {
+	query := "foo"
+	expr, err := extpromql.ParseExpr(`rate(prometheus_build_info[5m])`)
+	testutil.Ok(t, err)
+	possibleCounterInfo := annotations.NewPossibleNonCounterInfo("foo", expr.PositionRange())
+	badBucketLabelWarning := annotations.NewBadBucketLabelWarning("foo", "0.99", expr.PositionRange())
+
+	t.Run("info annotation logs at debug", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := log.NewLogfmtLogger(&buf)
+		filterOutPromQLWarnings([]string{possibleCounterInfo.Error()}, logger, query)
+		testutil.Assert(t, strings.Contains(buf.String(), "level=debug"), "expected info annotation to be logged at debug level, got: %s", buf.String())
+	})
+
+	t.Run("warning annotation logs at warn", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := log.NewLogfmtLogger(&buf)
+		filterOutPromQLWarnings([]string{badBucketLabelWarning.Error()}, logger, query)
+		testutil.Assert(t, strings.Contains(buf.String(), "level=warn"), "expected warning annotation to be logged at warn level, got: %s", buf.String())
+	})
 }
