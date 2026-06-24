@@ -1417,3 +1417,40 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 
 	return relabelConfig, nil
 }
+
+// ParseRelabelConfigWithTenants parses relabel configuration provided either as
+// a single list applied to all tenants or as a map of tenant ID to relabel configs.
+func ParseRelabelConfigWithTenants(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
+	if len(contentYaml) == 0 {
+		return nil, nil, nil
+	}
+
+	var global []*relabel.Config
+	if err := yaml.Unmarshal(contentYaml, &global); err == nil {
+		cfg, err := ParseRelabelConfig(contentYaml, supportedActions)
+		if err != nil {
+			return nil, nil, err
+		}
+		return cfg, nil, nil
+	}
+
+	var perTenantRaw map[string][]*relabel.Config
+	if err := yaml.Unmarshal(contentYaml, &perTenantRaw); err != nil {
+		return nil, nil, errors.Wrap(err, "parsing relabel configuration")
+	}
+
+	perTenant := make(map[string][]*relabel.Config, len(perTenantRaw))
+	for tenant, cfgs := range perTenantRaw {
+		tenantYaml, err := yaml.Marshal(cfgs)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "marshal relabel config for tenant %q", tenant)
+		}
+		parsed, err := ParseRelabelConfig(tenantYaml, supportedActions)
+		if err != nil {
+			return nil, nil, errors.Wrapf(err, "invalid relabel config for tenant %q", tenant)
+		}
+		perTenant[tenant] = parsed
+	}
+
+	return nil, perTenant, nil
+}

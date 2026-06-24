@@ -24,7 +24,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/compression"
 	"github.com/thanos-io/objstore"
@@ -32,7 +31,6 @@ import (
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"google.golang.org/grpc"
 
-	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/compressutil"
@@ -220,7 +218,7 @@ func runReceive(
 		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
 	}
 
-	relabelConfig, tenantRelabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
+	relabelConfig, tenantRelabelConfig, err := conf.relabelCfg.RelabelConfigWithTenants(nil)
 	if err != nil {
 		return errors.Wrap(err, "get relabel configuration")
 	}
@@ -955,52 +953,6 @@ type receiveConfig struct {
 	otlpResourceAttributes                   []string
 }
 
-type relabelCfg struct {
-	*extflag.PathOrContent
-}
-
-func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
-	relabelContentYaml, err := r.Content()
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "get content of relabel configuration")
-	}
-
-	// return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
-	return parseRelabelConfig(relabelContentYaml)
-}
-
-func parseRelabelConfig(relabelContentYaml []byte) ([]*relabel.Config, map[string][]*relabel.Config, error) {
-	if len(relabelContentYaml) == 0 {
-		return nil, nil, nil
-	}
-
-	// Try the global format first.
-	var global []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &global); err == nil {
-		for _, cfg := range global {
-			if err := cfg.Validate(model.LegacyValidation); err != nil {
-				return nil, nil, errors.Wrap(err, "invalid relabel config")
-			}
-		}
-		return global, nil, nil
-	}
-
-	// Fall back to the per-tenant format.
-	var perTenant map[string][]*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &perTenant); err != nil {
-		return nil, nil, errors.Wrap(err, "parse relabel configuration")
-	}
-	for tenant, cfgs := range perTenant {
-		for _, cfg := range cfgs {
-			if err := cfg.Validate(model.LegacyValidation); err != nil {
-				return nil, nil, errors.Wrapf(err, "invalid relabel config for tenant %q", tenant)
-			}
-		}
-	}
-
-	return nil, perTenant, nil
-}
-
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
 	rc.grpcConfig.registerFlag(cmd)
@@ -1093,7 +1045,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration. It supports two formats: a list of relabel configs applied to all tenants, or a map of tenant ID to relabel configs for per-tenant relabeling. Per-tenant configs take precedence over the default tenantLa limite config for matching tenants.", extflag.WithEnvSubstitution())}
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration. It supports two formats: a list of relabel configs applied to all tenants, or a map of tenant ID to relabel configs for per-tenant relabeling. Per-tenant configs take precedence over the default tenant for matching tenants.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
