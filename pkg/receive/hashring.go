@@ -689,7 +689,7 @@ func (s *shuffleShardHashring) GetN(tenant string, ts *prompb.TimeSeries, n uint
 	return h.GetN(tenant, ts, n)
 }
 
-// newMultiHashring creates a multi-tenant hashring for a given slice of
+// NewMultiHashring creates a multi-tenant hashring for a given slice of
 // groups.
 // Which hashring to use for a tenant is determined
 // by the tenants field of the hashring configuration.
