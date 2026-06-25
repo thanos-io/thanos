@@ -251,13 +251,13 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 				return nil
 			})
 
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "cortex_cache_fetched_keys_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(0), "cortex_cache_hits_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "querier_cache_misses_total"))
 
 		testutil.Ok(t, querier.WaitSumMetricsWithOptions(
 			e2emon.Equals(1),
@@ -285,13 +285,13 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 				return nil
 			})
 
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(6), "cortex_cache_fetched_keys_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "cortex_cache_hits_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_added_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(6), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "querier_cache_misses_total"))
 
 		testutil.Ok(t, querier.WaitSumMetricsWithOptions(
 			e2emon.Equals(2),
@@ -318,13 +318,13 @@ func TestQueryFrontendNativeHistograms(t *testing.T) {
 				return nil
 			})
 
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "cortex_cache_fetched_keys_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(7), "cortex_cache_fetched_keys_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(2), "cortex_cache_hits_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_added_new_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_added_total"))
 		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_entries"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(3), "querier_cache_gets_total"))
-		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(1), "querier_cache_misses_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(7), "querier_cache_gets_total"))
+		testutil.Ok(t, queryFrontend.WaitSumMetrics(e2emon.Equals(5), "querier_cache_misses_total"))
 
 		testutil.Ok(t, querier.WaitSumMetricsWithOptions(
 			e2emon.Equals(3),

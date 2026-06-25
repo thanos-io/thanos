@@ -86,18 +86,28 @@ type Extractor interface {
 	ResponseWithoutStats(resp Response) Response
 }
 
+// StepExtractor extracts response data matching a specific query step.
+type StepExtractor interface {
+	ExtractForStep(start, end, step int64, from Response) Response
+}
+
 // PrometheusResponseExtractor helps extracting specific info from Query Response.
 type PrometheusResponseExtractor struct{}
 
 // Extract extracts response for specific a range from a response.
 func (PrometheusResponseExtractor) Extract(start, end int64, from Response) Response {
+	return PrometheusResponseExtractor{}.ExtractForStep(start, end, 0, from)
+}
+
+// ExtractForStep extracts response data for a range and step.
+func (PrometheusResponseExtractor) ExtractForStep(start, end, step int64, from Response) Response {
 	promRes := from.(*PrometheusResponse)
 	return &PrometheusResponse{
 		Status: StatusSuccess,
 		Data: PrometheusData{
 			ResultType: promRes.Data.ResultType,
-			Result:     extractMatrix(start, end, promRes.Data.Result),
-			Stats:      extractStats(start, end, promRes.Data.Stats),
+			Result:     extractMatrix(start, end, step, promRes.Data.Result),
+			Stats:      extractStats(start, end, step, promRes.Data.Stats),
 			Analysis:   promRes.Data.Analysis,
 		},
 		Headers:  promRes.Headers,
@@ -140,6 +150,12 @@ func (PrometheusResponseExtractor) ResponseWithoutStats(resp Response) Response 
 // consumers who wish to implement their own strategies.
 type CacheSplitter interface {
 	GenerateCacheKey(userID string, r Request) string
+}
+
+// AlternativeCacheSplitter optionally returns cache keys that can satisfy the
+// request after extraction, such as denser step-aligned query range responses.
+type AlternativeCacheSplitter interface {
+	GenerateCacheKeyAlternatives(userID string, r Request) []string
 }
 
 // constSplitter is a utility for using a constant split interval when determining cache keys
@@ -241,9 +257,10 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 	}
 
 	var (
-		key      = s.splitter.GenerateCacheKey(tenant.JoinTenantIDs(tenantIDs), r)
-		extents  []Extent
-		response Response
+		key       = s.splitter.GenerateCacheKey(tenant.JoinTenantIDs(tenantIDs), r)
+		extents   []Extent
+		response  Response
+		writeBack = true
 	)
 
 	maxCacheFreshness := validation.MaxDurationPerTenant(tenantIDs, s.limits.MaxCacheFreshness)
@@ -254,12 +271,25 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 
 	cached, ok := s.get(ctx, key)
 	if ok {
-		response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime)
+		response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, false)
 	} else {
-		response, extents, err = s.handleMiss(ctx, r, maxCacheTime)
+		for _, alternativeKey := range s.generateAlternativeCacheKeys(tenantIDs, r) {
+			if alternativeKey == key {
+				continue
+			}
+			cached, ok = s.get(ctx, alternativeKey)
+			if ok {
+				response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, true)
+				writeBack = false
+				break
+			}
+		}
+		if !ok {
+			response, extents, err = s.handleMiss(ctx, r, maxCacheTime)
+		}
 	}
 
-	if err == nil && len(extents) > 0 {
+	if err == nil && writeBack && len(extents) > 0 {
 		extents, err := s.filterRecentExtents(r, maxCacheFreshness, extents)
 		if err != nil {
 			return nil, err
@@ -271,6 +301,14 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 		response = s.extractor.ResponseWithoutStats(response)
 	}
 	return response, err
+}
+
+func (s resultsCache) generateAlternativeCacheKeys(tenantIDs []string, r Request) []string {
+	splitter, ok := s.splitter.(AlternativeCacheSplitter)
+	if !ok {
+		return nil
+	}
+	return splitter.GenerateCacheKeyAlternatives(tenant.JoinTenantIDs(tenantIDs), r)
 }
 
 // shouldCacheResponse says whether the response should be cached or not.
@@ -439,7 +477,7 @@ func (s resultsCache) handleMiss(ctx context.Context, r Request, maxCacheTime in
 	return response, extents, nil
 }
 
-func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent, maxCacheTime int64) (Response, []Extent, error) {
+func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent, maxCacheTime int64, filterStep bool) (Response, []Extent, error) {
 	var (
 		reqResps []RequestResponse
 		err      error
@@ -447,7 +485,7 @@ func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent
 	log, ctx := spanlogger.New(ctx, "handleHit")
 	defer log.Finish()
 
-	requests, responses, err := s.partition(r, extents)
+	requests, responses, err := s.partition(r, extents, filterStep)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -571,7 +609,7 @@ func toExtent(ctx context.Context, req Request, res Response) (Extent, error) {
 
 // partition calculates the required requests to satisfy req given the cached data.
 // extents must be in order by start time.
-func (s resultsCache) partition(req Request, extents []Extent) ([]Request, []Response, error) {
+func (s resultsCache) partition(req Request, extents []Extent, filterStep bool) ([]Request, []Response, error) {
 	var requests []Request
 	var cachedResponses []Response
 	start := req.GetStart()
@@ -602,7 +640,7 @@ func (s resultsCache) partition(req Request, extents []Extent) ([]Request, []Res
 			return nil, nil, err
 		}
 		// extract the overlap from the cached extent.
-		cachedResponses = append(cachedResponses, s.extractor.Extract(start, req.GetEnd(), res))
+		cachedResponses = append(cachedResponses, s.extract(req, start, req.GetEnd(), res, filterStep))
 		start = extent.End
 	}
 
@@ -619,6 +657,13 @@ func (s resultsCache) partition(req Request, extents []Extent) ([]Request, []Res
 	}
 
 	return requests, cachedResponses, nil
+}
+
+func (s resultsCache) extract(req Request, start, end int64, res Response, filterStep bool) Response {
+	if extractor, ok := s.extractor.(StepExtractor); ok && filterStep {
+		return extractor.ExtractForStep(start, end, req.GetStep(), res)
+	}
+	return s.extractor.Extract(start, end, res)
 }
 
 func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Duration, extents []Extent) ([]Extent, error) {
@@ -689,14 +734,14 @@ func (s resultsCache) put(ctx context.Context, key string, extents []Extent) {
 
 // extractStats returns the stats for a given time range
 // this function is similar to extractSampleStream
-func extractStats(start, end int64, stats *PrometheusResponseStats) *PrometheusResponseStats {
+func extractStats(start, end, step int64, stats *PrometheusResponseStats) *PrometheusResponseStats {
 	if stats == nil || stats.Samples == nil {
 		return stats
 	}
 
 	result := &PrometheusResponseStats{Samples: &PrometheusResponseSamplesStats{}}
 	for _, s := range stats.Samples.TotalQueryableSamplesPerStep {
-		if start <= s.TimestampMs && s.TimestampMs <= end {
+		if isTimestampAtStep(start, end, step, s.TimestampMs) {
 			result.Samples.TotalQueryableSamplesPerStep = append(result.Samples.TotalQueryableSamplesPerStep, s)
 			result.Samples.TotalQueryableSamples += s.Value
 		}
@@ -704,10 +749,10 @@ func extractStats(start, end int64, stats *PrometheusResponseStats) *PrometheusR
 	return result
 }
 
-func extractMatrix(start, end int64, matrix []SampleStream) []SampleStream {
+func extractMatrix(start, end, step int64, matrix []SampleStream) []SampleStream {
 	result := make([]SampleStream, 0, len(matrix))
 	for _, stream := range matrix {
-		extracted, ok := extractSampleStream(start, end, stream)
+		extracted, ok := extractSampleStream(start, end, step, stream)
 		if ok {
 			result = append(result, extracted)
 		}
@@ -715,7 +760,7 @@ func extractMatrix(start, end int64, matrix []SampleStream) []SampleStream {
 	return result
 }
 
-func extractSampleStream(start, end int64, stream SampleStream) (SampleStream, bool) {
+func extractSampleStream(start, end, step int64, stream SampleStream) (SampleStream, bool) {
 	result := SampleStream{
 		Labels: stream.Labels,
 	}
@@ -729,12 +774,12 @@ func extractSampleStream(start, end int64, stream SampleStream) (SampleStream, b
 	}
 
 	for _, sample := range stream.Samples {
-		if start <= sample.TimestampMs && sample.TimestampMs <= end {
+		if isTimestampAtStep(start, end, step, sample.TimestampMs) {
 			result.Samples = append(result.Samples, sample)
 		}
 	}
 	for _, histogram := range stream.Histograms {
-		if start <= int64(histogram.GetTimestamp()) && int64(histogram.GetTimestamp()) <= end {
+		if isTimestampAtStep(start, end, step, int64(histogram.GetTimestamp())) {
 			result.Histograms = append(result.Histograms, histogram)
 		}
 	}
@@ -742,6 +787,13 @@ func extractSampleStream(start, end int64, stream SampleStream) (SampleStream, b
 		return SampleStream{}, false
 	}
 	return result, true
+}
+
+func isTimestampAtStep(start, end, step, ts int64) bool {
+	if ts < start || ts > end {
+		return false
+	}
+	return step <= 0 || (ts-start)%step == 0
 }
 
 func (e *Extent) toResponse() (Response, error) {

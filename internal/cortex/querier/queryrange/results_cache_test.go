@@ -838,7 +838,7 @@ func TestPartition(t *testing.T) {
 				extractor:      PrometheusResponseExtractor{},
 				minCacheExtent: 10,
 			}
-			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse)
+			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse, false)
 			require.Nil(t, err)
 			require.Equal(t, tc.expectedRequests, reqs)
 			require.Equal(t, tc.expectedCachedResponse, resps)
@@ -1044,7 +1044,7 @@ func TestHandleHit(t *testing.T) {
 			}
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0)
+			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0, false)
 			require.NoError(t, err)
 
 			expectedResponse := mkAPIResponse(tc.input.GetStart(), tc.input.GetEnd(), tc.input.GetStep())
@@ -1052,6 +1052,28 @@ func TestHandleHit(t *testing.T) {
 			require.Equal(t, tc.expectedUpdatedCachedEntry, updatedExtents, "updated cache entry does not match the expectation")
 		})
 	}
+}
+
+type alternativeStepSplitter struct {
+	interval time.Duration
+	steps    []int64
+}
+
+func (s alternativeStepSplitter) GenerateCacheKey(userID string, r Request) string {
+	return s.generateCacheKey(userID, r, r.GetStep())
+}
+
+func (s alternativeStepSplitter) GenerateCacheKeyAlternatives(userID string, r Request) []string {
+	keys := make([]string, 0, len(s.steps))
+	for _, step := range s.steps {
+		keys = append(keys, s.generateCacheKey(userID, r, step))
+	}
+	return keys
+}
+
+func (s alternativeStepSplitter) generateCacheKey(userID string, r Request, step int64) string {
+	currentInterval := r.GetStart() / int64(s.interval/time.Millisecond)
+	return fmt.Sprintf("%s:%s:%d:%d", userID, r.GetQuery(), step, currentInterval)
 }
 
 func TestResultsCache(t *testing.T) {
@@ -1098,6 +1120,60 @@ func TestResultsCache(t *testing.T) {
 	_, err = rc.Do(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 2, calls)
+}
+
+func TestResultsCacheUsesLowerStepCache(t *testing.T) {
+	cfg := ResultsCacheConfig{
+		CacheConfig: cache.Config{
+			Cache: cache.NewMockCache(),
+		},
+	}
+	rcm, _, err := NewResultsCacheMiddleware(
+		log.NewNopLogger(),
+		cfg,
+		alternativeStepSplitter{
+			interval: day,
+			steps:    []int64{15 * 1000},
+		},
+		mockLimits{},
+		PrometheusCodec,
+		PrometheusResponseExtractor{},
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	calls := 0
+	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+		calls++
+		return mkAPIResponse(req.GetStart(), req.GetEnd(), req.GetStep()), nil
+	}))
+	ctx := user.InjectOrgID(context.Background(), "1")
+
+	warmCacheReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  15 * 1000,
+		Query: "up",
+	}
+	resp, err := rc.Do(ctx, warmCacheReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Equal(t, mkAPIResponse(0, 120*1000, 15*1000), resp)
+
+	crossStepReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  30 * 1000,
+		Query: "up",
+	}
+	resp, err = rc.Do(ctx, crossStepReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Equal(t, mkAPIResponse(0, 120*1000, 30*1000), resp)
 }
 
 func TestResultsCacheRecent(t *testing.T) {
