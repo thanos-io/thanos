@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8875](https://github.com/thanos-io/thanos/pull/8875): Ruler: Preserve rule and rule group order after deduplication.
+
 ### Changed
 
 ## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)

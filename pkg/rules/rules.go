@@ -16,6 +16,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -188,59 +189,100 @@ func matches(matcherSets [][]*labels.Matcher, l labels.Labels) bool {
 	return true
 }
 
-// dedupRules re-sorts the set so that the same series with different replica
-// labels are coming right after each other.
+// dedupRules removes rules that differ only by replica labels while preserving
+// the order in which unique rules first appeared.
 func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rulespb.Rule {
 	if len(rules) == 0 {
 		return rules
 	}
 
-	// Remove replica labels
-	for _, r := range rules {
-		removeReplicaLabels(r, replicaLabels)
+	if len(replicaLabels) > 0 {
+		for _, r := range rules {
+			removeReplicaLabels(r, replicaLabels)
+		}
 	}
 
-	// Sort rules globally.
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Compare(rules[j]) < 0
+	ordered := make([]int, len(rules))
+	for i := range ordered {
+		ordered[i] = i
+	}
+
+	// Sort indexes so equal rules are adjacent without changing output order.
+	sort.Slice(ordered, func(i, j int) bool {
+		if d := rules[ordered[i]].Compare(rules[ordered[j]]); d != 0 {
+			return d < 0
+		}
+		return ordered[i] < ordered[j]
 	})
 
-	// Remove rules based on synthesized deduplication labels.
-	i := 0
-	for j := 1; j < len(rules); j++ {
-		if rules[i].Compare(rules[j]) != 0 {
-			// Effectively retain rules[j] in the resulting slice.
-			i++
-			rules[i] = rules[j]
-			continue
+	keep := make([]bool, len(rules))
+	for i := 0; i < len(ordered); {
+		first := ordered[i]
+		best := first
+
+		j := i + 1
+		for ; j < len(ordered) && rules[ordered[i]].Compare(rules[ordered[j]]) == 0; j++ {
+			if ordered[j] < first {
+				first = ordered[j]
+			}
+			if preferredRule(rules[best], rules[ordered[j]]) != rules[best] {
+				best = ordered[j]
+			}
 		}
 
-		// If rules are the same, ordering is still determined depending on type.
-		switch {
-		case rules[i].GetRecording() != nil && rules[j].GetRecording() != nil:
-			if rules[i].GetRecording().Compare(rules[j].GetRecording()) <= 0 {
-				continue
-			}
-		case rules[i].GetAlert() != nil && rules[j].GetAlert() != nil:
-			if rules[i].GetAlert().Compare(rules[j].GetAlert()) <= 0 {
-				continue
-			}
-		default:
-			continue
-		}
-
-		// Swap if we found a younger recording rule or a younger firing alerting rule.
-		rules[i] = rules[j]
+		rules[first] = rules[best]
+		keep[first] = true
+		i = j
 	}
-	return rules[:i+1]
+
+	i := 0
+	for j, r := range rules {
+		if keep[j] {
+			rules[i] = r
+			i++
+		}
+	}
+	return rules[:i]
+}
+
+func preferredRule(current, candidate *rulespb.Rule) *rulespb.Rule {
+	switch {
+	case current.GetRecording() != nil && candidate.GetRecording() != nil:
+		if current.GetRecording().Compare(candidate.GetRecording()) <= 0 {
+			return current
+		}
+	case current.GetAlert() != nil && candidate.GetAlert() != nil:
+		if current.GetAlert().Compare(candidate.GetAlert()) <= 0 {
+			return current
+		}
+	default:
+		return current
+	}
+	return candidate
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
-	b := labels.NewBuilder(r.GetLabels())
-	for k := range replicaLabels {
-		b.Del(k)
+	removeLabels := func(labelSet *labelpb.ZLabelSet) {
+		i := 0
+		for _, label := range labelSet.Labels {
+			if _, ok := replicaLabels[label.Name]; ok {
+				continue
+			}
+			labelSet.Labels[i] = label
+			i++
+		}
+		labelSet.Labels = labelSet.Labels[:i]
+		if len(labelSet.Labels) == 0 {
+			labelSet.Labels = nil
+		}
 	}
-	r.SetLabels(b.Labels())
+
+	switch {
+	case r.GetRecording() != nil:
+		removeLabels(&r.GetRecording().Labels)
+	case r.GetAlert() != nil:
+		removeLabels(&r.GetAlert().Labels)
+	}
 }
 
 func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
@@ -248,19 +290,40 @@ func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
 		return nil
 	}
 
-	// Sort groups such that they appear next to each other.
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Compare(groups[j]) < 0 })
+	ordered := make([]int, len(groups))
+	for i := range ordered {
+		ordered[i] = i
+	}
+
+	// Sort indexes so equal groups are adjacent without changing output order.
+	sort.Slice(ordered, func(i, j int) bool {
+		if d := groups[ordered[i]].Compare(groups[ordered[j]]); d != 0 {
+			return d < 0
+		}
+		return ordered[i] < ordered[j]
+	})
+
+	keep := make([]bool, len(groups))
+	for i := 0; i < len(ordered); {
+		first := ordered[i]
+
+		j := i + 1
+		for ; j < len(ordered) && groups[ordered[i]].Compare(groups[ordered[j]]) == 0; j++ {
+			groups[first].Rules = append(groups[first].Rules, groups[ordered[j]].Rules...)
+		}
+
+		keep[first] = true
+		i = j
+	}
 
 	i := 0
-	for _, g := range groups[1:] {
-		if g.Compare(groups[i]) == 0 {
-			groups[i].Rules = append(groups[i].Rules, g.Rules...)
-		} else {
-			i++
+	for j, g := range groups {
+		if keep[j] {
 			groups[i] = g
+			i++
 		}
 	}
-	return groups[:i+1]
+	return groups[:i]
 }
 
 type rulesServer struct {
