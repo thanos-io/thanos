@@ -203,6 +203,89 @@ config:
 	testutil.Ok(t, os.Unsetenv("TEST_RELOADER_THANOS_ENV2"))
 }
 
+// TestReloader_ConfigApplyAtomicReplace ensures that a reload is triggered
+// even when the config file is replaced atomically (temp-file-then-rename),
+// which is how ConfigMap-mounted files and many editors update files in
+// place. Watching the file's inode directly (rather than its parent
+// directory) would stop receiving events once the original inode is gone.
+func TestReloader_ConfigApplyAtomicReplace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+
+	l, err := net.Listen("tcp", "localhost:0")
+	testutil.Ok(t, err)
+
+	reloads := &atomic.Value{}
+	reloads.Store(0)
+	srv := &http.Server{}
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
+		reloads.Store(reloads.Load().(int) + 1) // The only writer.
+		resp.WriteHeader(http.StatusOK)
+	})
+	go func() { _ = srv.Serve(l) }()
+	defer func() { testutil.Ok(t, srv.Close()) }()
+
+	reloadURL, err := url.Parse(fmt.Sprintf("http://%s", l.Addr().String()))
+	testutil.Ok(t, err)
+
+	dir := t.TempDir()
+	input := filepath.Join(dir, "cfg.yaml")
+
+	testutil.Ok(t, os.WriteFile(input, []byte("a: 1\n"), os.ModePerm))
+
+	reloader := New(nil, nil, &Options{
+		ReloadURL:     reloadURL,
+		CfgFile:       input,
+		WatchInterval: 9999 * time.Hour, // Disable interval to test watch logic only.
+		RetryInterval: 100 * time.Millisecond,
+		DelayInterval: 1 * time.Millisecond,
+	})
+
+	rctx, cancel2 := context.WithCancel(ctx)
+	g := sync.WaitGroup{}
+	g.Go(func() {
+		testutil.Ok(t, reloader.Watch(rctx))
+	})
+
+	// Replace the config file atomically (write to a temp file in the same
+	// directory, then rename over the target) twice. A single replacement can
+	// still produce a trailing inotify event on a dying file-level watch (e.g.
+	// a REMOVE event for the old inode), so it isn't enough to distinguish a
+	// watch that survives replacement from one that doesn't: only the *second*
+	// replacement reliably tells them apart, since by then a file-level watch
+	// has gone fully dead while a directory-level watch keeps working.
+	replacements := 0
+Outer:
+	for {
+		select {
+		case <-ctx.Done():
+			break Outer
+		case <-time.After(300 * time.Millisecond):
+		}
+
+		rel := reloads.Load().(int)
+		if rel == replacements+1 && replacements < 2 {
+			replacements++
+			tmp := filepath.Join(dir, fmt.Sprintf("cfg.yaml.tmp%d", replacements))
+			testutil.Ok(t, os.WriteFile(tmp, []byte(fmt.Sprintf("a: %d\n", replacements+1)), os.ModePerm))
+			testutil.Ok(t, os.Rename(tmp, input))
+		} else if rel >= 3 {
+			break
+		}
+	}
+	cancel2()
+	g.Wait()
+
+	testutil.Equals(t, 2, replacements)
+	testutil.Assert(t, reloads.Load().(int) >= 3, "expected a reload after each of the two atomic replacements, got %d reloads", reloads.Load().(int))
+}
+
 func TestReloader_ConfigRollback(t *testing.T) {
 	if testing.
 		Short() {
