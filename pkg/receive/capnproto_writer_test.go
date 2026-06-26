@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"capnproto.org/go/capnp/v3"
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
@@ -17,6 +18,22 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
+
+// newOldFormatWrite builds a request in the deprecated format where the tenant and
+// time series list are set directly on the WriteRequest instead of in the data tuples.
+func newOldFormatWrite(t *testing.T, tenant string, tsreq []prompb.TimeSeries) *writecapnp.Request {
+	arena := capnp.SingleSegment(nil)
+	_, seg, err := capnp.NewMessage(arena)
+	require.NoError(t, err)
+
+	wr, err := writecapnp.NewRootWriteRequest(seg)
+	require.NoError(t, err)
+	require.NoError(t, writecapnp.BuildIntoSingleTenantWriteRequest(wr, tenant, tsreq))
+
+	req, err := writecapnp.NewSingleTenantRequest(wr, tenant)
+	require.NoError(t, err)
+	return req
+}
 
 func TestCapNProtoWriter_Write(t *testing.T) {
 	t.Parallel()
@@ -53,15 +70,20 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 		},
 	}
 
-	// Create capnproto request
 	capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, timeseries)
 	require.NoError(t, err)
 
-	wr, err := writecapnp.NewRequest(capnpReq)
+	syms, err := capnpReq.Symbols()
+	require.NoError(t, err)
+
+	data, err := capnpReq.Data()
+	require.NoError(t, err)
+
+	wr, err := writecapnp.NewRequest(data.At(0), syms, tenancy.DefaultTenant)
 	require.NoError(t, err)
 
 	// Write the request
-	err = writer.Write(context.Background(), tenancy.DefaultTenant, wr)
+	err = writer.Write(context.Background(), wr)
 	require.NoError(t, err)
 
 	require.NotNil(t, app)
@@ -116,6 +138,12 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 
 	require.Equal(t, "xyz789", secondLabels["trace_id"], "Second exemplar trace_id should match")
 	require.Equal(t, "uvw012", secondLabels["span_id"], "Second exemplar span_id should match")
+
+	// A request in the deprecated format should still create the tenant.
+	oldReq := newOldFormatWrite(t, "old-format-tenant", timeseries)
+	require.NoError(t, writer.Write(context.Background(), oldReq))
+	require.NoError(t, oldReq.Close())
+	require.NotNil(t, m.testGetTenant("old-format-tenant"), "old format write should create the tenant")
 }
 
 func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
@@ -185,9 +213,15 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
 					testutil.Ok(t, err)
 
-					wr, err := writecapnp.NewRequest(capnpReq)
+					syms, err := capnpReq.Symbols()
 					testutil.Ok(t, err)
-					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
+
+					data, err := capnpReq.Data()
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(data.At(0), syms, tenancy.DefaultTenant)
+					testutil.Ok(t, err)
+					err = w.Write(context.Background(), wr)
 
 					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
 						testutil.Ok(t, err)
