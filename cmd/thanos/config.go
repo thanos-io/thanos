@@ -22,7 +22,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/relabel"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
@@ -322,6 +324,26 @@ func (ac *alertMgrConfig) registerFlag(cmd extflag.FlagClause) *alertMgrConfig {
 	ac.alertSourceTemplate = cmd.Flag("alert.query-template", "Template to use in alerts source field. Need only include {{.Expr}} parameter").Default("/graph?g0.expr={{.Expr}}&g0.tab=1").String()
 
 	return ac
+}
+
+type relabelCfg struct {
+	*extflag.PathOrContent
+}
+
+func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
+	relabelContentYaml, err := r.Content()
+	if err != nil {
+		return nil, errors.Wrap(err, "get content of relabel configuration")
+	}
+	return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
+}
+
+func (r *relabelCfg) RelabelConfigWithTenants(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
+	relabelContentYaml, err := r.Content()
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get content of relabel configuration")
+	}
+	return block.ParseRelabelConfigWithTenants(relabelContentYaml, supportedActions)
 }
 
 func parseFlagLabels(s []string) (labels.Labels, error) {

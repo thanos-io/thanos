@@ -1959,7 +1959,7 @@ func TestRelabel(t *testing.T) {
 				RelabelConfigs: tcase.relabel,
 			})
 
-			h.relabel(&tcase.writeRequest)
+			h.relabel(&tcase.writeRequest, "")
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
@@ -2011,7 +2011,7 @@ func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 	}
 
 	// This would panic before the fix.
-	h.relabel(&wreq)
+	h.relabel(&wreq, "")
 
 	expected := prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -2028,6 +2028,89 @@ func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 		},
 	}
 	testutil.Equals(t, expected, wreq)
+}
+
+func TestRelabelPerTenant(t *testing.T) {
+	t.Parallel()
+
+	globalRelabelConfigs := []*relabel.Config{
+		{
+			SourceLabels:         model.LabelNames{"__name__"},
+			Action:               relabel.Drop,
+			Regex:                relabel.MustNewRegexp("global_drop_.*"),
+			NameValidationScheme: model.UTF8Validation,
+		},
+	}
+
+	tenantRelabelConfigs := map[string][]*relabel.Config{
+		"tenant-a": {
+			{
+				SourceLabels:         model.LabelNames{"__name__"},
+				Action:               relabel.Drop,
+				Regex:                relabel.MustNewRegexp("tenant_a_drop_.*"),
+				NameValidationScheme: model.UTF8Validation,
+			},
+		},
+	}
+
+	for _, tcase := range []struct {
+		name                string
+		tenant              string
+		inputMetricNames    []string
+		expectedMetricNames []string
+	}{
+		{
+			name:                "tenant with specific config uses it instead of global",
+			tenant:              "tenant-a",
+			inputMetricNames:    []string{"tenant_a_drop_metric", "global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"global_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "tenant without specific config falls back to global",
+			tenant:              "tenant-b",
+			inputMetricNames:    []string{"tenant_a_drop_metric", "global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "empty tenant falls back to global",
+			tenant:              "",
+			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
+		},
+		{
+			name:                "no relabel configs for tenant and no global configs",
+			tenant:              "tenant-no-config",
+			inputMetricNames:    []string{"any_metric"},
+			expectedMetricNames: []string{"any_metric"},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			var relabelConfigs []*relabel.Config
+			if tcase.name != "no relabel configs for tenant and no global configs" {
+				relabelConfigs = globalRelabelConfigs
+			}
+			h := NewHandler(nil, &Options{
+				RelabelConfigs:       relabelConfigs,
+				TenantRelabelConfigs: tenantRelabelConfigs,
+			})
+
+			wreq := prompb.WriteRequest{}
+			for _, name := range tcase.inputMetricNames {
+				wreq.Timeseries = append(wreq.Timeseries, prompb.TimeSeries{
+					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("__name__", name)),
+					Samples: []prompb.Sample{{Timestamp: 0, Value: 1}},
+				})
+			}
+
+			h.relabel(&wreq, tcase.tenant)
+
+			testutil.Equals(t, len(tcase.expectedMetricNames), len(wreq.Timeseries))
+			for i, ts := range wreq.Timeseries {
+				gotName := labelpb.ZLabelsToPromLabels(ts.Labels).Get("__name__")
+				testutil.Equals(t, tcase.expectedMetricNames[i], gotName)
+			}
+		})
+	}
 }
 
 func TestGetStatsLimitParameter(t *testing.T) {

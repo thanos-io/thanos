@@ -119,6 +119,7 @@ type Options struct {
 	MaxBackoff              time.Duration
 	MaxArtificialDelay      time.Duration
 	RelabelConfigs          []*relabel.Config
+	TenantRelabelConfigs    map[string][]*relabel.Config
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
@@ -625,7 +626,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(&wreq)
+	h.relabel(&wreq, tenantHTTP)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
@@ -1154,14 +1155,19 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-func (h *Handler) relabel(wreq *prompb.WriteRequest) {
-	if len(h.options.RelabelConfigs) == 0 {
-		return
+func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
+	relabelConfigs := h.options.RelabelConfigs
+
+	if tenant != "" && len(h.options.TenantRelabelConfigs) > 0 {
+		if tenantRelabelConfigs, ok := h.options.TenantRelabelConfigs[tenant]; ok {
+			relabelConfigs = tenantRelabelConfigs
+		}
 	}
+
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
 		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), relabelConfigs...)
 		if !keep {
 			continue
 		}
