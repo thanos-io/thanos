@@ -73,7 +73,21 @@ struct TimeSeries {
 }
 
 struct WriteRequest {
+    # Deprecated: these only allow sending one tenant's worth of data in one request.
+    # We might want to send multiple tenants worth of data in one request in the case
+    # of split tenant label functionality.
+    timeSeries @1 :List(TimeSeries);
+    tenant @2: Text;
+
     symbols @0: Symbols;
+    data @3 :List(TimeSeriesTenantTuple);
+}
+
+struct TimeSeriesTenantTuple {
+    # Adding this field to maintain compatibility with what we have right now
+    # (upstreaming the code from our codebase). Use the top-level symbols.
+    nop @0 :Symbols;
+
     timeSeries @1 :List(TimeSeries);
     tenant @2: Text;
 }
