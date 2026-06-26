@@ -18,6 +18,10 @@ func (ThanosResponseExtractor) Extract(_, _ int64, resp queryrange.Response) que
 	return resp
 }
 
+func (ThanosResponseExtractor) ExtractForStep(_, _, _ int64, resp queryrange.Response) queryrange.Response {
+	return resp
+}
+
 // ResponseWithoutHeaders returns the response without HTTP headers.
 func (ThanosResponseExtractor) ResponseWithoutHeaders(resp queryrange.Response) queryrange.Response {
 	switch tr := resp.(type) {

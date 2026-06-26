@@ -838,7 +838,7 @@ func TestPartition(t *testing.T) {
 				extractor:      PrometheusResponseExtractor{},
 				minCacheExtent: 10,
 			}
-			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse, false)
+			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse, extractAnyStep)
 			require.Nil(t, err)
 			require.Equal(t, tc.expectedRequests, reqs)
 			require.Equal(t, tc.expectedCachedResponse, resps)
@@ -1044,7 +1044,7 @@ func TestHandleHit(t *testing.T) {
 			}
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0, false)
+			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0, extractAnyStep)
 			require.NoError(t, err)
 
 			expectedResponse := mkAPIResponse(tc.input.GetStart(), tc.input.GetEnd(), tc.input.GetStep())

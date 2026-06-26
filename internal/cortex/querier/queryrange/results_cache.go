@@ -82,13 +82,9 @@ func (cfg *ResultsCacheConfig) Validate(qCfg querier.Config) error {
 type Extractor interface {
 	// Extract extracts a subset of a response from the `start` and `end` timestamps in milliseconds in the `from` response.
 	Extract(start, end int64, from Response) Response
+	ExtractForStep(start, end, step int64, from Response) Response
 	ResponseWithoutHeaders(resp Response) Response
 	ResponseWithoutStats(resp Response) Response
-}
-
-// StepExtractor extracts response data matching a specific query step.
-type StepExtractor interface {
-	ExtractForStep(start, end, step int64, from Response) Response
 }
 
 // PrometheusResponseExtractor helps extracting specific info from Query Response.
@@ -114,6 +110,13 @@ func (PrometheusResponseExtractor) ExtractForStep(start, end, step int64, from R
 		Warnings: promRes.Warnings,
 	}
 }
+
+type stepExtractionMode int
+
+const (
+	extractAnyStep stepExtractionMode = iota
+	extractMatchingStep
+)
 
 // ResponseWithoutHeaders is useful in caching data without headers since
 // we anyways do not need headers for sending back the response so this saves some space by reducing size of the objects.
@@ -271,7 +274,7 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 
 	cached, ok := s.get(ctx, key)
 	if ok {
-		response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, false)
+		response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractAnyStep)
 	} else {
 		for _, alternativeKey := range s.generateAlternativeCacheKeys(tenantIDs, r) {
 			if alternativeKey == key {
@@ -279,7 +282,7 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 			}
 			cached, ok = s.get(ctx, alternativeKey)
 			if ok {
-				response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, true)
+				response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractMatchingStep)
 				writeBack = false
 				break
 			}
@@ -477,7 +480,7 @@ func (s resultsCache) handleMiss(ctx context.Context, r Request, maxCacheTime in
 	return response, extents, nil
 }
 
-func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent, maxCacheTime int64, filterStep bool) (Response, []Extent, error) {
+func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent, maxCacheTime int64, stepExtraction stepExtractionMode) (Response, []Extent, error) {
 	var (
 		reqResps []RequestResponse
 		err      error
@@ -485,7 +488,7 @@ func (s resultsCache) handleHit(ctx context.Context, r Request, extents []Extent
 	log, ctx := spanlogger.New(ctx, "handleHit")
 	defer log.Finish()
 
-	requests, responses, err := s.partition(r, extents, filterStep)
+	requests, responses, err := s.partition(r, extents, stepExtraction)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -609,7 +612,7 @@ func toExtent(ctx context.Context, req Request, res Response) (Extent, error) {
 
 // partition calculates the required requests to satisfy req given the cached data.
 // extents must be in order by start time.
-func (s resultsCache) partition(req Request, extents []Extent, filterStep bool) ([]Request, []Response, error) {
+func (s resultsCache) partition(req Request, extents []Extent, stepExtraction stepExtractionMode) ([]Request, []Response, error) {
 	var requests []Request
 	var cachedResponses []Response
 	start := req.GetStart()
@@ -640,7 +643,7 @@ func (s resultsCache) partition(req Request, extents []Extent, filterStep bool) 
 			return nil, nil, err
 		}
 		// extract the overlap from the cached extent.
-		cachedResponses = append(cachedResponses, s.extract(req, start, req.GetEnd(), res, filterStep))
+		cachedResponses = append(cachedResponses, s.extract(req, start, req.GetEnd(), res, stepExtraction))
 		start = extent.End
 	}
 
@@ -659,9 +662,9 @@ func (s resultsCache) partition(req Request, extents []Extent, filterStep bool) 
 	return requests, cachedResponses, nil
 }
 
-func (s resultsCache) extract(req Request, start, end int64, res Response, filterStep bool) Response {
-	if extractor, ok := s.extractor.(StepExtractor); ok && filterStep {
-		return extractor.ExtractForStep(start, end, req.GetStep(), res)
+func (s resultsCache) extract(req Request, start, end int64, res Response, stepExtraction stepExtractionMode) Response {
+	if stepExtraction == extractMatchingStep {
+		return s.extractor.ExtractForStep(start, end, req.GetStep(), res)
 	}
 	return s.extractor.Extract(start, end, res)
 }

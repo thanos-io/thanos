@@ -4,14 +4,26 @@
 package queryfrontend
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
-	"strings"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 )
+
+const maxPooledCacheKeyBufferSize = 64 * 1024
+
+// bytes.Buffer lets us safely return backing storage to the pool after String
+// copies the generated cache key.
+var queryRangeCacheKeyBufferPool = sync.Pool{
+	New: func() any {
+		return bytes.NewBuffer(nil)
+	},
+}
 
 // thanosCacheKeyGenerator is a utility for using split interval when determining cache keys.
 type thanosCacheKeyGenerator struct {
@@ -82,9 +94,36 @@ func (t thanosCacheKeyGenerator) generateQueryRangeCacheKey(userID string, tr *T
 	shardInfoKey := generateShardInfoKey(tr)
 	replicaLabels := append([]string(nil), tr.ReplicaLabels...)
 	sort.Strings(replicaLabels)
-	return fmt.Sprintf("fe:%s:%s:%d:%d:%d:%d:%s:%d:%s:%t:%s:%t",
-		userID, tr.Query, step, splitInterval, currentInterval, i, shardInfoKey,
-		tr.LookbackDelta, tr.Engine, tr.PartialResponse, strings.Join(replicaLabels, ","), tr.Analyze)
+
+	buf := queryRangeCacheKeyBufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	buf.Grow(len(userID) + len(tr.Query) + len(shardInfoKey) + len(tr.Engine) + cacheKeyReplicaLabelsLen(replicaLabels) + 64)
+
+	buf.WriteString("fe:")
+	buf.WriteString(userID)
+	buf.WriteByte(':')
+	buf.WriteString(tr.Query)
+	writeCacheKeyInt64(buf, step)
+	writeCacheKeyInt64(buf, splitInterval)
+	writeCacheKeyInt64(buf, currentInterval)
+	writeCacheKeyInt(buf, i)
+	buf.WriteByte(':')
+	buf.WriteString(shardInfoKey)
+	writeCacheKeyInt64(buf, tr.LookbackDelta)
+	buf.WriteByte(':')
+	buf.WriteString(tr.Engine)
+	writeCacheKeyBool(buf, tr.PartialResponse)
+	buf.WriteByte(':')
+	writeCacheKeyReplicaLabels(buf, replicaLabels)
+	writeCacheKeyBool(buf, tr.Analyze)
+
+	cacheKey := buf.String()
+	buf.Reset()
+	if buf.Cap() <= maxPooledCacheKeyBufferSize {
+		queryRangeCacheKeyBufferPool.Put(buf)
+	}
+
+	return cacheKey
 }
 
 // commonQuerySteps bounds alternative cache lookups to common dashboard query steps.
@@ -137,4 +176,41 @@ func generateShardInfoKey(r *ThanosQueryRangeRequest) string {
 		return "-"
 	}
 	return fmt.Sprintf("%d:%d", r.ShardInfo.TotalShards, r.ShardInfo.ShardIndex)
+}
+
+func writeCacheKeyInt(buf *bytes.Buffer, value int) {
+	writeCacheKeyInt64(buf, int64(value))
+}
+
+func writeCacheKeyInt64(buf *bytes.Buffer, value int64) {
+	var scratch [20]byte
+	buf.WriteByte(':')
+	buf.Write(strconv.AppendInt(scratch[:0], value, 10))
+}
+
+func writeCacheKeyBool(buf *bytes.Buffer, value bool) {
+	var scratch [5]byte
+	buf.WriteByte(':')
+	buf.Write(strconv.AppendBool(scratch[:0], value))
+}
+
+func writeCacheKeyReplicaLabels(buf *bytes.Buffer, replicaLabels []string) {
+	for i, replicaLabel := range replicaLabels {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(replicaLabel)
+	}
+}
+
+func cacheKeyReplicaLabelsLen(replicaLabels []string) int {
+	if len(replicaLabels) == 0 {
+		return 0
+	}
+
+	length := len(replicaLabels) - 1
+	for _, replicaLabel := range replicaLabels {
+		length += len(replicaLabel)
+	}
+	return length
 }
