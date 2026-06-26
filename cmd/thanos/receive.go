@@ -206,18 +206,21 @@ func runReceive(
 		}
 	}
 
-	if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
-		return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
-	}
+	var dataDir *os.Root
+	if enableIngestion {
+		if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
+			return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
+		}
 
-	dataDir, err := os.OpenRoot(conf.dataDir)
-	if err != nil {
-		return errors.Wrap(err, "open storage dir")
-	}
+		dataDir, err = os.OpenRoot(conf.dataDir)
+		if err != nil {
+			return errors.Wrap(err, "open storage dir")
+		}
 
-	// Create TSDB for the default tenant.
-	if err := createDefautTenantTSDB(logger, conf.defaultTenantID, dataDir); err != nil {
-		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
+		// Create TSDB for the default tenant.
+		if err := createDefautTenantTSDB(logger, conf.defaultTenantID, dataDir); err != nil {
+			return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
+		}
 	}
 
 	relabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
