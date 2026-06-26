@@ -55,9 +55,14 @@ message WriteResponse {
 }
 
 message WriteRequest {
+  // This only allows to put one tenant and a set of series in one write request.
+  // In the case of split tenant label functionality, we want to send multiple tenants worth of
+  // data to improve throughput. Will mark as deprecated once the other field's functionality
+  // is implemented.
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  repeated TimeSeriesTenantTuple timeseriesTenantData = 4 [(gogoproto.nullable) = false];
 }
 
 message SeriesRequest {
@@ -189,6 +194,11 @@ enum Aggr {
   COUNTER = 5;
 }
 
+message TimeSeriesTenantTuple {
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+}
+
 message SeriesResponse {
   oneof result {
     /// series contains 1 response series. The series labels are sorted by name.
@@ -230,8 +240,8 @@ message LabelNamesRequest {
   // same as in series request.
   repeated string without_replica_labels = 7;
 
-    // limit is used to limit the number of results returned
-    int64 limit = 8;
+  // limit is used to limit the number of results returned
+  int64 limit = 8;
 }
 
 message LabelNamesResponse {
