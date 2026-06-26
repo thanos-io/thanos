@@ -13,7 +13,6 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 )
@@ -57,39 +56,16 @@ func (c *CapNProtoServer) Shutdown() {
 type CapNProtoHandler struct {
 	writer *CapNProtoWriter
 	logger log.Logger
-
-	handledTotal  prometheus.Counter
-	writesByShape *prometheus.CounterVec
 }
 
-const (
-	capnpShapeSingleTenant = "single_tenant"
-	capnpShapeMultiTenant  = "multi_tenant"
-)
-
 func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
-	handledTotal := promauto.With(reg).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_receive_capnproto_handled_total",
-		Help: "Total number of handled CapNProto requests.",
-	})
-	writesByShape := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-		Name: "thanos_receive_capnproto_writes_total",
-		Help: "Total number of CapNProto write requests broken down by tenant payload shape.",
-	}, []string{"shape"})
-	writesByShape.WithLabelValues(capnpShapeSingleTenant)
-	writesByShape.WithLabelValues(capnpShapeMultiTenant)
-
 	return &CapNProtoHandler{
-		handledTotal:  handledTotal,
-		writesByShape: writesByShape,
-		logger:        logger,
-		writer:        writer,
+		logger: logger,
+		writer: writer,
 	}
 }
 
 func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
-	c.handledTotal.Inc()
-
 	call.Go()
 	wr, err := call.Args().Wr()
 	if err != nil {
@@ -99,8 +75,6 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 	var errs writeErrors
 
 	if wr.HasTimeSeries() {
-		c.writesByShape.WithLabelValues(capnpShapeSingleTenant).Inc()
-
 		t, err := wr.Tenant()
 		if err != nil {
 			return err
@@ -114,8 +88,6 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 		errs.Add(c.writer.Write(ctx, req))
 		errs.Add(req.Close())
 	} else {
-		c.writesByShape.WithLabelValues(capnpShapeMultiTenant).Inc()
-
 		data, err := wr.Data()
 		if err != nil {
 			return err
