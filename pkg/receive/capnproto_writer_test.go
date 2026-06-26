@@ -57,11 +57,17 @@ func TestCapNProtoWriter_Write(t *testing.T) {
 	capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, timeseries)
 	require.NoError(t, err)
 
-	wr, err := writecapnp.NewRequest(capnpReq)
+	syms, err := capnpReq.Symbols()
+	require.NoError(t, err)
+
+	data, err := capnpReq.Data()
+	require.NoError(t, err)
+
+	wr, err := writecapnp.NewRequest(data.At(0), syms, tenancy.DefaultTenant)
 	require.NoError(t, err)
 
 	// Write the request
-	err = writer.Write(context.Background(), tenancy.DefaultTenant, wr)
+	err = writer.Write(context.Background(), wr)
 	require.NoError(t, err)
 
 	require.NotNil(t, app)
@@ -185,9 +191,15 @@ func TestCapNProtoWriter_ValidateExemplarLabels(t *testing.T) {
 					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
 					testutil.Ok(t, err)
 
-					wr, err := writecapnp.NewRequest(capnpReq)
+					syms, err := capnpReq.Symbols()
 					testutil.Ok(t, err)
-					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
+
+					data, err := capnpReq.Data()
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(data.At(0), syms, tenancy.DefaultTenant)
+					testutil.Ok(t, err)
+					err = w.Write(context.Background(), wr)
 
 					if testData.expectedErr == nil || idx < len(testData.reqs)-1 {
 						testutil.Ok(t, err)

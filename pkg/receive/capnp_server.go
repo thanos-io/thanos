@@ -12,6 +12,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 )
@@ -55,30 +57,93 @@ func (c *CapNProtoServer) Shutdown() {
 type CapNProtoHandler struct {
 	writer *CapNProtoWriter
 	logger log.Logger
+
+	handledTotal  prometheus.Counter
+	writesByShape *prometheus.CounterVec
 }
 
-func NewCapNProtoHandler(logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
-	return &CapNProtoHandler{logger: logger, writer: writer}
+const (
+	capnpShapeSingleTenant = "single_tenant"
+	capnpShapeMultiTenant  = "multi_tenant"
+)
+
+func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
+	handledTotal := promauto.With(reg).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_capnproto_handled_total",
+		Help: "Total number of handled CapNProto requests.",
+	})
+	writesByShape := promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_receive_capnproto_writes_total",
+		Help: "Total number of CapNProto write requests broken down by tenant payload shape.",
+	}, []string{"shape"})
+	writesByShape.WithLabelValues(capnpShapeSingleTenant)
+	writesByShape.WithLabelValues(capnpShapeMultiTenant)
+
+	return &CapNProtoHandler{
+		handledTotal:  handledTotal,
+		writesByShape: writesByShape,
+		logger:        logger,
+		writer:        writer,
+	}
 }
 
 func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
+	c.handledTotal.Inc()
+
 	call.Go()
 	wr, err := call.Args().Wr()
 	if err != nil {
 		return err
 	}
-	t, err := wr.Tenant()
-	if err != nil {
-		return err
-	}
-	req, err := writecapnp.NewRequest(wr)
-	if err != nil {
-		return err
-	}
-	defer req.Close()
 
 	var errs writeErrors
-	errs.Add(c.writer.Write(ctx, t, req))
+
+	if wr.HasTimeSeries() {
+		c.writesByShape.WithLabelValues(capnpShapeSingleTenant).Inc()
+
+		t, err := wr.Tenant()
+		if err != nil {
+			return err
+		}
+
+		req, err := writecapnp.NewSingleTenantRequest(wr, t)
+		if err != nil {
+			return err
+		}
+
+		errs.Add(c.writer.Write(ctx, req))
+		errs.Add(req.Close())
+	} else {
+		c.writesByShape.WithLabelValues(capnpShapeMultiTenant).Inc()
+
+		data, err := wr.Data()
+		if err != nil {
+			return err
+		}
+
+		symTable, err := wr.Symbols()
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < data.Len(); i++ {
+			d := data.At(i)
+
+			tenant, err := d.Tenant()
+			if err != nil {
+				return err
+			}
+
+			req, err := writecapnp.NewRequest(d, symTable, tenant)
+			if err != nil {
+				return err
+			}
+
+			errs.Add(c.writer.Write(ctx, req))
+			errs.Add(req.Close())
+		}
+	}
+
 	if err := errs.ErrOrNil(); err != nil {
 		level.Debug(c.logger).Log("msg", "failed to handle request", "err", err)
 		result, allocErr := call.AllocResults()
