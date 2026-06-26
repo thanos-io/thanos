@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- Receive: Fix routing receivers crashing with `mkdir ./data: read-only file system` on startup by gating data directory setup on `enableIngestion`, since routing receivers don't write local TSDB data.
+
 ### Changed
 
 ## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)
