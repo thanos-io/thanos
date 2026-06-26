@@ -227,6 +227,10 @@ type adjustableSeriesIterator interface {
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
 	adjustAtValue(lastFloatValue float64)
+
+	// adjustAtValueFloatHistogram is the float-histogram counterpart of adjustAtValue. It lets a counter
+	// implementation adjust an obsolete counter-histogram value knowing the last float histogram returned.
+	adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram)
 }
 
 type noopAdjustableSeriesIterator struct {
@@ -234,6 +238,8 @@ type noopAdjustableSeriesIterator struct {
 }
 
 func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
+
+func (it noopAdjustableSeriesIterator) adjustAtValueFloatHistogram(*histogram.FloatHistogram) {}
 
 // counterErrAdjustSeriesIterator is extendedSeriesIterator used when we deduplicate counter.
 // It makes sure we always adjust for the latest seen last counter value for all replicas.
@@ -261,6 +267,11 @@ type counterErrAdjustSeriesIterator struct {
 	chunkenc.Iterator
 
 	errAdjust float64
+
+	// histErrAdjust is the float-histogram version of errAdjust: a correction
+	// added to every float histogram we return so a replica with an obsolete
+	// counter value does not look like a reset. nil until first needed.
+	histErrAdjust *histogram.FloatHistogram
 }
 
 func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
@@ -271,9 +282,53 @@ func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) 
 	}
 }
 
+func (it *counterErrAdjustSeriesIterator) adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram) {
+	if lastFloatHistogram == nil {
+		return
+	}
+	_, v := it.AtFloatHistogram(nil)
+	// If this replica's count is below the last one we returned, its value is
+	// obsolete and would look like a reset. Add the full difference (every bucket,
+	// not just the count) so no bucket drops below the last histogram.
+	if lastFloatHistogram.Count > v.Count {
+		delta, _, _, err := lastFloatHistogram.Copy().Sub(v)
+		if err != nil {
+			// Schemas or buckets do not match; leave the value as-is instead of
+			// returning a broken histogram.
+			return
+		}
+		// The delta is a correction, not a real counter, so mark it a gauge. That
+		// keeps the accumulation and later Add from changing reset hints.
+		delta.CounterResetHint = histogram.GaugeType
+		if it.histErrAdjust == nil {
+			it.histErrAdjust = delta
+			return
+		}
+		if sum, _, _, err := it.histErrAdjust.Add(delta); err == nil {
+			it.histErrAdjust = sum
+		}
+	}
+}
+
 func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
 	t, v := it.Iterator.At()
 	return t, v + it.errAdjust
+}
+
+func (it *counterErrAdjustSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	t, v := it.Iterator.AtFloatHistogram(fh)
+	if it.histErrAdjust == nil {
+		return t, v
+	}
+	adjusted, _, _, err := v.Copy().Add(it.histErrAdjust)
+	if err != nil {
+		// Does not match the accumulated correction; return the raw value.
+		return t, v
+	}
+	// Keep the real sample's reset hint; the gauge correction must not turn the
+	// counter histogram into a gauge.
+	adjusted.CounterResetHint = v.CounterResetHint
+	return t, adjusted
 }
 
 type dedupSeriesIterator struct {
@@ -281,139 +336,193 @@ type dedupSeriesIterator struct {
 
 	aval, bval chunkenc.ValueType
 
-	// TODO(bwplotka): Don't base on LastT, but on detected scrape interval. This will allow us to be more
-	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
+	// lastT is the time of the last sample we returned.
 	lastT    int64
 	lastIter chunkenc.Iterator
 
-	penA, penB   int64
-	lastA, lastB int64
-	stepA        int64
-	useA         bool
+	// step is the interval between the primary replica's samples, used to detect
+	// gaps. It is 0 until we can determine it.
+	step int64
+
+	// lastPrimaryT is the time of the last sample taken from the primary replica
+	// (gap fills from the secondary do not change it).
+	lastPrimaryT int64
+
+	// primaryA is true while replica A is the primary.
+	primaryA bool
+	useA     bool
+
+	// firstSecondaryT is the secondary replica's first sample time. While we've
+	// only got a single sample from the primary so far we don't know the scrape
+	// interval, so we approximate it from how far the secondary has moved past
+	// firstSecondaryT.
+	firstSecondaryT int64
 }
 
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
-		a:        a,
-		b:        b,
-		lastT:    math.MinInt64,
-		lastA:    math.MinInt64,
-		lastB:    math.MinInt64,
-		lastIter: a,
-		useA:     true,
-		aval:     chunkenc.ValNone,
-		bval:     chunkenc.ValNone,
+		a:               a,
+		b:               b,
+		lastT:           math.MinInt64,
+		lastPrimaryT:    math.MinInt64,
+		lastIter:        a,
+		primaryA:        true,
+		useA:            true,
+		firstSecondaryT: math.MinInt64,
+		aval:            chunkenc.ValNone,
+		bval:            chunkenc.ValNone,
 	}
 }
 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	lastFloatVal, isFloatVal := it.lastFloatVal()
+	lastFloatHist, isFloatHistVal := it.lastFloatHistogramVal()
 	lastUseA := it.useA
 	defer func() {
-		if it.useA != lastUseA && isFloatVal {
-			// We switched replicas.
-			// Ensure values are correct bases on value before At.
-			// TODO(rabenhorst): Investigate if we also need to implement adjusting histograms here.
+		if it.useA == lastUseA {
+			return
+		}
+		// We switched replicas, so make sure the new replica's value continues from
+		// the last one we returned instead of looking like a counter reset.
+		if isFloatVal {
 			it.adjustAtValue(lastFloatVal)
+		} else if isFloatHistVal {
+			it.adjustAtValueFloatHistogram(lastFloatHist)
 		}
 	}()
 
-	// Keep the current timestamps, so we know if each iterator moved to the next sample or not.
-	if it.lastT != math.MinInt64 && it.aval != chunkenc.ValNone {
-		// If we have a sample for A then get the timestamp of it.
-		it.lastA = it.a.AtT()
-	}
-	if it.lastT != math.MinInt64 && it.bval != chunkenc.ValNone {
-		// If we have a sample for B then get the timestamp of it.
-		it.lastB = it.b.AtT()
-	}
-
-	// Advance both iterators to the next sample in each stream unless we've
-	// reached the end (lastT >= 0 but val is None).
+	// Advance both iterators to the next sample after the last one we returned.
 	if it.lastT == math.MinInt64 || it.aval != chunkenc.ValNone {
-		it.aval = it.a.Seek(it.lastT + 1 + it.penA)
+		it.aval = it.a.Seek(it.lastT + 1)
 	}
 	if it.lastT == math.MinInt64 || it.bval != chunkenc.ValNone {
-		it.bval = it.b.Seek(it.lastT + 1 + it.penB)
+		it.bval = it.b.Seek(it.lastT + 1)
 	}
 
-	// Handle basic cases where one iterator is exhausted before the other.
-	if it.aval == chunkenc.ValNone {
-		it.useA = false
-		if it.bval != chunkenc.ValNone {
-			it.lastT = it.b.AtT()
-			it.lastIter = it.b
-			it.penB = 0
+	// First sample: pick the replica that starts earlier as the primary.
+	if it.lastT == math.MinInt64 {
+		it.primaryA = it.aval != chunkenc.ValNone &&
+			(it.bval == chunkenc.ValNone || it.a.AtT() <= it.b.AtT())
+		// Remember the secondary's first timestamp so we can estimate its interval
+		// while we've only got a single sample from the primary.
+		if it.primaryA && it.bval != chunkenc.ValNone {
+			it.firstSecondaryT = it.b.AtT()
+		} else if !it.primaryA && it.aval != chunkenc.ValNone {
+			it.firstSecondaryT = it.a.AtT()
 		}
-		return it.bval
+		return it.returnPrimary()
 	}
-	if it.bval == chunkenc.ValNone {
-		it.useA = true
-		it.lastT = it.a.AtT()
-		it.lastIter = it.a
-		it.penA = 0
-		return it.aval
+
+	primary, secondary := it.a, it.b
+	pval, sval := it.aval, it.bval
+	if !it.primaryA {
+		primary, secondary = it.b, it.a
+		pval, sval = it.bval, it.aval
 	}
-	// General case where both iterators still have data. We pick the one
-	// with the smaller timestamp.
-	// The applied penalty potentially already skipped potential samples already
-	// that would have resulted in exaggerated sampling frequency.
-	ta := it.a.AtT()
-	tb := it.b.AtT()
 
-	// By default, we use A unless B has a lower timestamp.
-	it.useA = ta <= tb
-
-	// If we've decided to use B, then we first need to check
-	// if B's Seek() stayed at the same sample or moved forward.
-	// If it stayed then we need to decide if B is:
-	// - filling a gap in A
-	// - there's an offset between A & B samples
-	if !it.useA && it.lastT != math.MinInt64 && tb == it.lastB {
-		if it.stepA > 0 {
-			// We know A's step size. If A's next sample is within 2x
-			// of that step, A has no gap — B is an offset replica,
-			// stick with A. Otherwise A has a real gap and B fills it.
-			it.useA = ta-it.lastT < 2*it.stepA
+	// There are no more samples in the primary, so the other one becomes the
+	// primary. What we do with its next sample depends on how far it is from the
+	// last one we returned:
+	//   - Within half a step: too close, treat it as a duplicate and skip it.
+	//   - Further out: a real sample, so keep it. The other replica is the only
+	//     source now, and dropping it would lose data.
+	//
+	// Half a step is a rough cut-off, so a real sample that close to the old
+	// primary's last one is dropped as a duplicate. We accept that: we can't tell
+	// the two apart that close, and a tight cut-off avoids an oddly-spaced sample
+	// right after the switch.
+	if pval == chunkenc.ValNone {
+		it.primaryA = !it.primaryA
+		for sval != chunkenc.ValNone && it.step > 0 && secondary.AtT() < it.lastT+it.step/2 {
+			sval = secondary.Seek(secondary.AtT() + 1)
+		}
+		if it.primaryA {
+			it.aval = sval
 		} else {
-			// No known step size yet. Default to A.
-			it.useA = true
+			it.bval = sval
+		}
+		return it.returnPrimary()
+	}
+
+	// If the primary replica has a gap, and the other replica has samples in it,
+	// use them to fill the gap.
+	pt := primary.AtT()
+	if it.step == 0 && it.firstSecondaryT != math.MinInt64 && sval != chunkenc.ValNone {
+		// We've only got a single sample from the primary so far, so we don't know
+		// the scrape interval yet (step is 0). Estimate it from the secondary.
+		est := secondary.AtT() - it.firstSecondaryT
+		if est == 0 && secondary.AtT() < pt {
+			// est is 0 when the other replica is still on its first sample, which
+			// happens when it starts a bit later than the primary. We don't know the
+			// step yet, so look at its next sample to measure the gap between the two.
+			// Seek moves the iterator forward and some iterators (e.g. XOR chunks)
+			// can't go back, so only do this when this sample is inside the gap and we
+			// will use it. Otherwise we would skip past it and lose it.
+			if nval := secondary.Seek(secondary.AtT() + 1); nval != chunkenc.ValNone {
+				est = secondary.AtT() - it.firstSecondaryT
+				sval = nval
+			}
+		}
+		if est > 0 {
+			it.step = est
+		}
+	}
+	if it.step > 0 && pt-it.lastT >= 2*it.step && sval != chunkenc.ValNone {
+		st := secondary.AtT()
+		// Skip the other replica's samples that are too close to the last one we
+		// returned; they would just duplicate it.
+		for sval != chunkenc.ValNone && st < it.lastT+it.step {
+			sval = secondary.Seek(st + 1)
+			if sval == chunkenc.ValNone {
+				break
+			}
+			st = secondary.AtT()
+		}
+		// Only use the sample if it sits in the gap, more than half a step before the
+		// primary replica's next sample. A full step would reject an offset replica's
+		// sample that still usefully fills a single-sample gap.
+		if sval != chunkenc.ValNone && st < pt-it.step/2 {
+			if it.primaryA {
+				it.bval = sval
+			} else {
+				it.aval = sval
+			}
+			it.useA = !it.primaryA
+			it.lastIter = secondary
+			it.lastT = st
+			return sval
 		}
 	}
 
-	// For the series we didn't pick, add a penalty twice as high as the delta of the last two
-	// samples to the next seek against it.
-	// This ensures that we don't pick a sample too close, which would increase the overall
-	// sample frequency. It also guards against clock drift and inaccuracies during
-	// timestamp assignment.
-	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
-	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenalty = 5000
+	return it.returnPrimary()
+}
 
-	if it.useA {
-		if it.lastT != math.MinInt64 {
-			it.penB = 2 * (ta - it.lastT)
-		} else {
-			it.penB = initialPenalty
-		}
-		it.penA = 0
-		if it.lastA != math.MinInt64 {
-			it.stepA = ta - it.lastA
-		}
-		it.lastT = ta
-		it.lastIter = it.a
-
-		return it.aval
+// returnPrimary returns the current sample of the primary replica, updates step,
+// and moves lastT forward.
+func (it *dedupSeriesIterator) returnPrimary() chunkenc.ValueType {
+	primary := it.a
+	pval := it.aval
+	if !it.primaryA {
+		primary = it.b
+		pval = it.bval
 	}
-	if it.lastT != math.MinInt64 {
-		it.penA = 2 * (tb - it.lastT)
-	} else {
-		it.penA = initialPenalty
+	if pval == chunkenc.ValNone {
+		return chunkenc.ValNone
 	}
-	it.penB = 0
-	it.lastT = tb
-	it.lastIter = it.b
-	return it.bval
+	pt := primary.AtT()
+	if it.lastPrimaryT != math.MinInt64 {
+		d := pt - it.lastPrimaryT
+		// Only update step when two samples are a normal distance apart. A bigger
+		// jump is a real gap, which would throw step off.
+		if it.step == 0 || d < 2*it.step {
+			it.step = d
+		}
+	}
+	it.useA = it.primaryA
+	it.lastIter = primary
+	it.lastT = pt
+	it.lastPrimaryT = pt
+	return pval
 }
 
 func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
@@ -428,12 +537,38 @@ func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
 	return 0, false
 }
 
+// lastFloatHistogramVal returns a copy of the last histogram we returned as a
+// float histogram, if it was a histogram. Integer histograms are read as float
+// histograms because that is how the query engine reads them. The copy is needed
+// because the iterators are advanced before the adjustment runs and may reuse
+// their backing histogram.
+func (it *dedupSeriesIterator) lastFloatHistogramVal() (*histogram.FloatHistogram, bool) {
+	if it.useA && (it.aval == chunkenc.ValFloatHistogram || it.aval == chunkenc.ValHistogram) {
+		_, fh := it.lastIter.AtFloatHistogram(nil)
+		return fh.Copy(), true
+	}
+	if !it.useA && (it.bval == chunkenc.ValFloatHistogram || it.bval == chunkenc.ValHistogram) {
+		_, fh := it.lastIter.AtFloatHistogram(nil)
+		return fh.Copy(), true
+	}
+	return nil, false
+}
+
 func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	if it.aval == chunkenc.ValFloat {
 		it.a.adjustAtValue(lastFloatValue)
 	}
 	if it.bval == chunkenc.ValFloat {
 		it.b.adjustAtValue(lastFloatValue)
+	}
+}
+
+func (it *dedupSeriesIterator) adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram) {
+	if it.aval == chunkenc.ValFloatHistogram || it.aval == chunkenc.ValHistogram {
+		it.a.adjustAtValueFloatHistogram(lastFloatHistogram)
+	}
+	if it.bval == chunkenc.ValFloatHistogram || it.bval == chunkenc.ValHistogram {
+		it.b.adjustAtValueFloatHistogram(lastFloatHistogram)
 	}
 }
 
