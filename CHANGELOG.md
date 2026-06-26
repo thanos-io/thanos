@@ -14,6 +14,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8127](https://github.com/thanos-io/thanos/issues/8127): Reloader: Watch the parent directory of the config file instead of the file itself, so reload is no longer missed after the file is replaced atomically (e.g. ConfigMap mounts, editors using temp-file-and-rename).
+
 ### Changed
 
 ## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)
