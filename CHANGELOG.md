@@ -8,7 +8,7 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
-## [v0.42.0-rc.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 23 (in progress)
+## [v0.42.0-rc.2](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 06 30
 
 The biggest new things in this release are, I think, Receive component's improvements regarding tenant's lifecycle handling, ability to have per endpoint configuration, and showing fanout information in Thanos Query. Thank you to everyone for your contributions!
 
