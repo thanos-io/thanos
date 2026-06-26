@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/symboltable"
 )
 
 type Dialer interface {
@@ -99,7 +100,54 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 		if err != nil {
 			return err
 		}
-		return BuildInto(wr, in.Tenant, in.Timeseries)
+
+		if len(in.TimeseriesTenantData) == 0 {
+			if err := BuildIntoSingleTenantWriteRequest(wr, in.Tenant, in.Timeseries); err != nil {
+				return err
+			}
+			if err := params.SetWr(wr); err != nil {
+				return err
+			}
+
+			return nil
+		}
+
+		sym, err := wr.NewSymbols()
+		if err != nil {
+			return err
+		}
+
+		tl, err := NewTimeSeriesTenantTuple_List(wr.Segment(), int32(len(in.TimeseriesTenantData)))
+		if err != nil {
+			return err
+		}
+
+		builder := symboltable.NewBuilder()
+
+		for i, d := range in.TimeseriesTenantData {
+			ttl := tl.At(i)
+			if err := BuildInto(&ttl, d.Tenant, d.Timeseries, builder); err != nil {
+				return err
+			}
+
+			if err := tl.Set(i, ttl); err != nil {
+				return err
+			}
+		}
+
+		if err := marshalSymbols(builder, sym); err != nil {
+			return err
+		}
+
+		if err := wr.SetData(tl); err != nil {
+			return err
+		}
+
+		if err := params.SetWr(wr); err != nil {
+			return err
+		}
+
+		return nil
 	})
 	defer release()
 

@@ -132,13 +132,25 @@ func BenchmarkMarshalWriteRequest(b *testing.B) {
 			wr, err := ReadRootWriteRequest(msg)
 			require.NoError(b, err)
 
-			var ts Series
-			iter, err := NewRequest(wr)
+			symTable, err := wr.Symbols()
 			require.NoError(b, err)
-			for iter.Next() {
-				require.NoError(b, iter.At(&ts))
+
+			data, err := wr.Data()
+			require.NoError(b, err)
+
+			var ts Series
+			for i := 0; i < data.Len(); i++ {
+				d := data.At(i)
+				tenant, err := d.Tenant()
+				require.NoError(b, err)
+
+				iter, err := NewRequest(d, symTable, tenant)
+				require.NoError(b, err)
+				for iter.Next() {
+					require.NoError(b, iter.At(&ts))
+				}
+				iter.Close()
 			}
-			iter.Close()
 		}
 	})
 }
