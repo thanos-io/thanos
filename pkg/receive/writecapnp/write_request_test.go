@@ -33,7 +33,10 @@ func TestNewRequest(t *testing.T) {
 	require.NoError(t, symbols.SetOffsets(list))
 	require.NoError(t, wr.SetSymbols(symbols))
 
-	req, err := NewRequest(wr)
+	tuples, err := NewTimeSeriesTenantTuple_List(seg, 1)
+	require.NoError(t, err)
+
+	req, err := NewRequest(tuples.At(0), symbols, "test-tenant")
 	require.NoError(t, err)
 
 	require.Equal(t, "foo", (*req.symbols)[0])
