@@ -148,13 +148,13 @@ var expectedRealSeriesWithStaleMarkerDeduplicatedForRate = []sample{
 	{t: 1587691805791, f: 488036}, {t: 1587691820791, f: 488241}, {t: 1587691835791, f: 488411}, {t: 1587691850791, f: 488625}, {t: 1587691865791, f: 488868}, {t: 1587691880791, f: 489005}, {t: 1587691895791, f: 489237}, {t: 1587691910791, f: 489545}, {t: 1587691925791, f: 489750}, {t: 1587691940791, f: 489899}, {t: 1587691955791, f: 490048}, {t: 1587691970791, f: 490364},
 	{t: 1587691985791, f: 490485}, {t: 1587692000791, f: 490722}, {t: 1587692015791, f: 490866}, {t: 1587692030791, f: 491025}, {t: 1587692045791, f: 491286}, {t: 1587692060816, f: 491543}, {t: 1587692075791, f: 491787}, {t: 1587692090791, f: 492065}, {t: 1587692105791, f: 492223}, {t: 1587692120816, f: 492501}, {t: 1587692135791, f: 492767}, {t: 1587692150791, f: 492955},
 	{t: 1587692165791, f: 493194}, {t: 1587692180792, f: 493402}, {t: 1587692195791, f: 493647}, {t: 1587692210791, f: 493897}, {t: 1587692225791, f: 494117}, {t: 1587692240805, f: 494356}, {t: 1587692255791, f: 494620}, {t: 1587692270791, f: 494762}, {t: 1587692285791, f: 495001}, {t: 1587692300805, f: 495222}, {t: 1587692315791, f: 495393}, {t: 1587692330791, f: 495662},
-	{t: 1587692345791, f: 495875}, {t: 1587692360801, f: 496082}, {t: 1587692375791, f: 496196}, {t: 1587692390791, f: 496245}, {t: 1587692405791, f: 496295}, {t: 1587692420791, f: 496365}, {t: 1587692435791, f: 496401}, {t: 1587692450791, f: 496452}, {t: 1587692465791, f: 496491}, {t: 1587692480791, f: 496544}, {t: 1587692542149, f: 496544}, {t: 1587692557139, f: 496640},
-	{t: 1587692572139, f: 496851}, {t: 1587692587139, f: 497047}, {t: 1587692602144, f: 497264}, {t: 1587692617139, f: 497529}, {t: 1587692632139, f: 497717}, {t: 1587692647139, f: 497945}, {t: 1587692662154, f: 498179}, {t: 1587692677139, f: 498466}, {t: 1587692692139, f: 498642}, {t: 1587692707139, f: 498839}, {t: 1587692722139, f: 499021}, {t: 1587692737139, f: 499177},
-	{t: 1587692752139, f: 499345}, {t: 1587692767139, f: 499518}, {t: 1587692782149, f: 499726}, {t: 1587692797139, f: 499980}, {t: 1587692812139, f: 500196}, {t: 1587692827139, f: 500366}, {t: 1587692842139, f: 500524}, {t: 1587692857139, f: 500734}, {t: 1587692872139, f: 500966}, {t: 1587692887139, f: 501185}, {t: 1587692902139, f: 501253}, {t: 1587692917153, f: 501411},
-	{t: 1587692932139, f: 501670}, {t: 1587692947139, f: 501857}, {t: 1587692962139, f: 502110}, {t: 1587692977155, f: 502287}, {t: 1587692992139, f: 502569}, {t: 1587693007139, f: 502749}, {t: 1587693022139, f: 502938}, {t: 1587693037139, f: 503197}, {t: 1587693052139, f: 503435}, {t: 1587693067139, f: 503637}, {t: 1587693082139, f: 503880}, {t: 1587693097139, f: 504034},
-	{t: 1587693112139, f: 504186}, {t: 1587693127139, f: 504369}, {t: 1587693142139, f: 504597}, {t: 1587693157139, f: 504748}, {t: 1587693172139, f: 505063}, {t: 1587693187139, f: 505251}, {t: 1587693202139, f: 505443}, {t: 1587693217139, f: 505642}, {t: 1587693232139, f: 505943}, {t: 1587693247155, f: 506095}, {t: 1587693262139, f: 506316}, {t: 1587693277139, f: 506531},
-	{t: 1587693292139, f: 506807}, {t: 1587693307139, f: 507017}, {t: 1587693322139, f: 507293}, {t: 1587693337139, f: 507537}, {t: 1587693352139, f: 507788}, {t: 1587693367139, f: 507998}, {t: 1587693382139, f: 508317}, {t: 1587693397139, f: 508577}, {t: 1587693412139, f: 508777}, {t: 1587693427139, f: 508989}, {t: 1587693442163, f: 509281}, {t: 1587693457139, f: 509484},
-	{t: 1587693472139, f: 509720}, {t: 1587693487139, f: 509979}, {t: 1587693502139, f: 510189}, {t: 1587693517139, f: 510505}, {t: 1587693532139, f: 510661}, {t: 1587693547139, f: 510866}, {t: 1587693562139, f: 511131}, {t: 1587693577139, f: 511321}, {t: 1587693592139, f: 511495},
+	{t: 1587692345791, f: 495875}, {t: 1587692360801, f: 496082}, {t: 1587692375791, f: 496196}, {t: 1587692390791, f: 496245}, {t: 1587692405791, f: 496295}, {t: 1587692420791, f: 496365}, {t: 1587692435791, f: 496401}, {t: 1587692450791, f: 496452}, {t: 1587692465791, f: 496491}, {t: 1587692480791, f: 496544}, {t: 1587692542149, f: 496544}, {t: 1587692555791, f: 496619}, {t: 1587692570791, f: 496852},
+	{t: 1587692585791, f: 497052}, {t: 1587692600791, f: 497245}, {t: 1587692615791, f: 497529}, {t: 1587692630791, f: 497697}, {t: 1587692645791, f: 497909}, {t: 1587692660791, f: 498156}, {t: 1587692675803, f: 498466}, {t: 1587692690791, f: 498647}, {t: 1587692705791, f: 498805}, {t: 1587692720791, f: 499013}, {t: 1587692735805, f: 499169}, {t: 1587692750791, f: 499345},
+	{t: 1587692765791, f: 499499}, {t: 1587692780791, f: 499731}, {t: 1587692795806, f: 499972}, {t: 1587692810791, f: 500201}, {t: 1587692825791, f: 500354}, {t: 1587692840791, f: 500512}, {t: 1587692855791, f: 500739}, {t: 1587692870791, f: 500958}, {t: 1587692885791, f: 501190}, {t: 1587692900791, f: 501233}, {t: 1587692915791, f: 501391}, {t: 1587692930791, f: 501649},
+	{t: 1587692945791, f: 501853}, {t: 1587692960791, f: 502065}, {t: 1587692975791, f: 502239}, {t: 1587692990810, f: 502554}, {t: 1587693005791, f: 502754}, {t: 1587693020791, f: 502938}, {t: 1587693035791, f: 503141}, {t: 1587693050791, f: 503416}, {t: 1587693065791, f: 503642}, {t: 1587693080791, f: 503873}, {t: 1587693095791, f: 504014}, {t: 1587693110791, f: 504178},
+	{t: 1587693125821, f: 504374}, {t: 1587693140791, f: 504578}, {t: 1587693155791, f: 504753}, {t: 1587693170791, f: 505043}, {t: 1587693185791, f: 505232}, {t: 1587693200791, f: 505437}, {t: 1587693215791, f: 505596}, {t: 1587693230791, f: 505923}, {t: 1587693245791, f: 506088}, {t: 1587693260791, f: 506307}, {t: 1587693275791, f: 506518}, {t: 1587693290791, f: 506786},
+	{t: 1587693305791, f: 507008}, {t: 1587693320803, f: 507260}, {t: 1587693335791, f: 507519}, {t: 1587693350791, f: 507776}, {t: 1587693365791, f: 508003}, {t: 1587693380791, f: 508322}, {t: 1587693395804, f: 508551}, {t: 1587693410791, f: 508750}, {t: 1587693425791, f: 508994}, {t: 1587693440791, f: 509237}, {t: 1587693455791, f: 509452}, {t: 1587693470791, f: 509702},
+	{t: 1587693485791, f: 509971}, {t: 1587693500791, f: 510147}, {t: 1587693515791, f: 510471}, {t: 1587693530816, f: 510666}, {t: 1587693545791, f: 510871}, {t: 1587693560791, f: 511123}, {t: 1587693575791, f: 511303}, {t: 1587693590791, f: 511500},
 }
 
 type chunkedSeries struct {
@@ -414,33 +414,32 @@ func TestDedupSeriesSet(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10000, 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
-						{20000, 9.0}, // Same. CurrValue = 9.0.
-						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
-						{50001, 9 + 1.0}, // Next after 20000+1 has a bit higher than timestamp then in second series. Penalty 5000 will be added.
+						{10000, 8.0}, // a starts earlier, so a is the primary we follow.
+						{20000, 9.0},
+						// Gap: app reset, no sample (stale marker, removed by downsample.CounterSeriesIterator).
+						{50001, 9 + 1.0}, // a resumes here after the gap.
 						{60000, 9 + 2.0},
 						{70000, 9 + 3.0},
 						{80000, 9 + 4.0},
-						{90000, 9 + 5.0}, // This should be now taken, and we expect 14 to be correct value now.
+						{90000, 9 + 5.0},
 						{100000, 9 + 6.0},
 					},
 				}, {
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10001, 8.0}, // Penalty 5000 will be added.
-						// 20001 was app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator. Penalty 2 * (20000 - 10000) will be added.
-						// 30001 no sample. Within penalty, ignored.
-						{45001, 8 + 0.5}, // Smaller timestamp, this will be chosen. CurrValue = 8.5 which is smaller than last chosen value.
+						{10001, 8.0}, // b is the other replica; a is preferred, so b is not used here.
+						// 20001 app reset, no sample (stale marker, removed by downsample.CounterSeriesIterator).
+						{45001, 8 + 0.5}, // In a's gap, but too close to a's resume at 50001, so not used.
 						{55001, 8 + 1.5},
 						{65001, 8 + 2.5},
-						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
+						// Gap: app reset, no sample (stale marker, removed by downsample.CounterSeriesIterator).
 					},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1"),
-					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}},
+					samples: []sample{{10000, 8}, {20000, 9}, {50001, 10}, {60000, 11}, {70000, 12}, {80000, 13}, {90000, 14}, {100000, 15}},
 				},
 			},
 		},
@@ -464,7 +463,51 @@ func TestDedupSeriesSet(t *testing.T) {
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1"),
-					samples: []sample{{10000, 8}, {20000, 9}, {45001, 8.5}, {55001, 9.5}, {65001, 10.5}, {90000, 14}, {100000, 15}},
+					samples: []sample{{10000, 8}, {20000, 9}, {50001, 10}, {60000, 11}, {70000, 12}, {80000, 13}, {90000, 14}, {100000, 15}},
+				},
+			},
+		},
+		{
+			// Counter gap fill exercises adjustAtValue: the primary (a) has a gap and the
+			// other replica (b) has lower values after a reset. When b fills a's gap we
+			// switch replicas, so adjustAtValue bumps b's filled values up to keep the
+			// counter going up instead of looking like a reset.
+			name:      "Counter gap fill adjusts values to stay monotonic",
+			isCounter: true,
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 100}, {20000, 200}, {50000, 500}, {60000, 600}},
+				}, {
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 100}, {20000, 200}, {30000, 200}, {40000, 201}, {50000, 500}, {60000, 600}},
+				},
+			},
+		},
+		{
+			// a ends early and b continues at lower counter values; the handover is
+			// adjusted so the counter does not look reset.
+			name:      "Counter replica ends early, handover stays monotonic",
+			isCounter: true,
+			input: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 100}, {20000, 200}, {30000, 300}},
+				}, {
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}},
+				},
+			},
+			exp: []series{
+				{
+					lset:    labels.FromStrings("a", "1"),
+					samples: []sample{{10000, 100}, {20000, 200}, {30000, 300}, {40000, 300}, {50000, 301}},
 				},
 			},
 		},
@@ -712,32 +755,34 @@ func TestDedupSeriesIterator(t *testing.T) {
 	cases := []struct {
 		a, b, exp []sample
 	}{
-		{ // Generally prefer the first series.
+		{ // Both replicas are complete, so we follow a the whole time.
 			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
 			b:   []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
 			exp: []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
 		},
-		{ // Prefer b if it starts earlier.
+		{ // b starts earlier, so b is the primary and a is never used.
 			a:   []sample{{10100, 1}, {20100, 1}, {30100, 1}, {40100, 1}},
 			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
 			exp: []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
 		},
-		{ // Don't switch series on a single delta sized gap.
+		{ // a has a one-sample gap; fill it from b, then go back to a.
 			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
 			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			exp: []sample{{10000, 1}, {20000, 1}, {30000, 2}, {40000, 1}},
 		},
-		{
+		{ // b is offset, so none of its samples land in a's gap. Once a ends, b's
+			// trailing sample is past a's last one and is kept rather than dropped.
 			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
 			b:   []sample{{15000, 2}, {25000, 2}, {35000, 2}, {45000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}, {45000, 2}},
 		},
-		{ // Once the gap gets bigger than 2 deltas, switch and stay with the new series.
+		{ // a has a multi-sample gap; fill it from b, then resume a.
 			a:   []sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
 			b:   []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
+			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {40100, 2}, {60000, 1}, {70000, 1}},
 		},
-		{ // Two replicas with sample offset of 21s and 53s scrape interval, don't switch and stay with a.
+		{ // a and b are offset by 21s with a 53s scrape interval. No b sample lands
+			// inside a gap, so we stay on a throughout.
 
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
@@ -758,7 +803,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 1s and 53s scrape interval, don't switch and stay with a.
+		{ // a and b are offset by 1s with a 53s scrape interval. No b sample lands
+			// inside a gap, so we stay on a throughout.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				{169000, 63895}, {222000, 63948}, {275000, 64001},
@@ -778,7 +824,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 30s and 53s scrape interval, don't switch and stay with a.
+		{ // a and b are offset by 30s with a 53s scrape interval. No b sample lands
+			// inside a gap, so we stay on a throughout.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				{169000, 63895}, {222000, 63948}, {275000, 64001},
@@ -798,7 +845,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 52s and 53s scrape interval, don't switch and stay with a.
+		{ // a and b are offset by 52s with a 53s scrape interval. No b sample lands
+			// inside a gap, so we stay on a throughout.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				{169000, 63895}, {222000, 63948}, {275000, 64001},
@@ -818,7 +866,8 @@ func TestDedupSeriesIterator(t *testing.T) {
 				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 21s and 53s scrape interval, switch to b after a gap in a.
+		{ // a and b are offset by 21s with a 53s scrape interval. a has a gap; one b
+			// sample lands inside it and fills it, then a resumes.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				// Gap here.
@@ -828,21 +877,24 @@ func TestDedupSeriesIterator(t *testing.T) {
 			},
 			b: []sample{
 				{30764, 63757}, {83764, 63810}, {136764, 63863}, {189764, 63916},
-				// Switch to B starts here.
+				// a resumes before these, so they are unused.
 				{242764, 63969}, {295764, 64022},
 				{348764, 64074}, {401764, 64128}, {454764, 64181},
 				{507764, 64234}, {560764, 64287},
 			},
 			exp: []sample{
-				// These come from A.
+				// These come from a.
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
-				// These come from B.
-				{242764, 63969}, {295764, 64022},
-				{348764, 64074}, {401764, 64128}, {454764, 64181},
-				{507764, 64234}, {560764, 64287},
+				// One sample from b fills the gap.
+				{189764, 63916},
+				// a resumes after the gap.
+				{275000, 64001}, {328000, 64054},
+				{381000, 64107}, {434000, 64160},
+				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 1s and 53s scrape interval, switch to b after a gap in a.
+		{ // a and b are offset by 1s with a 53s scrape interval. a has a gap; one b
+			// sample lands inside it and fills it, then a resumes.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				// Gap here.
@@ -853,21 +905,24 @@ func TestDedupSeriesIterator(t *testing.T) {
 			b: []sample{
 				{11000, 63757}, {64000, 63810}, {117000, 63863},
 				{170000, 63916},
-				// Switch to B starts here.
+				// a resumes before these, so they are unused.
 				{223000, 63969}, {276000, 64022},
 				{329000, 64074}, {382000, 64128}, {435000, 64181},
 				{488000, 64234}, {541000, 64287},
 			},
 			exp: []sample{
-				// These come from A.
+				// These come from a.
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
-				// These come from B.
-				{223000, 63969}, {276000, 64022},
-				{329000, 64074}, {382000, 64128}, {435000, 64181},
-				{488000, 64234}, {541000, 64287},
+				// One sample from b fills the gap.
+				{170000, 63916},
+				// a resumes after the gap.
+				{275000, 64001}, {328000, 64054},
+				{381000, 64107}, {434000, 64160},
+				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 30s and 53s scrape interval, switch to b after a gap in a.
+		{ // a and b are offset by 30s with a 53s scrape interval. a has a gap; one b
+			// sample lands inside it and fills it, then a resumes.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				// Gap here.
@@ -878,21 +933,24 @@ func TestDedupSeriesIterator(t *testing.T) {
 			b: []sample{
 				{40000, 63757}, {93000, 63810}, {146000, 63863},
 				{199000, 63916},
-				// Switch to B starts here.
+				// a resumes before these, so they are unused.
 				{252000, 63969}, {305000, 64022},
 				{358000, 64074}, {411000, 64128}, {464000, 64181},
 				{517000, 64234}, {570000, 64287},
 			},
 			exp: []sample{
-				// These come from A.
+				// These come from a.
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
-				// These come from B.
-				{252000, 63969}, {305000, 64022},
-				{358000, 64074}, {411000, 64128}, {464000, 64181},
-				{517000, 64234}, {570000, 64287},
+				// One sample from b fills the gap.
+				{199000, 63916},
+				// a resumes after the gap.
+				{275000, 64001}, {328000, 64054},
+				{381000, 64107}, {434000, 64160},
+				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
 		},
-		{ // Two replicas with sample offset of 52s and 53s scrape interval, switch to b after a gap in a.
+		{ // a and b are offset by 52s with a 53s scrape interval. a has a gap; one b
+			// sample lands inside it and fills it, then a resumes.
 			a: []sample{
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
 				// Gap here.
@@ -903,19 +961,96 @@ func TestDedupSeriesIterator(t *testing.T) {
 			b: []sample{
 				{62000, 63757}, {115000, 63810}, {168000, 63863},
 				{221000, 63916},
-				// Switch to B starts here.
+				// a resumes before these, so they are unused.
 				{274000, 63969}, {327000, 64022},
 				{380000, 64074}, {433000, 64128}, {486000, 64181},
 				{539000, 64234}, {592000, 64287},
 			},
 			exp: []sample{
-				// These come from A.
+				// These come from a.
 				{10000, 63736}, {63000, 63789}, {116000, 63842},
-				// These come from B.
-				{274000, 63969}, {327000, 64022},
-				{380000, 64074}, {433000, 64128}, {486000, 64181},
-				{539000, 64234}, {592000, 64287},
+				// One sample from b fills the gap.
+				{221000, 63916},
+				// a resumes after the gap.
+				{275000, 64001}, {328000, 64054},
+				{381000, 64107}, {434000, 64160},
+				{487000, 64213}, {540000, 64266}, {593000, 64319},
 			},
+		},
+		{ // a has a one-sample gap and b is complete, so the gap is filled from b.
+			a:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {50000, 5}, {60000, 6}},
+			b:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}},
+		},
+		{ // a is missing its first sample and has a gap; both are filled from b.
+			a:   []sample{{20000, 2}, {30000, 3}, {50000, 5}, {60000, 6}},
+			b:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}},
+		},
+		{ // a has a two-sample gap and b is complete, so both missing samples come from b.
+			a:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {60000, 6}, {70000, 7}},
+			b:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}, {70000, 7}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}, {60000, 6}, {70000, 7}},
+		},
+		{ // a ends early, so b is the only source left. b's remaining samples are real
+			// (not offset copies of a's last one), so none should be lost.
+			a:   []sample{{10000, 1}, {20000, 2}},
+			b:   []sample{{10000, 1}, {25000, 3}, {35000, 4}},
+			exp: []sample{{10000, 1}, {20000, 2}, {25000, 3}, {35000, 4}},
+		},
+		{ // a ends early and offset replica b continues. b's first remaining sample is
+			// just an offset copy of a's last one, so it is skipped; the later ones are kept.
+			a:   []sample{{10000, 1}, {20000, 2}},
+			b:   []sample{{10100, 1}, {20100, 2}, {30100, 3}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30100, 3}},
+		},
+		{ // a's gap sits between its first two samples, before a has revealed its
+			// interval. We estimate the step from b so the gap can still be filled.
+			a:   []sample{{10000, 1}, {30000, 3}},
+			b:   []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+		},
+		{ // a's first gap spans several of b's samples. The step we estimate from b
+			// must stay fixed while we borrow; otherwise the later in-gap samples would
+			// be lost.
+			a:   []sample{{10000, 1}, {50000, 5}},
+			b:   []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}},
+			exp: []sample{{10000, 1}, {20000, 2}, {30000, 3}, {40000, 4}, {50000, 5}},
+		},
+		{ // a's first interval has a gap and b is offset later, so b is still on its
+			// first sample when we need the interval. We learn the step from b's own
+			// interval and fill the gap from b.
+			a:   []sample{{0, 1}, {120, 1}, {180, 1}},
+			b:   []sample{{1, 2}, {61, 2}, {181, 2}},
+			exp: []sample{{0, 1}, {61, 2}, {120, 1}, {180, 1}},
+		},
+		{ // Same offset first-interval gap, but it spans more than one sample. Only
+			// the sample b has in the gap is filled; the rest stays a hole because b is
+			// missing it too.
+			a:   []sample{{0, 1}, {180, 1}, {240, 1}},
+			b:   []sample{{1, 2}, {61, 2}, {181, 2}, {241, 2}},
+			exp: []sample{{0, 1}, {61, 2}, {180, 1}, {240, 1}},
+		},
+		{ // A mid-series one-sample gap with an offset b. b's in-gap sample is more
+			// than half a step from both neighbors, so it fills the gap.
+			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}, {50000, 1}},
+			b:   []sample{{11000, 2}, {21000, 2}, {31000, 2}, {41000, 2}, {51000, 2}},
+			exp: []sample{{10000, 1}, {20000, 1}, {31000, 2}, {40000, 1}, {50000, 1}},
+		},
+		{ // Two replicas offset by one step with no gaps; b only duplicates a, so we follow a.
+			a:   []sample{{0, 1}, {60, 1}, {120, 1}, {180, 1}},
+			b:   []sample{{1, 2}, {61, 2}, {121, 2}, {181, 2}},
+			exp: []sample{{0, 1}, {60, 1}, {120, 1}, {180, 1}},
+		},
+		{ // b starts first so it is the primary; a's offset sample fills b's first gap.
+			a:   []sample{{1, 1}, {61, 1}, {181, 1}},
+			b:   []sample{{0, 2}, {120, 2}, {180, 2}},
+			exp: []sample{{0, 2}, {61, 1}, {120, 2}, {180, 2}},
+		},
+		{ // a has two separate gaps; both are filled from b, and a is followed otherwise.
+			a:   []sample{{0, 1}, {60, 1}, {180, 1}, {240, 1}, {360, 1}},
+			b:   []sample{{1, 2}, {61, 2}, {121, 2}, {181, 2}, {241, 2}, {301, 2}, {361, 2}},
+			exp: []sample{{0, 1}, {60, 1}, {121, 2}, {180, 1}, {240, 1}, {301, 2}, {360, 1}},
 		},
 	}
 	for i, c := range cases {
@@ -960,6 +1095,53 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
 			)
 			res = expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
+			require.EqualValues(t, c.exp, res)
+		})
+	}
+
+	// Same logic as TestDedupSeriesIterator, but with integer histograms on both
+	// replicas, to check the right replica's histogram is returned. Each sample
+	// uses a distinct histogram so exp shows which replica it came from.
+	gh := tsdbutil.GenerateTestHistograms(20)
+	casesHist := []struct {
+		a, b []*testiters.HistogramPair
+		exp  []any
+	}{
+		{ // Both replicas are complete, so we follow a the whole time.
+			a:   []*testiters.HistogramPair{{T: 10000, H: gh[0]}, {T: 20000, H: gh[1]}, {T: 30000, H: gh[2]}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: gh[10]}, {T: 20000, H: gh[11]}, {T: 30000, H: gh[12]}},
+			exp: []any{&testiters.HistogramPair{T: 10000, H: gh[0]}, &testiters.HistogramPair{T: 20000, H: gh[1]}, &testiters.HistogramPair{T: 30000, H: gh[2]}},
+		},
+		{ // a has a one-sample gap; the missing sample is filled from b, then a resumes.
+			a:   []*testiters.HistogramPair{{T: 10000, H: gh[0]}, {T: 20000, H: gh[1]}, {T: 40000, H: gh[3]}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: gh[10]}, {T: 20000, H: gh[11]}, {T: 30000, H: gh[12]}, {T: 40000, H: gh[13]}},
+			exp: []any{&testiters.HistogramPair{T: 10000, H: gh[0]}, &testiters.HistogramPair{T: 20000, H: gh[1]}, &testiters.HistogramPair{T: 30000, H: gh[12]}, &testiters.HistogramPair{T: 40000, H: gh[3]}},
+		},
+		{ // a has a multi-sample gap; both missing samples are filled from b, then a resumes.
+			a:   []*testiters.HistogramPair{{T: 10000, H: gh[0]}, {T: 20000, H: gh[1]}, {T: 50000, H: gh[4]}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: gh[10]}, {T: 20000, H: gh[11]}, {T: 30000, H: gh[12]}, {T: 40000, H: gh[13]}, {T: 50000, H: gh[14]}},
+			exp: []any{&testiters.HistogramPair{T: 10000, H: gh[0]}, &testiters.HistogramPair{T: 20000, H: gh[1]}, &testiters.HistogramPair{T: 30000, H: gh[12]}, &testiters.HistogramPair{T: 40000, H: gh[13]}, &testiters.HistogramPair{T: 50000, H: gh[4]}},
+		},
+		{ // a ends early; b is the only source left and its later samples are real, so they are kept.
+			a:   []*testiters.HistogramPair{{T: 10000, H: gh[0]}, {T: 20000, H: gh[1]}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: gh[10]}, {T: 25000, H: gh[12]}, {T: 35000, H: gh[13]}},
+			exp: []any{&testiters.HistogramPair{T: 10000, H: gh[0]}, &testiters.HistogramPair{T: 20000, H: gh[1]}, &testiters.HistogramPair{T: 25000, H: gh[12]}, &testiters.HistogramPair{T: 35000, H: gh[13]}},
+		},
+		{ // a ends early; b's next sample is within half a step of a's last, so it is skipped as a duplicate.
+			a:   []*testiters.HistogramPair{{T: 10000, H: gh[0]}, {T: 20000, H: gh[1]}},
+			b:   []*testiters.HistogramPair{{T: 10000, H: gh[10]}, {T: 20000, H: gh[11]}, {T: 22000, H: gh[12]}, {T: 40000, H: gh[13]}},
+			exp: []any{&testiters.HistogramPair{T: 10000, H: gh[0]}, &testiters.HistogramPair{T: 20000, H: gh[1]}, &testiters.HistogramPair{T: 40000, H: gh[13]}},
+		},
+	}
+
+	for i, c := range casesHist {
+		t.Run(fmt.Sprintf("hist-%d", i), func(t *testing.T) {
+			t.Parallel()
+			it := newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.a)},
+				noopAdjustableSeriesIterator{testiters.NewHistogramIterator(c.b)},
+			)
+			res := expandHistogramSeries(t, noopAdjustableSeriesIterator{it})
 			require.EqualValues(t, c.exp, res)
 		})
 	}

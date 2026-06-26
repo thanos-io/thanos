@@ -60,7 +60,8 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{8, 8}}),
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
 			},
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{8, 8}}, []chunks.Sample{sample{10, 10}}),
+			// b's 9 overlaps a's [3, 8] chunk and extends it; b's trailing 10 stays separate.
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{8, 8}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
 		},
 		{
 			name: "two overlapping with large time diff",
@@ -68,8 +69,9 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{2, 2}, sample{5008, 5008}}),
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
 			},
-			// sample{5008, 5008} is added to the result due to its large timestamp.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{5008, 5008}}),
+			// a has a big gap between t=2 and t=5008. We fill it with b's samples
+			// (7, 9, 10), then append a's own sample at t=5008 once b is exhausted.
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{7, 7}, sample{9, 9}, sample{10, 10}, sample{5008, 5008}}),
 		},
 		{
 			name: "two duplicated",
@@ -86,8 +88,9 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{2, 2}, sample{3, 3}, sample{6, 6}}),
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{4, 4}}),
 			},
-			// only samples from the last series are retained due to high penalty.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{4, 4}}),
+			// s3 starts earliest so it is followed; its 0->4 gap is filled from s1/s2
+			// (2, 3) and the later samples (5, 6) are kept.
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{2, 2}, sample{3, 3}, sample{4, 4}, sample{5, 5}, sample{6, 6}}),
 		},
 		{
 			name: "three in chained overlap",
@@ -96,8 +99,8 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{4, 4}, sample{6, 66}}),
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{6, 6}, sample{10, 10}}),
 			},
-			// only samples from the last series are retained due to high penalty.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
+			// Gaps in the followed series are filled from the others.
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{4, 4}, sample{5, 5}, sample{6, 66}, sample{10, 10}}),
 		},
 		{
 			name: "three in chained overlap complex",
@@ -107,7 +110,7 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{18, 18}, sample{26, 26}}, []chunks.Sample{sample{31, 31}, sample{35, 35}}),
 			},
 			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"),
-				[]chunks.Sample{sample{0, 0}, sample{5, 5}},
+				[]chunks.Sample{sample{0, 0}, sample{5, 5}, sample{10, 10}, sample{15, 15}, sample{20, 20}, sample{26, 26}, sample{30, 30}},
 				[]chunks.Sample{sample{31, 31}, sample{35, 35}},
 			),
 		},
@@ -128,7 +131,8 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), chunks.GenerateSamples(60, 90)), // [90 - 150)
 			},
 			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"),
-				chunks.GenerateSamples(0, 90),
+				chunks.GenerateSamples(0, 120),
+				chunks.GenerateSamples(120, 30),
 			),
 		},
 	} {
@@ -289,11 +293,11 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 				Lset: defaultLabels,
 				ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
 					samples := [][]chunks.Sample{
-						{sample{299999, 3}, sample{540000, 5}},
-						{sample{299999, 540000}, sample{540000, 2100000}},
-						{sample{299999, 120000}, sample{540000, 300000}},
-						{sample{299999, 240000}, sample{540000, 540000}},
-						{sample{299999, 240000}, sample{299999, 240000}},
+						{sample{299999, 3}, sample{599999, 5}, sample{660000, 2}},
+						{sample{299999, 540000}, sample{599999, 2100000}, sample{660000, 1260000}},
+						{sample{299999, 120000}, sample{599999, 300000}, sample{660000, 600000}},
+						{sample{299999, 240000}, sample{599999, 540000}, sample{660000, 660000}},
+						{sample{299999, 240000}, sample{540000, 540000}, sample{660000, 660000}, sample{660000, 660000}},
 					}
 					var chks [5]chunkenc.Chunk
 					for i, s := range samples {
@@ -303,7 +307,7 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 					}
 					return storage.NewListChunkSeriesIterator(chunks.Meta{
 						MinTime: 299999,
-						MaxTime: 540000,
+						MaxTime: 660000,
 						Chunk:   downsample.EncodeAggrChunk(chks),
 					})
 				},
@@ -407,6 +411,7 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 				histoSample{t: 0 * scrapeIntervalMilli, h: histogramSample},
 				histoSample{t: 2 * scrapeIntervalMilli, h: histogramSample},
 				histoSample{t: 3 * scrapeIntervalMilli, h: histogramSample},
+				histoSample{t: 4 * scrapeIntervalMilli, h: histogramSample},
 			}),
 		},
 		{
@@ -441,6 +446,8 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 					histoSample{t: 5 * scrapeIntervalMilli, h: histogramSample},
 					histoSample{t: 6 * scrapeIntervalMilli, h: histogramSample},
 					histoSample{t: 7 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 8 * scrapeIntervalMilli, h: histogramSample},
+					histoSample{t: 9 * scrapeIntervalMilli, h: histogramSample},
 				},
 			),
 		},
