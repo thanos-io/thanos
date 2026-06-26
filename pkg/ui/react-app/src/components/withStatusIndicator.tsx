@@ -12,7 +12,7 @@ interface StatusIndicatorProps {
 
 export const withStatusIndicator =
   <T,>(Component: ComponentType<T>): FC<StatusIndicatorProps & T> =>
-  ({ error, isLoading, customErrorMsg, componentTitle, ...rest }: StatusIndicatorProps) => {
+  ({ error, isLoading, customErrorMsg, componentTitle, ...rest }: StatusIndicatorProps & T) => {
     if (error) {
       return (
         <UncontrolledAlert color="danger">
@@ -38,5 +38,5 @@ export const withStatusIndicator =
         />
       );
     }
-    return <Component {...(rest as any)} />;
+    return <Component {...(rest as T)} />;
   };

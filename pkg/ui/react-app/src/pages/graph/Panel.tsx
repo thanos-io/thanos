@@ -54,6 +54,7 @@ export interface PanelProps {
 }
 
 interface PanelState {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data: any; // TODO: Type data.
   lastQueryParams: QueryParams | null;
   loading: boolean;
@@ -213,7 +214,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
       dedup: this.props.options.useDeduplication.toString(),
-      partial_response: this.props.options.usePartialResponse.toString(),
+      partialResponse: this.props.options.usePartialResponse.toString(),
     });
 
     // Add storeMatches to query params.
@@ -324,7 +325,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
       });
   };
 
-  setOptions(opts: any): void {
+  setOptions(opts: Partial<PanelOptions>): void {
     const newOpts = { ...this.props.options, ...opts };
     this.props.onOptionsChanged(newOpts);
   }
@@ -386,6 +387,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handleStoreMatchChange = (selectedStores: any): void => {
     this.setOptions({ storeMatches: selectedStores || [] });
   };
@@ -441,7 +443,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     const params: URLSearchParams = new URLSearchParams({
       query: this.state.exprInputValue,
       dedup: this.props.options.useDeduplication.toString(),
-      partial_response: this.props.options.usePartialResponse.toString(),
+      partialResponse: this.props.options.usePartialResponse.toString(),
     });
 
     // Add storeMatches to query params.

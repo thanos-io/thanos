@@ -33,6 +33,7 @@ interface TimeInputProps {
 
 class TimeInput extends Component<TimeInputProps> {
   private timeInputRef = React.createRef<HTMLInputElement>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private $time: any = null;
 
   getBaseTime = (): number => {
@@ -60,32 +61,38 @@ class TimeInput extends Component<TimeInputProps> {
   };
 
   componentDidMount(): void {
-    this.$time = $(this.timeInputRef.current!);
+    if (this.timeInputRef.current) {
+      this.$time = $(this.timeInputRef.current);
+    }
 
-    this.$time.datetimepicker({
-      icons: {
-        today: 'fas fa-calendar-check',
-      },
-      buttons: {
-        //showClear: true,
-        showClose: true,
-        showToday: true,
-      },
-      sideBySide: true,
-      format: 'YYYY-MM-DD HH:mm:ss',
-      locale: 'en',
-      timeZone: this.timezone(),
-      defaultDate: this.props.time,
-    });
+    if (this.$time) {
+      this.$time.datetimepicker({
+        icons: {
+          today: 'fas fa-calendar-check',
+        },
+        buttons: {
+          //showClear: true,
+          showClose: true,
+          showToday: true,
+        },
+        sideBySide: true,
+        format: 'YYYY-MM-DD HH:mm:ss',
+        locale: 'en',
+        timeZone: this.timezone(),
+        defaultDate: this.props.time,
+      });
+    }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.$time.on('change.datetimepicker', (e: any) => {
-      // The end time can also be set by dragging a section on the graph,
-      // and that value will have decimal places.
-      if (e.date && e.date.valueOf() !== Math.trunc(this.props.time?.valueOf() ?? 0)) {
-        this.props.onChangeTime(e.date.valueOf());
-      }
-    });
+    if (this.$time) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.$time.on('change.datetimepicker', (e: any) => {
+        // The end time can also be set by dragging a section on the graph,
+        // and that value will have decimal places.
+        if (e.date && e.date.valueOf() !== Math.trunc(this.props.time?.valueOf() ?? 0)) {
+          this.props.onChangeTime(e.date.valueOf());
+        }
+      });
+    }
   }
 
   componentWillUnmount(): void {
