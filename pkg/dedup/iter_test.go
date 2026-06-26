@@ -1147,6 +1147,140 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 	}
 }
 
+// counterFloatHistogram builds a single-bucket counter float histogram whose
+// total count and only positive bucket both equal count, so a bucket dip below
+// the previous sample shows up directly as a count dip.
+func counterFloatHistogram(count float64) *histogram.FloatHistogram {
+	return &histogram.FloatHistogram{
+		Schema:           0,
+		ZeroThreshold:    0.001,
+		Count:            count,
+		Sum:              count,
+		PositiveSpans:    []histogram.Span{{Offset: 0, Length: 1}},
+		PositiveBuckets:  []float64{count},
+		CounterResetHint: histogram.NotCounterReset,
+	}
+}
+
+func TestDedupSeriesIterator_FloatHistogramCounterAdjust(t *testing.T) {
+	type fhResult struct {
+		t           int64
+		count       float64
+		firstBucket float64
+	}
+
+	expandFH := func(_ testing.TB, it chunkenc.Iterator) []fhResult {
+		var res []fhResult
+		for it.Next() != chunkenc.ValNone {
+			ts, fh := it.AtFloatHistogram(nil)
+			res = append(res, fhResult{t: ts, count: fh.Count, firstBucket: fh.PositiveBuckets[0]})
+		}
+		return res
+	}
+
+	// Counter float histograms across two replicas. a is the primary and runs out
+	// early; b is the only remaining source but its counter is obsolete (lower),
+	// and a gap in a is also filled from b. On each switch to b the adjustment must
+	// raise b's value so neither the count nor the bucket drops below the last
+	// returned sample. The first switch sets the correction; the second switch
+	// accumulates onto it.
+	a := []*testiters.FloatHistogramPair{
+		{T: 10000, FH: counterFloatHistogram(100)},
+		{T: 20000, FH: counterFloatHistogram(200)},
+		// Gap here (30000, 40000 missing), then a resumes.
+		{T: 50000, FH: counterFloatHistogram(500)},
+		// a ends; b is the only source past this point.
+	}
+	b := []*testiters.FloatHistogramPair{
+		{T: 10000, FH: counterFloatHistogram(5)},
+		{T: 20000, FH: counterFloatHistogram(6)},
+		{T: 35000, FH: counterFloatHistogram(7)},
+		{T: 50000, FH: counterFloatHistogram(8)},
+		{T: 65000, FH: counterFloatHistogram(9)},
+	}
+
+	// b's counter is lower than what we already returned. When b fills a's gap and
+	// when it takes over after a ends, we add the difference so b's values do not
+	// drop below the last value we returned and look like a reset.
+	exp := []fhResult{
+		{t: 10000, count: 100, firstBucket: 100},
+		{t: 20000, count: 200, firstBucket: 200},
+		{t: 35000, count: 200, firstBucket: 200},
+		{t: 50000, count: 500, firstBucket: 500},
+		{t: 65000, count: 500, firstBucket: 500},
+	}
+
+	it := newDedupSeriesIterator(
+		&counterErrAdjustSeriesIterator{Iterator: testiters.NewFloatHistogramIterator(a)},
+		&counterErrAdjustSeriesIterator{Iterator: testiters.NewFloatHistogramIterator(b)},
+	)
+	res := expandFH(t, noopAdjustableSeriesIterator{it})
+	testutil.Equals(t, exp, res)
+}
+
+// counterIntHistogram builds a single-bucket counter integer histogram whose
+// count and only positive bucket both equal count.
+func counterIntHistogram(count uint64) *histogram.Histogram {
+	return &histogram.Histogram{
+		Schema:           0,
+		ZeroThreshold:    0.001,
+		Count:            count,
+		Sum:              float64(count),
+		PositiveSpans:    []histogram.Span{{Offset: 0, Length: 1}},
+		PositiveBuckets:  []int64{int64(count)},
+		CounterResetHint: histogram.NotCounterReset,
+	}
+}
+
+func TestDedupSeriesIterator_HistogramCounterAdjust(t *testing.T) {
+	type fhResult struct {
+		t           int64
+		count       float64
+		firstBucket float64
+	}
+
+	expandFH := func(_ testing.TB, it chunkenc.Iterator) []fhResult {
+		var res []fhResult
+		for it.Next() != chunkenc.ValNone {
+			ts, fh := it.AtFloatHistogram(nil)
+			res = append(res, fhResult{t: ts, count: fh.Count, firstBucket: fh.PositiveBuckets[0]})
+		}
+		return res
+	}
+
+	// The engine reads integer histograms through AtFloatHistogram, so the counter
+	// adjustment must apply to them too. a runs out early and a gap in a is filled
+	// from b, but b's counter is lower, so each switch to b bumps its value to stay
+	// monotonic.
+	a := []*testiters.HistogramPair{
+		{T: 10000, H: counterIntHistogram(100)},
+		{T: 20000, H: counterIntHistogram(200)},
+		{T: 50000, H: counterIntHistogram(500)},
+	}
+	b := []*testiters.HistogramPair{
+		{T: 10000, H: counterIntHistogram(5)},
+		{T: 20000, H: counterIntHistogram(6)},
+		{T: 35000, H: counterIntHistogram(7)},
+		{T: 50000, H: counterIntHistogram(8)},
+		{T: 65000, H: counterIntHistogram(9)},
+	}
+
+	exp := []fhResult{
+		{t: 10000, count: 100, firstBucket: 100},
+		{t: 20000, count: 200, firstBucket: 200},
+		{t: 35000, count: 200, firstBucket: 200},
+		{t: 50000, count: 500, firstBucket: 500},
+		{t: 65000, count: 500, firstBucket: 500},
+	}
+
+	it := newDedupSeriesIterator(
+		&counterErrAdjustSeriesIterator{Iterator: testiters.NewHistogramIterator(a)},
+		&counterErrAdjustSeriesIterator{Iterator: testiters.NewHistogramIterator(b)},
+	)
+	res := expandFH(t, noopAdjustableSeriesIterator{it})
+	testutil.Equals(t, exp, res)
+}
+
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
 		it := newDedupSeriesIterator(

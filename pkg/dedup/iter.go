@@ -227,6 +227,10 @@ type adjustableSeriesIterator interface {
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
 	adjustAtValue(lastFloatValue float64)
+
+	// adjustAtValueFloatHistogram is the float-histogram counterpart of adjustAtValue. It lets a counter
+	// implementation adjust an obsolete counter-histogram value knowing the last float histogram returned.
+	adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram)
 }
 
 type noopAdjustableSeriesIterator struct {
@@ -234,6 +238,8 @@ type noopAdjustableSeriesIterator struct {
 }
 
 func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
+
+func (it noopAdjustableSeriesIterator) adjustAtValueFloatHistogram(*histogram.FloatHistogram) {}
 
 // counterErrAdjustSeriesIterator is extendedSeriesIterator used when we deduplicate counter.
 // It makes sure we always adjust for the latest seen last counter value for all replicas.
@@ -261,6 +267,11 @@ type counterErrAdjustSeriesIterator struct {
 	chunkenc.Iterator
 
 	errAdjust float64
+
+	// histErrAdjust is the float-histogram version of errAdjust: a correction
+	// added to every float histogram we return so a replica with an obsolete
+	// counter value does not look like a reset. nil until first needed.
+	histErrAdjust *histogram.FloatHistogram
 }
 
 func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
@@ -271,9 +282,53 @@ func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) 
 	}
 }
 
+func (it *counterErrAdjustSeriesIterator) adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram) {
+	if lastFloatHistogram == nil {
+		return
+	}
+	_, v := it.AtFloatHistogram(nil)
+	// If this replica's count is below the last one we returned, its value is
+	// obsolete and would look like a reset. Add the full difference (every bucket,
+	// not just the count) so no bucket drops below the last histogram.
+	if lastFloatHistogram.Count > v.Count {
+		delta, _, _, err := lastFloatHistogram.Copy().Sub(v)
+		if err != nil {
+			// Schemas or buckets do not match; leave the value as-is instead of
+			// returning a broken histogram.
+			return
+		}
+		// The delta is a correction, not a real counter, so mark it a gauge. That
+		// keeps the accumulation and later Add from changing reset hints.
+		delta.CounterResetHint = histogram.GaugeType
+		if it.histErrAdjust == nil {
+			it.histErrAdjust = delta
+			return
+		}
+		if sum, _, _, err := it.histErrAdjust.Add(delta); err == nil {
+			it.histErrAdjust = sum
+		}
+	}
+}
+
 func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
 	t, v := it.Iterator.At()
 	return t, v + it.errAdjust
+}
+
+func (it *counterErrAdjustSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	t, v := it.Iterator.AtFloatHistogram(fh)
+	if it.histErrAdjust == nil {
+		return t, v
+	}
+	adjusted, _, _, err := v.Copy().Add(it.histErrAdjust)
+	if err != nil {
+		// Does not match the accumulated correction; return the raw value.
+		return t, v
+	}
+	// Keep the real sample's reset hint; the gauge correction must not turn the
+	// counter histogram into a gauge.
+	adjusted.CounterResetHint = v.CounterResetHint
+	return t, adjusted
 }
 
 type dedupSeriesIterator struct {
@@ -321,6 +376,7 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	lastFloatVal, isFloatVal := it.lastFloatVal()
+	lastFloatHist, isFloatHistVal := it.lastFloatHistogramVal()
 	lastUseA := it.useA
 	defer func() {
 		if it.useA == lastUseA {
@@ -330,6 +386,8 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		// the last one we returned instead of looking like a counter reset.
 		if isFloatVal {
 			it.adjustAtValue(lastFloatVal)
+		} else if isFloatHistVal {
+			it.adjustAtValueFloatHistogram(lastFloatHist)
 		}
 	}()
 
@@ -479,12 +537,38 @@ func (it *dedupSeriesIterator) lastFloatVal() (float64, bool) {
 	return 0, false
 }
 
+// lastFloatHistogramVal returns a copy of the last histogram we returned as a
+// float histogram, if it was a histogram. Integer histograms are read as float
+// histograms because that is how the query engine reads them. The copy is needed
+// because the iterators are advanced before the adjustment runs and may reuse
+// their backing histogram.
+func (it *dedupSeriesIterator) lastFloatHistogramVal() (*histogram.FloatHistogram, bool) {
+	if it.useA && (it.aval == chunkenc.ValFloatHistogram || it.aval == chunkenc.ValHistogram) {
+		_, fh := it.lastIter.AtFloatHistogram(nil)
+		return fh.Copy(), true
+	}
+	if !it.useA && (it.bval == chunkenc.ValFloatHistogram || it.bval == chunkenc.ValHistogram) {
+		_, fh := it.lastIter.AtFloatHistogram(nil)
+		return fh.Copy(), true
+	}
+	return nil, false
+}
+
 func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	if it.aval == chunkenc.ValFloat {
 		it.a.adjustAtValue(lastFloatValue)
 	}
 	if it.bval == chunkenc.ValFloat {
 		it.b.adjustAtValue(lastFloatValue)
+	}
+}
+
+func (it *dedupSeriesIterator) adjustAtValueFloatHistogram(lastFloatHistogram *histogram.FloatHistogram) {
+	if it.aval == chunkenc.ValFloatHistogram || it.aval == chunkenc.ValHistogram {
+		it.a.adjustAtValueFloatHistogram(lastFloatHistogram)
+	}
+	if it.bval == chunkenc.ValFloatHistogram || it.bval == chunkenc.ValHistogram {
+		it.b.adjustAtValueFloatHistogram(lastFloatHistogram)
 	}
 }
 
