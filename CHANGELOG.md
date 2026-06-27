@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 ### Fixed
+- [#8684](https://github.com/thanos-io/thanos/pull/8684): Fix: EncodeAggrChunk created corrupt block if the last chunk is empty
 
 - [#8881](https://github.com/thanos-io/thanos/pull/8881): Receive: Fix routing receivers crashing with `mkdir ./data: read-only file system` on startup by gating data directory setup on `enableIngestion`, since routing receivers don't write local TSDB data.
 
