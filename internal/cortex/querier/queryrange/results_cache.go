@@ -276,16 +276,10 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 	if ok {
 		response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractAnyStep)
 	} else {
-		for _, alternativeKey := range s.generateAlternativeCacheKeys(tenantIDs, r) {
-			if alternativeKey == key {
-				continue
-			}
-			cached, ok = s.get(ctx, alternativeKey)
-			if ok {
-				response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractMatchingStep)
-				writeBack = false
-				break
-			}
+		cached, _, ok = s.getFirst(ctx, alternativeCacheKeys(s.generateAlternativeCacheKeys(tenantIDs, r), key))
+		if ok {
+			response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractMatchingStep)
+			writeBack = false
 		}
 		if !ok {
 			response, extents, err = s.handleMiss(ctx, r, maxCacheTime)
@@ -312,6 +306,26 @@ func (s resultsCache) generateAlternativeCacheKeys(tenantIDs []string, r Request
 		return nil
 	}
 	return splitter.GenerateCacheKeyAlternatives(tenant.JoinTenantIDs(tenantIDs), r)
+}
+
+func alternativeCacheKeys(keys []string, primaryKey string) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, len(keys))
+	alternativeKeys := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if key == primaryKey {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		alternativeKeys = append(alternativeKeys, key)
+	}
+	return alternativeKeys
 }
 
 // shouldCacheResponse says whether the response should be cached or not.
@@ -691,18 +705,61 @@ func (s resultsCache) filterRecentExtents(req Request, maxCacheFreshness time.Du
 }
 
 func (s resultsCache) get(ctx context.Context, key string) ([]Extent, bool) {
-	found, bufs, _ := s.cache.Fetch(ctx, []string{cache.HashKey(key)})
-	if len(found) != 1 {
-		return nil, false
+	extents, _, ok := s.getFirst(ctx, []string{key})
+	return extents, ok
+}
+
+func (s resultsCache) getFirst(ctx context.Context, keys []string) ([]Extent, string, bool) {
+	if len(keys) == 0 {
+		return nil, "", false
 	}
 
+	cacheKeys := make([]string, 0, len(keys))
+	originalKeysByCacheKey := make(map[string]string, len(keys))
+	for _, key := range keys {
+		cacheKey := cache.HashKey(key)
+		if _, ok := originalKeysByCacheKey[cacheKey]; ok {
+			continue
+		}
+		originalKeysByCacheKey[cacheKey] = key
+		cacheKeys = append(cacheKeys, cacheKey)
+	}
+
+	found, bufs, _ := s.cache.Fetch(ctx, cacheKeys)
+	foundBufsByCacheKey := make(map[string][]byte, len(found))
+	for i, cacheKey := range found {
+		if i >= len(bufs) {
+			break
+		}
+		foundBufsByCacheKey[cacheKey] = bufs[i]
+	}
+
+	for _, cacheKey := range cacheKeys {
+		buf, ok := foundBufsByCacheKey[cacheKey]
+		if !ok {
+			continue
+		}
+		key, ok := originalKeysByCacheKey[cacheKey]
+		if !ok {
+			continue
+		}
+		extents, ok := s.decodeCachedResponse(ctx, key, buf)
+		if ok {
+			return extents, key, true
+		}
+	}
+
+	return nil, "", false
+}
+
+func (s resultsCache) decodeCachedResponse(ctx context.Context, key string, buf []byte) ([]Extent, bool) {
 	var resp CachedResponse
 	log, ctx := spanlogger.New(ctx, "unmarshal-extent") //nolint:ineffassign,staticcheck
 	defer log.Finish()
 
-	log.LogFields(otlog.Int("bytes", len(bufs[0])))
+	log.LogFields(otlog.Int("bytes", len(buf)))
 
-	if err := proto.Unmarshal(bufs[0], &resp); err != nil {
+	if err := proto.Unmarshal(buf, &resp); err != nil {
 		level.Error(log).Log("msg", "error unmarshalling cached value", "err", err)
 		log.Error(err)
 		return nil, false
