@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
 - [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
 
 ### Fixed
