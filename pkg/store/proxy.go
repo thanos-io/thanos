@@ -713,7 +713,7 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 
 	match := false
 	for _, sm := range storeDebugMatchers {
-		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
+		match = match || matchersMatchAddress(sm, addr)
 	}
 	if !match {
 		const s string = "__address__ does not match debug store metadata matchers"
@@ -723,6 +723,18 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 		return false, s
 	}
 	return true, ""
+}
+
+// matchersMatchAddress reports whether the matchers match a label set that only
+// contains __address__=addr. It mirrors LabelSetsMatch for that single synthetic
+// label without allocating a labels.Labels for every store on every request.
+func matchersMatchAddress(matchers []*labels.Matcher, addr string) bool {
+	for _, m := range matchers {
+		if m.Name == "__address__" && !m.Matches(addr) {
+			return false
+		}
+	}
+	return true
 }
 
 // LabelSetsMatch returns false if all label-sets do not match the matchers (aka: OR is between all label-sets).
