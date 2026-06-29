@@ -38,7 +38,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 
 	// Use querier work dir for shared resources (easiest to obtain).
-	promRulesSubDir := filepath.Join("rules")
+	promRulesSubDir := filepath.Join(rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
 	// Create the abort_on_partial_response alert for Prometheus.
 	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.

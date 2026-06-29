@@ -346,7 +346,6 @@ func TestRuleNativeHistograms(t *testing.T) {
 	t.Cleanup(cancel)
 
 	rFuture := e2ethanos.NewRulerBuilder(e, "1")
-	rulesSubDir := "rules"
 	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
@@ -405,7 +404,6 @@ func TestRuleNativeHistogramsTSDB(t *testing.T) {
 	t.Cleanup(cancel)
 
 	rFuture := e2ethanos.NewRulerBuilder(e, "1").WithNativeHistograms()
-	rulesSubDir := "rules"
 	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
