@@ -899,12 +899,12 @@ func TestSendRemoteWriteMarksPeerUnavailableOnAnyError(t *testing.T) {
 
 			cl.sendUnavailable = sendUnavailable
 
-			h.sendWrite(ctx, "tenant-a", endpointReplica{
-				endpoint: endpoint,
-				replica:  0,
-			}, trackedSeries{
+			h.sendWrite(ctx, map[string]trackedSeries{"tenant-a": {
 				seriesIDs:  []int{0},
 				timeSeries: []prompb.TimeSeries{{}},
+			}}, endpointReplica{
+				endpoint: endpoint,
+				replica:  0,
 			}, false, responses, &wg)
 
 			wg.Wait()
