@@ -129,7 +129,7 @@ type QueryAPI struct {
 	tenantHeader    string
 	defaultTenant   string
 	tenantCertField string
-	enforceTenancy  bool
+	enforceTenancy  tenancy.EnforcementMode
 	tenantLabel     string
 }
 
@@ -166,7 +166,7 @@ func NewQueryAPI(
 	tenantHeader string,
 	defaultTenant string,
 	tenantCertField string,
-	enforceTenancy bool,
+	enforceTenancy tenancy.EnforcementMode,
 	tenantLabel string,
 	tsdbSelector *store.TSDBSelector,
 ) *QueryAPI {
