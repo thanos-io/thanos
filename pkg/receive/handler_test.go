@@ -241,8 +241,14 @@ type localTestWriter struct {
 func (w *localTestWriter) Close() error { return nil }
 
 func (w *localTestWriter) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	if err := w.h.writer.Write(ctx, in.Tenant, in.Timeseries); err != nil {
-		return nil, errors.Wrap(err, "writing locally")
+	if len(in.TimeseriesTenantData) == 0 {
+		panic("BUG: localTestWriter.RemoteWrite called without TimeseriesTenantData")
+	}
+
+	for _, ts := range in.TimeseriesTenantData {
+		if err := w.h.writer.Write(ctx, ts.Tenant, ts.Timeseries); err != nil {
+			return nil, errors.Wrap(err, "writing locally")
+		}
 	}
 	return &storepb.WriteResponse{}, nil
 }
@@ -2149,14 +2155,20 @@ func TestDistributeSeries(t *testing.T) {
 	h.Hashring(hr)
 
 	writes, err := h.distributeTimeseriesToReplicas(
-		"foo",
 		[]uint64{0},
-		[]prompb.TimeSeries{
+		[]wreqTenantTuple{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
-			},
-			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+				tenant: "foo",
+				wreq: &prompb.WriteRequest{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
+						},
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+						},
+					},
+				},
 			},
 		},
 	)
@@ -2262,14 +2274,19 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
-					{
-						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
-						Samples: []prompb.Sample{
+			_, err := h.handleRequest(ctx, 0, []wreqTenantTuple{
+				{
+					tenant: "test",
+					wreq: &prompb.WriteRequest{
+						Timeseries: []prompb.TimeSeries{
 							{
-								Timestamp: time.Now().Unix(),
-								Value:     123,
+								Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+								Samples: []prompb.Sample{
+									{
+										Timestamp: time.Now().Unix(),
+										Value:     123,
+									},
+								},
 							},
 						},
 					},
