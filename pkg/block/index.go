@@ -119,14 +119,14 @@ func (i HealthStats) Issue347OutsideChunksErr() error {
 
 func (i HealthStats) OutOfOrderChunksErr() error {
 	if i.OutOfOrderChunks > 0 {
-		return errors.New(fmt.Sprintf(
+		return errors.Errorf(
 			"%d/%d series have an average of %.3f out-of-order chunks: "+
 				"%.3f of these are exact duplicates (in terms of data and time range)",
 			i.OutOfOrderSeries,
 			i.TotalSeries,
 			float64(i.OutOfOrderChunks)/float64(i.OutOfOrderSeries),
 			float64(i.DuplicatedChunks)/float64(i.OutOfOrderChunks),
-		))
+		)
 	}
 	return nil
 }
