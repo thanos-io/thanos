@@ -1482,15 +1482,14 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 		if err != nil {
 			return errors.Wrap(err, "unable to create bucket")
 		}
-		defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
 		tbcDir, err := os.OpenRoot(tbc.path)
 		if err != nil {
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			return errors.Wrap(err, "unable to open tbc directory")
 		}
-		defer tbcDir.Close()
 
 		s := shipper.New(
 			bkt,
@@ -1506,6 +1505,9 @@ func registerBucketUploadBlocks(app extkingpin.AppClause, objStoreConfig *extfla
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
+			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			defer runutil.CloseWithLogOnErr(logger, tbcDir, "tbc directory")
+
 			n, err := s.Sync(ctx)
 			if err != nil {
 				return errors.Wrap(err, "unable to sync blocks")
