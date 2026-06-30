@@ -891,18 +891,10 @@ func runRule(
 		}
 		bkt = objstoretracing.WrapWithTraces(objstore.WrapWithMetrics(bkt, extprom.WrapRegistererWithPrefix("thanos_", reg), bkt.Name()))
 
-		// Ensure we close up everything properly.
-		defer func() {
-			if err != nil {
-				runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-			}
-		}()
-
 		dataDir, err := os.OpenRoot(conf.dataDir)
 		if err != nil {
 			return errors.Wrap(err, "open data dir")
 		}
-		defer runutil.CloseWithLogOnErr(logger, dataDir, "data dir")
 
 		s := shipper.New(
 			bkt,
@@ -922,7 +914,6 @@ func runRule(
 
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
-
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
 				if _, err := s.Sync(ctx); err != nil {
 					level.Warn(logger).Log("err", err)
@@ -931,6 +922,9 @@ func runRule(
 			})
 		}, func(error) {
 			cancel()
+
+			runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
+			runutil.CloseWithLogOnErr(logger, dataDir, "data dir")
 		})
 	} else {
 		level.Info(logger).Log("msg", "no supported bucket was configured, uploads will be disabled")
