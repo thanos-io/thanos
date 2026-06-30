@@ -72,7 +72,7 @@ type TSDBStore struct {
 	maxBytesPerFrame int
 	matcherCache     storecache.MatchersCache
 
-	extLset                labels.Labels
+	extLsetAsLabelSets     []labels.Labels
 	startStoreFilterUpdate bool
 	storeFilter            filter.StoreFilter
 	mtx                    sync.RWMutex
@@ -110,13 +110,13 @@ func NewTSDBStore(
 	}
 
 	st := &TSDBStore{
-		logger:           logger,
-		db:               db,
-		component:        component,
-		extLset:          extLset,
-		maxBytesPerFrame: RemoteReadFrameLimit,
-		storeFilter:      filter.AllowAllStoreFilter{},
-		close:            func() {},
+		logger:             logger,
+		db:                 db,
+		component:          component,
+		extLsetAsLabelSets: []labels.Labels{extLset},
+		maxBytesPerFrame:   RemoteReadFrameLimit,
+		storeFilter:        filter.AllowAllStoreFilter{},
+		close:              func() {},
 		buffers: sync.Pool{New: func() any {
 			b := make([]byte, 0, initialBufSize)
 			return &b
@@ -167,14 +167,23 @@ func (s *TSDBStore) SetExtLset(extLset labels.Labels) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	s.extLset = extLset
+	s.extLsetAsLabelSets = []labels.Labels{extLset}
 }
 
 func (s *TSDBStore) getExtLset() labels.Labels {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	return s.extLset
+	return s.extLsetAsLabelSets[0]
+}
+
+// ExtLabelSets returns the external labels exposed by this store as a slice of
+// label sets. Read-only.
+func (s *TSDBStore) ExtLabelSets() []labels.Labels {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+
+	return s.extLsetAsLabelSets
 }
 
 func (s *TSDBStore) LabelSet() []labelpb.ZLabelSet {
@@ -300,7 +309,7 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	for _, lbl := range r.WithoutReplicaLabels {
 		extLsetToRemove[lbl] = struct{}{}
 	}
-	finalExtLset := rmLabels(s.extLset.Copy(), extLsetToRemove)
+	finalExtLset := rmLabels(s.extLsetAsLabelSets[0].Copy(), extLsetToRemove)
 
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
 	for set.Next() {
