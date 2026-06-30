@@ -373,7 +373,7 @@ func GatherIndexHealthStats(ctx context.Context, logger log.Logger, fn string, m
 			seriesLifeDurationWithoutSingleSampleSeries.Add(seriesLifeTimeMs)
 		}
 	}
-	if p.Err() != nil {
+	if err := p.Err(); err != nil {
 		return stats, errors.Wrap(err, "walk postings")
 	}
 
