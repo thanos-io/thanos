@@ -48,6 +48,11 @@ const StoreMatcherKey = ctxKey(0)
 // This can happen with Query servers trees and external labels.
 var ErrorNoStoresMatched = errors.New("No StoreAPIs matched for this query")
 
+// ErrorNoStoresAvailable is returned if we have an empty list of stores.
+// This happens either when we didn't yet complete any discovery
+// or when all stores disappear suddenly.
+var ErrorNoStoresAvailable = errors.New("No StoreAPIs available")
+
 // Client holds meta information about a store.
 type Client interface {
 	// StoreClient to access the store.
@@ -198,7 +203,7 @@ func NewProxyStore(
 }
 
 func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	if len(stores) == 0 {
 		// We always want to enforce announcing the subset of data that
 		// selector-labels represents. If no stores match the filter,
@@ -246,7 +251,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 }
 
 func (s *ProxyStore) TimeRange() (int64, int64) {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	if len(stores) == 0 {
 		return math.MinInt64, math.MaxInt64
 	}
@@ -266,7 +271,7 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 }
 
 func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	infos := make([]infopb.TSDBInfo, 0)
 	for _, st := range stores {
 		infos = append(infos, st.TSDBInfos()...)
@@ -309,7 +314,14 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.MinTime, originalRequest.MaxTime, matchers)
+	// There are no stores registered at all and partial results are disabled, return an error.
+	stores := s.stores()
+	if originalRequest.PartialResponseDisabled && len(stores) == 0 {
+		level.Debug(reqLogger).Log("err", ErrorNoStoresAvailable)
+		return ErrorNoStoresAvailable
+	}
+
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, stores, originalRequest.MinTime, originalRequest.MaxTime, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
@@ -433,7 +445,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, s.stores(), originalRequest.Start, originalRequest.End, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return &storepb.LabelNamesResponse{}, nil
@@ -536,7 +548,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(reqLogger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, s.stores(), originalRequest.Start, originalRequest.End, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return &storepb.LabelValuesResponse{}, nil
@@ -617,9 +629,9 @@ func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) 
 // storesForTSDBSelector returns stores that match the TSDBSelector filtering criteria.
 // This centralizes the TSDBSelector filtering logic used across all ProxyStore methods
 // for cases where we don't need additional matchers or time range filtering.
-func (s *ProxyStore) storesForTSDBSelector() []Client {
+func (s *ProxyStore) storesForTSDBSelector(stores []Client) []Client {
 	var filteredStores []Client
-	for _, st := range s.stores() {
+	for _, st := range stores {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if matches {
 			filteredStores = append(filteredStores, st)
@@ -630,13 +642,13 @@ func (s *ProxyStore) storesForTSDBSelector() []Client {
 
 // TODO: consider moving the following functions into something like "pkg/pruneutils" since it is also used for exemplars.
 
-func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
+func (s *ProxyStore) matchingStores(ctx context.Context, allStores []Client, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
 	var (
 		stores         []Client
 		storeLabelSets []labels.Labels
 		storeDebugMsgs []string
 	)
-	for _, st := range s.storesForTSDBSelector() {
+	for _, st := range s.storesForTSDBSelector(allStores) {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
 			if s.debugLogging {
