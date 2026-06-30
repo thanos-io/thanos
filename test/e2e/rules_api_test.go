@@ -210,6 +210,10 @@ func ruleAndAssert(t *testing.T, ctx context.Context, addr, typ string, want []*
 			}
 		}
 
+		// Fanout response order can depend on store response arrival order.
+		sort.Slice(res, func(i, j int) bool { return res[i].Compare(res[j]) < 0 })
+		sort.Slice(want, func(i, j int) bool { return want[i].Compare(want[j]) < 0 })
+
 		if !reflect.DeepEqual(want, res) {
 			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
 		}

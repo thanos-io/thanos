@@ -83,6 +83,17 @@ func (r *Rule) GetLabels() labels.Labels {
 	}
 }
 
+func (r *Rule) getZLabels() []labelpb.ZLabel {
+	switch {
+	case r.GetRecording() != nil:
+		return r.GetRecording().Labels.Labels
+	case r.GetAlert() != nil:
+		return r.GetAlert().Labels.Labels
+	default:
+		return nil
+	}
+}
+
 func (r *Rule) SetLabels(ls labels.Labels) {
 	var result labelpb.ZLabelSet
 
@@ -160,7 +171,7 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 		return d
 	}
 
-	if d := labels.Compare(r1.GetLabels(), r2.GetLabels()); d != 0 {
+	if d := compareZLabels(r1.getZLabels(), r2.getZLabels()); d != 0 {
 		return d
 	}
 
@@ -175,6 +186,27 @@ func (r1 *Rule) Compare(r2 *Rule) int {
 	}
 
 	return 0
+}
+
+func compareZLabels(a, b []labelpb.ZLabel) int {
+	i := 0
+	j := 0
+	for i < len(a) && j < len(b) {
+		if d := a[i].Compare(b[j]); d != 0 {
+			return d
+		}
+		i++
+		j++
+	}
+
+	switch {
+	case i == len(a) && j == len(b):
+		return 0
+	case i == len(a):
+		return -1
+	default:
+		return 1
+	}
 }
 
 func (r *RuleGroups) MarshalJSON() ([]byte, error) {
