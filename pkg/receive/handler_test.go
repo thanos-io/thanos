@@ -2319,3 +2319,31 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 	cancel()
 	wg.Wait()
 }
+
+func TestHandlerWriteMetricsHelp(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	h := NewHandler(log.NewNopLogger(), &Options{Registry: reg})
+
+	// Instantiate one child per histogram so they appear in the registry.
+	h.writeTimeseriesTotal.WithLabelValues("200", "test")
+	h.writeSamplesTotal.WithLabelValues("200", "test")
+
+	expected := map[string]string{
+		"thanos_receive_write_timeseries": "The number of timeseries received in the incoming write requests.",
+		"thanos_receive_write_samples":    "The number of samples received in the incoming write requests.",
+	}
+
+	mfs, err := reg.Gather()
+	testutil.Ok(t, err)
+
+	got := make(map[string]string, len(expected))
+	for _, mf := range mfs {
+		if _, ok := expected[mf.GetName()]; ok {
+			got[mf.GetName()] = mf.GetHelp()
+		}
+	}
+
+	for name, help := range expected {
+		testutil.Equals(t, help, got[name])
+	}
+}

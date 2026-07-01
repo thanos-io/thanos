@@ -233,7 +233,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 				Namespace: "thanos",
 				Subsystem: "receive",
 				Name:      "write_samples",
-				Help:      "The number of sampled received in the incoming write requests.",
+				Help:      "The number of samples received in the incoming write requests.",
 				Buckets:   []float64{10, 50, 100, 500, 1000, 5000, 10000},
 			}, []string{"code", "tenant"},
 		),
