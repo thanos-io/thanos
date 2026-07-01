@@ -354,6 +354,8 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	}}
 }
 
+const SeriesHashLabelName = "__cf_series_hash__"
+
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
@@ -384,6 +386,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		QueryHints: &storepb.QueryHints{
 			ProjectionLabels:  hints.ProjectionLabels,
 			ProjectionInclude: hints.ProjectionInclude,
+			// NOTE(GiedriusS): this is what the Thanos parquet gateway uses right now so
+			// I just copied/pasted it.
+			SeriesHashLabelName: SeriesHashLabelName,
 		},
 	}
 	if q.isDedupEnabled() {
