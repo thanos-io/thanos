@@ -26,7 +26,6 @@ import (
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/prometheus/prometheus/tsdb/index"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
 
@@ -1354,74 +1353,26 @@ func (f *GatherNoDownsampleMarkFilter) NoDownsampleMarkedBlocks() map[ulid.ULID]
 	return copiedNoDownsampleMarked
 }
 
-// TODO (@rohitkochhar): reduce code duplication here by combining
-// this code with that of GatherNoCompactionMarkFilter
 // Filter passes all metas, while gathering no downsample markers.
 func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
-	f.mtx.Lock()
-	f.noDownsampleMarkedMap = make(map[ulid.ULID]*metadata.NoDownsampleMark)
-	f.mtx.Unlock()
-
-	// Make a copy of block IDs to check, in order to avoid concurrency issues
-	// between the scheduler and workers.
-	blockIDs := make([]ulid.ULID, 0, len(metas))
-	for id := range metas {
-		blockIDs = append(blockIDs, id)
-	}
-
-	var (
-		eg errgroup.Group
-		ch = make(chan ulid.ULID, f.concurrency)
+	noDownsampleMarkedMap, err := block.GatherMarkedBlocks(
+		ctx,
+		f.logger,
+		f.bkt,
+		metas,
+		f.concurrency,
+		func() *metadata.NoDownsampleMark { return &metadata.NoDownsampleMark{} },
+		metadata.NoDownsampleMarkFilename,
+		synced,
+		block.MarkedForNoDownsampleMeta,
 	)
-
-	for i := 0; i < f.concurrency; i++ {
-		eg.Go(func() error {
-			var lastErr error
-			for id := range ch {
-				m := &metadata.NoDownsampleMark{}
-
-				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
-					if errors.Cause(err) == metadata.ErrorMarkerNotFound {
-						continue
-					}
-					if errors.Cause(err) == metadata.ErrorUnmarshalMarker {
-						level.Warn(f.logger).Log("msg", "found partial no-downsample-mark.json; if we will see it happening often for the same block, consider manually deleting no-downsample-mark.json from the object storage", "block", id, "err", err)
-						continue
-					}
-					// Remember the last error and continue draining the channel.
-					lastErr = err
-					continue
-				}
-
-				f.mtx.Lock()
-				f.noDownsampleMarkedMap[id] = m
-				f.mtx.Unlock()
-				synced.WithLabelValues(block.MarkedForNoDownsampleMeta).Inc()
-			}
-
-			return lastErr
-		})
-	}
-
-	// Workers scheduled, distribute blocks.
-	eg.Go(func() error {
-		defer close(ch)
-
-		for _, id := range blockIDs {
-			select {
-			case ch <- id:
-				// Nothing to do.
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-
-		return nil
-	})
-
-	if err := eg.Wait(); err != nil {
+	if err != nil {
 		return errors.Wrap(err, "filter blocks marked for no downsample")
 	}
+
+	f.mtx.Lock()
+	f.noDownsampleMarkedMap = noDownsampleMarkedMap
+	f.mtx.Unlock()
 
 	return nil
 }
