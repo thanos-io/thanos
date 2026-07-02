@@ -313,7 +313,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 
 	// There are no stores registered at all and partial results are disabled, return an error.
 	stores := s.stores()
-	if originalRequest.PartialResponseDisabled && len(stores) == 0 {
+	if len(stores) == 0 && (originalRequest.PartialResponseDisabled || originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresAvailable)
 		return ErrorNoStoresAvailable
 	}
