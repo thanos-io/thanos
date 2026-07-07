@@ -123,6 +123,16 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedErr: ErrorNoStoresAvailable, // No stored registered at all.
 		},
 		{
+			title: "no storeAPI available with abort partial response strategy",
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			},
+			expectedErr: ErrorNoStoresAvailable, // No stored registered at all.
+		},
+		{
 			title: "no storeAPI available for 301-302 time range",
 			storeAPIs: []Client{
 				&storetestutil.TestClient{

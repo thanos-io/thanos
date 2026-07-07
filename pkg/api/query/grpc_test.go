@@ -49,11 +49,12 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	testutil.Ok(t, err)
 
 	rangeRequest := &querypb.QueryRangeRequest{
-		Query:            "metric",
-		StartTimeSeconds: 0,
-		IntervalSeconds:  10,
-		EndTimeSeconds:   300,
-		QueryPlan:        &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
+		Query:                 "metric",
+		StartTimeSeconds:      0,
+		IntervalSeconds:       10,
+		EndTimeSeconds:        300,
+		EnablePartialResponse: true,
+		QueryPlan:             &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
 	}
 
 	srv := newQueryRangeServer(context.Background())
@@ -66,9 +67,10 @@ func TestGRPCQueryAPIWithQueryPlan(t *testing.T) {
 	testutil.Ok(t, err)
 
 	instantRequest := &querypb.QueryRequest{
-		Query:          "metric",
-		TimeoutSeconds: 60,
-		QueryPlan:      &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
+		Query:                 "metric",
+		TimeoutSeconds:        60,
+		EnablePartialResponse: true,
+		QueryPlan:             &querypb.QueryPlan{Encoding: &querypb.QueryPlan_Json{Json: planBytes}},
 	}
 	instSrv := newQueryServer(context.Background())
 	err = api.Query(instantRequest, instSrv)
@@ -166,6 +168,7 @@ func (qs queryCreatorStub) makeInstantQuery(
 ) (res promql.Query, err error) {
 	return queryStub{err: qs.err, warns: qs.warns, result: qs.result}, nil
 }
+
 func (qs queryCreatorStub) makeRangeQuery(
 	ctx context.Context,
 	t PromqlEngineType,

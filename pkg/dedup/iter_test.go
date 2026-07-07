@@ -1281,6 +1281,103 @@ func TestDedupSeriesIterator_HistogramCounterAdjust(t *testing.T) {
 	testutil.Equals(t, exp, res)
 }
 
+func TestDedupSeriesIterator_ExhaustedSecondary(t *testing.T) {
+	type fhResult struct {
+		t           int64
+		count       float64
+		firstBucket float64
+	}
+
+	expandFH := func(_ testing.TB, it chunkenc.Iterator) []fhResult {
+		var res []fhResult
+		for it.Next() != chunkenc.ValNone {
+			ts, fh := it.AtFloatHistogram(nil)
+			res = append(res, fhResult{
+				t:           ts,
+				count:       fh.Count,
+				firstBucket: fh.PositiveBuckets[0],
+			})
+		}
+		return res
+	}
+
+	for _, tc := range []struct {
+		name string
+		a    []*testiters.FloatHistogramPair
+		b    []*testiters.FloatHistogramPair
+		exp  []fhResult
+	}{
+		{
+			// a has a gap at 40000-60000. b has two samples inside the gap;
+			// the second (43000) falls inside the skip-loop's "too close"
+			// range, so the loop Seeks past it exhausting b. The stale bval
+			// must not cause a panic when the defer calls
+			// adjustAtValueFloatHistogram.
+			name: "gap-fill skip loop exhausts secondary",
+			a: []*testiters.FloatHistogramPair{
+				{T: 10000, FH: counterFloatHistogram(100)},
+				{T: 20000, FH: counterFloatHistogram(200)},
+				{T: 30000, FH: counterFloatHistogram(300)},
+				{T: 70000, FH: counterFloatHistogram(700)},
+				{T: 80000, FH: counterFloatHistogram(800)},
+			},
+			b: []*testiters.FloatHistogramPair{
+				{T: 10000, FH: counterFloatHistogram(5)},
+				{T: 20000, FH: counterFloatHistogram(6)},
+				{T: 30000, FH: counterFloatHistogram(7)},
+				{T: 42000, FH: counterFloatHistogram(8)},
+				{T: 43000, FH: counterFloatHistogram(9)},
+			},
+			exp: []fhResult{
+				{t: 10000, count: 100, firstBucket: 100},
+				{t: 20000, count: 200, firstBucket: 200},
+				{t: 30000, count: 300, firstBucket: 300},
+				{t: 42000, count: 300, firstBucket: 300},
+				{t: 70000, count: 700, firstBucket: 700},
+				{t: 80000, count: 800, firstBucket: 800},
+			},
+		},
+		{
+			// a ends early. When b takes over as the new primary, the
+			// skip loop at the primary-exhaustion path exhausts a. The
+			// stale aval must not cause a panic.
+			name: "primary-exhaustion skip loop exhausts old primary",
+			a: []*testiters.FloatHistogramPair{
+				{T: 10000, FH: counterFloatHistogram(100)},
+				{T: 20000, FH: counterFloatHistogram(200)},
+				{T: 30000, FH: counterFloatHistogram(300)},
+			},
+			b: []*testiters.FloatHistogramPair{
+				{T: 10000, FH: counterFloatHistogram(5)},
+				{T: 20000, FH: counterFloatHistogram(6)},
+				{T: 30000, FH: counterFloatHistogram(7)},
+				{T: 40000, FH: counterFloatHistogram(8)},
+				{T: 50000, FH: counterFloatHistogram(9)},
+			},
+			exp: []fhResult{
+				{t: 10000, count: 100, firstBucket: 100},
+				{t: 20000, count: 200, firstBucket: 200},
+				{t: 30000, count: 300, firstBucket: 300},
+				{t: 40000, count: 300, firstBucket: 300},
+				{t: 50000, count: 301, firstBucket: 301},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			it := newDedupSeriesIterator(
+				&counterErrAdjustSeriesIterator{
+					Iterator: testiters.NewFloatHistogramIterator(tc.a),
+				},
+				&counterErrAdjustSeriesIterator{
+					Iterator: testiters.NewFloatHistogramIterator(tc.b),
+				},
+			)
+			res := expandFH(t, noopAdjustableSeriesIterator{it})
+			testutil.Equals(t, tc.exp, res)
+		})
+	}
+}
+
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
 		it := newDedupSeriesIterator(
