@@ -2,8 +2,10 @@
 name: "thanos"
 arch: "${PKG_ARCH}"
 platform: "linux"
+# The full version string (including release number) is in the VERSION file.
+# If you're making a new release update only that file.
 version: "${PKG_VERSION}"
-release: "21"
+version_schema: none
 section: "default"
 priority: "extra"
 maintainer: "Observability <obs@cloudflare.com>"
