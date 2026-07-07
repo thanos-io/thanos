@@ -494,6 +494,15 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 		}
 	}
 
+	// Seeks above may have exhausted the secondary and break the loop without updatng
+	// aval/bval. Update it here so the defer does not try to read a value from a finished
+	// iterator.
+	if it.primaryA {
+		it.bval = sval
+	} else {
+		it.aval = sval
+	}
+
 	return it.returnPrimary()
 }
 
