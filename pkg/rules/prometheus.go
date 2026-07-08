@@ -58,6 +58,15 @@ func enrichRulesWithExtLabels(groups []*rulespb.RuleGroup, extLset labels.Labels
 	for _, g := range groups {
 		for _, r := range g.Rules {
 			r.SetLabels(labelpb.ExtendSortedLabels(r.GetLabels(), extLset))
+
+			// Prometheus does not add external labels to the individual alert
+			// instances either, so enrich those too.
+			if a := r.GetAlert(); a != nil {
+				for _, ai := range a.Alerts {
+					ai.Labels = labelpb.ZLabelSet{Labels: labelpb.ZLabelsFromPromLabels(
+						labelpb.ExtendSortedLabels(ai.Labels.PromLabels(), extLset))}
+				}
+			}
 		}
 	}
 }
