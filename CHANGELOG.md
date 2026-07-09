@@ -13,6 +13,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Added
 
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
+- [#8906](https://github.com/thanos-io/thanos/pull/8906) *: Add `--auto-gomemlimit.refresh-interval` flag to periodically refresh GOMEMLIMIT from the detected container or system memory limit, so in-place container memory resizes are picked up. Defaults to `0` (no refresh, previous behavior).
 - [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
 
 ### Fixed
