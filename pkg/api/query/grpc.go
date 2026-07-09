@@ -21,6 +21,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
@@ -65,6 +66,10 @@ func RegisterQueryServer(queryServer querypb.QueryServer) func(*grpc.Server) {
 
 func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_QueryServer) error {
 	ctx := server.Context()
+
+	if request.Tenant != "" {
+		ctx = context.WithValue(ctx, tenancy.TenantKey, request.Tenant)
+	}
 
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
@@ -189,6 +194,11 @@ func (g *GRPCAPI) Query(request *querypb.QueryRequest, server querypb.Query_Quer
 
 func (g *GRPCAPI) QueryRange(request *querypb.QueryRangeRequest, srv querypb.Query_QueryRangeServer) error {
 	ctx := srv.Context()
+
+	if request.Tenant != "" {
+		ctx = context.WithValue(ctx, tenancy.TenantKey, request.Tenant)
+	}
+
 	if request.TimeoutSeconds != 0 {
 		var cancel context.CancelFunc
 		timeout := time.Duration(request.TimeoutSeconds) * time.Second
