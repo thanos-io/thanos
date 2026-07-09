@@ -1031,7 +1031,7 @@ Flags:
                             object store configuration. See format details:
                             https://thanos.io/tip/thanos/storage.md/#configuration
       --id=ID ...           ID (ULID) of the blocks for rewrite (repeated flag).
-      --tmp.dir="/var/folders/h1/nkyfc5zj2zlbylk9sbw1m_100000gn/T/thanos-rewrite"
+      --tmp.dir="/tmp/thanos-rewrite"
                             Working directory for temporary files
       --[no-]dry-run        Prints the series changes instead of doing them.
                             Defaults to true, for user to double check. (:
