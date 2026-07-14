@@ -122,14 +122,19 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(&wreq)
+	tenantOverrides, err := h.relabel(&wreq, tenant)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "error relabeling request", "err", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
 	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, tenant, &wreq)
+	tenantStats, err := h.handleRequest(ctx, rep, tenant, &wreq, tenantOverrides)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {

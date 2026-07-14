@@ -4,6 +4,22 @@
 
 [![CI](https://github.com/thanos-io/thanos/workflows/CI/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3ACI) [![CI](https://circleci.com/gh/thanos-io/thanos.svg?style=svg)](https://circleci.com/gh/thanos-io/thanos) [![go](https://github.com/thanos-io/thanos/workflows/go/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Ago) [![react](https://github.com/thanos-io/thanos/workflows/react/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Areact) [![docs](https://github.com/thanos-io/thanos/workflows/docs/badge.svg)](https://github.com/thanos-io/thanos/actions?query=workflow%3Adocs) [![Gitpod ready-to-code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/thanos-io/thanos) [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/codespaces/new?hide_repo_select=true&ref=main&repo=109162639)
 
+## Fork Notes
+
+This fork keeps a Receive patch that makes `__meta_tenant_id` available during `--receive.relabel-config` processing. Relabel rules can read it to validate incoming labels or write it to derive the effective Receive tenant before routing. The temporary meta label is removed before samples are stored or forwarded.
+
+Example:
+
+```yaml
+- source_labels: [__meta_tenant_id, prometheus]
+  regex: (foo;compose-test-1|bar;compose-test-2)
+  action: keep
+- source_labels: [prometheus]
+  target_label: __meta_tenant_id
+```
+
+The old fork's Receive quorum patch for two replicas is not carried separately here because the behavior is already present upstream in Thanos 0.41.0.
+
 > 📢 [ThanosCon](https://events.linuxfoundation.org/kubecon-cloudnativecon-europe/co-located-events/thanoscon/) happened on 19th March 2024 as a co-located half-day on KubeCon EU in Paris.
 
 ## Overview

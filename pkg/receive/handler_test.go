@@ -977,6 +977,17 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	return rec, nil
 }
 
+func zLabelsFromStrings(ss ...string) []labelpb.ZLabel {
+	if len(ss)%2 != 0 {
+		panic("expected even number of label name/value arguments")
+	}
+	lbls := make([]labelpb.ZLabel, 0, len(ss)/2)
+	for i := 0; i < len(ss); i += 2 {
+		lbls = append(lbls, labelpb.ZLabel{Name: ss[i], Value: ss[i+1]})
+	}
+	return lbls
+}
+
 type addrGen struct{ n int }
 
 func (a *addrGen) newEndpoint() Endpoint {
@@ -1341,10 +1352,12 @@ func TestRelabel(t *testing.T) {
 	t.Parallel()
 
 	for _, tcase := range []struct {
-		name                 string
-		relabel              []*relabel.Config
-		writeRequest         prompb.WriteRequest
-		expectedWriteRequest prompb.WriteRequest
+		name                    string
+		relabel                 []*relabel.Config
+		writeRequest            prompb.WriteRequest
+		expectedWriteRequest    prompb.WriteRequest
+		expectedTenantOverrides []string
+		expectedErr             string
 	}{
 		{
 			name: "empty relabel configs",
@@ -1703,14 +1716,168 @@ func TestRelabel(t *testing.T) {
 				Timeseries: []prompb.TimeSeries{},
 			},
 		},
+		{
+			name: "relabel can keep by meta tenant",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels:         model.LabelNames{metaLabelTenantID, "foo"},
+					Separator:            ";",
+					Action:               relabel.Keep,
+					Regex:                relabel.MustNewRegexp("test;bar"),
+					NameValidationScheme: model.UTF8Validation,
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "foo",
+								Value: "bar",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedTenantOverrides: []string{"test"},
+		},
+		{
+			name: "relabel can derive tenant from label",
+			relabel: []*relabel.Config{
+				{
+					SourceLabels:         model.LabelNames{"prometheus"},
+					TargetLabel:          metaLabelTenantID,
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp("(.*)"),
+					Replacement:          "$1",
+					NameValidationScheme: model.UTF8Validation,
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "prometheus",
+								Value: "tenant-a",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedWriteRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+							{
+								Name:  "prometheus",
+								Value: "tenant-a",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedTenantOverrides: []string{"tenant-a"},
+		},
+		{
+			name: "relabel rejects invalid tenant",
+			relabel: []*relabel.Config{
+				{
+					TargetLabel:          metaLabelTenantID,
+					Action:               relabel.Replace,
+					Regex:                relabel.MustNewRegexp(""),
+					Replacement:          "../tenant",
+					NameValidationScheme: model.UTF8Validation,
+				},
+			},
+			writeRequest: prompb.WriteRequest{
+				Timeseries: []prompb.TimeSeries{
+					{
+						Labels: []labelpb.ZLabel{
+							{
+								Name:  "__name__",
+								Value: "test_metric",
+							},
+						},
+						Samples: []prompb.Sample{
+							{
+								Timestamp: 0,
+								Value:     1,
+							},
+						},
+					},
+				},
+			},
+			expectedErr: `invalid relabeled tenant "../tenant"`,
+		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			h := NewHandler(nil, &Options{
 				RelabelConfigs: tcase.relabel,
 			})
 
-			h.relabel(&tcase.writeRequest)
+			tenantOverrides, err := h.relabel(&tcase.writeRequest, "test")
+			if tcase.expectedErr != "" {
+				require.ErrorContains(t, err, tcase.expectedErr)
+				return
+			}
+			require.NoError(t, err)
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
+			if tcase.expectedTenantOverrides != nil {
+				require.Equal(t, tcase.expectedTenantOverrides, tenantOverrides)
+			}
 		})
 	}
 }
@@ -1838,12 +2005,13 @@ func TestDistributeSeries(t *testing.T) {
 		[]uint64{0},
 		[]prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
+				Labels: zLabelsFromStrings("a", "b", tenantIDLabelName, "bar"),
 			},
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+				Labels: zLabelsFromStrings("b", "a", tenantIDLabelName, "boo"),
 			},
 		},
+		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, remote, 1)
@@ -1890,14 +2058,10 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 	response, err := h.RemoteWrite(context.Background(), &storepb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(
-					labels.FromStrings("a", "b", tenantIDLabelName, "bar"),
-				),
+				Labels: zLabelsFromStrings("a", "b", tenantIDLabelName, "bar"),
 			},
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(
-					labels.FromStrings("b", "a", tenantIDLabelName, "foo"),
-				),
+				Labels: zLabelsFromStrings("b", "a", tenantIDLabelName, "foo"),
 			},
 		},
 	})
@@ -1905,6 +2069,71 @@ func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, response)
 	require.Equal(t, map[string]struct{}{"bar": {}, "foo": {}}, hr.seenTenants)
+}
+
+func TestHandlerRelabelTenantLocalWrite(t *testing.T) {
+	const derivedTenant = "tenant-a"
+
+	appendable := &fakeAppendable{
+		appender: newFakeAppender(nil, nil, nil),
+	}
+	limiter, err := NewLimiter(extkingpin.NewNopConfig(), nil, RouterIngestor, log.NewNopLogger(), 1*time.Second)
+	require.NoError(t, err)
+
+	h := NewHandler(nil, &Options{
+		Endpoint:          "localhost",
+		TenantHeader:      tenancy.DefaultTenantHeader,
+		DefaultTenantID:   tenancy.DefaultTenant,
+		ReplicaHeader:     DefaultReplicaHeader,
+		ReceiverMode:      RouterIngestor,
+		ReplicationFactor: 1,
+		ForwardTimeout:    1 * time.Second,
+		RelabelConfigs: []*relabel.Config{
+			{
+				SourceLabels:         model.LabelNames{"prometheus"},
+				TargetLabel:          metaLabelTenantID,
+				Action:               relabel.Replace,
+				Regex:                relabel.MustNewRegexp("(.*)"),
+				Replacement:          "$1",
+				NameValidationScheme: model.UTF8Validation,
+			},
+		},
+		Writer: NewWriter(
+			log.NewNopLogger(),
+			newFakeTenantAppendable(appendable),
+			&WriterOptions{},
+		),
+		Limiter: limiter,
+	})
+
+	hashring, err := newSimpleHashring([]Endpoint{
+		{
+			Address: h.options.Endpoint,
+		},
+	})
+	require.NoError(t, err)
+	hr := &hashringSeenTenants{Hashring: hashring}
+	h.Hashring(hr)
+
+	rec, err := makeRequest(h, "tenant-from-header", &prompb.WriteRequest{
+		Timeseries: []prompb.TimeSeries{
+			{
+				Labels: zLabelsFromStrings("__name__", "test_metric", "prometheus", derivedTenant),
+				Samples: []prompb.Sample{
+					{
+						Timestamp: 0,
+						Value:     1,
+					},
+				},
+			},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, map[string]struct{}{derivedTenant: {}}, hr.seenTenants)
+	require.Len(t, appendable.appender.(*fakeAppender).Get(labels.FromStrings("__name__", "test_metric", "prometheus", derivedTenant)), 1)
+	require.Empty(t, appendable.appender.(*fakeAppender).Get(labels.FromStrings("__name__", "test_metric", "prometheus", derivedTenant, metaLabelTenantID, derivedTenant)))
 }
 
 func TestHandlerFlippingHashrings(t *testing.T) {
@@ -1956,7 +2185,7 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 						},
 					},
 				},
-			})
+			}, nil)
 			require.Error(t, err)
 		}
 	}()

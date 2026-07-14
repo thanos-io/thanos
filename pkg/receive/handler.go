@@ -31,6 +31,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
@@ -69,8 +70,9 @@ const (
 	// LimitStatsQueryParam is the query parameter for limiting the amount of returned TSDB stats.
 	LimitStatsQueryParam = "limit"
 	// Labels for metrics.
-	labelSuccess = "success"
-	labelError   = "error"
+	labelSuccess      = "success"
+	labelError        = "error"
+	metaLabelTenantID = model.MetaLabelPrefix + "tenant_id"
 )
 
 type ReplicationProtocol string
@@ -617,14 +619,19 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply relabeling configs.
-	h.relabel(&wreq)
+	tenantOverrides, err := h.relabel(&wreq, tenantHTTP)
+	if err != nil {
+		level.Error(tLogger).Log("msg", "error relabeling request", "err", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return
 	}
 
 	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
+	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq, tenantOverrides)
 	if err != nil {
 		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
 		switch errors.Cause(err) {
@@ -656,7 +663,7 @@ type requestStats struct {
 
 type tenantRequestStats map[string]requestStats
 
-func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP string, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
+func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP string, wreq *prompb.WriteRequest, tenantOverrides []string) (tenantRequestStats, error) {
 	tLogger := log.With(h.logger, "tenantHTTP", tenantHTTP)
 
 	// This replica value is used to detect cycles in cyclic topologies.
@@ -685,7 +692,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP stri
 	// Forward any time series as necessary. All time series
 	// destined for the local node will be written to the receiver.
 	// Time series will be replicated as necessary.
-	return h.forward(ctx, tenantHTTP, r, wreq)
+	return h.forward(ctx, tenantHTTP, r, wreq, tenantOverrides)
 }
 
 // forward accepts a write request, batches its time series by
@@ -696,7 +703,7 @@ func (h *Handler) handleRequest(ctx context.Context, rep uint64, tenantHTTP stri
 // unless the request needs to be replicated.
 // The function only returns when all requests have finished
 // or the context is canceled.
-func (h *Handler) forward(ctx context.Context, tenantHTTP string, r replica, wreq *prompb.WriteRequest) (tenantRequestStats, error) {
+func (h *Handler) forward(ctx context.Context, tenantHTTP string, r replica, wreq *prompb.WriteRequest, tenantOverrides []string) (tenantRequestStats, error) {
 	span, ctx := tracing.StartSpan(ctx, "receive_fanout_forward")
 	defer span.Finish()
 
@@ -714,6 +721,7 @@ func (h *Handler) forward(ctx context.Context, tenantHTTP string, r replica, wre
 		writeRequest:      wreq,
 		replicas:          replicas,
 		alreadyReplicated: r.replicated,
+		tenantOverrides:   tenantOverrides,
 	}
 
 	return h.fanoutForward(ctx, params)
@@ -724,6 +732,7 @@ type remoteWriteParams struct {
 	writeRequest      *prompb.WriteRequest
 	replicas          []uint64
 	alreadyReplicated bool
+	tenantOverrides   []string
 }
 
 func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[string]trackedSeries) tenantRequestStats {
@@ -784,7 +793,7 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	}
 	requestLogger := log.With(h.logger, logTags...)
 
-	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries)
+	localWrites, remoteWrites, err := h.distributeTimeseriesToReplicas(params.tenant, params.replicas, params.writeRequest.Timeseries, params.tenantOverrides)
 	if err != nil {
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return stats, err
@@ -869,13 +878,21 @@ func (h *Handler) distributeTimeseriesToReplicas(
 	tenantHTTP string,
 	replicas []uint64,
 	timeseries []prompb.TimeSeries,
+	tenantOverrides []string,
 ) (map[endpointReplica]map[string]trackedSeries, map[endpointReplica]map[string]trackedSeries, error) {
+	if len(tenantOverrides) != 0 && len(tenantOverrides) != len(timeseries) {
+		return nil, nil, errors.Errorf("tenant override count %d does not match timeseries count %d", len(tenantOverrides), len(timeseries))
+	}
+
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
 	remoteWrites := make(map[endpointReplica]map[string]trackedSeries)
 	localWrites := make(map[endpointReplica]map[string]trackedSeries)
 	for tsIndex, ts := range timeseries {
 		var tenant = tenantHTTP
+		if len(tenantOverrides) != 0 {
+			tenant = tenantOverrides[tsIndex]
+		}
 
 		if h.splitTenantLabelName != "" {
 			lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
@@ -1101,7 +1118,7 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 		}
 	}
 
-	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries})
+	_, err := h.handleRequest(ctx, uint64(r.Replica), r.Tenant, &prompb.WriteRequest{Timeseries: r.Timeseries}, nil)
 	if err != nil {
 		level.Debug(h.logger).Log("msg", "failed to handle request", "err", err)
 	}
@@ -1122,21 +1139,50 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-func (h *Handler) relabel(wreq *prompb.WriteRequest) {
+func (h *Handler) relabel(wreq *prompb.WriteRequest, tenantHTTP string) ([]string, error) {
 	if len(h.options.RelabelConfigs) == 0 {
-		return
+		return nil, nil
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	tenantOverrides := make([]string, 0, len(wreq.Timeseries))
+	lb := labels.NewBuilder(labels.EmptyLabels())
 	for _, ts := range wreq.Timeseries {
-		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-		if !keep {
+		lb.Reset(labelpb.ZLabelsToPromLabels(ts.Labels))
+		lb.Set(metaLabelTenantID, tenantHTTP)
+		if keep := relabel.ProcessBuilder(lb, h.options.RelabelConfigs...); !keep {
 			continue
 		}
+
+		tenant := tenantHTTP
+		if relabeledTenant, ok := labelValue(lb.Labels(), metaLabelTenantID); ok {
+			tenant = relabeledTenant
+			if err := tenancy.IsTenantValid(tenant); err != nil {
+				return nil, errors.Wrapf(err, "invalid relabeled tenant %q", tenant)
+			}
+		}
+		lb.Del(metaLabelTenantID)
+
+		lbls := lb.Labels()
 		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
+		tenantOverrides = append(tenantOverrides, tenant)
 	}
 	wreq.Timeseries = timeSeries
+	return tenantOverrides, nil
+}
+
+func labelValue(lbls labels.Labels, name string) (string, bool) {
+	var (
+		value string
+		found bool
+	)
+	lbls.Range(func(l labels.Label) {
+		if l.Name == name {
+			value = l.Value
+			found = true
+		}
+	})
+	return value, found
 }
 
 // isConflict returns whether or not the given error represents a conflict.
