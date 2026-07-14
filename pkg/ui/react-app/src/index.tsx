@@ -1,6 +1,6 @@
 import './globals';
 import React from 'react';
-import ReactDOM from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import App from './App';
 import './themes/app.scss';
 import './themes/light.scss';
@@ -25,4 +25,10 @@ if (THANOS_COMPONENT === '' || THANOS_COMPONENT === '{{ .Component }}') {
   thanosComponent = 'query';
 }
 
-ReactDOM.render(<App pathPrefix={prefix} thanosComponent={thanosComponent} />, document.getElementById('root'));
+const root = document.getElementById('root');
+
+if (root === null) {
+  throw new Error('Root element not found');
+}
+
+createRoot(root).render(<App pathPrefix={prefix} thanosComponent={thanosComponent} />);

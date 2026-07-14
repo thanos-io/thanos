@@ -1,4 +1,4 @@
-import React, { FC, useState, Fragment, ChangeEvent, useEffect } from 'react';
+import React, { FC, useState, Fragment, ChangeEvent, useEffect, ReactNode } from 'react';
 import { Badge, Col, Row } from 'reactstrap';
 import CollapsibleAlertPanel from './CollapsibleAlertPanel';
 import Checkbox from '../../components/Checkbox';
@@ -156,6 +156,7 @@ const AlertsContent: FC<AlertsProps> = ({ groups = [], statsCount }) => {
 };
 
 interface GroupInfoProps {
+  children?: ReactNode;
   rules: Rule[];
 }
 
