@@ -72,8 +72,9 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   const viewMinTime = queryViewMinTime;
   const viewMaxTime = queryViewMaxTime;
 
-  // Initialize time controls from query parameters
-  const [endTime, setEndTime] = useState<number>(viewMaxTime);
+  // As in Prometheus, a null end time leaves the input blank and means the
+  // latest available data.
+  const [endTime, setEndTime] = useState<number | null>(null);
   const [range, setRange] = useState<number>(rangeSteps[rangeSteps.length - 1]);
   const [rangeInput, setRangeInput] = useState<string>(formatDuration(rangeSteps[rangeSteps.length - 1]));
 
@@ -108,8 +109,11 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
     setViewTime(times);
   };
 
-  const updateTimeRange = (currentEndTime: number, currentRange: number) => {
-    setViewTime([currentEndTime - currentRange, currentEndTime]);
+  const updateTimeRange = (currentEndTime: number | null, currentRange: number) => {
+    // As in Prometheus, a cleared end time means the latest available data while
+    // leaving the time input blank.
+    const effectiveEndTime = currentEndTime ?? gridMaxTime;
+    setViewTime([effectiveEndTime - currentRange, effectiveEndTime]);
   };
 
   const onChangeRange = (newRange: number) => {
@@ -119,11 +123,9 @@ export const BlocksContent: FC<{ data: BlockListProps } & PathPrefixProps> = ({ 
   };
 
   const onChangeEndTime = (newEndTime: number | null) => {
-    if (newEndTime == null) {
-      newEndTime = gridMaxTime;
-    }
-    // Cap the end time to gridMaxTime.
-    const cappedEndTime = Math.min(newEndTime, gridMaxTime);
+    // Cap explicit end times to gridMaxTime, but preserve null so TimeInput
+    // remains empty after it is cleared.
+    const cappedEndTime = newEndTime === null ? null : Math.min(newEndTime, gridMaxTime);
     setEndTime(cappedEndTime);
     updateTimeRange(cappedEndTime, range);
   };
