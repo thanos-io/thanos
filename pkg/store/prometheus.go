@@ -510,7 +510,7 @@ func matchesExternalLabels(ms []storepb.LabelMatcher, externalLabels labels.Labe
 		extValue := externalLabels.Get(tm.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
-			tms = append(tms[:i], tms[i:]...)
+			tms = append(tms[:i], tms[i+1:]...)
 			newMatchers = append(newMatchers, tm)
 			continue
 		}
