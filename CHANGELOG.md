@@ -21,7 +21,9 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 
-## [v0.42.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 08
+## v0.42.0 - 2026 07 08
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.42.0)
 
 The biggest new things in this release are, I think, Receive component's improvements regarding tenant's lifecycle handling, ability to have per endpoint configuration, and showing fanout information in Thanos Query. Thank you to everyone for your contributions!
 
@@ -64,7 +66,9 @@ The biggest new things in this release are, I think, Receive component's improve
 
 ### Removed
 
-## [v0.41.0](https://github.com/thanos-io/thanos/tree/release-41.0) - 2026 02 12
+## v0.41.0 - 2026 02 12
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.41.0)
 
 ### Fixed
 
@@ -89,7 +93,9 @@ The biggest new things in this release are, I think, Receive component's improve
 - [#8555](https://github.com/thanos-io/thanos/pull/8555): Promu: re-add Darwin and FreeBSD as release platforms
 - [#8661](https://github.com/thanos-io/thanos/pull/8661): Upgrade Prometheus to v3.8.0. `tsdb.enable-native-histograms` flag in Receiver and Ruler becomes a no-op and deprecated. Now native histogram ingestion is always enabled.
 
-## [v0.40.0](https://github.com/thanos-io/thanos/tree/release-0.40) - 2025 10 27
+## v0.40.0 - 2025 10 27
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.40.0)
 
 ### Fixed
 
@@ -120,14 +126,18 @@ The biggest new things in this release are, I think, Receive component's improve
 
 ### Removed
 
-## [v0.39.2](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 17
+## v0.39.2 - 2025 07 17
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.39.2)
 
 ### Fixed
 
 - [#8374](https://github.com/thanos-io/thanos/pull/8374) Query: fix panic when concurrently accessing annotations map
 - [#8375](https://github.com/thanos-io/thanos/pull/8375) Query: fix native histogram buckets in distributed queries
 
-## [v0.39.1](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 07 01
+## v0.39.1 - 2025 07 01
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.39.1)
 
 Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 
@@ -136,7 +146,9 @@ Fixes a memory leak issue on query-frontend. The bug only affects v0.39.0.
 - [#8349](https://github.com/thanos-io/thanos/pull/8349) Query-Frontend: properly clean up resources
 - [#8338](https://github.com/thanos-io/thanos/pull/8338) Query-Frontend: use original roundtripper + close immediately
 
-## [v0.39.0](https://github.com/thanos-io/thanos/tree/release-0.39) - 2025 06 25
+## v0.39.0 - 2025 06 25
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.39.0)
 
 In short: there are a bunch of fixes and small improvements. The shining items in this release are memory usage improvements in Thanos Query and shuffle sharding support in Thanos Receiver. Information about shuffle sharding support is available in the documentation. Thank you to all contributors!
 
@@ -166,7 +178,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 - [#8212](https://github.com/thanos-io/thanos/pull/8212) Receive: Ensure forward/replication metrics are incremented in err cases
 - [#8296](https://github.com/thanos-io/thanos/pull/8296) Query: limit LazyRetrieval memory buffer size
 
-## [v0.38.0](https://github.com/thanos-io/thanos/tree/release-0.38) - 03.04.2025
+## v0.38.0 - 03.04.2025
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.38.0)
 
 ### Fixed
 - [#8091](https://github.com/thanos-io/thanos/pull/8091) *: Add POST into allowed CORS methods header
@@ -197,7 +211,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.37.2](https://github.com/thanos-io/thanos/tree/release-0.37) - 11.12.2024
+## v0.37.2 - 11.12.2024
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.37.2)
 
 ### Fixed
 
@@ -211,7 +227,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.37.1](https://github.com/thanos-io/thanos/tree/release-0.37) - 04.12.2024
+## v0.37.1 - 04.12.2024
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.37.1)
 
 ### Fixed
 
@@ -227,7 +245,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.37.0](https://github.com/thanos-io/thanos/tree/release-0.37) - 25.11.2024
+## v0.37.0 - 25.11.2024
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.37.0)
 
 ### Fixed
 
@@ -285,7 +305,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 - [#7793](https://github.com/thanos-io/thanos/pull/7793) Receive: Disable dedup proxy in multi-tsdb
 - [#7678](https://github.com/thanos-io/thanos/pull/7678) Query: Skip formatting strings if debug logging is disabled
 
-## [v0.36.1](https://github.com/thanos-io/thanos/tree/release-0.36)
+## v0.36.1
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.36.1)
 
 ### Fixed
 
@@ -298,7 +320,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.36.0](https://github.com/thanos-io/thanos/tree/release-0.36)
+## v0.36.0
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.36.0)
 
 ### Fixed
 
@@ -323,7 +347,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.35.1](https://github.com/thanos-io/thanos/tree/release-0.35) - 28.05.2024
+## v0.35.1 - 28.05.2024
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.35.1)
 
 ### Fixed
 
@@ -340,7 +366,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.35.0](https://github.com/thanos-io/thanos/tree/release-0.35) - 02.05.2024
+## v0.35.0 - 02.05.2024
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.35.0)
 
 ### Fixed
 
@@ -391,7 +419,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.34.1](https://github.com/thanos-io/thanos/tree/release-0.34) - 11.02.24
+## v0.34.1 - 11.02.24
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.34.1)
 
 ### Fixed
 
@@ -403,7 +433,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.34.0](https://github.com/thanos-io/thanos/tree/release-0.34) - 26.01.24
+## v0.34.0 - 26.01.24
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.34.0)
 
 ### Fixed
 
@@ -437,7 +469,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 - [#7014](https://github.com/thanos-io/thanos/pull/7014) *: *breaking :warning:* Removed experimental query pushdown feature to simplify query path. This feature has had high complexity for too little benefits. The responsibility for query pushdown will be moved to the distributed mode of the new 'thanos' promql engine.
 
-## [v0.33.0](https://github.com/thanos-io/thanos/tree/release-0.33) - 18.12.2023
+## v0.33.0 - 18.12.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.33.0)
 
 ### Fixed
 
@@ -469,7 +503,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 - [#6686](https://github.com/thanos-io/thanos/pull/6686) Remove deprecated `--log.request.decision` flag. We now use `--request.logging-config` to set logging decisions.
 
-## [v0.32.5](https://github.com/thanos-io/thanos/tree/release-0.32) - 18.10.2023
+## v0.32.5 - 18.10.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.5)
 
 ### Fixed
 
@@ -483,7 +519,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.32.4](https://github.com/thanos-io/thanos/tree/release-0.32) - 02.10.2023
+## v0.32.4 - 02.10.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.4)
 
 ### Fixed
 
@@ -495,7 +533,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.32.3](https://github.com/thanos-io/thanos/tree/release-0.32) - 20.09.2023
+## v0.32.3 - 20.09.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.3)
 
 ### Fixed
 
@@ -514,7 +554,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.32.2](https://github.com/thanos-io/thanos/tree/release-0.32) - 31.08.2023
+## v0.32.2 - 31.08.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.2)
 
 ### Fixed
 
@@ -529,7 +571,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.32.1](https://github.com/thanos-io/thanos/tree/release-0.32) - 28.08.2023
+## v0.32.1 - 28.08.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.1)
 
 ### Fixed
 
@@ -546,7 +590,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 
 ### Removed
 
-## [v0.32.0](https://github.com/thanos-io/thanos/tree/release-0.32) - 23.08.2023
+## v0.32.0 - 23.08.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.32.0)
 
 ### Added
 
@@ -629,7 +675,9 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 - [#6432](https://github.com/thanos-io/thanos/pull/6432) Receive: Remove duplicated `gopkg.in/fsnotify.v1` dependency.
 - [#6332](https://github.com/thanos-io/thanos/pull/6332) *: Remove unmaintained `gzip` dependency.
 
-## [v0.31.0](https://github.com/thanos-io/thanos/tree/release-0.31) - 22.03.2023
+## v0.31.0 - 22.03.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.31.0)
 
 ### Added
 
@@ -671,20 +719,26 @@ In short: there are a bunch of fixes and small improvements. The shining items i
 - [#6035](https://github.com/thanos-io/thanos/pull/6035) Tools (replicate): Support all types of matchers to match blocks for replication. Change matcher parameter from string slice to a single string.
 - [#6131](https://github.com/thanos-io/thanos/pull/6131) Store: *breaking :warning:* Use Histograms instead of Summaries for bucket metrics.
 
-## [v0.30.2](https://github.com/thanos-io/thanos/tree/release-0.30) - 28.01.2023
+## v0.30.2 - 28.01.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.30.2)
 
 ### Fixed
 
 - [#6066](https://github.com/thanos-io/thanos/pull/6066) Tracing: fixed panic because of nil sampler
 - [#6086](https://github.com/thanos-io/thanos/pull/6086) Store Gateway: Fix store-gateway deadlock due to not close BlockSeriesClient
 
-## [v0.30.1](https://github.com/thanos-io/thanos/tree/release-0.30) - 4.01.2023
+## v0.30.1 - 4.01.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.30.1)
 
 ### Fixed
 
 - [#6009](https://github.com/thanos-io/thanos/pull/6009) Query Frontend/Store: fix duplicate metrics registration in Redis client
 
-## [v0.30.0](https://github.com/thanos-io/thanos/tree/release-0.30) - 2.01.2023
+## v0.30.0 - 2.01.2023
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.30.0)
 
 NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unhidden. We encourage users to use new experimental PromQL engine for efficiency reasons.
 
@@ -732,7 +786,9 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 
 - [#5824](https://github.com/thanos-io/thanos/pull/5824) Mixin: Remove noisy `ThanosReceiveTrafficBelowThreshold` alert.
 
-## [v0.29.0](https://github.com/thanos-io/thanos/tree/release-0.29) - 2022.11.03
+## v0.29.0 - 2022.11.03
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.29.0)
 
 ### Fixed
 
@@ -778,13 +834,17 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 
 ### Removed
 
-## [v0.28.1](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.10.06
+## v0.28.1 - 2022.10.06
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.28.1)
 
 ### Fixed
 
 - [#5702](https://github.com/thanos-io/thanos/pull/5702) Store: Upgrade minio-go/v7 to fix panic caused by leaked goroutines.
 
-## [v0.28.0](https://github.com/thanos-io/thanos/tree/release-0.28) - 2022.08.26
+## v0.28.0 - 2022.08.26
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.28.0)
 
 ### Fixed
 - [#5502](https://github.com/thanos-io/thanos/pull/5502) Receive: Handle exemplar storage errors as conflict error.
@@ -824,7 +884,9 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5588](https://github.com/thanos-io/thanos/pull/5588) Store: Improve index header reading performance by sorting values first.
 - [#5596](https://github.com/thanos-io/thanos/pull/5596) Store: Filter external labels from matchers on LabelValues/LabelNames to improve performance.
 
-## [v0.27.0](https://github.com/thanos-io/thanos/tree/release-0.27) - 2022.07.05
+## v0.27.0 - 2022.07.05
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.27.0)
 
 ### Fixed
 - [#5339](https://github.com/thanos-io/thanos/pull/5339) Receive: Fix deadlock on interrupt in routerOnly mode.
@@ -849,7 +911,9 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 
 - [#5426](https://github.com/thanos-io/thanos/pull/5426) Compactor: Remove an unused flag `--block-sync-concurrency`.
 
-## [v0.26.0](https://github.com/thanos-io/thanos/tree/release-0.26) - 2022.05.05
+## v0.26.0 - 2022.05.05
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.26.0)
 
 ### Fixed
 - [#5281](https://github.com/thanos-io/thanos/pull/5281) Blocks: Use correct separators for filesystem paths and object storage paths respectively.
@@ -879,7 +943,9 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 
 - [#5145](https://github.com/thanos-io/thanos/pull/5145) UI: Remove old Prometheus UI.
 
-## [v0.25.2](https://github.com/thanos-io/thanos/releases/tag/v0.25.2) - 2022.03.24
+## v0.25.2 - 2022.03.24
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.25.2)
 
 ### Fixed
 
@@ -887,7 +953,9 @@ NOTE: Querier's `query.promql-engine` flag enabling new PromQL engine is now unh
 - [#5204](https://github.com/thanos-io/thanos/pull/5204) Store: Fix data race in advertised label set in bucket store.
 - [#5242](https://github.com/thanos-io/thanos/pull/5242) Ruler: Make ruler use the correct WAL directory.
 
-## [v0.25.1](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.03.09
+## v0.25.1 - 2022.03.09
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.25.1)
 
 The binaries published with this release are built with Go1.17.8 to avoid [CVE-2022-24921](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2022-24921).
 
@@ -895,7 +963,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 - [#5226](https://github.com/thanos-io/thanos/pull/5226) Rebuild Thanos for v0.25.1 with Go 1.17.8
 
-## [v0.25.0](https://github.com/thanos-io/thanos/tree/release-0.25) - 2022.02.23
+## v0.25.0 - 2022.02.23
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.25.0)
 
 ### Added
 
@@ -939,7 +1009,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#5014](https://github.com/thanos-io/thanos/pull/5014) Query: Set default times for `query_exemplars` API.
 - [#5103](https://github.com/thanos-io/thanos/pull/5013) Store: Fix race condition in filesystem client's `Delete()`.
 
-## [v0.24.0](https://github.com/thanos-io/thanos/tree/release-0.24) - 2021.12.22
+## v0.24.0 - 2021.12.22
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.24.0)
 
 ### Added
 
@@ -986,7 +1058,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4864](https://github.com/thanos-io/thanos/pull/4864) UI: Remove the old PromQL editor.
 - [#4708](https://github.com/thanos-io/thanos/pull/4708) Receive: Remove gRPC message size limit, which fixes errors commonly seen when receivers forward messages within a hashring.
 
-## [v0.23.2](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.22
+## v0.23.2 - 2021.12.22
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.23.2)
 
 ### Fixed
 
@@ -995,24 +1069,32 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4939](https://github.com/thanos-io/thanos/pull/4939) Sidecar: set Sidecar to NOT READY when it cannot establish a connection with Prometheus
 - [#4864](https://github.com/thanos-io/thanos/pull/4864) UI: Remove the old PromQL editor
 
-## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
+## v0.23.1 - 2021.10.1
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.23.1)
 
 - [#4714](https://github.com/thanos-io/thanos/pull/4714) EndpointSet: Do not use unimplemented yet new InfoAPI to obtain metadata (avoids unnecessary HTTP roundtrip, instrumentation/alerts spam and logs).
 
-## [v0.23.2](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.12.22
+## v0.23.2 - 2021.12.22
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.23.2)
 
 ### Fixed
 
 - [#4795](https://github.com/thanos-io/thanos/pull/4795) Query: Fix deadlock in endpointset.
 - [#4962](https://github.com/thanos-io/thanos/pull/4962) Compact/downsample: fix deadlock if error occurs with some backlog of blocks; fixes [this pull request](https://github.com/thanos-io/thanos/pull/4430). Affected versions are 0.22.0 - 0.23.1.
 
-## [v0.23.1](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.10.1
+## v0.23.1 - 2021.10.1
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.23.1)
 
 ### Fixed
 
 - [#4714](https://github.com/thanos-io/thanos/pull/4714) Endpointset: Do not use info client to obtain metadata.
 
-## [v0.23.0](https://github.com/thanos-io/thanos/tree/release-0.23) - 2021.09.23
+## v0.23.0 - 2021.09.23
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.23.0)
 
 ### Added
 
@@ -1043,7 +1125,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4421](https://github.com/thanos-io/thanos/pull/4421) *breaking :warning:*: `--store` (in the future, to be renamed to `--endpoints`) now supports passing any APIs from Thanos gRPC APIs: StoreAPI, MetadataAPI, RulesAPI, TargetsAPI and ExemplarsAPI (in oppose in the past you have to put it in hidden `--targets`, `--rules` etc flags). `--store` will now automatically detect what APIs server exposes.
 - [#4669](https://github.com/thanos-io/thanos/pull/4669) Moved Prometheus dependency to v2.30.
 
-## [v0.22.0](https://github.com/thanos-io/thanos/tree/release-0.22) - 2021.07.22
+## v0.22.0 - 2021.07.22
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.22.0)
 
 ### Added
 
@@ -1070,13 +1154,17 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4354](https://github.com/thanos-io/thanos/pull/4354) Receive: use the S2 library for decoding Snappy data; saves about 5-7% of CPU time in the Receive component when handling incoming remote write requests
 - [#4369](https://github.com/thanos-io/thanos/pull/4354) Build: do not upgrade apline version
 
-## [v0.21.1](https://github.com/thanos-io/thanos/releases/tag/v0.21.1) - 2021.06.04
+## v0.21.1 - 2021.06.04
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.21.1)
 
 ### Fixed
 
 - [#4308](https://github.com/thanos-io/thanos/pull/4308) Sidecar: reloader: fix output config file permission
 
-## [v0.21.0](https://github.com/thanos-io/thanos/releases/tag/v0.21.0) - 2021.06.03
+## v0.21.0 - 2021.06.03
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.21.0)
 
 ### Added
 
@@ -1099,13 +1187,17 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 - [#4223](https://github.com/thanos-io/thanos/pull/4223) Query: federated exemplars API only add replica labels to series labels, not to exemplar labels.
 
-## [v0.20.2](https://github.com/thanos-io/thanos/releases/tag/v0.20.2) - 2021.05.20
+## v0.20.2 - 2021.05.20
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.20.2)
 
 ### Fixed
 
 - [#4208](https://github.com/thanos-io/thanos/pull/4208) UI: Fix infinite redirection loop on root (/).
 
-## [v0.20.1](https://github.com/thanos-io/thanos/releases/tag/v0.20.1) - 2021.04.30
+## v0.20.1 - 2021.04.30
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.20.1)
 
 ### Fixed
 
@@ -1119,7 +1211,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 -
 
-## [v0.20.0](https://github.com/thanos-io/thanos/releases/tag/v0.20.0) - 2021.04.28
+## v0.20.0 - 2021.04.28
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.20.0)
 
 ### Added
 
@@ -1156,7 +1250,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#4085](https://github.com/thanos-io/thanos/pull/4085) Receive: Improved Performance for err path.
 - [#4094](https://github.com/thanos-io/thanos/pull/4094) \*: Upgrade Prometheus & Alertmanager.
 
-## [v0.19.0](https://github.com/thanos-io/thanos/releases/tag/v0.19.0) - 2021.03.31
+## v0.19.0 - 2021.03.31
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.19.0)
 
 - [#3700](https://github.com/thanos-io/thanos/pull/3700) Compact/Web: Make old bucket viewer UI work with vanilla Prometheus blocks.
 - [#3657](https://github.com/thanos-io/thanos/pull/3657) \*: It's now possible to configure HTTP transport options for S3 client.
@@ -1186,7 +1282,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 - [#3804](https://github.com/thanos-io/thanos/pull/3804) Ruler, Receive, Querier: Updated Prometheus dependency. TSDB characteristics might have changed.
 
-## [v0.18.0](https://github.com/thanos-io/thanos/releases/tag/v0.18.0) - 2021.01.27
+## v0.18.0 - 2021.01.27
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.18.0)
 
 ### Added
 
@@ -1216,14 +1314,18 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 - [#2732](https://github.com/thanos-io/thanos/pull/2732) Swift: Switched to a new library [ncw/swift](https://github.com/ncw/swift) providing large objects support. By default, segments will be uploaded to the same container directory `segments/` if the file is bigger than `1GB`. To change the defaults see [the docs](docs/storage.md#openstack-swift).
 - [#3626](https://github.com/thanos-io/thanos/pull/3626) Shipper: Failed upload of `meta.json` file doesn't cause block cleanup anymore. This has a potential to generate corrupted blocks under specific conditions. Partial block is left in bucket for later cleanup.
 
-## [v0.17.2](https://github.com/thanos-io/thanos/releases/tag/v0.17.2) - 2020.12.07
+## v0.17.2 - 2020.12.07
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.17.2)
 
 ### Fixed
 
 - [#3532](https://github.com/thanos-io/thanos/pull/3532) compact: do not cleanup blocks on boot. Reverts the behavior change introduced in [#3115](https://github.com/thanos-io/thanos/pull/3115) as in some very bad cases the boot of Thanos Compact took a very long time since there were a lot of blocks-to-be-cleaned.
 - [#3520](https://github.com/thanos-io/thanos/pull/3520) Fix index out of bound bug when comparing ZLabelSets.
 
-## [v0.17.1](https://github.com/thanos-io/thanos/releases/tag/v0.17.1) - 2020.11.24
+## v0.17.1 - 2020.11.24
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.17.1)
 
 ### Fixed
 
@@ -1234,7 +1336,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
 
 - [#3498](https://github.com/thanos-io/thanos/pull/3498) Enabled debug.SetPanicOnFault(true) which allow us to recover on queries causing SEG FAULTs (e.g unmmaped memory access).
 
-## [v0.17.0](https://github.com/thanos-io/thanos/releases/tag/v0.17.0) - 2020.11.18
+## v0.17.0 - 2020.11.18
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.17.0)
 
 ### Added
 
@@ -1276,7 +1380,9 @@ The binaries published with this release are built with Go1.17.8 to avoid [CVE-2
   - `thanos_replicate_origin_partial_meta_reads_total` can be replaced by `blocks_meta_synced{state="failed"}`.
 - [#3309](https://github.com/thanos-io/thanos/pull/3309) Compact: *breaking :warning:* Rename metrics to match naming convention. This includes metrics starting with `thanos_compactor` to `thanos_compact`, `thanos_querier` to `thanos_query` and `thanos_ruler` to `thanos_rule`.
 
-## [v0.16.0](https://github.com/thanos-io/thanos/releases/tag/v0.16.0) - 2020.10.26
+## v0.16.0 - 2020.10.26
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.16.0)
 
 Highlights:
 
@@ -1315,7 +1421,9 @@ Highlights:
 - [#3022](https://github.com/thanos-io/thanos/pull/3022) \*: Thanos images are now build with Go 1.15.
 - [#3205](https://github.com/thanos-io/thanos/pull/3205) \*: Updated TSDB to ~2.21
 
-## [v0.15.0](https://github.com/thanos-io/thanos/releases/v0.15.0) - 2020.09.07
+## v0.15.0 - 2020.09.07
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.15.0)
 
 Highlights:
 
@@ -1377,7 +1485,9 @@ sse_config:
   type: SSE-S3
 ```
 
-## [v0.14.0](https://github.com/thanos-io/thanos/releases/tag/v0.14.0) - 2020.07.10
+## v0.14.0 - 2020.07.10
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.14.0)
 
 ### Fixed
 
@@ -1408,7 +1518,9 @@ sse_config:
 - [#2754](https://github.com/thanos-io/thanos/pull/2754) UI: Add stores page in the React UI.
 - [#2752](https://github.com/thanos-io/thanos/pull/2752) Compact: Add flag `--block-viewer.global.sync-block-interval` to configure metadata sync interval for the bucket UI.
 
-## [v0.13.0](https://github.com/thanos-io/thanos/releases/tag/v0.13.0) - 2020.06.22
+## v0.13.0 - 2020.06.22
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.13.0)
 
 ### Fixed
 
@@ -1449,14 +1561,18 @@ sse_config:
 - [#2526](https://github.com/thanos-io/thanos/pull/2526) Compact: In case there are no labels left after deduplication via `--deduplication.replica-label`, assign first `replica-label` with value `deduped`.
 - [#2603](https://github.com/thanos-io/thanos/pull/2603) Store/Querier: Significantly optimize cases where StoreAPIs or blocks returns exact overlapping chunks (e.g Store GW and sidecar or brute force Store Gateway HA).
 
-## [v0.12.2](https://github.com/thanos-io/thanos/releases/tag/v0.12.2) - 2020.04.30
+## v0.12.2 - 2020.04.30
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.12.2)
 
 ### Fixed
 
 - [#2459](https://github.com/thanos-io/thanos/issues/2459) Compact: Fixed issue with old blocks being marked and deleted in a (slow) loop.
 - [#2533](https://github.com/thanos-io/thanos/pull/2515) Rule: do not wrap reload endpoint with `/`. Makes `/-/reload` accessible again when no prefix has been specified.
 
-## [v0.12.1](https://github.com/thanos-io/thanos/releases/tag/v0.12.1) - 2020.04.20
+## v0.12.1 - 2020.04.20
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.12.1)
 
 ### Fixed
 
@@ -1465,7 +1581,9 @@ sse_config:
 - [#2472](https://github.com/thanos-io/thanos/pull/2472) Compact: fix a bug where partial blocks were never deleted, causing spam of warnings.
 - [#2474](https://github.com/thanos-io/thanos/pull/2474) Store: fix a panic caused by concurrent memory access during block filtering.
 
-## [v0.12.0](https://github.com/thanos-io/thanos/releases/tag/v0.12.0) - 2020.04.15
+## v0.12.0 - 2020.04.15
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.12.0)
 
 ### Fixed
 
@@ -1508,7 +1626,9 @@ sse_config:
 - [#1848](https://github.com/thanos-io/thanos/pull/1848) Ruler: allow returning error messages when a reload is triggered via HTTP.
 - [#2270](https://github.com/thanos-io/thanos/pull/2277) All: Thanos components will now print stack traces when they error out.
 
-## [v0.11.0](https://github.com/thanos-io/thanos/releases/tag/v0.11.0) - 2020.03.02
+## v0.11.0 - 2020.03.02
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.11.0)
 
 ### Fixed
 
@@ -1545,14 +1665,18 @@ sse_config:
 - [#2021](https://github.com/thanos-io/thanos/pull/2021) Rename metric `thanos_query_duplicated_store_address` to `thanos_query_duplicated_store_addresses_total` and `thanos_rule_duplicated_query_address` to `thanos_rule_duplicated_query_addresses_total`.
 - [#2166](https://github.com/thanos-io/thanos/pull/2166) Bucket Web: improve the tooltip for the bucket UI; it was reconstructed and now exposes much more information about blocks.
 
-## [v0.10.1](https://github.com/thanos-io/thanos/releases/tag/v0.10.1) - 2020.01.24
+## v0.10.1 - 2020.01.24
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.10.1)
 
 ### Fixed
 
 - [#2015](https://github.com/thanos-io/thanos/pull/2015) Sidecar: Querier /api/v1/series bug fixed when time range was ignored inside sidecar. The bug was noticeable for example when using Grafana template variables.
 - [#2120](https://github.com/thanos-io/thanos/pull/2120) Bucket Web: Set state of status prober properly.
 
-## [v0.10.0](https://github.com/thanos-io/thanos/releases/tag/v0.10.0) - 2020.01.13
+## v0.10.0 - 2020.01.13
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.10.0)
 
 ### Fixed
 
@@ -1594,7 +1718,9 @@ sse_config:
 - [#1867](https://github.com/thanos-io/thanos/pull/1867) Ruler: now sets a `Thanos/$version` `User-Agent` in requests
 - [#1887](https://github.com/thanos-io/thanos/pull/1887) Service discovery now deduplicates targets between different target groups
 
-## [v0.9.0](https://github.com/thanos-io/thanos/releases/tag/v0.9.0) - 2019.12.03
+## v0.9.0 - 2019.12.03
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.9.0)
 
 ### Added
 
@@ -1632,7 +1758,9 @@ sse_config:
 - [#1790](https://github.com/thanos-io/thanos/pull/1790) Ruler: Fixes subqueries support for ruler.
 - [#1769](https://github.com/thanos-io/thanos/pull/1769) & [#1545](https://github.com/thanos-io/thanos/pull/1545) Adjusted most of the metrics histogram buckets.
 
-## [v0.8.1](https://github.com/thanos-io/thanos/releases/tag/v0.8.1) - 2019.10.14
+## v0.8.1 - 2019.10.14
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.8.1)
 
 ### Fixed
 
@@ -1640,7 +1768,9 @@ sse_config:
   - NOTE: `thanos_store_nodes_grpc_connections` metric is now per `external_labels` and `store_type`. It is a recommended metric for Querier storeAPIs. `thanos_store_node_info` is marked as obsolete and will be removed in next release.
   - NOTE2: Store Gateway is now advertising artificial: `"@thanos_compatibility_store_type=store"` label. This is to have the current Store Gateway compatible with Querier pre v0.8.0. This label can be disabled by hidden `debug.advertise-compatibility-label=false` flag on Store Gateway.
 
-## [v0.8.0](https://github.com/thanos-io/thanos/releases/tag/v0.8.0) - 2019.10.10
+## v0.8.0 - 2019.10.10
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.8.0)
 
 Lot's of improvements this release! Noteworthy items:
 
@@ -1691,7 +1821,9 @@ Make sure you check out Prometheus 2.13.0 as well. New release drastically impro
 - [#1512](https://github.com/thanos-io/thanos/pull/1512) Thanos Store fixed memory leak for chunk pool.
 - [#1488](https://github.com/thanos-io/thanos/pull/1488) Thanos Rule now now correctly links to query URL from rules and alerts.
 
-## [v0.7.0](https://github.com/thanos-io/thanos/releases/tag/v0.7.0) - 2019.09.02
+## v0.7.0 - 2019.09.02
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.7.0)
 
 Accepted into CNCF:
 
@@ -1735,7 +1867,9 @@ Accepted into CNCF:
 - [#1458](https://github.com/thanos-io/thanos/pull/1458) Thanos Query and Receive now use common instrumentation middleware. As as result, for sake of `http_requests_total` and `http_request_duration_seconds_bucket`; Thanos Query no longer exposes `thanos_query_api_instant_query_duration_seconds`, `thanos_query_api_range_query_duration_second` metrics and Thanos Receive no longer exposes `thanos_http_request_duration_seconds`, `thanos_http_requests_total`, `thanos_http_response_size_bytes`.
 - [#1423](https://github.com/thanos-io/thanos/pull/1423) Thanos Bench deprecated.
 
-## [v0.6.0](https://github.com/thanos-io/thanos/releases/tag/v0.6.0) - 2019.07.18
+## v0.6.0 - 2019.07.18
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.6.0)
 
 ### Added
 
@@ -1806,7 +1940,9 @@ The other `type` you can use is `JAEGER` now. The `config` keys and values are J
 
 - [#1216](https://github.com/thanos-io/thanos/pull/1216) the old "Command-line flags" has been removed from Thanos Query UI since it was not populated and because we are striving for consistency
 
-## [v0.5.0](https://github.com/thanos-io/thanos/releases/tag/v0.5.0) - 2019.06.05
+## v0.5.0 - 2019.06.05
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.5.0)
 
 TL;DR: Store LRU cache is no longer leaking, Upgraded Thanos UI to Prometheus 2.9, Fixed auto-downsampling, Moved to Go 1.12.5 and more.
 
@@ -1869,7 +2005,9 @@ This version moved tarballs to Golang 1.12.5 from 1.11 as well, so same warning 
 
 - [#1008](https://github.com/thanos-io/thanos/pull/1008) *breaking* Removed Gossip implementation. All `--cluster.*` flags removed and Thanos will error out if any is provided.
 
-## [v0.4.0](https://github.com/thanos-io/thanos/releases/tag/v0.4.0) - 2019.05.3
+## v0.4.0 - 2019.05.3
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.4.0)
 
 :warning: **IMPORTANT** :warning: This is the last release that supports gossip. From Thanos v0.5.0, gossip will be completely removed.
 
@@ -1999,7 +2137,9 @@ New Store tracing span: \* `store_query_gate_ismyturn` shows how long it took fo
 - [#904](https://github.com/thanos-io/thanos/pull/904) Compact: Skip compaction for blocks with no samples.
 - [#1070](https://github.com/thanos-io/thanos/pull/1070) Downsampling works back again. Deferred closer errors are now properly captured.
 
-## [v0.3.2](https://github.com/thanos-io/thanos/releases/tag/v0.3.2) - 2019.03.04
+## v0.3.2 - 2019.03.04
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.3.2)
 
 ### Added
 
@@ -2013,14 +2153,18 @@ New Store tracing span: \* `store_query_gate_ismyturn` shows how long it took fo
 - [#833](https://github.com/thanos-io/thanos/issues/833) Store Gateway matcher regression for intersecting with empty posting.
 - [#867](https://github.com/thanos-io/thanos/pull/867) Fixed race condition in sidecare between reloader and shipper.
 
-## [v0.3.1](https://github.com/thanos-io/thanos/releases/tag/v0.3.1) - 2019.02.18
+## v0.3.1 - 2019.02.18
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.3.1)
 
 ### Fixed
 
 - [#829](https://github.com/thanos-io/thanos/issues/829) Store Gateway crashing due to `slice bounds out of range`.
 - [#834](https://github.com/thanos-io/thanos/issues/834) Store Gateway matcher regression for `<>` `!=`.
 
-## [v0.3.0](https://github.com/thanos-io/thanos/releases/tag/v0.3.0) - 2019.02.08
+## v0.3.0 - 2019.02.08
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.3.0)
 
 ### Added
 
@@ -2070,7 +2214,9 @@ New Store tracing span: \* `store_query_gate_ismyturn` shows how long it took fo
 
 - Tests against Prometheus below v2.2.1. This does not mean *lack* of support for those. Only that we don't tests the compatibility anymore. See [#758](https://github.com/thanos-io/thanos/issues/758) for details.
 
-## [v0.2.1](https://github.com/thanos-io/thanos/releases/tag/v0.2.1) - 2018.12.27
+## v0.2.1 - 2018.12.27
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.2.1)
 
 ### Added
 
@@ -2086,7 +2232,9 @@ New Store tracing span: \* `store_query_gate_ismyturn` shows how long it took fo
 - Move handling of HA alertmanagers to be the same as Prometheus.
 - Azure iteration implementation flaw.
 
-## [v0.2.0](https://github.com/thanos-io/thanos/releases/tag/v0.2.0) - 2018.12.10
+## v0.2.0 - 2018.12.10
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.2.0)
 
 Next Thanos release adding support to new discovery method, gRPC mTLS and two new object store providers (Swift and Azure).
 
@@ -2145,7 +2293,9 @@ Note lots of necessary breaking changes in flags that relates to bucket configur
 - Sidecar too frequent Prometheus reload.
 - `thanos_compactor_retries_total` metric not being registered.
 
-## [v0.1.0](https://github.com/thanos-io/thanos/releases/tag/v0.1.0) - 2018.09.14
+## v0.1.0 - 2018.09.14
+
+[GitHub release](https://github.com/thanos-io/thanos/releases/tag/v0.1.0)
 
 Initial version to have a stable reference before [gossip protocol removal](docs/proposals-done/201809-gossip-removal.md).
 
