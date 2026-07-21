@@ -867,7 +867,8 @@ func TestGroupCompactHaltsOnMissingIndex(t *testing.T) {
 	// Only upload meta.json, simulating an aborted upload that never wrote the index file.
 	testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.MetaFilename), &buf))
 
-	counter := prometheus.NewCounter(prometheus.CounterOpts{})
+	reg := prometheus.NewRegistry()
+	counter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_missing_index"})
 	cg, err := NewGroup(
 		logger,
 		bkt,
