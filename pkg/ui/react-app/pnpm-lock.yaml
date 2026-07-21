@@ -43,7 +43,7 @@ importers:
         version: 5.15.4
       '@fortawesome/react-fontawesome':
         specifier: ^0.1.14
-        version: 0.1.15(@fortawesome/fontawesome-svg-core@1.2.36)(react@16.14.0)
+        version: 0.1.15(@fortawesome/fontawesome-svg-core@1.2.36)(react@18.3.1)
       '@lezer/common':
         specifier: ^1.4.0
         version: 1.4.0
@@ -64,7 +64,7 @@ importers:
         version: 0.308.0(@lezer/highlight@1.2.3)(@lezer/lr@1.4.2)
       '@reach/router':
         specifier: ^1.3.4
-        version: 1.3.4(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 1.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       bootstrap:
         specifier: ^4.6.0
         version: 4.6.1(jquery@3.6.0)(popper.js@1.16.1)
@@ -73,7 +73,7 @@ importers:
         version: 1.5.1
       downshift:
         specifier: ^6.1.0
-        version: 6.1.7(react@16.14.0)
+        version: 6.1.7(react@18.3.1)
       i:
         specifier: ^0.3.7
         version: 0.3.7
@@ -100,31 +100,31 @@ importers:
         version: 6.14.1
       rc-slider:
         specifier: ^9.7.1
-        version: 9.7.2(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 9.7.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react:
-        specifier: ^16.14.0
-        version: 16.14.0
+        specifier: ^18.3.1
+        version: 18.3.1
       react-copy-to-clipboard:
         specifier: ^5.0.3
-        version: 5.0.4(react@16.14.0)
+        version: 5.0.4(react@18.3.1)
       react-dom:
-        specifier: ^16.14.0
-        version: 16.14.0(react@16.14.0)
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       react-infinite-scroll-component:
         specifier: ^6.1.0
-        version: 6.1.0(react@16.14.0)
+        version: 6.1.0(react@18.3.1)
       react-resize-detector:
         specifier: ^4.2.1
-        version: 4.2.3(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 4.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-select:
         specifier: ^4.1.0
-        version: 4.3.1(@babel/core@7.17.5)(@types/react@17.0.22)(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 4.3.1(@babel/core@7.17.5)(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react-test-renderer:
-        specifier: ^16.14.0
-        version: 16.14.0(react@16.14.0)
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
       reactstrap:
         specifier: ^8.9.0
-        version: 8.10.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 8.10.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       sanitize-html:
         specifier: ^2.3.2
         version: 2.5.1
@@ -139,20 +139,20 @@ importers:
         version: 5.19.3(jquery@3.6.0)(moment-timezone@0.5.34)(moment@2.29.3)
       use-media:
         specifier: ^1.4.0
-        version: 1.4.0(react@16.14.0)
+        version: 1.4.0(react@18.3.1)
       use-query-params:
         specifier: ^1.1.9
-        version: 1.2.3(query-string@6.14.1)(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 1.2.3(query-string@6.14.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     devDependencies:
+      '@cfaester/enzyme-adapter-react-18':
+        specifier: ^0.8.0
+        version: 0.8.0(enzyme@3.11.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@testing-library/react-hooks':
         specifier: ^5.0.3
-        version: 5.1.3(react-dom@16.14.0(react@16.14.0))(react-test-renderer@16.14.0(react@16.14.0))(react@16.14.0)
+        version: 5.1.3(react-dom@18.3.1(react@18.3.1))(react-test-renderer@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/enzyme':
         specifier: ^3.10.8
         version: 3.10.9
-      '@types/enzyme-adapter-react-16':
-        specifier: ^1.0.6
-        version: 1.0.6
       '@types/flot':
         specifier: ^0.0.31
         version: 0.0.31
@@ -172,14 +172,14 @@ importers:
         specifier: ^1.3.7
         version: 1.3.9
       '@types/react':
-        specifier: ^17.0.2
-        version: 17.0.22
+        specifier: ^18.3.12
+        version: 18.3.31
       '@types/react-copy-to-clipboard':
         specifier: ^5.0.0
         version: 5.0.1
       '@types/react-dom':
-        specifier: ^17.0.1
-        version: 17.0.9
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.31)
       '@types/react-resize-detector':
         specifier: ^4.0.2
         version: 4.2.0
@@ -201,9 +201,6 @@ importers:
       enzyme:
         specifier: ^3.11.0
         version: 3.11.0
-      enzyme-adapter-react-16:
-        specifier: ^1.15.6
-        version: 1.15.6(enzyme@3.11.0)(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
       enzyme-to-json:
         specifier: ^3.4.3
         version: 3.6.2(enzyme@3.11.0)
@@ -233,7 +230,7 @@ importers:
         version: 2.4.1
       react-scripts:
         specifier: ^5.0.0
-        version: 5.0.1(@babel/plugin-syntax-flow@7.16.7(@babel/core@7.17.5))(@babel/plugin-transform-react-jsx@7.17.3(@babel/core@7.17.5))(@types/babel__core@7.1.18)(autoprefixer@10.4.2(postcss@8.4.8))(eslint@8.11.0)(react@16.14.0)(sass@1.41.1)(type-fest@0.21.3)(typescript@4.6.2)
+        version: 5.0.1(@babel/plugin-syntax-flow@7.16.7(@babel/core@7.17.5))(@babel/plugin-transform-react-jsx@7.17.3(@babel/core@7.17.5))(@types/babel__core@7.1.18)(autoprefixer@10.4.2(postcss@8.4.8))(eslint@8.11.0)(react@18.3.1)(sass@1.41.1)(type-fest@0.21.3)(typescript@4.6.2)
       sinon:
         specifier: ^9.2.4
         version: 9.2.4
@@ -912,6 +909,13 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
+  '@cfaester/enzyme-adapter-react-18@0.8.0':
+    resolution: {integrity: sha512-3Z3ThTUouHwz8oIyhTYQljEMNRFtlVyc3VOOHCbxs47U6cnXs8K9ygi/c1tv49s7MBlTXeIcuN+Ttd9aPtILFQ==, tarball: https://registry.npmjs.org/@cfaester/enzyme-adapter-react-18/-/enzyme-adapter-react-18-0.8.0.tgz}
+    peerDependencies:
+      enzyme: ^3.11.0
+      react: '>=18'
+      react-dom: '>=18'
+
   '@codemirror/autocomplete@6.20.0':
     resolution: {integrity: sha512-bOwvTOIJcG5FVo5gUUupiwYh8MioPLQ4UcqbcRf7UQ98X90tCa9E1kZ3Z7tqwpZxYyOvh1YTYbmZE9RTfTp5hg==}
 
@@ -1382,9 +1386,6 @@ packages:
   '@types/connect@3.4.35':
     resolution: {integrity: sha512-cdeYyv4KWoEgpBISTxWvqYsVy444DOqehiF3fM3ne10AmJ62RSyNkUnxMJXHQWRQQX2eR94m5y1IZyDwBjV9FQ==}
 
-  '@types/enzyme-adapter-react-16@1.0.6':
-    resolution: {integrity: sha512-VonDkZ15jzqDWL8mPFIQnnLtjwebuL9YnDkqeCDYnB4IVgwUm0mwKkqhrxLL6mb05xm7qqa3IE95m8CZE9imCg==}
-
   '@types/enzyme@3.10.9':
     resolution: {integrity: sha512-dx5UvcWe2Vtye6S9Hw2rFB7Ul9uMXOAje2FAbXvVYieQDNle9qPAo7DfvFMSztZ9NFiD3dVZ4JsRYGTrSLynJg==}
 
@@ -1456,7 +1457,7 @@ packages:
     resolution: {integrity: sha512-ReVR2rLTV1kvtlWFyuot+d1pkpG2Fw/XKE3PDAdj57rbM97ttSp9JZ2UsP+2EHTylra9cUf6JA7tGwW1INzUrA==}
 
   '@types/prop-types@15.7.4':
-    resolution: {integrity: sha512-rZ5drC/jWjrArrS8BR6SIr4cWpW09RNTYt9AMZo3Jwwif+iacXAqgVjm0B0Bv/S1jhDXKHqRVNCbACkJ89RAnQ==}
+    resolution: {integrity: sha512-rZ5drC/jWjrArrS8BR6SIr4cWpW09RNTYt9AMZo3Jwwif+iacXAqgVjm0B0Bv/S1jhDXKHqRVNCbACkJ89RAnQ==, tarball: https://registry.npmjs.org/@types/prop-types/-/prop-types-15.7.4.tgz}
 
   '@types/q@1.5.5':
     resolution: {integrity: sha512-L28j2FcJfSZOnL1WBjDYp2vUHCeIFlyYI/53EwD/rKUBQ7MtUUfbQWiyKJGpcnv4/WgrhWsFKrcPstcAt/J0tQ==}
@@ -1473,8 +1474,10 @@ packages:
   '@types/react-copy-to-clipboard@5.0.1':
     resolution: {integrity: sha512-CDuRrJWEIdfKFC4vbwpXT3vk0O4gA/I/Kxu/1npUvGc2Yey5swPvsgO3JEnQkIUwdnYUbwUYDE/fTFQVgqr4oA==}
 
-  '@types/react-dom@17.0.9':
-    resolution: {integrity: sha512-wIvGxLfgpVDSAMH5utdL9Ngm5Owu0VsGmldro3ORLXV8CShrL8awVj06NuEXFQ5xyaYfdca7Sgbk/50Ri1GdPg==}
+  '@types/react-dom@18.3.7':
+    resolution: {integrity: sha512-MEe3UeoENYVFXzoXEWsvcpg6ZvlrFNlOQ7EOsvhI3CfAXwzPfO8Qwuxd40nepsYKqyyVQnTdEfv68q91yLcKrQ==, tarball: https://registry.npmjs.org/@types/react-dom/-/react-dom-18.3.7.tgz}
+    peerDependencies:
+      '@types/react': ^18.0.0
 
   '@types/react-resize-detector@4.2.0':
     resolution: {integrity: sha512-y5PPThHUrBGxMhLDNn0BRWglKr84y+gQHvzkyKxF8aW3pox4IySC33V8AOu7ReS0JR1X1dKQgWeF8IOkGrbeBg==}
@@ -1488,8 +1491,8 @@ packages:
   '@types/react-transition-group@4.4.3':
     resolution: {integrity: sha512-fUx5muOWSYP8Bw2BUQ9M9RK9+W1XBK/7FLJ8PTQpnpTEkn0ccyMffyEQvan4C3h53gHdx7KE5Qrxi/LnUGQtdg==}
 
-  '@types/react@17.0.22':
-    resolution: {integrity: sha512-kq/BMeaAVLJM6Pynh8C2rnr/drCK+/5ksH0ch9asz+8FW3DscYCIEFtCeYTFeIx/ubvOsMXmRfy7qEJ76gM96A==}
+  '@types/react@18.3.31':
+    resolution: {integrity: sha512-vfEqpXTvwT91yhmwdfouStN2hSKwTvyRs8qpLfADyrq/kxDw0hZM7Wk9Ug1FELj8hIby+S/+kQCSRFF32nv2Qw==, tarball: https://registry.npmjs.org/@types/react/-/react-18.3.31.tgz}
 
   '@types/resolve@1.17.1':
     resolution: {integrity: sha512-yy7HuzQhj0dhGpD8RLXSZWEkLsV9ibvxvi6EiJ3bkqLAO1RGo0WbkWQiwpRlSFymTJRz0d3k5LM3kkx8ArDbLw==}
@@ -1499,9 +1502,6 @@ packages:
 
   '@types/sanitize-html@1.27.2':
     resolution: {integrity: sha512-DrH26m7CV6PB4YVckjbSIx+xloB7HBolr9Ctm0gZBffSu5dDV4yJKFQGPquJlReVW+xmg59gx+b/8/qYHxZEuw==}
-
-  '@types/scheduler@0.16.2':
-    resolution: {integrity: sha512-hppQEBDmlwhFAXKJX2KnWLYu5yMfi91yazPb2l+lbJiwW+wdo1gNeRA+3RgNSO39WYX2euey41KEwnqesU2Jew==}
 
   '@types/serve-index@1.9.1':
     resolution: {integrity: sha512-d/Hs3nWDxNL2xAczmOVZNj92YZCS6RGxfBPjKzuu/XirCgXdpKEb88dYNbrYGint6IVWLNP+yonwVAuRC0T2Dg==}
@@ -1709,12 +1709,6 @@ packages:
     resolution: {integrity: sha512-4I7Td01quW/RpocfNayFdFVk1qSuoh0E7JrbRJ16nH01HhKFQ88INq9Sd+nd72zqRySlr9BmDA8xlEJ6vJMrYA==}
     engines: {node: '>=8'}
 
-  airbnb-prop-types@2.16.0:
-    resolution: {integrity: sha512-7WHOFolP/6cS96PhKNrslCLMYAI8yB1Pp6u6XmxozQOiZbsI5ycglZr5cHhBFfuRcQQjzCMith5ZPZdYiJCxUg==}
-    deprecated: This package has been renamed to 'prop-types-tools'
-    peerDependencies:
-      react: ^0.14 || ^15.0.0 || ^16.0.0-alpha
-
   ajv-formats@2.1.1:
     resolution: {integrity: sha512-Wx0Kx52hxE7C18hkMEggYlEifqWZtYaRgouJor+WMdPnQyEK13vgEWyVNup7SoeeoLMsr4kf5h6dOW11I15MUA==}
     peerDependencies:
@@ -1802,9 +1796,6 @@ packages:
   array.prototype.filter@1.0.0:
     resolution: {integrity: sha512-TfO1gz+tLm+Bswq0FBOXPqAchtCr2Rn48T8dLJoRFl8NoEosjZmzptmuo1X8aZBzZcqsR1W8U761tjACJtngTQ==}
     engines: {node: '>= 0.4'}
-
-  array.prototype.find@2.1.1:
-    resolution: {integrity: sha512-mi+MYNJYLTx2eNYy+Yh6raoQacCsNeeMUaspFPh9Y141lFSsWxxB8V9mM2ye+eqiRs917J6/pJ4M9ZPzenWckA==}
 
   array.prototype.flat@1.2.5:
     resolution: {integrity: sha512-KaYU+S+ndVqyUnignHftkwc58o3uVU1jzczILJ1tN2YaIZpFIKBiP/x/j97E5MVPsaCloPbqWLB/8qCTVvT2qg==}
@@ -1985,8 +1976,20 @@ packages:
     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
     engines: {node: '>= 0.8'}
 
+  call-bind-apply-helpers@1.0.2:
+    resolution: {integrity: sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==, tarball: https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz}
+    engines: {node: '>= 0.4'}
+
   call-bind@1.0.2:
     resolution: {integrity: sha512-7O+FbCihrB5WGbFYesctwmTKae6rOiIzmz1icreWJ+0aA7LJfuqhEso2T9ncpcFtzMQtzXf2QGGueWJGTYsqrA==}
+
+  call-bind@1.0.9:
+    resolution: {integrity: sha512-a/hy+pNsFUTR+Iz8TCJvXudKVLAnz/DyeSUo10I5yvFDQJBFU2s9uqQpoSrJlroHUKoKqzg+epxyP9lqFdzfBQ==, tarball: https://registry.npmjs.org/call-bind/-/call-bind-1.0.9.tgz}
+    engines: {node: '>= 0.4'}
+
+  call-bound@1.0.4:
+    resolution: {integrity: sha512-+ys997U96po4Kx/ABpBCqhA9EuxJaQWDQg7295H4hBphv3IZg0boBKuwYpt4YXp6MZ5AmZQnU/tyMTlRpaSejg==, tarball: https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz}
+    engines: {node: '>= 0.4'}
 
   callsites@3.1.0:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
@@ -2337,6 +2340,9 @@ packages:
   csstype@3.0.9:
     resolution: {integrity: sha512-rpw6JPxK6Rfg1zLOYCSwle2GFOOsnjmDYDaBwEcwoOg4qlsIVCN789VkBZDJAGi4T07gI4YSutR43t9Zz4Lzuw==}
 
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==, tarball: https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz}
+
   damerau-levenshtein@1.0.8:
     resolution: {integrity: sha512-sdQSFB7+llfUcQHUQO3+B8ERRj0Oa4w9POWMI/puGtuf7gFywGmkaLCElnudfTiKZV+NvHqL0ifzdrI8Ro7ESA==}
 
@@ -2392,6 +2398,10 @@ packages:
   default-gateway@6.0.3:
     resolution: {integrity: sha512-fwSOJsbbNzZ/CUFpqFBqYfYNLj1NbMPm8MMCIzHjC83iSJRBEGmDUxU+WP661BaBQImeC2yHwXtz+P/O9o+XEg==}
     engines: {node: '>= 10'}
+
+  define-data-property@1.1.4:
+    resolution: {integrity: sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==, tarball: https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz}
+    engines: {node: '>= 0.4'}
 
   define-lazy-prop@2.0.0:
     resolution: {integrity: sha512-Ds09qNh8yw3khSjiJjiUInaGX9xlqZDY7JVryGxdxV7NPeuqQfplOpQ66yJFZut3jLa5zOwkXw1g9EI2uKh4Og==}
@@ -2536,6 +2546,10 @@ packages:
     peerDependencies:
       react: '>=16.12.0'
 
+  dunder-proto@1.0.1:
+    resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==, tarball: https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
   duplexer@0.1.2:
     resolution: {integrity: sha512-jtD6YG370ZCIi/9GTaJKQxWTZD045+4R4hTk/x1UyoqadyJ9x9CgSi1RlVDQF8U2sxLLSnFkCaMihqljHIWgMg==}
 
@@ -2575,18 +2589,6 @@ packages:
   entities@2.2.0:
     resolution: {integrity: sha512-p92if5Nz619I0w+akJrLZH0MX0Pb5DX39XOwQTtXSdQQOaYH03S1uIQp4mhOZtAXrxq4ViO67YTiLBo2638o9A==}
 
-  enzyme-adapter-react-16@1.15.6:
-    resolution: {integrity: sha512-yFlVJCXh8T+mcQo8M6my9sPgeGzj85HSHi6Apgf1Cvq/7EL/J9+1JoJmJsRxZgyTvPMAqOEpRSu/Ii/ZpyOk0g==}
-    peerDependencies:
-      enzyme: ^3.0.0
-      react: ^16.0.0-0
-      react-dom: ^16.0.0-0
-
-  enzyme-adapter-utils@1.14.0:
-    resolution: {integrity: sha512-F/z/7SeLt+reKFcb7597IThpDp0bmzcH1E9Oabqv+o01cID2/YInlqHbFl7HzWBl4h3OdZYedtwNDOmSKkk0bg==}
-    peerDependencies:
-      react: 0.13.x || 0.14.x || ^15.0.0-0 || ^16.0.0-0
-
   enzyme-shallow-equal@1.0.4:
     resolution: {integrity: sha512-MttIwB8kKxypwHvRynuC3ahyNc+cFbR8mjVIltnmzQ0uKGqmsfO4bfBuLxb0beLNPhjblUEYvEbsg+VSygvF1Q==}
 
@@ -2612,8 +2614,20 @@ packages:
   es-array-method-boxes-properly@1.0.0:
     resolution: {integrity: sha512-wd6JXUmyHmt8T5a2xreUwKcGPq6f1f+WwIJkijUqiGcJz1qqnZgP6XIK+QyIWU5lT7imeNxUll48bziG+TSYcA==}
 
+  es-define-property@1.0.1:
+    resolution: {integrity: sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==, tarball: https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
+
+  es-errors@1.3.0:
+    resolution: {integrity: sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==, tarball: https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz}
+    engines: {node: '>= 0.4'}
+
   es-module-lexer@1.5.2:
     resolution: {integrity: sha512-l60ETUTmLqbVbVHv1J4/qj+M8nq7AwMzEcg3kmJDt9dCNrTk+yHcYFf/Kw75pMDwd9mPcIGCG5LcS20SxYRzFA==}
+
+  es-object-atoms@1.1.2:
+    resolution: {integrity: sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==, tarball: https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz}
+    engines: {node: '>= 0.4'}
 
   es-to-primitive@1.2.1:
     resolution: {integrity: sha512-QCOllgZJtaUo9miYBcLChTUaHNjJF3PYs1VidD7AwiEj1kYxKeQTctLAezAOH5ZKRH0g2IgPn6KwB4IT8iRpvA==}
@@ -2979,15 +2993,22 @@ packages:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
   fsevents@2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==, tarball: https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
   function-bind@1.1.1:
     resolution: {integrity: sha512-yIovAzMX49sF8Yl58fSCWJ5svSLuaibPxXQJFLmBObTuCr0Mf1KiPopGM9NiFjiYBCbfaa2Fh6breQ6ANVTI0A==}
 
+  function-bind@1.1.2:
+    resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==, tarball: https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz}
+
   function.prototype.name@1.1.4:
     resolution: {integrity: sha512-iqy1pIotY/RmhdFZygSSlW0wko2yxkSCKqsuv4pr8QESohpYyG/Z7B/XXvPRKTJS//960rgguE5mSRUsDdaJrQ==}
+    engines: {node: '>= 0.4'}
+
+  function.prototype.name@1.2.0:
+    resolution: {integrity: sha512-jObKIik1P2QjPHP5nz5BaOtUlfgS0fWo8IUByNXkM+o+02sJOi94em77GwJKQSJ3gfPHdgzLNrHc1uokV4P/ew==, tarball: https://registry.npmjs.org/function.prototype.name/-/function.prototype.name-1.2.0.tgz}
     engines: {node: '>= 0.4'}
 
   functional-red-black-tree@1.0.1:
@@ -2995,6 +3016,9 @@ packages:
 
   functions-have-names@1.2.2:
     resolution: {integrity: sha512-bLgc3asbWdwPbx2mNk2S49kmJCuQeu0nfmaOgbs8WIyzzkw3r4htszdIi9Q9EMezDPTYuJx2wvjZ/EwgAthpnA==}
+
+  functions-have-names@1.2.3:
+    resolution: {integrity: sha512-xckBUXyTIqT97tq2x2AMb+g163b5JFysYk0x4qxNFwbfQkmNZoiRHb6sPzI9/QV33WeuvVYBUIiD4NzNIyqaRQ==, tarball: https://registry.npmjs.org/functions-have-names/-/functions-have-names-1.2.3.tgz}
 
   gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
@@ -3007,12 +3031,20 @@ packages:
   get-intrinsic@1.1.1:
     resolution: {integrity: sha512-kWZrnVM42QCiEA2Ig1bG8zjoIMOgxWwYCEeNdwY6Tv/cOSeGpcoX4pXHfKUxNKVoArnrEr2e9srnAxxGIraS9Q==}
 
+  get-intrinsic@1.3.0:
+    resolution: {integrity: sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==, tarball: https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz}
+    engines: {node: '>= 0.4'}
+
   get-own-enumerable-property-symbols@3.0.2:
     resolution: {integrity: sha512-I0UBV/XOz1XkIJHEUDMZAbzCThU/H8DxmSfmdGcKPnVhu2VfFqr34jr9777IyaTYvxjedWhqVIilEDsCdP5G6g==}
 
   get-package-type@0.1.0:
     resolution: {integrity: sha512-pjzuKtY64GYfWizNAJ0fr9VqttZkNiK2iS430LtIHzjBEr6bX8Am2zm4sW4Ro5wjWW5cAlRL1qAMTcXbjNAO2Q==}
     engines: {node: '>=8.0.0'}
+
+  get-proto@1.0.1:
+    resolution: {integrity: sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==, tarball: https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz}
+    engines: {node: '>= 0.4'}
 
   get-stream@6.0.1:
     resolution: {integrity: sha512-ts6Wi+2j3jQjqi70w5AlN8DFnkSwC+MqmxEzdEALB2qXZYV3X/b1CTfgPLGJNMeAWxdPfU8FO1ms3NUfaHCPYg==}
@@ -3057,6 +3089,10 @@ packages:
     resolution: {integrity: sha512-9O4MVG9ioZJ08ffbcyVYyLOJLk5JQ688pJ4eMGLpdWLHq/Wr1D9BlriLQyL0E+jbkuePVZXYFj47QM/v093wHg==}
     engines: {node: '>=10'}
 
+  gopd@1.2.0:
+    resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==, tarball: https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz}
+    engines: {node: '>= 0.4'}
+
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
@@ -3084,8 +3120,15 @@ packages:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
 
+  has-property-descriptors@1.0.2:
+    resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==, tarball: https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz}
+
   has-symbols@1.0.2:
     resolution: {integrity: sha512-chXa79rL/UC2KlX17jo3vRGz0azaWEx5tGqZg5pO3NUyEJVB17dMruQlzCCOfUvElghKcm5194+BCRvi2Rv/Gw==}
+    engines: {node: '>= 0.4'}
+
+  has-symbols@1.1.0:
+    resolution: {integrity: sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==, tarball: https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz}
     engines: {node: '>= 0.4'}
 
   has-tostringtag@1.0.0:
@@ -3095,6 +3138,14 @@ packages:
   has@1.0.3:
     resolution: {integrity: sha512-f2dvO0VU6Oej7RkWJGrehjbzMAjFp5/VKPp5tTpWIV4JHHZK1/BxbFRtf/siA2SWTe09caDmVtYYzWEIbBS4zw==}
     engines: {node: '>= 0.4.0'}
+
+  has@1.0.4:
+    resolution: {integrity: sha512-qdSAmqLF6209RFj4VVItywPMbm3vWylknmB3nvNiUIs72xAimcM8nVYxYr7ncvZq5qzk9MKIZR8ijqD/1QuYjQ==, tarball: https://registry.npmjs.org/has/-/has-1.0.4.tgz}
+    engines: {node: '>= 0.4.0'}
+
+  hasown@2.0.4:
+    resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==, tarball: https://registry.npmjs.org/hasown/-/hasown-2.0.4.tgz}
+    engines: {node: '>= 0.4'}
 
   he@1.2.0:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
@@ -3281,6 +3332,10 @@ packages:
     resolution: {integrity: sha512-nsuwtxZfMX67Oryl9LCQ+upnC0Z0BgpwntpS89m1H/TLF0zNfzfLMV/9Wa/6MZsj0acpEjAO0KF1xT6ZdLl95w==}
     engines: {node: '>= 0.4'}
 
+  is-callable@1.2.7:
+    resolution: {integrity: sha512-1BC0BVFhS/p0qtw6enp8e+8OD0UrK0oFLztSjNzhcKA3WDuJxxAPXzPuPtKkjEY9UUoEWlX/8fgKeu2S8i9JTA==, tarball: https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz}
+    engines: {node: '>= 0.4'}
+
   is-core-module@2.8.1:
     resolution: {integrity: sha512-SdNCUs284hr40hFTFP6l0IfZ/RSrMXF3qgoRHd3/79unUTvrFO/JoXwkGm+5J/Oe3E/b5GsnG330uUNgRpu1PA==}
 
@@ -3292,6 +3347,10 @@ packages:
     resolution: {integrity: sha512-F+i2BKsFrH66iaUFc0woD8sLy8getkwTwtOBjvs56Cx4CgJDeKQeqfz8wAYiSb8JOprWhHH5p77PbmYCvvUuXQ==}
     engines: {node: '>=8'}
     hasBin: true
+
+  is-document.all@1.0.0:
+    resolution: {integrity: sha512-+XSoyS05OdBbhFuELhgTCpFNHkpBOJqtsZfUFFpe5QTw+9Sjbh8zitxhQkYAo6wV7e1Vb8cAPvpCk9jGam/82g==, tarball: https://registry.npmjs.org/is-document.all/-/is-document.all-1.0.0.tgz}
+    engines: {node: '>= 0.4'}
 
   is-extglob@2.1.1:
     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
@@ -3781,6 +3840,10 @@ packages:
 
   makeerror@1.0.12:
     resolution: {integrity: sha512-JmqCvUhmt43madlpFzG4BQzG2Z3m6tvQDNKdClZnO3VbIudJYmxsT0FNJMeiB2+JTSlTQTSbU8QdesVmwJcmLg==}
+
+  math-intrinsics@1.1.0:
+    resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==, tarball: https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz}
+    engines: {node: '>= 0.4'}
 
   mdn-data@2.0.14:
     resolution: {integrity: sha512-dn6wd0uw5GsdswPFfsgMp5NSB0/aDe6fK94YJV/AJDYXL6HVLWBsxeq7js7Ad+mU2K9LAlwpk6kN2D5mwCPVow==}
@@ -4610,9 +4673,6 @@ packages:
     resolution: {integrity: sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==}
     engines: {node: '>= 6'}
 
-  prop-types-exact@1.2.0:
-    resolution: {integrity: sha512-K+Tk3Kd9V0odiXFP9fwDHUYRyvK3Nun3GVyPapSIs5OBkITAm15W0CPFD/YKTkMUAbc0b9CUwRQp2ybiBIq+eA==}
-
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
@@ -4731,10 +4791,10 @@ packages:
       typescript:
         optional: true
 
-  react-dom@16.14.0:
-    resolution: {integrity: sha512-1gCeQXDLoIqMgqD3IO2Ah9bnf0w9kzhwN5q4FGnHZ67hBm9yePzB5JJAIQCc8x3pFnNlwFq4RidZggNAAkzWWw==}
+  react-dom@18.3.1:
+    resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==, tarball: https://registry.npmjs.org/react-dom/-/react-dom-18.3.1.tgz}
     peerDependencies:
-      react: ^16.14.0
+      react: ^18.3.1
 
   react-error-boundary@3.1.3:
     resolution: {integrity: sha512-A+F9HHy9fvt9t8SNDlonq01prnU8AmkjvGKV4kk8seB9kU3xMEO8J/PQlLVmoOIDODl5U2kufSBs4vrWIqhsAA==}
@@ -4760,6 +4820,9 @@ packages:
 
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
+
+  react-is@18.3.1:
+    resolution: {integrity: sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg==, tarball: https://registry.npmjs.org/react-is/-/react-is-18.3.1.tgz}
 
   react-lifecycles-compat@3.0.4:
     resolution: {integrity: sha512-fBASbA6LnOU9dOU2eW7aQ8xmYBSXUIWr+UmF9b1efZBazGNO+rcXT/icdKnYm2pTwcRylVUYwW7H1PHfLekVzA==}
@@ -4797,10 +4860,15 @@ packages:
       react: ^16.8.0 || ^17.0.0
       react-dom: ^16.8.0 || ^17.0.0
 
-  react-test-renderer@16.14.0:
-    resolution: {integrity: sha512-L8yPjqPE5CZO6rKsKXRO/rVPiaCOy0tQQJbC+UjPNlobl5mad59lvPjwFsQHTvL03caVDIVr9x9/OSgDe6I5Eg==}
+  react-shallow-renderer@16.15.0:
+    resolution: {integrity: sha512-oScf2FqQ9LFVQgA73vr86xl2NaOIX73rh+YFqcOp68CWj56tSfgtGKrEbyhCj0rSijyG9M1CYprTh39fBi5hzA==, tarball: https://registry.npmjs.org/react-shallow-renderer/-/react-shallow-renderer-16.15.0.tgz}
     peerDependencies:
-      react: ^16.14.0
+      react: ^16.0.0 || ^17.0.0 || ^18.0.0
+
+  react-test-renderer@18.3.1:
+    resolution: {integrity: sha512-KkAgygexHUkQqtvvx/otwxtuFu5cVjfzTCtjXLH9boS19/Nbtg84zS7wIQn39G8IlrhThBpQsMKkq5ZHZIYFXA==, tarball: https://registry.npmjs.org/react-test-renderer/-/react-test-renderer-18.3.1.tgz}
+    peerDependencies:
+      react: ^18.3.1
 
   react-transition-group@2.9.0:
     resolution: {integrity: sha512-+HzNTCHpeQyl4MJ/bdE0u6XRMe9+XG/+aL4mCxVN4DnPBQ0/5bfHWPDuOZUzYdMj94daZaZdCCc1Dzt9R/xSSg==}
@@ -4814,8 +4882,8 @@ packages:
       react: '>=16.6.0'
       react-dom: '>=16.6.0'
 
-  react@16.14.0:
-    resolution: {integrity: sha512-0X2CImDkJGApiAlcf0ODKIneSwBPhqJawOa5wCtKbu7ZECrmS26NvtSILynQ66cgkT/RJ4LidJOc3bUESwmU8g==}
+  react@18.3.1:
+    resolution: {integrity: sha512-wS+hAgJShR0KhEvPJArfuPVN1+Hz1t0Y6n5jLrGQbkb4urgPE/0Rve+1kMB1v/oWgHgm4WIcV+i7F2pTVj+2iQ==, tarball: https://registry.npmjs.org/react/-/react-18.3.1.tgz}
     engines: {node: '>=0.10.0'}
 
   reactstrap@8.10.0:
@@ -4838,9 +4906,6 @@ packages:
   recursive-readdir@2.2.2:
     resolution: {integrity: sha512-nRCcW9Sj7NuZwa2XvH9co8NPeXUBhZP7CRKJtU+cS6PW9FpCIFoI5ib0NT1ZrbNuPoRy0ylyCaUL8Gih4LSyFg==}
     engines: {node: '>=0.10.0'}
-
-  reflect.ownkeys@0.2.0:
-    resolution: {integrity: sha512-qOLsBKHCpSOFKK1NUOCGC5VyeufB6lEsFe92AL2bhIJsacZS1qdoOZSbPk3MYKuT2cFlRDnulKXuuElIrMjGUg==}
 
   regenerate-unicode-properties@10.0.1:
     resolution: {integrity: sha512-vn5DU6yg6h8hP/2OkQo3K7uVILvY4iu0oI4t3HFa81UPkhGJwkRwM10JEc3upjdhHjs/k8GJY1sRBhk5sr69Bw==}
@@ -5013,8 +5078,8 @@ packages:
     resolution: {integrity: sha512-5LBh1Tls8c9xgGjw3QrMwETmTMVk0oFgvrFSvWx62llR2hcEInrKNZ2GZCCuuy2lvWrdl5jhbpeqc5hRYKFOcw==}
     engines: {node: '>=10'}
 
-  scheduler@0.19.1:
-    resolution: {integrity: sha512-n/zwRWRYSUj0/3g/otKDRPMh6qv2SYMWNq85IEa8iZyAv8od9zDYpGSnpBEjNgcMNq6Scbu5KfIPxNF72R/2EA==}
+  scheduler@0.23.2:
+    resolution: {integrity: sha512-UOShsPwz7NrMUqhR6t0hWjFduvOzbtv7toDH1/hIrfRNIDBnnBWd0CwJTGvTpngVlmwGCdP9/Zl/tVrDqcuYzQ==, tarball: https://registry.npmjs.org/scheduler/-/scheduler-0.23.2.tgz}
 
   schema-utils@2.7.0:
     resolution: {integrity: sha512-0ilKFI6QQF5nxDZLFn2dMjvc4hjg/Wkg7rHd3jK6/A4a1Hl9VFdQWvgB1UMGoU94pad1P/8N7fMcEnLnSiju8A==}
@@ -5038,10 +5103,6 @@ packages:
   selfsigned@2.0.0:
     resolution: {integrity: sha512-cUdFiCbKoa1mZ6osuJs2uDHrs0k0oprsKveFiiaBKCNq3SYyb5gs2HxhQyDNLCmL51ZZThqi4YNDpCK6GOP1iQ==}
     engines: {node: '>=10'}
-
-  semver@5.7.1:
-    resolution: {integrity: sha512-sauaDf/PZdVgrLTNYHRtpXa1iRiKcaebiKQ1BJdpQlWH2lCvexQdX55snPFyK7QzpudqbCI0qXFfOasHdyNDGQ==}
-    hasBin: true
 
   semver@6.3.0:
     resolution: {integrity: sha512-b39TBaTSfV6yBrapU89p5fKekE2m/NwnDocOVruQFS1/veMgdzuPcnOM34M6CwxW8jH/lxEa5rBoDeUwu5HHTw==}
@@ -5078,6 +5139,10 @@ packages:
   serve-static@1.14.2:
     resolution: {integrity: sha512-+TMNA9AFxUEGuC0z2mevogSnn9MXKb4fa7ngeRMJaaGv8vTwnIEkKi+QGvPt33HSnf8pRS+WGM0EbMtCJLKMBQ==}
     engines: {node: '>= 0.8.0'}
+
+  set-function-length@1.2.2:
+    resolution: {integrity: sha512-pgRc4hJ4/sNjWCSS9AmnS40x3bNMDTknHgL5UaMBTMyJnU90EgWh1Rz+MC9eFu4BuN/UwZjKQuY/1v3rM7HMfg==, tarball: https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz}
+    engines: {node: '>= 0.4'}
 
   setprototypeof@1.1.0:
     resolution: {integrity: sha512-BvE/TwpZX4FXExxOxZyRGQQv651MSwmWKZGqvmPcRIjDqWub67kTKuIMx43cZZrS/cBBzwBcNDWoFxt2XEFIpQ==}
@@ -6676,6 +6741,17 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
+  '@cfaester/enzyme-adapter-react-18@0.8.0(enzyme@3.11.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      enzyme: 3.11.0
+      enzyme-shallow-equal: 1.0.4
+      function.prototype.name: 1.2.0
+      has: 1.0.4
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-is: 18.3.1
+      react-shallow-renderer: 16.15.0(react@18.3.1)
+
   '@codemirror/autocomplete@6.20.0':
     dependencies:
       '@codemirror/language': 6.11.3
@@ -6779,7 +6855,7 @@ snapshots:
 
   '@emotion/memoize@0.7.5': {}
 
-  '@emotion/react@11.4.1(@babel/core@7.17.5)(@types/react@17.0.22)(react@16.14.0)':
+  '@emotion/react@11.4.1(@babel/core@7.17.5)(@types/react@18.3.31)(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.17.2
       '@emotion/cache': 11.4.0
@@ -6788,10 +6864,10 @@ snapshots:
       '@emotion/utils': 1.0.0
       '@emotion/weak-memoize': 0.2.5
       hoist-non-react-statics: 3.3.2
-      react: 16.14.0
+      react: 18.3.1
     optionalDependencies:
       '@babel/core': 7.17.5
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@emotion/serialize@1.0.2':
     dependencies:
@@ -6839,11 +6915,11 @@ snapshots:
     dependencies:
       '@fortawesome/fontawesome-common-types': 0.2.36
 
-  '@fortawesome/react-fontawesome@0.1.15(@fortawesome/fontawesome-svg-core@1.2.36)(react@16.14.0)':
+  '@fortawesome/react-fontawesome@0.1.15(@fortawesome/fontawesome-svg-core@1.2.36)(react@18.3.1)':
     dependencies:
       '@fortawesome/fontawesome-svg-core': 1.2.36
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
 
   '@humanwhocodes/config-array@0.9.5':
     dependencies:
@@ -6855,11 +6931,11 @@ snapshots:
 
   '@humanwhocodes/object-schema@1.2.1': {}
 
-  '@hypnosphi/create-react-context@0.3.1(prop-types@15.8.1)(react@16.14.0)':
+  '@hypnosphi/create-react-context@0.3.1(prop-types@15.8.1)(react@18.3.1)':
     dependencies:
       gud: 1.0.0
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
       warning: 4.0.3
 
   '@istanbuljs/load-nyc-config@1.1.0':
@@ -7116,13 +7192,13 @@ snapshots:
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.2
 
-  '@reach/router@1.3.4(react-dom@16.14.0(react@16.14.0))(react@16.14.0)':
+  '@reach/router@1.3.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
-      create-react-context: 0.3.0(prop-types@15.8.1)(react@16.14.0)
+      create-react-context: 0.3.0(prop-types@15.8.1)(react@18.3.1)
       invariant: 2.2.4
       prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       react-lifecycles-compat: 3.0.4
 
   '@rollup/plugin-babel@5.3.1(@babel/core@7.17.5)(@types/babel__core@7.1.18)(rollup@2.70.2)':
@@ -7253,18 +7329,18 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@testing-library/react-hooks@5.1.3(react-dom@16.14.0(react@16.14.0))(react-test-renderer@16.14.0(react@16.14.0))(react@16.14.0)':
+  '@testing-library/react-hooks@5.1.3(react-dom@18.3.1(react@18.3.1))(react-test-renderer@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.17.2
-      '@types/react': 17.0.22
-      '@types/react-dom': 17.0.9
+      '@types/react': 18.3.31
+      '@types/react-dom': 18.3.7(@types/react@18.3.31)
       '@types/react-test-renderer': 17.0.1
       filter-console: 0.1.1
-      react: 16.14.0
-      react-error-boundary: 3.1.3(react@16.14.0)
+      react: 18.3.1
+      react-error-boundary: 3.1.3(react@18.3.1)
     optionalDependencies:
-      react-dom: 16.14.0(react@16.14.0)
-      react-test-renderer: 16.14.0(react@16.14.0)
+      react-dom: 18.3.1(react@18.3.1)
+      react-test-renderer: 18.3.1(react@18.3.1)
 
   '@tootallnate/once@1.1.2': {}
 
@@ -7313,14 +7389,10 @@ snapshots:
     dependencies:
       '@types/node': 14.17.17
 
-  '@types/enzyme-adapter-react-16@1.0.6':
-    dependencies:
-      '@types/enzyme': 3.10.9
-
   '@types/enzyme@3.10.9':
     dependencies:
       '@types/cheerio': 0.22.30
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@types/eslint-scope@3.7.3':
     dependencies:
@@ -7408,40 +7480,39 @@ snapshots:
 
   '@types/reach__router@1.3.9':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@types/react-copy-to-clipboard@5.0.1':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
-  '@types/react-dom@17.0.9':
+  '@types/react-dom@18.3.7(@types/react@18.3.31)':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@types/react-resize-detector@4.2.0':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@types/react-select@4.0.17':
     dependencies:
       '@emotion/serialize': 1.0.2
-      '@types/react': 17.0.22
-      '@types/react-dom': 17.0.9
+      '@types/react': 18.3.31
+      '@types/react-dom': 18.3.7(@types/react@18.3.31)
       '@types/react-transition-group': 4.4.3
 
   '@types/react-test-renderer@17.0.1':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
   '@types/react-transition-group@4.4.3':
     dependencies:
-      '@types/react': 17.0.22
+      '@types/react': 18.3.31
 
-  '@types/react@17.0.22':
+  '@types/react@18.3.31':
     dependencies:
       '@types/prop-types': 15.7.4
-      '@types/scheduler': 0.16.2
-      csstype: 3.0.9
+      csstype: 3.2.3
 
   '@types/resolve@1.17.1':
     dependencies:
@@ -7452,8 +7523,6 @@ snapshots:
   '@types/sanitize-html@1.27.2':
     dependencies:
       htmlparser2: 4.1.0
-
-  '@types/scheduler@0.16.2': {}
 
   '@types/serve-index@1.9.1':
     dependencies:
@@ -7712,19 +7781,6 @@ snapshots:
       clean-stack: 2.2.0
       indent-string: 4.0.0
 
-  airbnb-prop-types@2.16.0(react@16.14.0):
-    dependencies:
-      array.prototype.find: 2.1.1
-      function.prototype.name: 1.1.4
-      is-regex: 1.1.4
-      object-is: 1.1.5
-      object.assign: 4.1.2
-      object.entries: 1.1.5
-      prop-types: 15.8.1
-      prop-types-exact: 1.2.0
-      react: 16.14.0
-      react-is: 16.13.1
-
   ajv-formats@2.1.1(ajv@8.11.0):
     optionalDependencies:
       ajv: 8.11.0
@@ -7811,11 +7867,6 @@ snapshots:
       es-abstract: 1.19.1
       es-array-method-boxes-properly: 1.0.0
       is-string: 1.0.7
-
-  array.prototype.find@2.1.1:
-    dependencies:
-      define-properties: 1.1.3
-      es-abstract: 1.19.1
 
   array.prototype.flat@1.2.5:
     dependencies:
@@ -8061,10 +8112,27 @@ snapshots:
 
   bytes@3.1.2: {}
 
+  call-bind-apply-helpers@1.0.2:
+    dependencies:
+      es-errors: 1.3.0
+      function-bind: 1.1.2
+
   call-bind@1.0.2:
     dependencies:
       function-bind: 1.1.1
       get-intrinsic: 1.1.1
+
+  call-bind@1.0.9:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      es-define-property: 1.0.1
+      get-intrinsic: 1.3.0
+      set-function-length: 1.2.2
+
+  call-bound@1.0.4:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      get-intrinsic: 1.3.0
 
   callsites@3.1.0: {}
 
@@ -8270,11 +8338,11 @@ snapshots:
       path-type: 4.0.0
       yaml: 1.10.2
 
-  create-react-context@0.3.0(prop-types@15.8.1)(react@16.14.0):
+  create-react-context@0.3.0(prop-types@15.8.1)(react@18.3.1):
     dependencies:
       gud: 1.0.0
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
       warning: 4.0.3
 
   crelt@1.0.6: {}
@@ -8429,6 +8497,8 @@ snapshots:
 
   csstype@3.0.9: {}
 
+  csstype@3.2.3: {}
+
   damerau-levenshtein@1.0.8: {}
 
   data-urls@2.0.0:
@@ -8471,6 +8541,12 @@ snapshots:
   default-gateway@6.0.3:
     dependencies:
       execa: 5.1.1
+
+  define-data-property@1.1.4:
+    dependencies:
+      es-define-property: 1.0.1
+      es-errors: 1.3.0
+      gopd: 1.2.0
 
   define-lazy-prop@2.0.0: {}
 
@@ -8611,14 +8687,20 @@ snapshots:
 
   dotenv@10.0.0: {}
 
-  downshift@6.1.7(react@16.14.0):
+  downshift@6.1.7(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       compute-scroll-into-view: 1.0.17
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
       react-is: 17.0.2
       tslib: 2.3.1
+
+  dunder-proto@1.0.1:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      es-errors: 1.3.0
+      gopd: 1.2.0
 
   duplexer@0.1.2: {}
 
@@ -8646,32 +8728,6 @@ snapshots:
       tapable: 2.2.1
 
   entities@2.2.0: {}
-
-  enzyme-adapter-react-16@1.15.6(enzyme@3.11.0)(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
-    dependencies:
-      enzyme: 3.11.0
-      enzyme-adapter-utils: 1.14.0(react@16.14.0)
-      enzyme-shallow-equal: 1.0.4
-      has: 1.0.3
-      object.assign: 4.1.2
-      object.values: 1.1.5
-      prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
-      react-is: 16.13.1
-      react-test-renderer: 16.14.0(react@16.14.0)
-      semver: 5.7.1
-
-  enzyme-adapter-utils@1.14.0(react@16.14.0):
-    dependencies:
-      airbnb-prop-types: 2.16.0(react@16.14.0)
-      function.prototype.name: 1.1.4
-      has: 1.0.3
-      object.assign: 4.1.2
-      object.fromentries: 2.0.5
-      prop-types: 15.8.1
-      react: 16.14.0
-      semver: 5.7.1
 
   enzyme-shallow-equal@1.0.4:
     dependencies:
@@ -8743,7 +8799,15 @@ snapshots:
 
   es-array-method-boxes-properly@1.0.0: {}
 
+  es-define-property@1.0.1: {}
+
+  es-errors@1.3.0: {}
+
   es-module-lexer@1.5.2: {}
+
+  es-object-atoms@1.1.2:
+    dependencies:
+      es-errors: 1.3.0
 
   es-to-primitive@1.2.1:
     dependencies:
@@ -9220,6 +9284,8 @@ snapshots:
 
   function-bind@1.1.1: {}
 
+  function-bind@1.1.2: {}
+
   function.prototype.name@1.1.4:
     dependencies:
       call-bind: 1.0.2
@@ -9227,9 +9293,23 @@ snapshots:
       es-abstract: 1.19.1
       functions-have-names: 1.2.2
 
+  function.prototype.name@1.2.0:
+    dependencies:
+      call-bind: 1.0.9
+      call-bound: 1.0.4
+      es-define-property: 1.0.1
+      es-errors: 1.3.0
+      functions-have-names: 1.2.3
+      has-property-descriptors: 1.0.2
+      hasown: 2.0.4
+      is-callable: 1.2.7
+      is-document.all: 1.0.0
+
   functional-red-black-tree@1.0.1: {}
 
   functions-have-names@1.2.2: {}
+
+  functions-have-names@1.2.3: {}
 
   gensync@1.0.0-beta.2: {}
 
@@ -9241,9 +9321,27 @@ snapshots:
       has: 1.0.3
       has-symbols: 1.0.2
 
+  get-intrinsic@1.3.0:
+    dependencies:
+      call-bind-apply-helpers: 1.0.2
+      es-define-property: 1.0.1
+      es-errors: 1.3.0
+      es-object-atoms: 1.1.2
+      function-bind: 1.1.2
+      get-proto: 1.0.1
+      gopd: 1.2.0
+      has-symbols: 1.1.0
+      hasown: 2.0.4
+      math-intrinsics: 1.1.0
+
   get-own-enumerable-property-symbols@3.0.2: {}
 
   get-package-type@0.1.0: {}
+
+  get-proto@1.0.1:
+    dependencies:
+      dunder-proto: 1.0.1
+      es-object-atoms: 1.1.2
 
   get-stream@6.0.1: {}
 
@@ -9296,6 +9394,8 @@ snapshots:
       merge2: 1.4.1
       slash: 3.0.0
 
+  gopd@1.2.0: {}
+
   graceful-fs@4.2.11: {}
 
   gud@1.0.0: {}
@@ -9314,7 +9414,13 @@ snapshots:
 
   has-flag@4.0.0: {}
 
+  has-property-descriptors@1.0.2:
+    dependencies:
+      es-define-property: 1.0.1
+
   has-symbols@1.0.2: {}
+
+  has-symbols@1.1.0: {}
 
   has-tostringtag@1.0.0:
     dependencies:
@@ -9323,6 +9429,12 @@ snapshots:
   has@1.0.3:
     dependencies:
       function-bind: 1.1.1
+
+  has@1.0.4: {}
+
+  hasown@2.0.4:
+    dependencies:
+      function-bind: 1.1.2
 
   he@1.2.0: {}
 
@@ -9528,6 +9640,8 @@ snapshots:
 
   is-callable@1.2.4: {}
 
+  is-callable@1.2.7: {}
+
   is-core-module@2.8.1:
     dependencies:
       has: 1.0.3
@@ -9537,6 +9651,10 @@ snapshots:
       has-tostringtag: 1.0.0
 
   is-docker@2.2.1: {}
+
+  is-document.all@1.0.0:
+    dependencies:
+      call-bound: 1.0.4
 
   is-extglob@2.1.1: {}
 
@@ -10232,6 +10350,8 @@ snapshots:
   makeerror@1.0.12:
     dependencies:
       tmpl: 1.0.5
+
+  math-intrinsics@1.1.0: {}
 
   mdn-data@2.0.14: {}
 
@@ -11017,12 +11137,6 @@ snapshots:
       kleur: 3.0.3
       sisteransi: 1.0.5
 
-  prop-types-exact@1.2.0:
-    dependencies:
-      has: 1.0.3
-      object.assign: 4.1.2
-      reflect.ownkeys: 0.2.0
-
   prop-types@15.8.1:
     dependencies:
       loose-envify: 1.4.0
@@ -11079,57 +11193,57 @@ snapshots:
       iconv-lite: 0.4.24
       unpipe: 1.0.0
 
-  rc-align@4.0.11(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-align@4.0.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       classnames: 2.3.1
       dom-align: 1.12.2
       lodash: 4.17.21
-      rc-util: 5.14.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      rc-util: 5.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       resize-observer-polyfill: 1.5.1
 
-  rc-motion@2.4.4(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-motion@2.4.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       classnames: 2.3.1
-      rc-util: 5.14.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      rc-util: 5.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
-  rc-slider@9.7.2(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-slider@9.7.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       classnames: 2.3.1
-      rc-tooltip: 5.1.1(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      rc-util: 5.14.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      rc-tooltip: 5.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      rc-util: 5.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       shallowequal: 1.1.0
 
-  rc-tooltip@5.1.1(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-tooltip@5.1.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
-      rc-trigger: 5.2.10(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      rc-trigger: 5.2.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
-  rc-trigger@5.2.10(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-trigger@5.2.10(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       classnames: 2.3.1
-      rc-align: 4.0.11(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      rc-motion: 2.4.4(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      rc-util: 5.14.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      rc-align: 4.0.11(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      rc-motion: 2.4.4(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      rc-util: 5.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
-  rc-util@5.14.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  rc-util@5.14.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       react-is: 16.13.1
       shallowequal: 1.1.0
 
@@ -11142,11 +11256,11 @@ snapshots:
       regenerator-runtime: 0.13.9
       whatwg-fetch: 3.6.2
 
-  react-copy-to-clipboard@5.0.4(react@16.14.0):
+  react-copy-to-clipboard@5.0.4(react@18.3.1):
     dependencies:
       copy-to-clipboard: 3.3.1
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
 
   react-dev-utils@12.0.1(eslint@8.11.0)(typescript@4.6.2)(webpack@5.91.0):
     dependencies:
@@ -11182,61 +11296,61 @@ snapshots:
       - supports-color
       - vue-template-compiler
 
-  react-dom@16.14.0(react@16.14.0):
+  react-dom@18.3.1(react@18.3.1):
     dependencies:
       loose-envify: 1.4.0
-      object-assign: 4.1.1
-      prop-types: 15.8.1
-      react: 16.14.0
-      scheduler: 0.19.1
+      react: 18.3.1
+      scheduler: 0.23.2
 
-  react-error-boundary@3.1.3(react@16.14.0):
+  react-error-boundary@3.1.3(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
-      react: 16.14.0
+      react: 18.3.1
 
   react-error-overlay@6.0.11: {}
 
-  react-infinite-scroll-component@6.1.0(react@16.14.0):
+  react-infinite-scroll-component@6.1.0(react@18.3.1):
     dependencies:
-      react: 16.14.0
+      react: 18.3.1
       throttle-debounce: 2.3.0
 
-  react-input-autosize@3.0.0(react@16.14.0):
+  react-input-autosize@3.0.0(react@18.3.1):
     dependencies:
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
 
   react-is@16.13.1: {}
 
   react-is@17.0.2: {}
 
+  react-is@18.3.1: {}
+
   react-lifecycles-compat@3.0.4: {}
 
-  react-popper@1.3.11(react@16.14.0):
+  react-popper@1.3.11(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
-      '@hypnosphi/create-react-context': 0.3.1(prop-types@15.8.1)(react@16.14.0)
+      '@hypnosphi/create-react-context': 0.3.1(prop-types@15.8.1)(react@18.3.1)
       deep-equal: 1.1.1
       popper.js: 1.16.1
       prop-types: 15.8.1
-      react: 16.14.0
+      react: 18.3.1
       typed-styles: 0.0.7
       warning: 4.0.3
 
   react-refresh@0.11.0: {}
 
-  react-resize-detector@4.2.3(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  react-resize-detector@4.2.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       lodash: 4.17.21
       lodash-es: 4.17.21
       prop-types: 15.8.1
       raf-schd: 4.0.3
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       resize-observer-polyfill: 1.5.1
 
-  react-scripts@5.0.1(@babel/plugin-syntax-flow@7.16.7(@babel/core@7.17.5))(@babel/plugin-transform-react-jsx@7.17.3(@babel/core@7.17.5))(@types/babel__core@7.1.18)(autoprefixer@10.4.2(postcss@8.4.8))(eslint@8.11.0)(react@16.14.0)(sass@1.41.1)(type-fest@0.21.3)(typescript@4.6.2):
+  react-scripts@5.0.1(@babel/plugin-syntax-flow@7.16.7(@babel/core@7.17.5))(@babel/plugin-transform-react-jsx@7.17.3(@babel/core@7.17.5))(@types/babel__core@7.1.18)(autoprefixer@10.4.2(postcss@8.4.8))(eslint@8.11.0)(react@18.3.1)(sass@1.41.1)(type-fest@0.21.3)(typescript@4.6.2):
     dependencies:
       '@babel/core': 7.17.5
       '@pmmmwh/react-refresh-webpack-plugin': 0.5.4(react-refresh@0.11.0)(type-fest@0.21.3)(webpack-dev-server@4.7.4(webpack@5.91.0))(webpack@5.91.0)
@@ -11270,7 +11384,7 @@ snapshots:
       postcss-normalize: 10.0.1(browserslist@4.23.0)(postcss@8.4.8)
       postcss-preset-env: 7.4.2(postcss@8.4.8)
       prompts: 2.4.2
-      react: 16.14.0
+      react: 18.3.1
       react-app-polyfill: 3.0.0
       react-dev-utils: 12.0.1(eslint@8.11.0)(typescript@4.6.2)(webpack@5.91.0)
       react-refresh: 0.11.0
@@ -11323,62 +11437,65 @@ snapshots:
       - webpack-hot-middleware
       - webpack-plugin-serve
 
-  react-select@4.3.1(@babel/core@7.17.5)(@types/react@17.0.22)(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  react-select@4.3.1(@babel/core@7.17.5)(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       '@emotion/cache': 11.4.0
-      '@emotion/react': 11.4.1(@babel/core@7.17.5)(@types/react@17.0.22)(react@16.14.0)
+      '@emotion/react': 11.4.1(@babel/core@7.17.5)(@types/react@18.3.31)(react@18.3.1)
       memoize-one: 5.2.1
       prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
-      react-input-autosize: 3.0.0(react@16.14.0)
-      react-transition-group: 4.4.2(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-input-autosize: 3.0.0(react@18.3.1)
+      react-transition-group: 4.4.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
     transitivePeerDependencies:
       - '@babel/core'
       - '@types/react'
 
-  react-test-renderer@16.14.0(react@16.14.0):
+  react-shallow-renderer@16.15.0(react@18.3.1):
     dependencies:
       object-assign: 4.1.1
-      prop-types: 15.8.1
-      react: 16.14.0
-      react-is: 16.13.1
-      scheduler: 0.19.1
+      react: 18.3.1
+      react-is: 18.3.1
 
-  react-transition-group@2.9.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  react-test-renderer@18.3.1(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+      react-is: 18.3.1
+      react-shallow-renderer: 16.15.0(react@18.3.1)
+      scheduler: 0.23.2
+
+  react-transition-group@2.9.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       dom-helpers: 3.4.0
       loose-envify: 1.4.0
       prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       react-lifecycles-compat: 3.0.4
 
-  react-transition-group@4.4.2(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  react-transition-group@4.4.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       dom-helpers: 5.2.1
       loose-envify: 1.4.0
       prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
 
-  react@16.14.0:
+  react@18.3.1:
     dependencies:
       loose-envify: 1.4.0
-      object-assign: 4.1.1
-      prop-types: 15.8.1
 
-  reactstrap@8.10.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  reactstrap@8.10.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       '@babel/runtime': 7.17.2
       classnames: 2.3.1
       prop-types: 15.8.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
-      react-popper: 1.3.11(react@16.14.0)
-      react-transition-group: 2.9.0(react-dom@16.14.0(react@16.14.0))(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      react-popper: 1.3.11(react@18.3.1)
+      react-transition-group: 2.9.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
 
   readable-stream@2.3.7:
     dependencies:
@@ -11403,8 +11520,6 @@ snapshots:
   recursive-readdir@2.2.2:
     dependencies:
       minimatch: 3.0.4
-
-  reflect.ownkeys@0.2.0: {}
 
   regenerate-unicode-properties@10.0.1:
     dependencies:
@@ -11556,10 +11671,9 @@ snapshots:
     dependencies:
       xmlchars: 2.2.0
 
-  scheduler@0.19.1:
+  scheduler@0.23.2:
     dependencies:
       loose-envify: 1.4.0
-      object-assign: 4.1.1
 
   schema-utils@2.7.0:
     dependencies:
@@ -11591,8 +11705,6 @@ snapshots:
   selfsigned@2.0.0:
     dependencies:
       node-forge: 1.3.1
-
-  semver@5.7.1: {}
 
   semver@6.3.0: {}
 
@@ -11652,6 +11764,15 @@ snapshots:
       send: 0.17.2
     transitivePeerDependencies:
       - supports-color
+
+  set-function-length@1.2.2:
+    dependencies:
+      define-data-property: 1.1.4
+      es-errors: 1.3.0
+      function-bind: 1.1.2
+      get-intrinsic: 1.3.0
+      gopd: 1.2.0
+      has-property-descriptors: 1.0.2
 
   setprototypeof@1.1.0: {}
 
@@ -12110,15 +12231,15 @@ snapshots:
     dependencies:
       punycode: 2.1.1
 
-  use-media@1.4.0(react@16.14.0):
+  use-media@1.4.0(react@18.3.1):
     dependencies:
-      react: 16.14.0
+      react: 18.3.1
 
-  use-query-params@1.2.3(query-string@6.14.1)(react-dom@16.14.0(react@16.14.0))(react@16.14.0):
+  use-query-params@1.2.3(query-string@6.14.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1):
     dependencies:
       query-string: 6.14.1
-      react: 16.14.0
-      react-dom: 16.14.0(react@16.14.0)
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
       serialize-query-params: 1.3.5(query-string@6.14.1)
 
   util-deprecate@1.0.2: {}

@@ -215,6 +215,10 @@ describe('Graph', () => {
   });
   describe('plotSetAndDraw', () => {
     it('should call spyPlotSetAndDraw on legend hover', () => {
+      jest.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+        callback(0);
+        return 0;
+      });
       jest.spyOn($, 'plot').mockReturnValue({ setData: jest.fn(), draw: jest.fn(), destroy: jest.fn() } as any);
       const graph = mount(
         <Graph

@@ -1,11 +1,15 @@
 import { configure } from 'enzyme';
-import Adapter from 'enzyme-adapter-react-16';
+import Adapter from '@cfaester/enzyme-adapter-react-18';
+import { TextDecoder, TextEncoder } from 'util';
 import { GlobalWithFetchMock } from 'jest-fetch-mock';
 import 'mutationobserver-shim'; // Needed for CodeMirror.
 import './globals';
 
 configure({ adapter: new Adapter() });
-const customGlobal: GlobalWithFetchMock = global as GlobalWithFetchMock;
+
+Object.defineProperty(global, 'TextEncoder', { value: TextEncoder });
+Object.defineProperty(global, 'TextDecoder', { value: TextDecoder });
+const customGlobal: GlobalWithFetchMock = global as unknown as GlobalWithFetchMock;
 customGlobal.fetch = require('jest-fetch-mock');
 customGlobal.fetchMock = customGlobal.fetch;
 
@@ -19,5 +23,5 @@ document.getSelection = function () {
     removeAllRanges: function () {
       return;
     },
-  };
+  } as unknown as Selection;
 };

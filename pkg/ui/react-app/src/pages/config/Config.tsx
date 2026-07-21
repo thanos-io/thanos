@@ -9,6 +9,10 @@ import { useFetch } from '../../hooks/useFetch';
 
 type YamlConfig = { yaml?: string };
 
+const CopyToClipboardWithChildren = CopyToClipboard as React.ComponentType<
+  React.PropsWithChildren<{ text: string; onCopy(text: string, result: boolean): void }>
+>;
+
 interface ConfigContentProps {
   error?: Error;
   data?: YamlConfig;
@@ -26,7 +30,7 @@ export const ConfigContent: FC<ConfigContentProps> = ({ error, data }) => {
     <>
       <h2>
         Configuration&nbsp;
-        <CopyToClipboard
+        <CopyToClipboardWithChildren
           text={config!}
           onCopy={(_, result) => {
             setCopied(result);
@@ -36,7 +40,7 @@ export const ConfigContent: FC<ConfigContentProps> = ({ error, data }) => {
           <Button color="light" disabled={!config}>
             {copied ? 'Copied' : 'Copy to clipboard'}
           </Button>
-        </CopyToClipboard>
+        </CopyToClipboardWithChildren>
       </h2>
       <ConfigWithStatusIndicator error={error} isLoading={!config} yaml={config} />
     </>
