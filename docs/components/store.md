@@ -741,110 +741,110 @@ Thanos Store Gateway exports metrics about its own operation: block lifecycle, q
 
 ### Block lifecycle
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_bucket_store_block_loads_total | Counter | — | Total number of remote block loading attempts. |
-| thanos_bucket_store_block_load_failures_total | Counter | — | Total number of failed remote block loading attempts. |
-| thanos_bucket_store_block_load_duration_seconds | Histogram | — | The total time taken to load a block in seconds. |
-| thanos_bucket_store_block_drops_total | Counter | — | Total number of local blocks that were dropped. |
-| thanos_bucket_store_block_drop_failures_total | Counter | — | Total number of local blocks that failed to be dropped. |
-| thanos_bucket_store_blocks_loaded | Gauge | — | Number of currently loaded blocks. |
-| thanos_bucket_store_blocks_last_loaded_timestamp_seconds | Gauge | — | Timestamp when last block got loaded. |
+| Name                                                     | Type      | Labels | Description                                             |
+|----------------------------------------------------------|-----------|--------|---------------------------------------------------------|
+| thanos_bucket_store_block_loads_total                    | Counter   | —      | Total number of remote block loading attempts.          |
+| thanos_bucket_store_block_load_failures_total            | Counter   | —      | Total number of failed remote block loading attempts.   |
+| thanos_bucket_store_block_load_duration_seconds          | Histogram | —      | The total time taken to load a block in seconds.        |
+| thanos_bucket_store_block_drops_total                    | Counter   | —      | Total number of local blocks that were dropped.         |
+| thanos_bucket_store_block_drop_failures_total            | Counter   | —      | Total number of local blocks that failed to be dropped. |
+| thanos_bucket_store_blocks_loaded                        | Gauge     | —      | Number of currently loaded blocks.                      |
+| thanos_bucket_store_blocks_last_loaded_timestamp_seconds | Gauge     | —      | Timestamp when last block got loaded.                   |
 
 ### Series query path
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_bucket_store_series_blocks_queried | Histogram | tenant | Number of blocks in a bucket store that were touched to satisfy a query. |
-| thanos_bucket_store_series_result_series | Histogram | tenant | Number of series observed in the final result of a query. |
-| thanos_bucket_store_series_get_all_duration_seconds | Histogram | tenant | Time it takes until all per-block prepares and loads for a query are finished. |
-| thanos_bucket_store_series_merge_duration_seconds | Histogram | tenant | Time it takes to merge sub-results from all queried blocks into a single result. |
-| thanos_bucket_store_series_fetch_duration_seconds | Histogram | tenant | Time to fetch series (cache and/or object storage) for a store-gateway request. |
-| thanos_bucket_store_series_fetch_duration_sum_seconds | Histogram | tenant | Total time to fetch series across all series batches for a store-gateway request. |
-| thanos_bucket_store_postings_fetch_duration_seconds | Histogram | tenant | Time to fetch postings (cache and/or object storage) for a store-gateway request. |
-| thanos_bucket_store_chunks_fetch_duration_seconds | Histogram | tenant | Time spent fetching chunks within a single request for one block. |
-| thanos_bucket_store_chunks_fetch_duration_sum_seconds | Histogram | tenant | Absolute time spent fetching chunks within a single request for one block. |
-| thanos_bucket_store_series_data_touched | Histogram | data_type, tenant | Number of items of a data type touched to fulfill a single Store API series request. |
-| thanos_bucket_store_series_data_fetched | Histogram | data_type, tenant | Number of items of a data type retrieved to fulfill a single Store API series request. |
-| thanos_bucket_store_series_data_size_touched_bytes | Histogram | data_type, tenant | Total size of items of a data type touched for a single Store API series request, in bytes. |
-| thanos_bucket_store_series_data_size_fetched_bytes | Histogram | data_type, tenant | Total size of items of a data type fetched for a single Store API series request, in bytes. |
-| thanos_bucket_store_postings_size_bytes | Histogram | tenant | Size in bytes of the postings for a single series call. |
-| thanos_bucket_store_sent_chunk_size_bytes | Histogram | tenant | Size in bytes of the chunks for a single series (related to gRPC message size sent to Querier). |
-| thanos_bucket_store_series_refetches_total | Counter | tenant | Cases where the configured estimated series bytes were insufficient, causing a refetch from index. |
-| thanos_bucket_store_chunk_refetches_total | Counter | tenant | Cases where the configured estimated chunk bytes were insufficient, causing a refetch from object storage. |
-| thanos_bucket_store_empty_postings_total | Counter | tenant | Total number of empty postings when fetching block series. |
-| thanos_bucket_store_queries_dropped_total | Counter | reason, tenant | Number of queries that were dropped due to configured limits. |
-| thanos_bucket_store_cached_postings_compressions_total | Counter | op, tenant | Number of postings compressions before storing to index cache. |
-| thanos_bucket_store_cached_postings_compression_errors_total | Counter | op, tenant | Number of postings compression errors. |
-| thanos_bucket_store_cached_postings_compression_time_seconds_total | Counter | op, tenant | Time spent compressing postings before storing them into postings cache. |
-| thanos_bucket_store_cached_postings_original_size_bytes_total | Counter | tenant | Original size of postings stored into cache. |
-| thanos_bucket_store_cached_postings_compressed_size_bytes_total | Counter | tenant | Compressed size of postings stored into cache. |
-| thanos_bucket_store_lazy_expanded_postings_total | Counter | — | Times when lazy expanded posting optimization applies. |
-| thanos_bucket_store_lazy_expanded_posting_groups_total | Counter | reason | Posting groups marked as lazy, labeled by reason. |
-| thanos_bucket_store_lazy_expanded_posting_size_bytes_total | Counter | — | Total lazy posting group size in bytes. |
-| thanos_bucket_store_lazy_expanded_posting_series_overfetched_size_bytes_total | Counter | — | Series size in bytes overfetched due to posting lazy expansion. |
+| Name                                                                          | Type      | Labels            | Description                                                                                                |
+|-------------------------------------------------------------------------------|-----------|-------------------|------------------------------------------------------------------------------------------------------------|
+| thanos_bucket_store_series_blocks_queried                                     | Histogram | tenant            | Number of blocks in a bucket store that were touched to satisfy a query.                                   |
+| thanos_bucket_store_series_result_series                                      | Histogram | tenant            | Number of series observed in the final result of a query.                                                  |
+| thanos_bucket_store_series_get_all_duration_seconds                           | Histogram | tenant            | Time it takes until all per-block prepares and loads for a query are finished.                             |
+| thanos_bucket_store_series_merge_duration_seconds                             | Histogram | tenant            | Time it takes to merge sub-results from all queried blocks into a single result.                           |
+| thanos_bucket_store_series_fetch_duration_seconds                             | Histogram | tenant            | Time to fetch series (cache and/or object storage) for a store-gateway request.                            |
+| thanos_bucket_store_series_fetch_duration_sum_seconds                         | Histogram | tenant            | Total time to fetch series across all series batches for a store-gateway request.                          |
+| thanos_bucket_store_postings_fetch_duration_seconds                           | Histogram | tenant            | Time to fetch postings (cache and/or object storage) for a store-gateway request.                          |
+| thanos_bucket_store_chunks_fetch_duration_seconds                             | Histogram | tenant            | Time spent fetching chunks within a single request for one block.                                          |
+| thanos_bucket_store_chunks_fetch_duration_sum_seconds                         | Histogram | tenant            | Absolute time spent fetching chunks within a single request for one block.                                 |
+| thanos_bucket_store_series_data_touched                                       | Histogram | data_type, tenant | Number of items of a data type touched to fulfill a single Store API series request.                       |
+| thanos_bucket_store_series_data_fetched                                       | Histogram | data_type, tenant | Number of items of a data type retrieved to fulfill a single Store API series request.                     |
+| thanos_bucket_store_series_data_size_touched_bytes                            | Histogram | data_type, tenant | Total size of items of a data type touched for a single Store API series request, in bytes.                |
+| thanos_bucket_store_series_data_size_fetched_bytes                            | Histogram | data_type, tenant | Total size of items of a data type fetched for a single Store API series request, in bytes.                |
+| thanos_bucket_store_postings_size_bytes                                       | Histogram | tenant            | Size in bytes of the postings for a single series call.                                                    |
+| thanos_bucket_store_sent_chunk_size_bytes                                     | Histogram | tenant            | Size in bytes of the chunks for a single series (related to gRPC message size sent to Querier).            |
+| thanos_bucket_store_series_refetches_total                                    | Counter   | tenant            | Cases where the configured estimated series bytes were insufficient, causing a refetch from index.         |
+| thanos_bucket_store_chunk_refetches_total                                     | Counter   | tenant            | Cases where the configured estimated chunk bytes were insufficient, causing a refetch from object storage. |
+| thanos_bucket_store_empty_postings_total                                      | Counter   | tenant            | Total number of empty postings when fetching block series.                                                 |
+| thanos_bucket_store_queries_dropped_total                                     | Counter   | reason, tenant    | Number of queries that were dropped due to configured limits.                                              |
+| thanos_bucket_store_cached_postings_compressions_total                        | Counter   | op, tenant        | Number of postings compressions before storing to index cache.                                             |
+| thanos_bucket_store_cached_postings_compression_errors_total                  | Counter   | op, tenant        | Number of postings compression errors.                                                                     |
+| thanos_bucket_store_cached_postings_compression_time_seconds_total            | Counter   | op, tenant        | Time spent compressing postings before storing them into postings cache.                                   |
+| thanos_bucket_store_cached_postings_original_size_bytes_total                 | Counter   | tenant            | Original size of postings stored into cache.                                                               |
+| thanos_bucket_store_cached_postings_compressed_size_bytes_total               | Counter   | tenant            | Compressed size of postings stored into cache.                                                             |
+| thanos_bucket_store_lazy_expanded_postings_total                              | Counter   | —                 | Times when lazy expanded posting optimization applies.                                                     |
+| thanos_bucket_store_lazy_expanded_posting_groups_total                        | Counter   | reason            | Posting groups marked as lazy, labeled by reason.                                                          |
+| thanos_bucket_store_lazy_expanded_posting_size_bytes_total                    | Counter   | —                 | Total lazy posting group size in bytes.                                                                    |
+| thanos_bucket_store_lazy_expanded_posting_series_overfetched_size_bytes_total | Counter   | —                 | Series size in bytes overfetched due to posting lazy expansion.                                            |
 
 ### Index cache
 
 These metrics cover the index cache used by Store Gateway (in-memory and remote backends share the request/hit metrics where applicable).
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_store_index_cache_requests_total | Counter | item_type, tenant | Total number of items requests to the cache. |
-| thanos_store_index_cache_hits_total | Counter | item_type, tenant | Total number of items requests to the cache that were a hit. |
-| thanos_store_index_cache_fetch_duration_seconds | Histogram | item_type, tenant | Latency of fetching items from the index cache. |
-| thanos_store_index_cache_stored_data_size_bytes | Histogram | item_type, tenant | Size of item data stored in the index cache. |
-| thanos_store_index_cache_items | Gauge | item_type | Current number of items in the in-memory index cache. |
-| thanos_store_index_cache_items_added_total | Counter | item_type | Total number of items that were added to the in-memory index cache. |
-| thanos_store_index_cache_items_evicted_total | Counter | item_type | Total number of items that were evicted from the in-memory index cache. |
-| thanos_store_index_cache_items_overflowed_total | Counter | item_type | Items that could not be added because they were too big. |
-| thanos_store_index_cache_items_size_bytes | Gauge | item_type | Current byte size of items in the in-memory index cache. |
-| thanos_store_index_cache_total_size_bytes | Gauge | item_type | Current byte size of items (value and key) in the in-memory index cache. |
-| thanos_store_index_cache_max_size_bytes | Gauge | — | Maximum number of bytes to be held in the in-memory index cache. |
-| thanos_store_index_cache_max_item_size_bytes | Gauge | — | Maximum number of bytes for a single entry in the in-memory index cache. |
+| Name                                            | Type      | Labels            | Description                                                              |
+|-------------------------------------------------|-----------|-------------------|--------------------------------------------------------------------------|
+| thanos_store_index_cache_requests_total         | Counter   | item_type, tenant | Total number of items requests to the cache.                             |
+| thanos_store_index_cache_hits_total             | Counter   | item_type, tenant | Total number of items requests to the cache that were a hit.             |
+| thanos_store_index_cache_fetch_duration_seconds | Histogram | item_type, tenant | Latency of fetching items from the index cache.                          |
+| thanos_store_index_cache_stored_data_size_bytes | Histogram | item_type, tenant | Size of item data stored in the index cache.                             |
+| thanos_store_index_cache_items                  | Gauge     | item_type         | Current number of items in the in-memory index cache.                    |
+| thanos_store_index_cache_items_added_total      | Counter   | item_type         | Total number of items that were added to the in-memory index cache.      |
+| thanos_store_index_cache_items_evicted_total    | Counter   | item_type         | Total number of items that were evicted from the in-memory index cache.  |
+| thanos_store_index_cache_items_overflowed_total | Counter   | item_type         | Items that could not be added because they were too big.                 |
+| thanos_store_index_cache_items_size_bytes       | Gauge     | item_type         | Current byte size of items in the in-memory index cache.                 |
+| thanos_store_index_cache_total_size_bytes       | Gauge     | item_type         | Current byte size of items (value and key) in the in-memory index cache. |
+| thanos_store_index_cache_max_size_bytes         | Gauge     | —                 | Maximum number of bytes to be held in the in-memory index cache.         |
+| thanos_store_index_cache_max_item_size_bytes    | Gauge     | —                 | Maximum number of bytes for a single entry in the in-memory index cache. |
 
 ### Caching bucket
 
 When a caching bucket is enabled, these metrics track object-storage read cache effectiveness.
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_store_bucket_cache_operation_requests_total | Counter | operation, config | Number of requested operations matching given config. |
-| thanos_store_bucket_cache_operation_hits_total | Counter | operation, config | Number of operations served from cache for given config. |
-| thanos_store_bucket_cache_getrange_requested_bytes_total | Counter | config | Total number of bytes requested via GetRange. |
-| thanos_store_bucket_cache_getrange_fetched_bytes_total | Counter | origin, config | Bytes fetched because of GetRange (data is then stored in cache). |
-| thanos_store_bucket_cache_getrange_refetched_bytes_total | Counter | origin, config | Bytes re-fetched from storage for GetRange despite already being in cache. |
+| Name                                                     | Type    | Labels            | Description                                                                |
+|----------------------------------------------------------|---------|-------------------|----------------------------------------------------------------------------|
+| thanos_store_bucket_cache_operation_requests_total       | Counter | operation, config | Number of requested operations matching given config.                      |
+| thanos_store_bucket_cache_operation_hits_total           | Counter | operation, config | Number of operations served from cache for given config.                   |
+| thanos_store_bucket_cache_getrange_requested_bytes_total | Counter | config            | Total number of bytes requested via GetRange.                              |
+| thanos_store_bucket_cache_getrange_fetched_bytes_total   | Counter | origin, config    | Bytes fetched because of GetRange (data is then stored in cache).          |
+| thanos_store_bucket_cache_getrange_refetched_bytes_total | Counter | origin, config    | Bytes re-fetched from storage for GetRange despite already being in cache. |
 
 ### Matchers cache
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_matchers_cache_requests_total | Counter | — | Total number of cache requests for series matchers. |
-| thanos_matchers_cache_hits_total | Counter | — | Total number of cache hits for series matchers. |
-| thanos_matchers_cache_items | Gauge | — | Total number of cached matcher items. |
-| thanos_matchers_cache_max_items | Gauge | — | Maximum number of items that can be cached. |
-| thanos_matchers_cache_evicted_total | Counter | — | Total number of items evicted from the matchers cache. |
+| Name                                 | Type    | Labels | Description                                            |
+|--------------------------------------|---------|--------|--------------------------------------------------------|
+| thanos_matchers_cache_requests_total | Counter | —      | Total number of cache requests for series matchers.    |
+| thanos_matchers_cache_hits_total     | Counter | —      | Total number of cache hits for series matchers.        |
+| thanos_matchers_cache_items          | Gauge   | —      | Total number of cached matcher items.                  |
+| thanos_matchers_cache_max_items      | Gauge   | —      | Maximum number of items that can be cached.            |
+| thanos_matchers_cache_evicted_total  | Counter | —      | Total number of items evicted from the matchers cache. |
 
 ### Index-header
 
 Store Gateway builds and serves from local index-headers derived from block indexes.
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| indexheader_download_duration_seconds | Histogram | — | Duration of the index-header download from object storage in seconds. |
-| indexheader_load_duration_seconds | Histogram | — | Duration of the index-header loading in seconds. |
-| indexheader_lazy_load_total | Counter | — | Total number of index-header lazy load operations. |
-| indexheader_lazy_load_failed_total | Counter | — | Total number of failed index-header lazy load operations. |
-| indexheader_lazy_load_duration_seconds | Histogram | — | Duration of the index-header lazy loading in seconds. |
-| indexheader_lazy_unload_total | Counter | — | Total number of index-header lazy unload operations. |
-| indexheader_lazy_unload_failed_total | Counter | — | Total number of failed index-header lazy unload operations. |
+| Name                                   | Type      | Labels | Description                                                           |
+|----------------------------------------|-----------|--------|-----------------------------------------------------------------------|
+| indexheader_download_duration_seconds  | Histogram | —      | Duration of the index-header download from object storage in seconds. |
+| indexheader_load_duration_seconds      | Histogram | —      | Duration of the index-header loading in seconds.                      |
+| indexheader_lazy_load_total            | Counter   | —      | Total number of index-header lazy load operations.                    |
+| indexheader_lazy_load_failed_total     | Counter   | —      | Total number of failed index-header lazy load operations.             |
+| indexheader_lazy_load_duration_seconds | Histogram | —      | Duration of the index-header lazy loading in seconds.                 |
+| indexheader_lazy_unload_total          | Counter   | —      | Total number of index-header lazy unload operations.                  |
+| indexheader_lazy_unload_failed_total   | Counter   | —      | Total number of failed index-header lazy unload operations.           |
 
 ### gRPC server telemetry and limits
 
-| Name | Type | Labels | Description |
-|------|------|--------|-------------|
-| thanos_store_server_series_requested | Histogram | — | Number of requested series for Series calls. |
-| thanos_store_server_chunks_requested | Histogram | — | Number of requested chunks for Series calls. |
-| thanos_store_server_pending_series_requests | Gauge | — | Number of pending series requests. |
-| thanos_store_api_query_duration_seconds | Histogram | series_le, samples_le, tenant | Duration of the Thanos Store API select phase for a query. |
-| thanos_store_selects_dropped_total | Counter | reason | Number of select queries that were dropped due to configured limits. |
+| Name                                        | Type      | Labels                        | Description                                                          |
+|---------------------------------------------|-----------|-------------------------------|----------------------------------------------------------------------|
+| thanos_store_server_series_requested        | Histogram | —                             | Number of requested series for Series calls.                         |
+| thanos_store_server_chunks_requested        | Histogram | —                             | Number of requested chunks for Series calls.                         |
+| thanos_store_server_pending_series_requests | Gauge     | —                             | Number of pending series requests.                                   |
+| thanos_store_api_query_duration_seconds     | Histogram | series_le, samples_le, tenant | Duration of the Thanos Store API select phase for a query.           |
+| thanos_store_selects_dropped_total          | Counter   | reason                        | Number of select queries that were dropped due to configured limits. |
