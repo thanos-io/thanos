@@ -37,37 +37,6 @@ func TestExtendLabels(t *testing.T) {
 	testInjectExtLabels(testutil.NewTB(t))
 }
 
-func BenchmarkRealloc(b *testing.B) {
-	lbls := ZLabelsFromPromLabels(labels.FromStrings(
-		"__name__", "container_cpu_usage_seconds_total",
-		"cluster", "prod-eu-west-1",
-		"container", "thanos-receive",
-		"cpu", "total",
-		"endpoint", "https-metrics",
-		"image", "quay.io/thanos/thanos:v0.35.0",
-		"instance", "10.128.4.231:10250",
-		"job", "kubelet",
-		"metrics_path", "/metrics/cadvisor",
-		"namespace", "monitoring",
-		"node", "ip-10-128-4-231.eu-west-1.compute.internal",
-		"pod", "thanos-receive-default-0",
-		"prometheus", "monitoring/k8s",
-		"prometheus_replica", "prometheus-k8s-0",
-		"service", "kubelet",
-	))
-	work := make([]ZLabel, len(lbls))
-
-	for _, intern := range []bool{false, true} {
-		b.Run(fmt.Sprintf("intern=%v", intern), func(b *testing.B) {
-			b.ReportAllocs()
-			for b.Loop() {
-				copy(work, lbls)
-				ReAllocZLabelsStrings(&work, intern)
-			}
-		})
-	}
-}
-
 func BenchmarkExtendLabels(b *testing.B) {
 	testInjectExtLabels(testutil.NewTB(b))
 }

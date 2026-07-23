@@ -53,23 +53,15 @@ func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
 }
 
 // ReAllocAndInternZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
-// If `intern` is set to true, the method will use interning, i.e. reuse already allocated strings, to make the reallocation
-// method more efficient.
+// It interns the given strings - if they are already in memory, they do not get copied.
 //
 // This is primarily intended to be used before labels are written into TSDB which can hold label strings in the memory long term.
-func ReAllocZLabelsStrings(lset *[]ZLabel, intern bool) {
-	if intern {
-		for j, l := range *lset {
-			(*lset)[j].Name = unique.Make(l.Name).Value()
-			(*lset)[j].Value = unique.Make(l.Value).Value()
-		}
-		return
+func ReAllocZLabelsStrings(lset *[]ZLabel) {
+	for j, l := range *lset {
+		(*lset)[j].Name = unique.Make(l.Name).Value()
+		(*lset)[j].Value = unique.Make(l.Value).Value()
 	}
 
-	for j, l := range *lset {
-		(*lset)[j].Name = string(noAllocBytes(l.Name))
-		(*lset)[j].Value = string(noAllocBytes(l.Value))
-	}
 }
 
 // ZLabelSetsToPromLabelSets converts slice of labelpb.ZLabelSet to slice of Prometheus labels.

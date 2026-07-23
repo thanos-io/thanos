@@ -544,28 +544,14 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		Timeseries: timeSeries,
 	}
 
-	b.Run("without interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: false})
+	w := NewWriter(logger, m, &WriterOptions{})
 
-		b.ReportAllocs()
-		b.ResetTimer()
+	b.ReportAllocs()
+	b.ResetTimer()
 
-		for b.Loop() {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
-		}
-	})
-
-	b.Run("with interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: true})
-
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for b.Loop() {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
-		}
-	})
-
+	for b.Loop() {
+		testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
+	}
 }
 
 // generateLabelsAndSeries generates time series for benchmark with specified number of labels.

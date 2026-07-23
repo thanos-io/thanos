@@ -51,7 +51,6 @@ func (ra *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t i
 }
 
 type WriterOptions struct {
-	Intern                   bool
 	TooFarInFutureTimeWindow int64 // Unit: nanoseconds
 }
 
@@ -114,7 +113,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels, r.opts.Intern)
+			labelpb.ReAllocZLabelsStrings(&t.Labels)
 			lset = labelpb.ZLabelsToPromLabels(t.Labels)
 		}
 
