@@ -1152,9 +1152,9 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
 
-	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive.active-series-limiting.retry-after-backoff", "Backoff duration for the Retry-After header returned on 429 (active-series-limiting exceeded) and 503 (quorum unavailable) responses.").Default("5s"))
+	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive.retry-after-backoff", "Backoff duration for the Retry-After header returned on 429 (active-series-limiting exceeded) and 503 (quorum unavailable) responses.").Default("5s"))
 
-	cmd.Flag("receive.active-series-limiting.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
+	cmd.Flag("receive.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
