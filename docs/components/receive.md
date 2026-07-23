@@ -701,12 +701,12 @@ Flags:
                                  this number of responses. This is to limit the
                                  memory usage. This flag takes effect only when
                                  the lazy retrieval strategy is enabled.
-      --receive.active-series-limiting.retry-after-backoff=5s
+      --receive.retry-after-backoff=5s
                                  Backoff duration for the Retry-After header
                                  returned on 429 (active-series-limiting
                                  exceeded) and 503 (quorum unavailable)
                                  responses.
-      --receive.active-series-limiting.retry-after-jitter=0.5
+      --receive.retry-after-jitter=0.5
                                  Fraction of the backoff duration to use as
                                  random jitter for the Retry-After header (e.g.
                                  0.5 = ±50%).
