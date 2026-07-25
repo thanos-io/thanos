@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 - [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
 - [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
+- [#8946](https://github.com/thanos-io/thanos/pull/8946): Receive: Fix write requests returning `500` instead of `409`/`503` when a series fails quorum with an even replication factor. Duplicate writes were reported as retryable server errors, causing Prometheus remote write to retry indefinitely and scale up shards instead of backing off.
 
 ### Changed
 
