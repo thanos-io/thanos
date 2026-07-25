@@ -1069,7 +1069,13 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		h.intScratchPool.Put(failures[:0])
 		h.intScratchPool.Put(conflictFailures[:0])
 	}()
-	seriesErrs := newReplicationErrors(successThreshold, numSeries)
+	// A series error is only ever inspected once the series has already failed
+	// quorum, so the question replicationErrors.Cause answers is "did enough
+	// replicas fail with the same permanent cause to make this unretryable?".
+	// That makes failureThreshold the correct threshold: with successThreshold
+	// the counts can never be reached for even replication factors, where
+	// failureThreshold < successThreshold, and the cause stays undetermined.
+	seriesErrs := newReplicationErrors(failureThreshold, numSeries)
 	for {
 		select {
 		case <-ctx.Done():

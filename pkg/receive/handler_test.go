@@ -662,6 +662,102 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			},
 		},
 		{
+			// With RF=2 the write quorum is 1, so a single successful write is
+			// enough and the conflict on the other replica must not surface.
+			name:              "size 2 with replication 2 and one conflict",
+			status:            http.StatusOK,
+			replicationFactor: 2,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			// Both replicas permanently reject the sample, so no retry can ever
+			// reach the quorum of 1. Must be reported as a conflict, not as a
+			// retryable error.
+			name:              "size 2 with replication 2 and two conflicts",
+			status:            http.StatusConflict,
+			replicationFactor: 2,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+			},
+		},
+		{
+			// One permanent conflict plus one transient failure. Once the
+			// transient replica recovers, 1 success reaches the quorum of 1, so
+			// the request is retryable and must not be reported as a conflict.
+			name:              "size 2 with replication 2 one conflict and one commit error",
+			status:            http.StatusServiceUnavailable,
+			replicationFactor: 2,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+			},
+		},
+		{
+			// With RF=4 the write quorum is 3, so two permanent conflicts already
+			// make the quorum unreachable no matter how often the client retries.
+			// This must be a conflict, mirroring "size 3 with replication and two
+			// conflicts" above.
+			name:              "size 4 with replication 4 and two conflicts",
+			status:            http.StatusConflict,
+			replicationFactor: 4,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(conflictErrFn, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
+			// Two transient failures also make the quorum of 3 unreachable, but
+			// a retry can still succeed, so this must be retryable.
+			name:              "size 4 with replication 4 and two commit errors",
+			status:            http.StatusServiceUnavailable,
+			replicationFactor: 4,
+			wreq:              wreq,
+			appendables: []*fakeAppendable{
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, commitErrFn, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+				{
+					appender: newFakeAppender(nil, nil, nil),
+				},
+			},
+		},
+		{
 			name:              "size 6 with replication 3",
 			status:            http.StatusOK,
 			replicationFactor: 3,
