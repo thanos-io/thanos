@@ -722,8 +722,6 @@ func startTSDBAndUpload(g *run.Group,
 	// TSDBs reload logic, listening on hashring changes.
 	cancel := make(chan struct{})
 	g.Add(func() error {
-		defer close(uploadC)
-
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
 		defer func() {
 			level.Info(logger).Log("msg", "shutting down storage")
@@ -731,6 +729,11 @@ func startTSDBAndUpload(g *run.Group,
 				level.Error(logger).Log("err", err, "msg", "failed to flush storage")
 			} else {
 				level.Info(logger).Log("msg", "storage is flushed successfully")
+			}
+			close(uploadC)
+			// Wait for upload to finish before closing dbs.
+			if upload {
+				<-uploadDone
 			}
 			dbs.Close()
 			level.Info(logger).Log("msg", "storage is closed")
@@ -812,6 +815,8 @@ func startTSDBAndUpload(g *run.Group,
 					runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 				}()
 
+				defer close(uploadDone)
+
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
 					<-uploadC // Closed by storage routine when it's done.
@@ -826,8 +831,6 @@ func startTSDBAndUpload(g *run.Group,
 					cancel()
 					level.Info(logger).Log("msg", "the final cut block was uploaded", "uploaded", uploaded)
 				}()
-
-				defer close(uploadDone)
 
 				for {
 					select {
