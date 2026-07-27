@@ -34,6 +34,10 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/providers/s3"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -1394,4 +1398,60 @@ func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
 		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")),
 		e2emon.WaitMissingMetrics(),
 	))
+}
+
+func TestReceiveUploadOnShutdown(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("receive-u-s")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "receive-upload-shutdown-test"
+	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	bktConfig := client.BucketConfig{
+		Type:   objstore.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+	}
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithObjStoreConfig(bktConfig).
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, ctx.Done(), func() error {
+		return storeWriteRequest(ctx, "http://"+i.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "__name__", Value: "upload_test_metric"},
+						{Name: "foo", Value: "bar"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.Stop())
+
+	l := logkit.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-verify", nil)
+	testutil.Ok(t, err)
+
+	var blockCount int
+	testutil.Ok(t, bkt.Iter(ctx, "", func(_ string) error {
+		blockCount++
+		return nil
+	}))
+	require.Greater(t, blockCount, 0, "expected at least one block uploaded to object storage after receiver shutdown")
 }

@@ -607,6 +607,7 @@ type ReceiveBuilder struct {
 	nativeHistograms      bool
 	labels                []string
 	tenantSplitLabel      string
+	objStoreConfig        *client.BucketConfig
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -685,6 +686,11 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 
 func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
 	r.nativeHistograms = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithObjStoreConfig(config client.BucketConfig) *ReceiveBuilder {
+	r.objStoreConfig = &config
 	return r
 }
 
@@ -794,6 +800,14 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.nativeHistograms {
 		args["--tsdb.enable-native-histograms"] = ""
+	}
+
+	if r.objStoreConfig != nil {
+		bktConfigBytes, err := yaml.Marshal(r.objStoreConfig)
+		if err != nil {
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate objstore config: %v", r.objStoreConfig))}
+		}
+		args["--objstore.config"] = string(bktConfigBytes)
 	}
 
 	return e2eobs.AsObservable(r.f.Init(wrapWithDefaults(e2e.StartOptions{
