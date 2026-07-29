@@ -1581,6 +1581,26 @@ func TestIsTenantValid(t *testing.T) {
 			name:   "test valid tenant",
 			tenant: "foo",
 		},
+		{
+			name:        "test malicious tenant with ..",
+			tenant:      "..",
+			expectedErr: errors.New("tenant name not valid"),
+		},
+		{
+			name:        "test malicious tenant with .",
+			tenant:      ".",
+			expectedErr: errors.New("tenant name not valid"),
+		},
+		{
+			name:        "test malicious tenant with /",
+			tenant:      "/",
+			expectedErr: errors.New("tenant name not valid"),
+		},
+		{
+			name:        "test malicious tenant ./",
+			tenant:      "./",
+			expectedErr: errors.New("tenant name not valid"),
+		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
 			err := tenancy.IsTenantValid(tcase.tenant)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"path"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
@@ -39,7 +40,7 @@ const (
 )
 
 func IsTenantValid(tenant string) error {
-	if tenant != path.Base(tenant) {
+	if !filepath.IsLocal(tenant) || tenant != path.Base(tenant) || tenant == "." {
 		return errors.New("tenant name not valid")
 	}
 	return nil
