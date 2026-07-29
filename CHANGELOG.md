@@ -8,6 +8,14 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.42.3](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 29
+
+Fixes a small bug - like before now Receive on shutdown creates a new block and uploads it.
+
+### Fixed
+
+- [#8948](https://github.com/thanos-io/thanos/pull/8948): receive: Preserve upload on shutdown behaviour
+
 ## [v0.42.2](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
 
 Had to do another version release due to broken base image SHAs. No changes.
