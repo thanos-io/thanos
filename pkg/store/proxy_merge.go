@@ -583,7 +583,7 @@ func newAsyncRespSet(
 
 	var cancel context.CancelFunc
 
-	_, storeAddr, _ := storeInfo(st)
+	storeID, storeAddr := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
 	})
@@ -599,7 +599,7 @@ func newAsyncRespSet(
 
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
-		err = errors.Wrapf(err, "fetch series for %s", st)
+		err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
 		cancel()
 		return nil, err
 	}
