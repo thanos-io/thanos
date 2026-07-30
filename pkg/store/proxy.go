@@ -33,7 +33,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type ctxKey int
@@ -468,16 +467,8 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-
-		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_names", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-			resp, err := st.LabelNames(spanCtx, r)
+			resp, err := st.LabelNames(gctx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
 				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
@@ -572,17 +563,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-
-		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-
-			resp, err := st.LabelValues(spanCtx, r)
+			resp, err := st.LabelValues(gctx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", st)
 				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {

@@ -76,9 +76,7 @@ func (s *Proxy) Rules(req *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) 
 	}
 
 	for _, g := range groups {
-		tracing.DoInSpan(srv.Context(), "send_rules_response", func(_ context.Context) {
-			err = srv.Send(rulespb.NewRuleGroupRulesResponse(g))
-		})
+		err = srv.Send(rulespb.NewRuleGroupRulesResponse(g))
 		if err != nil {
 			return status.Error(codes.Unknown, errors.Wrap(err, "send rules response").Error())
 		}
