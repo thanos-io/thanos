@@ -70,7 +70,7 @@ The following section explains various suggestions and procedures to note during
 * Running [WSL 2 (on Windows)](https://learn.microsoft.com/en-us/windows/wsl/) is also possible. Note that if during development you run a local Kubernetes cluster and have a Service with `service.spec.sessionAffinity: ClientIP`, it will break things until it's removed[^windows_xt_recent].
 * Go 1.22.x or higher.
 * Docker (to run e2e tests)
-* For React UI, you will need a working NodeJS environment and the npm package manager to compile the Web UI assets.
+* For React UI, you will need a working NodeJS environment and the [pnpm](https://pnpm.io/) package manager to compile the Web UI assets.
 
 [^windows_xt_recent]: A WSL 2 kernel recompilation is required to enable the `xt_recent` kernel module, used by `iptables` in `kube-proxy` to implement ClientIP session affinity. See [issue in WSL](https://github.com/microsoft/WSL/issues/7124).
 

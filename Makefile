@@ -65,6 +65,7 @@ ARCH ?= $(shell uname -m)
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.20.1
 GIT               ?= $(shell which git)
+PNPM              ?= pnpm
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
 # systems gsed won't be installed, so will use sed as expected.
@@ -111,8 +112,8 @@ help: ## Displays help.
 .PHONY: all
 all: format build
 
-$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/package-lock.json
-	   cd $(REACT_APP_PATH) && npm ci
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/pnpm-lock.yaml
+	   cd $(REACT_APP_PATH) && $(PNPM) install --frozen-lockfile
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
@@ -128,22 +129,22 @@ check-react-app: react-app
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
-	   cd $(REACT_APP_PATH) && npm run lint:ci
+	   cd $(REACT_APP_PATH) && $(PNPM) run lint:ci
 
 .PHONY: react-app-lint-fix
 react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
-	cd $(REACT_APP_PATH) && npm run lint
+	cd $(REACT_APP_PATH) && $(PNPM) run lint
 
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 	@echo ">> running React app tests"
-	cd $(REACT_APP_PATH) && export CI=true && npm test --no-watch
+	cd $(REACT_APP_PATH) && export CI=true && $(PNPM) test --no-watch
 
 .PHONY: react-app-start
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app"
-	cd $(REACT_APP_PATH) && npm start
+	cd $(REACT_APP_PATH) && $(PNPM) start
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.

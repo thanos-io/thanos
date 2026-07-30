@@ -89,6 +89,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 				"",
+				e2ethanos.Version1PB,
 				static1.InternalEndpoint("http"),
 			),
 			"", e2ethanos.DefaultPrometheusImage())
@@ -99,6 +100,7 @@ test_metric1{a="4", b="3"} 1`)
 				1,
 				e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 				"",
+				e2ethanos.Version1PB,
 				static2.InternalEndpoint("http"),
 			), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1a, prom1b))
@@ -298,6 +300,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				"http://"+rp1.InternalEndpoint("http")+"/api/v1/receive",
 				"",
+				e2ethanos.Version1PB,
 				static1.InternalEndpoint("http"),
 			),
 			"",
@@ -311,6 +314,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				"http://"+rp2.InternalEndpoint("http")+"/api/v1/receive",
 				"",
+				e2ethanos.Version1PB,
 				static2.InternalEndpoint("http"),
 			),
 			"",
@@ -491,10 +495,10 @@ test_metric1{a="4", b="3"} 1`)
 		// prom1 scrapes static1 (6 test_metric1 series + 5 scrape metrics).
 		// prom2 scrapes static2 (4 test_metric1 series + 5 scrape metrics).
 		prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "1",
-			e2ethanos.DefaultPromConfig("prom1", 0, "", "", static1.InternalEndpoint("http")),
+			e2ethanos.DefaultPromConfig("prom1", 0, "", "", e2ethanos.Version1PB, static1.InternalEndpoint("http")),
 			"", e2ethanos.DefaultPrometheusImage(), "")
 		prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "2",
-			e2ethanos.DefaultPromConfig("prom2", 0, "", "", static2.InternalEndpoint("http")),
+			e2ethanos.DefaultPromConfig("prom2", 0, "", "", e2ethanos.Version1PB, static2.InternalEndpoint("http")),
 			"", e2ethanos.DefaultPrometheusImage(), "")
 
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))

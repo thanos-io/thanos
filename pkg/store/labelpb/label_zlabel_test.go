@@ -324,7 +324,7 @@ func benchmarkTransformWithAndWithoutCopy(b *testing.B, num int) {
 		b.ResetTimer()
 
 		for b.Loop() {
-			ReAllocZLabelsStrings(&lbls, true)
+			ReAllocZLabelsStrings(&lbls)
 			ret = ZLabelsToPromLabels(lbls)
 		}
 	})

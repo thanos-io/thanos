@@ -32,6 +32,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
+	"github.com/jpillora/backoff"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
@@ -241,8 +242,14 @@ type localTestWriter struct {
 func (w *localTestWriter) Close() error { return nil }
 
 func (w *localTestWriter) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
-	if err := w.h.writer.Write(ctx, in.Tenant, in.Timeseries); err != nil {
-		return nil, errors.Wrap(err, "writing locally")
+	if len(in.TimeseriesTenantData) == 0 {
+		panic("BUG: localTestWriter.RemoteWrite called without TimeseriesTenantData")
+	}
+
+	for _, ts := range in.TimeseriesTenantData {
+		if err := w.h.writer.Write(ctx, ts.Tenant, ts.Timeseries); err != nil {
+			return nil, errors.Wrap(err, "writing locally")
+		}
 	}
 	return &storepb.WriteResponse{}, nil
 }
@@ -294,7 +301,7 @@ func newTestHandlerHashring(
 			writer := NewCapNProtoWriter(logger, newFakeTenantAppendable(appendables[i]), nil)
 			var (
 				listener = bufconn.Listen(1024)
-				handler  = NewCapNProtoHandler(log.NewNopLogger(), writer)
+				handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
 			)
 			srv := NewCapNProtoServer(listener, handler, log.NewNopLogger())
 			client := writecapnp.NewRemoteWriteClient(listener, logger)
@@ -2149,14 +2156,20 @@ func TestDistributeSeries(t *testing.T) {
 	h.Hashring(hr)
 
 	writes, err := h.distributeTimeseriesToReplicas(
-		"foo",
 		[]uint64{0},
-		[]prompb.TimeSeries{
+		[]wreqTenantTuple{
 			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
-			},
-			{
-				Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+				tenant: "foo",
+				wreq: &prompb.WriteRequest{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("a", "b", tenantIDLabelName, "bar")),
+						},
+						{
+							Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("b", "a", tenantIDLabelName, "boo")),
+						},
+					},
+				},
 			},
 		},
 	)
@@ -2169,6 +2182,45 @@ func TestDistributeSeries(t *testing.T) {
 	require.Equal(t, 1, labelpb.ZLabelsToPromLabels(writes[endpointReplica{endpoint: endpoint, replica: 0}]["boo"].timeSeries[0].Labels).Len())
 
 	require.Equal(t, map[string]struct{}{"bar": {}, "boo": {}}, hr.seenTenants)
+}
+
+type nopPeerClient struct{}
+
+func (nopPeerClient) RemoteWrite(context.Context, *storepb.WriteRequest, ...grpc.CallOption) (*storepb.WriteResponse, error) {
+	return &storepb.WriteResponse{}, nil
+}
+
+func (nopPeerClient) Close() error { return nil }
+
+func BenchmarkFanoutForward(b *testing.B) {
+	h := NewHandler(nil, &Options{
+		ReplicationFactor: 1,
+		ForwardTimeout:    time.Minute,
+	})
+	b.Cleanup(h.Close)
+
+	endpoint := Endpoint{Address: "http://localhost:9090"}
+	hashring, err := newSimpleHashring([]Endpoint{endpoint})
+	require.NoError(b, err)
+	h.peers = &fakePeersGroup{clients: map[Endpoint]*peerWorker{
+		endpoint: newPeerWorker(nopPeerClient{}, prometheus.NewHistogram(prometheus.HistogramOpts{}), 1, 0),
+	}}
+	h.Hashring(hashring)
+
+	params := remoteWriteParams{
+		data: []wreqTenantTuple{{
+			tenant: "bench",
+			wreq:   &prompb.WriteRequest{Timeseries: makeSeriesWithValues(1000)},
+		}},
+		replicas: []uint64{0},
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		_, err := h.fanoutForward(b.Context(), params)
+		require.NoError(b, err)
+	}
 }
 
 func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
@@ -2262,14 +2314,19 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 				return
 			}
 
-			_, err := h.handleRequest(ctx, 0, "test", &prompb.WriteRequest{
-				Timeseries: []prompb.TimeSeries{
-					{
-						Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
-						Samples: []prompb.Sample{
+			_, err := h.handleRequest(ctx, 0, []wreqTenantTuple{
+				{
+					tenant: "test",
+					wreq: &prompb.WriteRequest{
+						Timeseries: []prompb.TimeSeries{
 							{
-								Timestamp: time.Now().Unix(),
-								Value:     123,
+								Labels: labelpb.ZLabelsFromPromLabels(labels.FromStrings("foo", "bar")),
+								Samples: []prompb.Sample{
+									{
+										Timestamp: time.Now().Unix(),
+										Value:     123,
+									},
+								},
 							},
 						},
 					},
@@ -2300,5 +2357,55 @@ func TestHandlerFlippingHashrings(t *testing.T) {
 
 	<-time.After(1 * time.Second)
 	cancel()
+	wg.Wait()
+}
+
+// TestPeerGroupResetRace exercises peerGroup.reset() (called on the hashring
+// reload path under Handler.mtx) concurrently with the p.m-guarded accessors
+// that in-flight forward callbacks use (markPeerUnavailable, markPeerAvailable,
+// isPeerUp). reset() must take p.m or it races the peerStates map and
+// expBackoff. Run with -race to catch the regression.
+func TestPeerGroupResetRace(t *testing.T) {
+	t.Parallel()
+
+	endpoint := Endpoint{Address: "http://localhost:9090"}
+	p := &peerGroup{
+		peerStates: make(map[Endpoint]*retryState),
+		expBackoff: backoff.Backoff{
+			Factor: 2,
+			Min:    100 * time.Millisecond,
+			Max:    30 * time.Second,
+			Jitter: true,
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			p.reset()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			p.markPeerUnavailable(endpoint)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			p.markPeerAvailable(endpoint)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for range 1000 {
+			p.isPeerUp(endpoint)
+		}
+	}()
+
 	wg.Wait()
 }

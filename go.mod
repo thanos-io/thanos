@@ -70,7 +70,7 @@ require (
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/thanos-io/objstore v0.0.0-20250804093838-71d60dfee488
-	github.com/thanos-io/promql-engine v0.0.0-20260513095632-c5f6038078e3
+	github.com/thanos-io/promql-engine v0.0.0-20260707114442-fa2cb843e6ba
 	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	github.com/vimeo/galaxycache v1.3.1
 	github.com/weaveworks/common v0.0.0-20230728070032-dd9e68f319d5
@@ -88,7 +88,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.43.0
 	go.uber.org/atomic v1.11.0
 	go.uber.org/goleak v1.3.0
-	go4.org/intern v0.0.0-20230525184215-6c62f75575cb
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
 	golang.org/x/sync v0.21.0
@@ -118,6 +117,7 @@ require (
 require (
 	github.com/VictoriaMetrics/easyproto v1.1.3
 	github.com/alecthomas/kingpin/v2 v2.4.0
+	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/otlptranslator v1.0.0
 	github.com/tjhop/slog-gokit v0.1.4
@@ -149,7 +149,6 @@ require (
 	github.com/sercand/kuberesolver/v4 v4.0.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.61.0 // indirect
 	go.opentelemetry.io/contrib/propagators/ot v1.36.0 // indirect
-	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260615183401-62b3387ff324 // indirect

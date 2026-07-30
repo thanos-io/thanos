@@ -253,7 +253,6 @@ func runReceive(
 		multiTSDBOptions...,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
-		Intern:                   conf.writerInterning,
 		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 	})
 
@@ -557,7 +556,7 @@ func runReceive(
 		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
 			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 		})
-		handler := receive.NewCapNProtoHandler(logger, capNProtoWriter)
+		handler := receive.NewCapNProtoHandler(reg, logger, capNProtoWriter)
 		listener, err := net.Listen("tcp", conf.replicationAddr)
 		if err != nil {
 			return err
@@ -930,7 +929,6 @@ type receiveConfig struct {
 
 	walCompression       bool
 	noLockFile           bool
-	writerInterning      bool
 	splitTenantLabelName string
 
 	hashFunc string
@@ -1113,10 +1111,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.enable-native-histograms",
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
 		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
-
-	cmd.Flag("writer.intern",
-		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
-		Default("false").Hidden().BoolVar(&rc.writerInterning)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

@@ -38,8 +38,8 @@ func TestDistributedQueryExecution(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "prom1", e2ethanos.DefaultPromConfig("prom1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "prom2", e2ethanos.DefaultPromConfig("prom2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "prom1", e2ethanos.DefaultPromConfig("prom1", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "prom2", e2ethanos.DefaultPromConfig("prom2", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, sidecar1, sidecar2))
 
 	qry1 := e2ethanos.NewQuerierBuilder(e, "1").WithStrictEndpoints(sidecar1.InternalEndpoint("grpc")).Init()
@@ -161,7 +161,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 	querierLeaf1 := e2ethanos.NewQuerierBuilder(e, "1", store1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(querierLeaf1))
 	// We need another querier to circumvent the passthrough optimizer
-	promConfig2 := e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	promConfig2 := e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", promConfig2, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 	querierLeaf2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar2.InternalEndpoint("grpc")).Init()
@@ -255,7 +255,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 
 	testutil.Ok(t, e2e.StartAndWaitReady(querierLeaf1))
 	// We need another querier to circumvent the passthrough optimizer
-	promConfig2 := e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	promConfig2 := e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", promConfig2, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 	querierLeaf2 := e2ethanos.NewQuerierBuilder(e, "2", sidecar2.InternalEndpoint("grpc")).Init()

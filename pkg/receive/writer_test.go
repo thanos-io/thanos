@@ -399,9 +399,15 @@ func TestWriter(t *testing.T) {
 					capnpReq, err := writecapnp.Build(tenancy.DefaultTenant, req.Timeseries)
 					testutil.Ok(t, err)
 
-					wr, err := writecapnp.NewRequest(capnpReq)
+					syms, err := capnpReq.Symbols()
 					testutil.Ok(t, err)
-					err = w.Write(context.Background(), tenancy.DefaultTenant, wr)
+
+					data, err := capnpReq.Data()
+					testutil.Ok(t, err)
+
+					wr, err := writecapnp.NewRequest(data.At(0), syms, tenancy.DefaultTenant)
+					testutil.Ok(t, err)
+					err = w.Write(context.Background(), wr)
 
 					// We expect no error on any request except the last one
 					// which may error (and in that case we assert on it).
@@ -538,28 +544,14 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 		Timeseries: timeSeries,
 	}
 
-	b.Run("without interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: false})
+	w := NewWriter(logger, m, &WriterOptions{})
 
-		b.ReportAllocs()
-		b.ResetTimer()
+	b.ReportAllocs()
+	b.ResetTimer()
 
-		for b.Loop() {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
-		}
-	})
-
-	b.Run("with interning", func(b *testing.B) {
-		w := NewWriter(logger, m, &WriterOptions{Intern: true})
-
-		b.ReportAllocs()
-		b.ResetTimer()
-
-		for b.Loop() {
-			testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
-		}
-	})
-
+	for b.Loop() {
+		testutil.Ok(b, w.Write(ctx, "foo", wreq.Timeseries))
+	}
 }
 
 // generateLabelsAndSeries generates time series for benchmark with specified number of labels.

@@ -1234,6 +1234,10 @@ type testStoreServer struct {
 func (s *testStoreServer) Series(r *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
 	resps := s.resps
 
+	if r.QueryHints.SeriesHashLabelName != SeriesHashLabelName {
+		panic(fmt.Sprintf("invalid series hash label passed (value: %s, expected %s)", r.QueryHints.SeriesHashLabelName, SeriesHashLabelName))
+	}
+
 	if len(r.WithoutReplicaLabels) > 0 && len(s.respsWithoutReplicaLabels) > 0 {
 		// If `respsWithoutReplicaLabels` is present, we simulate server that supports without replica label feature.
 		resps = s.respsWithoutReplicaLabels

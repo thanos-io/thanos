@@ -939,7 +939,7 @@ func TestTenantQFEHTTPMetrics(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// scrape the local prometheus, and our querier metrics
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "qfetenantmetrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "qfetenantmetrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))

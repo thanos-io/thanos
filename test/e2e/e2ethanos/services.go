@@ -61,7 +61,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v3.2.1"
+	return "quay.io/prometheus/prometheus:v3.13.1"
 }
 
 // DefaultOtelImage sets default Otel image used in e2e service.
@@ -1296,11 +1296,16 @@ var QueryUpWithoutInstance = func() string { return "sum(up) without (instance)"
 // wish to enable Prometheus to scrape itself in a test.
 const LocalPrometheusTarget = "localhost:9090"
 
+type ProtobufMessageVersion string
+
+const Version1PB ProtobufMessageVersion = "prometheus.WriteRequest"
+const Version2PB ProtobufMessageVersion = "io.prometheus.write.v2.Request"
+
 // DefaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
 // * optionally scrape self. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
+func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, protobufMessage ProtobufMessageVersion, scrapeTargets ...string) string {
 	var targets string
 	if len(scrapeTargets) > 0 {
 		targets = strings.Join(scrapeTargets, ",")
@@ -1340,9 +1345,10 @@ remote_write:`, config)
 %s
 - url: "%s"
   # Don't spam receiver on mistake.
+  protobuf_message: "%s"
   queue_config:
     min_backoff: 2s
-    max_backoff: 10s`, config, url)
+    max_backoff: 10s`, config, url, protobufMessage)
 		}
 	}
 

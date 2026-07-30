@@ -208,3 +208,37 @@ func TestGenerateCacheKey_UnsupportedRequest(t *testing.T) {
 
 	splitter.GenerateCacheKey("", req)
 }
+
+func TestGenerateCacheKeyAlternatives(t *testing.T) {
+	splitter := newThanosCacheKeyGenerator()
+
+	req := &ThanosQueryRangeRequest{
+		Query:         "up",
+		Start:         0,
+		Step:          60 * seconds,
+		SplitInterval: time.Hour,
+	}
+
+	testutil.Equals(t, []string{
+		"fe::up:30000:3600000:0:2:-:0::false::false",
+		"fe::up:20000:3600000:0:2:-:0::false::false",
+		"fe::up:15000:3600000:0:2:-:0::false::false",
+		"fe::up:10000:3600000:0:2:-:0::false::false",
+		"fe::up:5000:3600000:0:2:-:0::false::false",
+		"fe::up:1000:3600000:0:2:-:0::false::false",
+	}, splitter.GenerateCacheKeyAlternatives("", req))
+
+	req.Step = 14 * seconds
+	testutil.Equals(t, []string(nil), splitter.GenerateCacheKeyAlternatives("", req))
+}
+
+func TestLowerStepCacheCandidates(t *testing.T) {
+	testutil.Equals(t, []int64{
+		15 * seconds,
+		10 * seconds,
+		5 * seconds,
+		seconds,
+	}, lowerStepCacheCandidates(30*seconds))
+
+	testutil.Equals(t, []int64(nil), lowerStepCacheCandidates(14*seconds))
+}

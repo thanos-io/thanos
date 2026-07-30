@@ -8,6 +8,24 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## Unreleased
+
+### Added
+
+- [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
+- [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
+
+### Fixed
+
+- [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
+- [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
+
+### Changed
+
+- [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
+- [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
+
+
 ## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
 
 Had to do another version release due to broken base image SHAs. No changes.
@@ -47,6 +65,9 @@ The biggest new things in this release are, I think, Receive component's improve
 - [#8799](https://github.com/thanos-io/thanos/pull/8799): *: Set a `KeepaliveEnforcementPolicy` with `MinTime: 10s` on all gRPC servers, matching the client keepalive interval.
 - [#8806](https://github.com/thanos-io/thanos/pull/8806): Receive: Validate tenant IDs extracted from split-tenant labels to prevent path traversal.
 - [#8810](https://github.com/thanos-io/thanos/pull/8810): Ruler: correctly pass query partial response for gRPC.
+- [#8881](https://github.com/thanos-io/thanos/pull/8881): Receive: Fix routing receivers crashing with `mkdir ./data: read-only file system` on startup by gating data directory setup on `enableIngestion`, since routing receivers don't write local TSDB data.
+- [#8890](https://github.com/thanos-io/thanos/pull/8890): block: fix GatherIndexHealthStats postings walk error check to prevent swallowing an error.
+- [#8889](https://github.com/thanos-io/thanos/pull/8889): Query: Return an error if Querier doesn't have any registered endpoints and partial response is disabled.
 
 ### Added
 

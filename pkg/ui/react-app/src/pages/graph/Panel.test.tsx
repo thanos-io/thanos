@@ -1,11 +1,13 @@
 import * as React from 'react';
 import { mount, shallow } from 'enzyme';
-import Panel, { PanelOptions, PanelProps, PanelType } from './Panel';
+import { act } from 'react-dom/test-utils';
+import Panel, { getQueryResolution, PanelOptions, PanelProps, PanelType } from './Panel';
 import GraphControls from './GraphControls';
 import { NavLink, TabPane } from 'reactstrap';
 import TimeInput from './TimeInput';
 import DataTable from './DataTable';
 import { GraphTabContent } from './GraphTabContent';
+import ExpressionInput from './ExpressionInput';
 
 const defaultProps: PanelProps = {
   id: 'abc123',
@@ -55,8 +57,62 @@ const defaultProps: PanelProps = {
   usePartialResponse: true,
 };
 
+const querySuccessResponse = JSON.stringify({
+  status: 'success',
+  data: {
+    resultType: 'matrix',
+    result: [],
+  },
+});
+
 describe('Panel', () => {
   const panel = shallow(<Panel {...defaultProps} />);
+
+  beforeEach(() => {
+    fetchMock.resetMocks();
+    fetchMock.mockResponse(querySuccessResponse);
+  });
+
+  describe('getQueryResolution', () => {
+    it('keeps explicit resolution unchanged', () => {
+      expect(getQueryResolution({ range: 60 * 60 * 1000, resolution: 28 }, '1s')).toEqual(28);
+    });
+
+    it('rounds the calculated default resolution up to a common query step', () => {
+      expect(getQueryResolution({ range: 60 * 60 * 1000, resolution: null }, '1s')).toEqual(15);
+    });
+
+    it('rounds the configured default step up before using it as the minimum', () => {
+      expect(getQueryResolution({ range: 60 * 1000, resolution: null }, '13s')).toEqual(15);
+    });
+  });
+
+  it('uses the rounded default resolution in graph query requests', async () => {
+    const graphPanel = shallow(
+      <Panel
+        {...defaultProps}
+        pathPrefix=""
+        options={{ ...defaultProps.options, type: PanelType.Graph, range: 60 * 60 * 1000, resolution: null }}
+      />
+    );
+    const executeQuery = graphPanel.find(ExpressionInput).prop('executeQuery');
+    if (executeQuery === undefined) {
+      throw new Error('executeQuery prop is missing');
+    }
+    fetchMock.mockClear();
+
+    await act(async () => {
+      executeQuery();
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = fetchMock.mock.calls[0][1]?.body;
+    expect(body instanceof URLSearchParams).toBe(true);
+    if (!(body instanceof URLSearchParams)) {
+      throw new Error('query request body is not URLSearchParams');
+    }
+    expect(body.get('step')).toEqual('15');
+  });
 
   it('renders NavLinks', () => {
     const results: PanelOptions[] = [];

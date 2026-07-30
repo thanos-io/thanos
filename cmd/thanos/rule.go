@@ -503,6 +503,11 @@ func runRule(
 		if err != nil {
 			return errors.Wrap(err, "start remote write agent db")
 		}
+		// We need to call SetWriteNotified() so that agendDB gets notified about every write.
+		// Without it we fallback to polling, which pulls new samples to write every 15s.
+		// If we don't call SetWriteNotified() we'll have up to 15s lag between rule evaluation
+		// and samples being sent over via remote_write.
+		agentDB.SetWriteNotified(remoteStore)
 		fanoutStore := storage.NewFanout(slogger, agentDB, remoteStore)
 		appendable = fanoutStore
 		// Use a separate queryable to restore the ALERTS firing states.
