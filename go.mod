@@ -120,7 +120,7 @@ require (
 	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381
 	github.com/oklog/ulid/v2 v2.1.1
 	github.com/prometheus/otlptranslator v1.0.0
-	github.com/tjhop/slog-gokit v0.1.4
+	github.com/tjhop/slog-gokit v0.2.2
 	go.opentelemetry.io/collector/pdata v1.48.0
 	go.opentelemetry.io/collector/semconv v0.128.0
 	go.opentelemetry.io/proto/otlp v1.10.0
@@ -196,7 +196,7 @@ require (
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
-	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/analysis v0.24.1 // indirect
