@@ -25,6 +25,30 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
 
+## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.3](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 29
+
+Fixes a small bug - like before now Receive on shutdown creates a new block and uploads it.
+
+### Fixed
+
+- [#8948](https://github.com/thanos-io/thanos/pull/8948): receive: Preserve upload on shutdown behaviour
+
+## [v0.42.2](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.1](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+This change fixes a small issue regarding timeouts in the Shipper component in the Receiver - we've accidentally set them too small. Sorry for that!
+
+### Changed
+
+- [#8920](https://github.com/thanos-io/thanos/pull/8920): receive: bump timeouts
+
 ## [v0.42.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 08
 
 The biggest new things in this release are, I think, Receive component's improvements regarding tenant's lifecycle handling, ability to have per endpoint configuration, and showing fanout information in Thanos Query. Thank you to everyone for your contributions!
