@@ -468,7 +468,7 @@ func setupMultitsdb(t *testing.T, maxExemplars int64) (log.Logger, *MultiTSDB, A
 	app, err := m.TenantAppendable(tenancy.DefaultTenant)
 	testutil.Ok(t, err)
 
-	testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		_, err = app.Appender(context.Background())
 		return err
 	}))
@@ -533,7 +533,7 @@ func benchmarkWriter(b *testing.B, labelsNum int, seriesNum int, generateHistogr
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+	testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		_, err = app.Appender(context.Background())
 		return err
 	}))

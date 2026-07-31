@@ -59,6 +59,8 @@ func newLocalWriteHandler(t *testing.T, endpoints []Endpoint, apps []*fakeAppend
 // TestLocalAsyncWriterRemoteWritePersists ensures localAsyncWriter actually
 // writes the request to the underlying TSDB.
 func TestLocalAsyncWriterRemoteWritePersists(t *testing.T) {
+	t.Parallel()
+
 	fa := newFakeAppender(nil, nil, nil)
 	app := &fakeAppendable{appender: fa}
 	w := NewWriter(log.NewNopLogger(), newFakeTenantAppendable(app), &WriterOptions{})
@@ -83,6 +85,8 @@ func TestLocalAsyncWriterRemoteWritePersists(t *testing.T) {
 // surfaces as an error to the caller. A no-op RemoteWrite would mask backend
 // errors and make the handler return a success code while losing data.
 func TestLocalAsyncWriterRemoteWritePropagatesError(t *testing.T) {
+	t.Parallel()
+
 	app := &fakeAppendable{
 		appender:    newFakeAppender(nil, nil, nil),
 		appenderErr: func() error { return errors.New("appender unavailable") },
@@ -103,6 +107,8 @@ func TestLocalAsyncWriterRemoteWritePropagatesError(t *testing.T) {
 // the real local-write path (peerGroup.getConnection -> localAsyncWriter) that
 // the existing test harness mocks away.
 func TestReceiveLocalWritePersistsEndToEnd(t *testing.T) {
+	t.Parallel()
+
 	fa := newFakeAppender(nil, nil, nil)
 	app := &fakeAppendable{appender: fa}
 	h := newLocalWriteHandler(t, []Endpoint{newUniqueEndpoint()}, []*fakeAppendable{app})
@@ -123,6 +129,8 @@ func TestReceiveLocalWritePersistsEndToEnd(t *testing.T) {
 // promise of the commit: when the local write fails the handler must return a
 // non-2xx status instead of pretending the write succeeded.
 func TestReceiveLocalWriteReportsFailureWhenLocalWriteFails(t *testing.T) {
+	t.Parallel()
+
 	app := &fakeAppendable{
 		appender:    newFakeAppender(nil, nil, nil),
 		appenderErr: func() error { return errors.New("appender unavailable") },
@@ -143,6 +151,8 @@ func TestReceiveLocalWriteReportsFailureWhenLocalWriteFails(t *testing.T) {
 // lost and the handler degrades the response to 503. Wrapping with errors.Wrap
 // instead preserves the Cause() chain that writeErrors/isConflict rely on.
 func TestReceiveLocalWriteConflictReturns409(t *testing.T) {
+	t.Parallel()
+
 	app := &fakeAppendable{
 		appender: newFakeAppender(func() error { return storage.ErrOutOfBounds }, nil, nil),
 	}
@@ -201,6 +211,8 @@ func (p *singleClientPeers) Close() error                 { return nil }
 // through the handler and asserts the fanout splits the data per tenant but
 // emits exactly one write to the destination carrying both tenants.
 func TestReceiveMultiTenantSplitWritesOnce(t *testing.T) {
+	t.Parallel()
+
 	const tenantLabel = "thanos_tenant_id"
 
 	fa := newFakeAppender(nil, nil, nil)

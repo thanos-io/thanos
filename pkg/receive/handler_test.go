@@ -926,7 +926,7 @@ func TestReceiveSaturatedPoolRF2(t *testing.T) {
 
 		// NOTE(GiedriusS): waiting until the best-effort writers are done
 		// because the waiting is happening in a goroutine.
-		require.NoError(t, runutil.Retry(1*time.Second, t.Context().Done(), func() error {
+		require.NoError(t, runutil.Retry(10*time.Millisecond, t.Context().Done(), func() error {
 			laggyPool := fakePeers.clients[endpoints[1]].wp
 
 			r := laggyPool.TryGo(func() {})
@@ -1473,7 +1473,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
-				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+				testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 					_, err = app.Appender(ctx)
 					return err
 				}))
@@ -1500,7 +1500,7 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 
-				testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+				testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 					_, err = app.Appender(ctx)
 					return err
 				}))
@@ -2224,6 +2224,8 @@ func BenchmarkFanoutForward(b *testing.B) {
 }
 
 func TestHandlerSplitTenantLabelLocalWrite(t *testing.T) {
+	t.Parallel()
+
 	const tenantIDLabelName = "thanos_tenant_id"
 
 	appendable := &fakeAppendable{

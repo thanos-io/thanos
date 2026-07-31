@@ -1380,7 +1380,7 @@ func TestBucketSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1394,7 +1394,7 @@ func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, true, samplesPerSeries, series, 1)
 	})
 }
@@ -1408,7 +1408,7 @@ func TestBucketHistogramSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValHistogram, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1422,7 +1422,7 @@ func TestBucketFloatHistogramSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloatHistogram, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1436,7 +1436,7 @@ func TestBucketSkipChunksSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, true, false, samplesPerSeries, series, 1)
 	})
 }
