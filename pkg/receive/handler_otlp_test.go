@@ -18,6 +18,8 @@ import (
 )
 
 func TestOTLPWriteHandler(t *testing.T) {
+	t.Parallel()
+
 	exportRequest := generateOTLPWriteRequest()
 
 	buf, err := exportRequest.MarshalProto()
