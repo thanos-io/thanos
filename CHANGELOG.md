@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8958](https://github.com/thanos-io/thanos/pull/8958): Query Frontend: Avoid invalid empty-name span events from cache instrumentation.
 - [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
 - [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
 
