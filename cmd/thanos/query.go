@@ -121,6 +121,9 @@ func registerQuery(app *extkingpin.App) {
 
 	defaultMetadataTimeRange := cmd.Flag("query.metadata.default-time-range", "The default metadata time range duration for retrieving labels through Labels and Series API when the range parameters are not specified. The zero value means range covers the time since the beginning.").Default("0s").Duration()
 
+	federateMaxSeries := cmd.Flag("query.federate.max-series", "Maximum number of series the /federate endpoint may match. Requests matching more series fail with an error instead of returning truncated data. 0 means no limit.").
+		Default("0").Int()
+
 	selectorLabels := cmd.Flag("selector-label", "Query selector labels that will be exposed in info endpoint (repeated).").
 		PlaceHolder("<name>=\"<value>\"").Strings()
 
@@ -360,6 +363,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryDistributedWithOverlappingInterval,
 			*lazyRetrievalMaxBufferedResponses,
 			store.DefaultResponseBatchSize,
+			*federateMaxSeries,
 		)
 	})
 }
@@ -426,6 +430,7 @@ func runQuery(
 	queryDistributedWithOverlappingInterval bool,
 	lazyRetrievalMaxBufferedResponses int,
 	seriesResponseBatchSize int,
+	federateMaxSeries int,
 ) error {
 	comp := component.Query
 	if alertQueryURL == "" {
@@ -571,9 +576,11 @@ func runQuery(
 			enforceTenancy,
 			tenantLabel,
 			tsdbSelector,
+			federateMaxSeries,
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+		api.RegisterFederate(router, tracer, logger, ins, logMiddleware)
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),
