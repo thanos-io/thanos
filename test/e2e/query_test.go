@@ -34,7 +34,9 @@ import (
 	"github.com/golang/snappy"
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
+	dto "github.com/prometheus/client_model/go"
 	config_util "github.com/prometheus/common/config"
+	"github.com/prometheus/common/expfmt"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -658,6 +660,69 @@ func TestQuerySeries(t *testing.T) {
 			return len(res) == 1
 		},
 	)
+}
+
+func TestQueryFederate(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("federate")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "1", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	t.Cleanup(cancel)
+
+	var families map[string]*dto.MetricFamily
+	testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+q.Endpoint("http")+"/federate?match[]=up", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return errors.Errorf("unexpected status code %v", resp.StatusCode)
+		}
+		var parser expfmt.TextParser
+		families, err = parser.TextToMetricFamilies(resp.Body)
+		if err != nil {
+			return err
+		}
+		if len(families) != 1 {
+			return errors.Errorf("expected exactly one metric family, got %v", len(families))
+		}
+		return nil
+	}))
+
+	// The sample timestamp depends on scrape timing, so it cannot be asserted
+	// exactly and is only checked for being set. Everything else is asserted
+	// fully.
+	up, ok := families["up"]
+	testutil.Assert(t, ok, "up metric family missing")
+	testutil.Equals(t, dto.MetricType_UNTYPED, up.GetType())
+	testutil.Equals(t, 1, len(up.GetMetric()))
+	m := up.GetMetric()[0]
+	lbls := map[string]string{}
+	for _, lp := range m.GetLabel() {
+		lbls[lp.GetName()] = lp.GetValue()
+	}
+	testutil.Equals(t, map[string]string{
+		"instance":   "localhost:9090",
+		"job":        "myself",
+		"prometheus": "prom-alone",
+		"replica":    "0",
+	}, lbls)
+	testutil.Equals(t, 1.0, m.GetUntyped().GetValue())
+	testutil.Assert(t, m.GetTimestampMs() > 0, "expected a positive timestamp")
 }
 
 func TestQueryWithAuthorizedSidecar(t *testing.T) {

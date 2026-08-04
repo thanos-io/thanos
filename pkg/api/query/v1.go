@@ -120,6 +120,7 @@ type QueryAPI struct {
 	defaultRangeQueryStep                  time.Duration
 	defaultInstantQueryMaxSourceResolution time.Duration
 	defaultMetadataTimeRange               time.Duration
+	federateMaxSeries                      int
 
 	queryRangeHist prometheus.Histogram
 
@@ -168,6 +169,7 @@ func NewQueryAPI(
 	enforceTenancy bool,
 	tenantLabel string,
 	tsdbSelector *store.TSDBSelector,
+	federateMaxSeries int,
 ) *QueryAPI {
 	if statsAggregatorFactory == nil {
 		statsAggregatorFactory = &store.NoopSeriesStatsAggregatorFactory{}
@@ -206,6 +208,7 @@ func NewQueryAPI(
 		enforceTenancy:                         enforceTenancy,
 		tenantLabel:                            tenantLabel,
 		tsdbSelector:                           tsdbSelector,
+		federateMaxSeries:                      federateMaxSeries,
 
 		queryRangeHist: promauto.With(reg).NewHistogram(prometheus.HistogramOpts{
 			Name:    "thanos_query_range_requested_timespan_duration_seconds",
