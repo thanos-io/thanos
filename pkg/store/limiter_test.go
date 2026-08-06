@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -50,9 +51,13 @@ func TestRateLimitedServer(t *testing.T) {
 	batchedSeries := []*storepb.SeriesResponse{
 		storepb.NewBatchResponse([]*storepb.Series{
 			series[0].GetSeries(),
+			nil,
 			series[1].GetSeries(),
 			series[2].GetSeries(),
 		}),
+	}
+	nonSeriesResponses := []*storepb.SeriesResponse{
+		storepb.NewWarnSeriesResponse(errors.New("warning")),
 	}
 	tests := []struct {
 		name   string
@@ -92,6 +97,14 @@ func TestRateLimitedServer(t *testing.T) {
 				SamplesPerRequest: uint64(3 * MaxSamplesPerChunk),
 			},
 			series: batchedSeries,
+		},
+		{
+			name: "non-series responses bypass limits",
+			limits: SeriesSelectLimits{
+				SeriesPerRequest:  1,
+				SamplesPerRequest: 1,
+			},
+			series: nonSeriesResponses,
 		},
 		{
 			name: "batched series over limit",
