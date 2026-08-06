@@ -1,0 +1,16 @@
+codecov:
+  require_ci_to_pass: false
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+ignore:
+  - "**/*.pb.go"
+  - "**/*.pb.gw.go"
+  - "internal/cortex"

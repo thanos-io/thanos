@@ -51,6 +51,15 @@ func wrapWithDefaults(opt e2e.StartOptions) e2e.StartOptions {
 	if opt.WaitReadyBackoff == nil {
 		opt.WaitReadyBackoff = &defaultBackoffConfig
 	}
+	// Coverage data must be written outside the environment's shared dir as that is removed on Close().
+	if dir := os.Getenv("THANOS_E2E_GOCOVERDIR"); dir != "" {
+		_ = os.MkdirAll(dir, 0750)
+		if opt.EnvVars == nil {
+			opt.EnvVars = map[string]string{}
+		}
+		opt.EnvVars["GOCOVERDIR"] = dir
+		opt.Volumes = append(opt.Volumes, dir+":"+dir+":z")
+	}
 	return opt
 }
 
@@ -1158,13 +1167,11 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).
 		WithPorts(map[string]int{"http": 8080}).
-		Init(e2e.StartOptions{
-			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-			User:             strconv.Itoa(os.Getuid()),
-			WaitReadyBackoff: &defaultBackoffConfig,
-		}), "http")
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     DefaultImage(),
+			Command:   e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		})), "http")
 }
 
 func NewReverseProxy(e e2e.Environment, name, tenantID, target string) *e2eobs.Observable {
@@ -1441,12 +1448,10 @@ func NewToolsBucketDownsample(e e2e.Environment, name string, bucketConfig clien
 	})...)
 
 	return e2eobs.AsObservable(f.Init(
-		e2e.StartOptions{
-			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("tools", args...),
-			User:             strconv.Itoa(os.Getuid()),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-			WaitReadyBackoff: &defaultBackoffConfig,
-		},
+		wrapWithDefaults(e2e.StartOptions{
+			Image:     DefaultImage(),
+			Command:   e2e.NewCommand("tools", args...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}),
 	), "http")
 }
