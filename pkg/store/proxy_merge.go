@@ -26,7 +26,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/losertree"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type seriesStream interface {
@@ -309,7 +308,6 @@ func (rb *ringBuffer) isFull() bool {
 // NB: It is not thread-safe, so its metholds must be called from the same goroutine.
 type lazyRespSet struct {
 	// Generic parameters.
-	span           opentracing.Span
 	cl             storepb.Store_SeriesClient
 	closeSeries    context.CancelFunc
 	storeName      string
@@ -407,7 +405,6 @@ func (l *lazyRespSet) Close() {
 }
 
 func newLazyRespSet(
-	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
 	storeLabelSets []labels.Labels,
@@ -427,7 +424,6 @@ func newLazyRespSet(
 		storeLabelSets:       storeLabelSets,
 		cl:                   cl,
 		closeSeries:          closeSeries,
-		span:                 span,
 		dataOrFinishEvent:    sync.NewCond(bufferedResponsesMtx),
 		bufferedResponsesMtx: bufferedResponsesMtx,
 		rb:                   newRingBuffer(fixedBufferSize, bufferedResponsesMtx),
@@ -451,12 +447,6 @@ func newLazyRespSet(
 		numResponses := 0
 
 		defer func() {
-			l.span.SetTag("processed.series", seriesStats.Series)
-			l.span.SetTag("processed.chunks", seriesStats.Chunks)
-			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
-			l.span.Finish()
-
 			reportStats(reportStatsFn, RespSetStats{
 				Duration:       time.Since(startTime),
 				BytesProcessed: int64(bytesProcessed),
@@ -500,8 +490,6 @@ func newLazyRespSet(
 				} else {
 					rerr = errors.Wrapf(err, "receive series from %s", st)
 				}
-				l.span.SetTag("err", rerr.Error())
-
 				l.bufferedResponsesMtx.Lock()
 				l.rb.append(storepb.NewWarnSeriesResponse(rerr))
 				l.noMoreData = true
@@ -593,20 +581,11 @@ func newAsyncRespSet(
 	reportStatsFn statsReporter,
 ) (respSet, error) {
 
-	var (
-		span   opentracing.Span
-		cancel context.CancelFunc
-	)
+	var cancel context.CancelFunc
 
-	storeID, storeAddr, isLocalStore := storeInfo(st)
+	storeID, storeAddr := storeInfo(st)
 	seriesCtx := grpc_opentracing.ClientAddContextTags(ctx, opentracing.Tags{
 		"target": storeAddr,
-	})
-	span, seriesCtx = tracing.StartSpan(seriesCtx, "proxy.series", tracing.Tags{
-		"store.id":           storeID,
-		"store.is_local":     isLocalStore,
-		"store.addr":         storeAddr,
-		"retrieval_strategy": retrievalStrategy,
 	})
 
 	seriesCtx, cancel = context.WithCancel(seriesCtx)
@@ -621,9 +600,6 @@ func newAsyncRespSet(
 	cl, err := st.Series(seriesCtx, req)
 	if err != nil {
 		err = errors.Wrapf(err, "fetch series for %s %s", storeID, st)
-
-		span.SetTag("err", err.Error())
-		span.Finish()
 		cancel()
 		return nil, err
 	}
@@ -648,7 +624,6 @@ func newAsyncRespSet(
 		}
 
 		return newLazyRespSet(
-			span,
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
@@ -662,7 +637,6 @@ func newAsyncRespSet(
 		), nil
 	case EagerRetrieval:
 		return newEagerRespSet(
-			span,
 			frameTimeout,
 			st.String(),
 			st.LabelSets(),
@@ -684,8 +658,6 @@ func newAsyncRespSet(
 // NOTE(bwplotka): It also resorts the series (and emits warning) if the client.SupportsWithoutReplicaLabels() is false.
 type eagerRespSet struct {
 	// Generic parameters.
-	span opentracing.Span
-
 	cl           storepb.Store_SeriesClient
 	closeSeries  context.CancelFunc
 	frameTimeout time.Duration
@@ -704,7 +676,6 @@ type eagerRespSet struct {
 }
 
 func newEagerRespSet(
-	span opentracing.Span,
 	frameTimeout time.Duration,
 	storeName string,
 	storeLabelSets []labels.Labels,
@@ -717,7 +688,6 @@ func newEagerRespSet(
 	reportStatsFn statsReporter,
 ) respSet {
 	ret := &eagerRespSet{
-		span:              span,
 		cl:                cl,
 		closeSeries:       closeSeries,
 		frameTimeout:      frameTimeout,
@@ -745,12 +715,6 @@ func newEagerRespSet(
 		numResponses := 0
 
 		defer func() {
-			l.span.SetTag("processed.series", seriesStats.Series)
-			l.span.SetTag("processed.chunks", seriesStats.Chunks)
-			l.span.SetTag("processed.samples", seriesStats.Samples)
-			l.span.SetTag("processed.bytes", bytesProcessed)
-			l.span.Finish()
-
 			reportStats(reportStatsFn, RespSetStats{
 				Duration:       time.Since(startTime),
 				BytesProcessed: int64(bytesProcessed),
@@ -794,7 +758,6 @@ func newEagerRespSet(
 				}
 
 				l.bufferedResponses = append(l.bufferedResponses, storepb.NewWarnSeriesResponse(rerr))
-				l.span.SetTag("err", rerr.Error())
 				return false
 			}
 

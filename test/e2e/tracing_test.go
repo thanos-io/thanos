@@ -84,7 +84,7 @@ config:
 		},
 	})
 
-	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query&operation=proxy.series")
+	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query&operation=%2Fthanos.Store%2FSeries")
 	request, err := http.NewRequest("GET", url, nil)
 	testutil.Ok(t, err)
 	client := &http.Client{}
