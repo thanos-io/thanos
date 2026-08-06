@@ -47,6 +47,13 @@ func TestRateLimitedServer(t *testing.T) {
 		storeSeriesResponse(t, labels.FromStrings("series", "2"), makeSamples(numSamples)),
 		storeSeriesResponse(t, labels.FromStrings("series", "3"), makeSamples(numSamples)),
 	}
+	batchedSeries := []*storepb.SeriesResponse{
+		storepb.NewBatchResponse([]*storepb.Series{
+			series[0].GetSeries(),
+			series[1].GetSeries(),
+			series[2].GetSeries(),
+		}),
+	}
 	tests := []struct {
 		name   string
 		limits SeriesSelectLimits
@@ -79,6 +86,23 @@ func TestRateLimitedServer(t *testing.T) {
 			err:    "failed to send series: limit 2 violated (got 3)",
 		},
 		{
+			name: "batched series below limit",
+			limits: SeriesSelectLimits{
+				SeriesPerRequest:  3,
+				SamplesPerRequest: uint64(3 * MaxSamplesPerChunk),
+			},
+			series: batchedSeries,
+		},
+		{
+			name: "batched series over limit",
+			limits: SeriesSelectLimits{
+				SeriesPerRequest:  2,
+				SamplesPerRequest: 0,
+			},
+			series: batchedSeries,
+			err:    "failed to send series: limit 2 violated (got 3)",
+		},
+		{
 			name: "chunks below limit",
 			limits: SeriesSelectLimits{
 				SeriesPerRequest:  0,
@@ -94,6 +118,15 @@ func TestRateLimitedServer(t *testing.T) {
 			},
 			series: series,
 			err:    "failed to send samples: limit 50 violated (got 120)",
+		},
+		{
+			name: "batched chunks over limit",
+			limits: SeriesSelectLimits{
+				SeriesPerRequest:  0,
+				SamplesPerRequest: uint64(2 * MaxSamplesPerChunk),
+			},
+			series: batchedSeries,
+			err:    "failed to send samples: limit 240 violated (got 360)",
 		},
 	}
 	for _, test := range tests {
