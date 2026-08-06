@@ -41,7 +41,15 @@ jobs:
       - name: Add GOBIN to path
         run: echo "/tmp/.bin" >> $GITHUB_PATH
       - name: Run unit tests
-        run: make test
+        run: make test-coverage
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-unit
+          path: .coverage
+          include-hidden-files: true
+          retention-days: 1
 
   cross-build-check:
     runs-on: ubuntu-latest
@@ -149,7 +157,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Build e2e Docker image
-        run: make docker-e2e
+        run: make docker-e2e E2E_GOFLAGS=-cover
 
       - name: Export image
         run: docker save thanos | gzip > /tmp/thanos-e2e.tar.gz
@@ -200,3 +208,43 @@ jobs:
 
       - name: Run e2e docker-based tests
         run: make test-e2e SKIP_DOCKER_BUILD=1 GH_PARALLEL=${{ matrix.parallelism }} GH_INDEX=${{ matrix.index }}
+        env:
+          THANOS_E2E_GOCOVERDIR: ${{ github.workspace }}/.coverage/e2e
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-e2e-${{ matrix.index }}
+          path: .coverage
+          include-hidden-files: true
+          retention-days: 1
+
+  coverage:
+    needs: [unit, e2e]
+    runs-on: ubuntu-latest
+    name: Merge unit+e2e coverage and upload to Codecov
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install Go.
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
+        with:
+          go-version: 1.26.x
+
+      - name: Download coverage data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: .coverage
+          merge-multiple: true
+
+      - name: Merge coverage profiles
+        run: make coverage-report
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: .coverage/coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
