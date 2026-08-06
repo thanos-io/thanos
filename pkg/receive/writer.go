@@ -113,8 +113,12 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 		if ref == 0 {
 			// If not, copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
-			labelpb.ReAllocZLabelsStrings(&t.Labels)
-			lset = labelpb.ZLabelsToPromLabels(t.Labels)
+			// Do the reallocation here instead of one level higher because this ensures that we
+			// do _not_ intern all strings even if they are already exist. This is a high likelihood
+			// that this is the case because new series are created much rarer.
+			lbls := append([]labelpb.ZLabel(nil), t.Labels...)
+			labelpb.ReAllocZLabelsStrings(&lbls)
+			lset = labelpb.ZLabelsToPromLabels(lbls)
 		}
 
 		// Append as many valid samples as possible, but keep track of the errors.

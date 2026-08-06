@@ -994,7 +994,7 @@ func TestRedisClient_Rueidis(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	r := e2ethanos.NewRedis(e, "redis")
-	testutil.Ok(t, r.Start())
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	redisClient, err := cacheutil.NewRedisClientWithConfig(log.NewLogfmtLogger(os.Stderr), "redis", cacheutil.RedisClientConfig{
 		Addr:                r.Endpoint("redis"),

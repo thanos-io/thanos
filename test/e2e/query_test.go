@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1351,49 +1352,59 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 	}
 }
 
-var chromedpAllocator context.Context
+var (
+	chromedpAllocator context.Context
+
+	browserCtx     context.Context
+	initBrowserCtx sync.Once
+)
 
 func TestMain(m *testing.M) {
-	execAlloc, execCancel := chromedp.NewExecAllocator(
-		context.Background(),
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.WSURLReadTimeout(3*time.Minute),
 	)
+	execAlloc, execCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	chromedpAllocator = execAlloc
 	rc := m.Run()
 	execCancel()
 	os.Exit(rc)
 }
 
+// sharedBrowserContext lazily starts a single Chrome process shared by all
+// tests; callers must open their own tab via chromedp.NewContext and never
+// cancel the returned context.
+func sharedBrowserContext(t *testing.T) context.Context {
+	initBrowserCtx.Do(func() {
+		ctx, cancel := chromedp.NewContext(chromedpAllocator)
+		if err := chromedp.Run(ctx); err != nil {
+			cancel()
+			t.Fatalf("starting shared browser: %v", err)
+		}
+		browserCtx = ctx
+	})
+	return browserCtx
+}
+
 func checkNetworkRequests(t *testing.T, addr string) {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-gpu", true),
-	)
-	allocCtx, cancel := chromedp.NewExecAllocator(chromedpAllocator, opts...)
-	defer cancel()
+	browser := sharedBrowserContext(t)
 
-	ctx, cancel := chromedp.NewContext(allocCtx)
-	t.Cleanup(cancel)
-
-	// make sure browser is already started
-	err := chromedp.Run(ctx)
-	testutil.Ok(t, err)
-
-	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(1*time.Minute, browser.Done(), func() error {
 		var networkErrors []string
 
-		var newCtx context.Context
-		newCtx, newCancel := chromedp.NewContext(ctx)
-		t.Cleanup(newCancel)
+		tabCtx, tabCancel := chromedp.NewContext(browser)
+		t.Cleanup(tabCancel)
 		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(newCtx, func(ev any) {
+		chromedp.ListenTarget(tabCtx, func(ev any) {
 			switch ev := ev.(type) {
 			case *network.EventLoadingFailed:
 				networkErrors = append(networkErrors, ev.ErrorText)
 			}
 		})
 
-		err := chromedp.Run(newCtx,
+		err := chromedp.Run(tabCtx,
 			network.Enable(),
 			chromedp.Navigate(addr),
 			chromedp.WaitVisible(`body`),

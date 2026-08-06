@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -134,7 +135,7 @@ test_metric1{a="4", b="3"} 1`)
 
 			// test_metric1 should be the metric with the highest number of series and
 			// we expect 2*10 because each receiver should report 10 series.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 20); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 20); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -200,7 +201,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (10 from one receiver).
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -241,7 +242,7 @@ test_metric1{a="4", b="3"} 1`)
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("multitenancy")
+		e, err := e2e.NewDockerEnvironment("status-mt")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -356,7 +357,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 6 series exposed by static1.
-				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 6); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -415,7 +416,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 4 series exposed by static2.
-				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 4); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -529,7 +530,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (6 + 4 = 10).
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -552,7 +553,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 6 series from prom1.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 6); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -574,7 +575,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 4 series from prom2.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 4); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -598,7 +599,11 @@ func statisticsContains(stats []statuspb.Statistic, name string, value uint64) e
 }
 
 // testMetricStatisticEqual checks that the given stat matches the (name,value) tuple.
-func testMetricStatisticEqual(stat statuspb.Statistic, value uint64) error {
+func testMetricStatisticEqual(stats []statuspb.Statistic, value uint64) error {
+	if len(stats) == 0 {
+		return fmt.Errorf("no statistics")
+	}
+	stat := stats[0]
 	if stat.Name != "test_metric1" {
 		return errors.Errorf("expecting name test_metric1, got %q", stat.Name)
 	}
