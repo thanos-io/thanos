@@ -337,10 +337,12 @@ test-local-short:
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
 test-e2e: $(if $(SKIP_DOCKER_BUILD),,docker-e2e) $(GOTESPLIT)
-	@echo ">> cleaning docker environment."
-	@docker system prune -f --volumes
-	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_*
+	@if [ -z "$(SKIP_PRUNE)" ]; then \
+		echo ">> cleaning docker environment."; \
+		docker system prune -f --volumes; \
+		echo ">> cleaning e2e test garbage."; \
+		rm -rf ./test/e2e/e2e_*; \
+	fi
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
@@ -430,6 +432,8 @@ io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
+	@echo ">> ensuring unique Docker environment names"
+	@scripts/checknames.sh
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
 .PHONY: shell-lint

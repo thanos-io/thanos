@@ -113,13 +113,15 @@ func (tse *TSDBStatisticsEntry) ToTSDBStats(limit int) tsdb.Stats {
 
 	if len(tse.SeriesCountByMetricName) > 0 ||
 		len(tse.LabelValueCountByLabelName) > 0 ||
+		len(tse.MemoryInBytesByLabelName) > 0 ||
 		len(tse.SeriesCountByLabelValuePair) > 0 ||
 		tse.HeadStatistics.NumLabelPairs > 0 {
 
 		stats.IndexPostingStats = &index.PostingsStats{
 			NumLabelPairs:           int(tse.HeadStatistics.NumLabelPairs),
+			CardinalityLabelStats:   convertToIndexStats(tse.LabelValueCountByLabelName, limit),
+			LabelValueStats:         convertToIndexStats(tse.MemoryInBytesByLabelName, limit),
 			CardinalityMetricsStats: convertToIndexStats(tse.SeriesCountByMetricName, limit),
-			LabelValueStats:         convertToIndexStats(tse.LabelValueCountByLabelName, limit),
 			LabelValuePairsStats:    convertToIndexStats(tse.SeriesCountByLabelValuePair, limit),
 		}
 	}

@@ -72,7 +72,7 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("external-prefix")
+	e, err := e2e.NewDockerEnvironment("bucketweb-prefix")
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
