@@ -172,7 +172,7 @@ config:
 
 Client for [Lightstep](https://www.servicenow.com/products/observability.html).
 
-In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-use-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
+In order to configure Thanos to interact with Lightstep you need to provide at least an [access token](https://docs.lightstep.com/docs/create-and-manage-access-tokens) in the configuration file. The `collector` key is optional and used when you have on-premise satellites.
 
 ```yaml mdox-exec="go run scripts/cfggen/main.go --name=lightstep.Config"
 type: LIGHTSTEP
