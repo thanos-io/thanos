@@ -6,8 +6,6 @@ package cache
 import (
 	"context"
 
-	ot "github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	instr "github.com/weaveworks/common/instrument"
@@ -74,8 +72,6 @@ func (i *instrumentedCache) Store(ctx context.Context, keys []string, bufs [][]b
 
 	method := i.name + ".store"
 	_ = instr.CollectedRequest(ctx, method, i.requestDuration, instr.ErrorCode, func(ctx context.Context) error {
-		sp := ot.SpanFromContext(ctx)
-		sp.LogFields(otlog.Int("keys", len(keys)))
 		i.Cache.Store(ctx, keys, bufs)
 		return nil
 	})
@@ -90,11 +86,7 @@ func (i *instrumentedCache) Fetch(ctx context.Context, keys []string) ([]string,
 	)
 
 	_ = instr.CollectedRequest(ctx, method, i.requestDuration, instr.ErrorCode, func(ctx context.Context) error {
-		sp := ot.SpanFromContext(ctx)
-		sp.LogFields(otlog.Int("keys requested", len(keys)))
-
 		found, bufs, missing = i.Cache.Fetch(ctx, keys)
-		sp.LogFields(otlog.Int("keys found", len(found)), otlog.Int("keys missing", len(keys)-len(found)))
 		return nil
 	})
 
