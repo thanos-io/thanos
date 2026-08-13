@@ -2145,13 +2145,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		indexr := b.indexReader(blockLogger)
 
 		g.Go(func() error {
-			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_values", tracing.Tags{
-				"block.id":         b.meta.ULID,
-				"block.mint":       b.meta.MinTime,
-				"block.maxt":       b.meta.MaxTime,
-				"block.resolution": b.meta.Thanos.Downsample.Resolution,
-			})
-			defer span.Finish()
 			defer runutil.CloseWithLogOnErr(blockLogger, indexr, "label values")
 
 			var result []string
@@ -2175,7 +2168,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					WithoutReplicaLabels: req.WithoutReplicaLabels,
 				}
 				blockClient := newBlockSeriesClient(
-					newCtx,
+					gctx,
 					blockLogger,
 					b,
 					seriesReq,
