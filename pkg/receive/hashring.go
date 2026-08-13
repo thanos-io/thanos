@@ -526,7 +526,7 @@ func (s *shuffleShardHashring) dedupedNodes() []Endpoint {
 func (s *shuffleShardHashring) getShardSize(tenant string) int {
 	for _, override := range s.shuffleShardingConfig.Overrides {
 		switch override.TenantMatcherType {
-		case TenantMatcherTypeExact, "":
+		case TenantMatcherTypeExact:
 			if slices.Contains(override.Tenants, tenant) {
 				return override.ShardSize
 			}
