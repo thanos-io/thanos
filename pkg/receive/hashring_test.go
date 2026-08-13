@@ -927,8 +927,13 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 	return assignments, nil
 }
 
+// TestTenantMatcher_UnmarshalJSON verifies that the custom JSON unmarshaling
+// logic for the tenantMatcher type strictly validates incoming matcher strings.
+// It ensures supported types ("exact", "glob") are correctly parsed, while
+// unrecognized strings and explicit empty strings ("") are rejected immediately.
 func TestTenantMatcher_UnmarshalJSON(t *testing.T) {
 	t.Parallel()
+	// Table-driven test cases covering valid, malformed, and edge-case inputs:
 	for _, tc := range []struct {
 		name        string
 		input       []byte
@@ -936,24 +941,30 @@ func TestTenantMatcher_UnmarshalJSON(t *testing.T) {
 		expectError bool
 	}{
 		{
+			// Unrecognized matcher strings must fail validation at parse time.
 			name:        "Invalid garbage matcher",
 			input:       []byte(`"exakt"`),
 			expected:    "",
 			expectError: true,
 		},
 		{
+			// Explicit "exact" matcher unmarshals successfully.
 			name:        "Valid exact matcher",
 			input:       []byte(`"exact"`),
 			expected:    TenantMatcherTypeExact,
 			expectError: false,
 		},
 		{
+			// Explicit "glob" matcher unmarshals successfully.
 			name:        "Valid glob matcher",
 			input:       []byte(`"glob"`),
 			expected:    TenantMatcherGlob,
 			expectError: false,
 		},
 		{
+			// Explicitly providing "" in JSON must be rejected by UnmarshalJSON.
+			// Defaulting omitted fields to "exact" is handled during post-parse
+			// normalization, NOT by accepting raw empty JSON strings.
 			name:        "Invalid empty matcher (explicitly rejected)",
 			input:       []byte(`""`),
 			expected:    "",
@@ -964,9 +975,11 @@ func TestTenantMatcher_UnmarshalJSON(t *testing.T) {
 			t.Parallel()
 			var tm tenantMatcher
 			err := tm.UnmarshalJSON(tc.input)
+			// Verify error behavior matches expectation.
 			if (err != nil) != tc.expectError {
 				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tc.expectError)
 			}
+			// Verify resulting enum value matches expected parsed type.
 			if tm != tc.expected {
 				t.Errorf("UnmarshalJSON() got = %v, want %v", tm, tc.expected)
 			}
