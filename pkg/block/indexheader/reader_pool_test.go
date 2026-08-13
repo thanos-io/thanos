@@ -115,8 +115,11 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
 	testutil.Equals(t, float64(0), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
 
-	// Wait enough time before checking it.
-	time.Sleep(idleTimeout * 2)
+	// Wait until the pool's background reaper (which runs every idleTimeout/10)
+	// has closed the idle reader, rather than sleeping for a fixed duration.
+	require.Eventually(t, func() bool {
+		return promtestutil.ToFloat64(metrics.lazyReader.unloadCount) == 1
+	}, 5*idleTimeout, idleTimeout/20)
 
 	// We expect the reader has been closed, but not released from the pool.
 	testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
