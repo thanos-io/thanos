@@ -927,6 +927,53 @@ func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replic
 	return assignments, nil
 }
 
+func TestTenantMatcher_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name        string
+		input       []byte
+		expected    tenantMatcher
+		expectError bool
+	}{
+		{
+			name:        "Invalid garbage matcher",
+			input:       []byte(`"exakt"`),
+			expected:    "",
+			expectError: true,
+		},
+		{
+			name:        "Valid exact matcher",
+			input:       []byte(`"exact"`),
+			expected:    TenantMatcherTypeExact,
+			expectError: false,
+		},
+		{
+			name:        "Valid glob matcher",
+			input:       []byte(`"glob"`),
+			expected:    TenantMatcherGlob,
+			expectError: false,
+		},
+		{
+			name:        "Invalid empty matcher (explicitly rejected)",
+			input:       []byte(`""`),
+			expected:    "",
+			expectError: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var tm tenantMatcher
+			err := tm.UnmarshalJSON(tc.input)
+			if (err != nil) != tc.expectError {
+				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tc.expectError)
+			}
+			if tm != tc.expected {
+				t.Errorf("UnmarshalJSON() got = %v, want %v", tm, tc.expected)
+			}
+		})
+	}
+}
+
 // TestShuffleShardHashringStability tests that shuffle sharding is stable when
 // adding/removing nodes. When scaling from N to N+1 nodes, at most 1 node should
 // change in a tenant's shard (the "consistency" property).

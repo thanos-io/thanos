@@ -153,6 +153,30 @@ const (
 	TenantMatcherGlob tenantMatcher = "glob"
 )
 
+// UnmarshalJSON implements the json.Unmarshaler interface for tenantMatcher.
+// We override the default unmarshaling to provide parse-time validation,
+// ensuring that only valid matchers ("exact", "glob", or "") are accepted.
+// This allows Thanos to fail fast during configuration loading if a user
+// provides an invalid matcher type, rather than silently falling back at runtime.
+func (t *tenantMatcher) UnmarshalJSON(data []byte) error {
+	// Convert Raw Json bytes into a string
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return err
+	}
+
+	// Check if that string is valid
+	switch str {
+	case "exact":
+		*t = TenantMatcherTypeExact
+	case "glob":
+		*t = tenantMatcher(str)
+	default:
+		return fmt.Errorf("invalid tenant matcher type: %s", str)
+	}
+	return nil
+}
+
 func isExactMatcher(m tenantMatcher) bool {
 	return m == TenantMatcherTypeExact || m == ""
 }
@@ -387,7 +411,19 @@ func ConfigFromWatcher(ctx context.Context, updates chan<- []HashringConfig, cw 
 func ParseConfig(content []byte) ([]HashringConfig, error) {
 	var config []HashringConfig
 	err := json.Unmarshal(content, &config)
-	return config, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Post-Parsing Normalization Pass
+	// If the user completely omitted the TenantMatcherType field, Go leaves it as "".
+	// We must explicitly default these omitted fields to "exact" to prevent routing failures.
+	for i := range config {
+		if config[i].TenantMatcherType == "" {
+			config[i].TenantMatcherType = TenantMatcherTypeExact
+		}
+	}
+	return config, nil
 }
 
 // loadConfig loads raw configuration content and returns a configuration.
