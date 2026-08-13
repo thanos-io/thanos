@@ -422,6 +422,11 @@ func ParseConfig(content []byte) ([]HashringConfig, error) {
 		if config[i].TenantMatcherType == "" {
 			config[i].TenantMatcherType = TenantMatcherTypeExact
 		}
+		for j := range config[i].ShuffleShardingConfig.Overrides {
+			if config[i].ShuffleShardingConfig.Overrides[j].TenantMatcherType == "" {
+				config[i].ShuffleShardingConfig.Overrides[j].TenantMatcherType = TenantMatcherTypeExact
+			}
+		}
 	}
 	return config, nil
 }

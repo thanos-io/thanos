@@ -713,7 +713,7 @@ func TestShuffleShardHashring(t *testing.T) {
 				Overrides: []ShuffleShardingOverrideConfig{
 					{
 						Tenants:   []string{"special-tenant"},
-						ShardSize: 3,
+						ShardSize: 3, // Override Value changed
 					},
 				},
 			},
