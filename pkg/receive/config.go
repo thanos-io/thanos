@@ -155,7 +155,7 @@ const (
 
 // UnmarshalJSON implements the json.Unmarshaler interface for tenantMatcher.
 // We override the default unmarshaling to provide parse-time validation,
-// ensuring that only valid matchers ("exact", "glob", or "") are accepted.
+// ensuring that only valid matchers ("exact" or "glob") are accepted.
 // This allows Thanos to fail fast during configuration loading if a user
 // provides an invalid matcher type, rather than silently falling back at runtime.
 func (t *tenantMatcher) UnmarshalJSON(data []byte) error {
