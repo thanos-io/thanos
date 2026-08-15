@@ -35,6 +35,10 @@ validators:
   # 403 when requested my mdox in GH actions.
   - regex: 'servicenow\.com'
     type: 'ignore'
+  # Ignore all github.com URLs because of rate limiting.
+  # TODO: find an alternative way to check these URLs avoiding the rate limiting.
+  - regex: 'github\.com'
+    type: ignore
   # Seems like improbable.io temporarily removed their blogs.
   - regex: 'improbable\.io'
     type: 'ignore'
