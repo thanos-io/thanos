@@ -552,7 +552,31 @@ func determineRWVersion(r *http.Request) (int, error) {
 	return 0, fmt.Errorf("required headers Content-Type and/or X-Prometheus-Remote-Write-Version not found")
 }
 
-func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
+// desymbolizeLabels resolves label references against a remote write v2 symbols
+// table. Both the references and the table are taken straight off the wire, so
+// a reference that does not address the table is a malformed request rather
+// than an internal error. Mirrors the invariants Prometheus enforces in
+// prompb/io/prometheus/write/v2.desymbolizeLabels.
+func desymbolizeLabels(symbols []string, refs []uint32) ([]labelpb.ZLabel, error) {
+	if len(refs)%2 != 0 {
+		return nil, fmt.Errorf("invalid labels_refs length %d: must be a multiple of two", len(refs))
+	}
+
+	lbls := make([]labelpb.ZLabel, 0, len(refs)/2)
+	for i := 0; i < len(refs); i += 2 {
+		nameRef, valueRef := refs[i], refs[i+1]
+		if int(nameRef) >= len(symbols) || int(valueRef) >= len(symbols) {
+			return nil, fmt.Errorf("labels_refs %d (name) %d (value) outside of symbols table (size %d)", nameRef, valueRef, len(symbols))
+		}
+		lbls = append(lbls, labelpb.ZLabel{
+			Name:  symbols[nameRef],
+			Value: symbols[valueRef],
+		})
+	}
+	return lbls, nil
+}
+
+func translateV2ToV1(w writev2.Request) (*prompb.WriteRequest, error) {
 	// TODO(GiedriusS): somehow ensure programmatically that all fields are set and we don't miss anything.
 	out := &prompb.WriteRequest{
 		Timeseries: make([]prompb.TimeSeries, 0, len(w.Timeseries)),
@@ -561,13 +585,11 @@ func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
 	for _, t := range w.Timeseries {
 		v1Ts := prompb.TimeSeries{}
 
-		v1Ts.Labels = make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2)
-		for i := 0; i+1 < len(t.LabelsRefs); i += 2 {
-			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
-				Name:  w.Symbols[t.LabelsRefs[i]],
-				Value: w.Symbols[t.LabelsRefs[i+1]],
-			})
+		lbls, err := desymbolizeLabels(w.Symbols, t.LabelsRefs)
+		if err != nil {
+			return nil, err
 		}
+		v1Ts.Labels = lbls
 
 		if len(t.Samples) > 0 {
 			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
@@ -582,18 +604,15 @@ func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
 		if len(t.Exemplars) > 0 {
 			v1Ts.Exemplars = make([]prompb.Exemplar, 0, len(t.Exemplars))
 			for _, e := range t.Exemplars {
-				v1Exemplar := prompb.Exemplar{
+				exLbls, err := desymbolizeLabels(w.Symbols, e.LabelsRefs)
+				if err != nil {
+					return nil, err
+				}
+				v1Ts.Exemplars = append(v1Ts.Exemplars, prompb.Exemplar{
 					Value:     e.Value,
 					Timestamp: e.Timestamp,
-					Labels:    make([]labelpb.ZLabel, 0, len(e.LabelsRefs)/2),
-				}
-				for i := 0; i+1 < len(e.LabelsRefs); i += 2 {
-					v1Exemplar.Labels = append(v1Exemplar.Labels, labelpb.ZLabel{
-						Name:  w.Symbols[e.LabelsRefs[i]],
-						Value: w.Symbols[e.LabelsRefs[i+1]],
-					})
-				}
-				v1Ts.Exemplars = append(v1Ts.Exemplars, v1Exemplar)
+					Labels:    exLbls,
+				})
 			}
 		}
 
@@ -635,7 +654,7 @@ func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
 
 		out.Timeseries = append(out.Timeseries, v1Ts)
 	}
-	return out
+	return out, nil
 }
 
 func translateV2SpansToV1(spans []writev2.BucketSpan) []prompb.BucketSpan {
@@ -656,7 +675,12 @@ func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 		return
 	}
 
-	translatedReq := translateV2ToV1(wreq)
+	translatedReq, err := translateV2ToV1(wreq)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	if err := h.handleV1HTTP(ctx, w, r, translatedReq, tLogger, tenantHTTP, requestLimiter); err != nil {
 		return
 	}
