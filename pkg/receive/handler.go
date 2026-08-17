@@ -46,6 +46,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/internal/cortex/util"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -128,6 +129,8 @@ type Options struct {
 	ReplicationProtocol     ReplicationProtocol
 	OtlpEnableTargetInfo    bool
 	OtlpResourceAttributes  []string
+	RetryAfterBackoff       time.Duration
+	RetryAfterJitter        float64
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -532,6 +535,15 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+// retryAfterDuration returns the backoff duration for the Retry-After header,
+// applying jitter when configured. A jitter of 0 returns the plain backoff.
+func (h *Handler) retryAfterDuration() time.Duration {
+	if h.options.RetryAfterJitter <= 0 {
+		return h.options.RetryAfterBackoff
+	}
+	return util.DurationWithJitter(h.options.RetryAfterBackoff, h.options.RetryAfterJitter)
+}
+
 func determineRWVersion(r *http.Request) (int, error) {
 	if r.Header.Get("X-Prometheus-Remote-Write-Version") != "2.0.0" {
 		return 1, nil
@@ -746,6 +758,9 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 			level.Error(tLogger).Log("err", err, "msg", "internal server error")
 			responseStatusCode = http.StatusInternalServerError
 		}
+		if responseStatusCode == http.StatusServiceUnavailable {
+			w.Header().Add("Retry-After", time.Now().Add(h.retryAfterDuration()).Format(http.TimeFormat))
+		}
 		http.Error(w, err.Error(), responseStatusCode)
 	}
 
@@ -791,6 +806,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
+		w.Header().Add("Retry-After", time.Now().Add(h.retryAfterDuration()).Format(http.TimeFormat))
 		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 		return
 	}
@@ -847,7 +863,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		panic("unsupported remote_write version")
 	}
-
 }
 
 type requestStats struct {
