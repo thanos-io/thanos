@@ -419,52 +419,53 @@ func (t *tenant) generateCompactionDelay() time.Duration {
 	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
 }
 
-func (t *tenant) startPeriodicHeadCompaction() {
-	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
-
-	doIter := func() error {
-		db := t.readyS.Get()
-		if db == nil {
-			return fmt.Errorf("no DB found")
-		}
-		head := db.Head()
-		if head.MinTime() < 0 {
-			return nil
-		}
-
-		// Wall-clock time determines whether the head is old enough to compact,
-		// ensuring tenants that stopped receiving samples still get flushed.
-		// The head's data span (MaxTime - MinTime) determines how many blocks
-		// to produce, compacting until the span drops below the threshold.
-		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
-		sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
-		if sinceOldestSampleMs <= compactionThreshold {
-			return nil
-		}
-
-		for {
-			select {
-			case <-t.doneC:
-				return nil
-			default:
-			}
-
-			if err := t.compactHead(db); err != nil {
-				return fmt.Errorf("compact head: %w", err)
-			}
-			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
-
-			head = db.Head()
-			if head.MaxTime()-head.MinTime() <= compactionThreshold {
-				break
-			}
-		}
-
-		if err := db.CompactOOOHead(context.Background()); err != nil {
-			return fmt.Errorf("compact ooo head: %w", err)
-		}
+// tryCompactHead attempts to compact the head if it has accumulated enough data.
+func (t *tenant) tryCompactHead() error {
+	db := t.readyS.Get()
+	if db == nil {
+		return fmt.Errorf("no DB found")
+	}
+	head := db.Head()
+	if head.MinTime() < 0 {
 		return nil
 	}
+
+	// Wall-clock time determines whether the head is old enough to compact,
+	// ensuring tenants that stopped receiving samples still get flushed.
+	// The head's data span (MaxTime - MinTime) determines how many blocks
+	// to produce, compacting until the span drops below the threshold.
+	compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
+	sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+	if sinceOldestSampleMs <= compactionThreshold {
+		return nil
+	}
+
+	for {
+		select {
+		case <-t.doneC:
+			return nil
+		default:
+		}
+
+		if err := t.compactHead(db); err != nil {
+			return fmt.Errorf("compact head: %w", err)
+		}
+		t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
+
+		head = db.Head()
+		if head.MaxTime()-head.MinTime() <= compactionThreshold {
+			break
+		}
+	}
+
+	if err := db.CompactOOOHead(context.Background()); err != nil {
+		return fmt.Errorf("compact ooo head: %w", err)
+	}
+	return nil
+}
+
+func (t *tenant) startPeriodicHeadCompaction() {
+	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
 	compactionDelay := t.generateCompactionDelay()
 	go func() {
@@ -482,7 +483,7 @@ func (t *tenant) startPeriodicHeadCompaction() {
 			select {
 			case <-ticker.C:
 				level.Info(t.logger).Log("msg", "running periodic head compaction")
-				if err := doIter(); err != nil {
+				if err := t.tryCompactHead(); err != nil {
 					level.Error(t.logger).Log("msg", "periodic head compaction failed", "err", err)
 				}
 
