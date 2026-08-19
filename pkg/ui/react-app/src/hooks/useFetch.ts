@@ -9,7 +9,7 @@ export interface FetchState<T> {
 }
 
 export const useFetch = <T>(url: string, options?: RequestInit): FetchState<T> => {
-  const [response, setResponse] = useState<APIResponse<T>>({ status: 'start fetching' } as any);
+  const [response, setResponse] = useState<APIResponse<T>>({ status: 'start fetching' } as APIResponse<T>);
   const [error, setError] = useState<Error>();
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
