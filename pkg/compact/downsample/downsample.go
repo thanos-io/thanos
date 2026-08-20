@@ -350,7 +350,9 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
-	if fh.Schema < h.schema {
+	// Custom bucket histograms (schema < 0) cannot be reduced in resolution.
+	// Skip the schema check for custom buckets and use them as-is.
+	if fh.Schema >= 0 && fh.Schema < h.schema {
 		panic("schema must be greater or equal to aggregator schema")
 	}
 
@@ -359,21 +361,30 @@ func (h *histogramAggregator) add(s sample) {
 	oFh := fh
 	// If schema of the sample is greater than the
 	// aggregator schema, we need to reduce the resolution.
-	if fh.Schema > h.schema {
+	// Custom bucket histograms (schema < 0) cannot be reduced, so skip this step.
+	if fh.Schema >= 0 && fh.Schema > h.schema {
 		fh = fh.CopyToSchema(h.schema)
 	}
 
 	if h.total > 0 {
-		if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
+		// Check if schemas are incompatible (custom bucket vs exponential bucket).
+		// Custom bucket histograms (schema < 0) and exponential bucket histograms (schema >= 0)
+		// cannot be added together. Treat as a counter reset.
+		incompatibleSchemas := (h.counter.Schema < 0) != (fh.Schema < 0)
+		if incompatibleSchemas {
+			// Schema type changed, treat as counter reset.
+			h.counter = fh.Copy()
+		} else if fh.CounterResetHint != histogram.GaugeType && oFh.DetectReset(h.previous) {
 			// Counter reset, correct the value.
+			mustHistogramOp(h.counter.Add(fh))
+		} else if oFh.Schema < 0 {
+			// Custom bucket histograms (schema < 0) cannot be subtracted.
+			// Treat as a counter reset and add the full value.
 			mustHistogramOp(h.counter.Add(fh))
 		} else {
 			// Add delta with previous value to the counter.
-			// TODO: support NHCB.
 			deltaFh, _, _, err := fh.Copy().Sub(h.previous)
 			if err != nil {
-				// TODO(GiedriusS): support native histograms with custom buckets.
-				// This can only happen with custom buckets.
 				panic(fmt.Sprintf("unexpected error: %v", err))
 			}
 
@@ -387,7 +398,15 @@ func (h *histogramAggregator) add(s sample) {
 	if h.sum == nil {
 		h.sum = fh.Copy()
 	} else {
-		mustHistogramOp(h.sum.Add(fh))
+		// Check if schemas are incompatible (custom bucket vs exponential bucket).
+		// Custom bucket histograms (schema < 0) and exponential bucket histograms (schema >= 0)
+		// cannot be added together. Reset the sum to the new histogram.
+		incompatibleSchemas := (h.sum.Schema < 0) != (fh.Schema < 0)
+		if incompatibleSchemas {
+			h.sum = fh.Copy()
+		} else {
+			mustHistogramOp(h.sum.Add(fh))
+		}
 	}
 
 	// This needs to be h gauge histogram, otherwise reset detection will be triggered
@@ -430,7 +449,9 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
 	for _, s := range samples {
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+		// Skip custom bucket schemas (schema < 0) since they cannot be reduced
+		// in resolution using CopyToSchema. Only consider exponential bucket schemas.
+		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema >= 0 && s.fh.Schema < schema {
 			schema = s.fh.Schema
 		}
 	}
