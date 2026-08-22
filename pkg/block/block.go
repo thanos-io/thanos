@@ -418,7 +418,7 @@ func MarkForNoDownsample(ctx context.Context, logger log.Logger, bkt objstore.Bu
 		return errors.Wrapf(err, "check exists %s in bucket", m)
 	}
 	if noDownsampleMarkExists {
-		level.Warn(logger).Log("msg", "requested to mark for no deletion, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
+		level.Warn(logger).Log("msg", "requested to mark for no downsampling, but file already exists; this should not happen; investigate", "err", errors.Errorf("file %s already exists in bucket", m))
 		return nil
 	}
 	noDownsampleMark, err := json.Marshal(metadata.NoDownsampleMark{
