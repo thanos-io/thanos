@@ -29,6 +29,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
+- [#7593](https://github.com/thanos-io/thanos/issues/7593): Receive: the per-request `samples` limit now also counts native histogram data points, not only float samples.
 
 ## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
 
