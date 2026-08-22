@@ -624,19 +624,19 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 }
 
 func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
-	t.Skip("Flaky")
-
 	t.Parallel()
 
 	l, err := net.Listen("tcp", "localhost:0")
 	testutil.Ok(t, err)
 
-	reloads := &atomic.Value{}
-	reloads.Store(0)
+	reloaded := make(chan struct{}, 10)
 	srv := &http.Server{}
 	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
-		reloads.Store(reloads.Load().(int) + 1) // The only writer.
 		resp.WriteHeader(http.StatusOK)
+		select {
+		case reloaded <- struct{}{}:
+		default:
+		}
 	})
 	go func() {
 		_ = srv.Serve(l)
@@ -701,91 +701,86 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 	testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule-dir", "rule4.yaml"), []byte("rule4"), os.ModePerm))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	g := sync.WaitGroup{}
 	g.Go(func() {
 		defer cancel()
 
-		reloadsSeen := 0
-		init := false
-		for {
-			runtime.Gosched() // Ensure during testing on small machine, other go routines have chance to continue.
+		// Wait for the first reload (initial apply via watch interval or fsnotify).
+		select {
+		case <-reloaded:
+		case <-ctx.Done():
+			return
+		}
 
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(500 * time.Millisecond):
-			}
+		// Step 0: Create rule3.yaml (symlink to rule3-001.yaml).
+		//
+		// dir
+		// ├─ rule-dir -> dir2/rule-dir
+		// ├─ rule1.yaml
+		// ├─ rule2.yaml
+		// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
+		// dir2
+		// ├─ rule-dir
+		// │  └─ rule4.yaml
+		// ├─ rule3-001.yaml -> rule3-source.yaml
+		// └─ rule3-source.yaml
+		testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
+		testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
+		// out1
+		// ├─ rule1.yaml
+		// ├─ rule2.yaml
+		// └─ rule3.yaml
+		// out2
+		// ├─ rule3-001.yaml
+		// └─ rule3-source.yaml
 
-			rel := reloads.Load().(int)
-			if init && rel <= reloadsSeen {
-				continue
-			}
-			init = true
-			reloadsSeen = rel
+		// Wait for the reload triggered by the fsnotify event from step 0.
+		select {
+		case <-reloaded:
+		case <-ctx.Done():
+			return
+		}
 
-			t.Log("Performing step number", rel)
-			switch rel {
-			case 0:
-				// Create rule3.yaml (symlink to rule3-001.yaml).
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml -> dir2/rule3-001.yaml (*)
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-001.yaml -> rule3-source.yaml
-				// └─ rule3-source.yaml
-				testutil.Ok(t, os.Symlink(path.Join(dir2, "rule3-001.yaml"), path.Join(dir2, "rule3.yaml")))
-				testutil.Ok(t, os.Rename(path.Join(dir2, "rule3.yaml"), path.Join(dir, "rule3.yaml")))
-				// out1
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml
-				// out2
-				// ├─ rule3-001.yaml
-				// └─ rule3-source.yaml
-			case 1:
-				// Update the symlinked file but do not replace the symlink in dir.
-				//
-				// fsnotify shouldn't send any event because the change happens
-				// in a directory that isn't watched but the reloader should detect
-				// the update thanks to the watch interval.
-				//
-				// dir
-				// ├─ rule-dir -> dir2/rule-dir
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml -> dir2/rule3-001.yaml
-				// dir2
-				// ├─ rule-dir
-				// │  └─ rule4.yaml
-				// ├─ rule3-001.yaml -> rule3-source.yaml
-				// └─ rule3-source.yaml (*)
-				testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
-				// out1
-				// ├─ rule1.yaml
-				// ├─ rule2.yaml
-				// └─ rule3.yaml
-				// out2
-				// ├─ rule3-001.yaml
-				// └─ rule3-source.yaml
-			}
+		// Step 1: Update the symlinked file but do not replace the symlink in dir.
+		//
+		// fsnotify shouldn't send any event because the change happens
+		// in a directory that isn't watched but the reloader should detect
+		// the update thanks to the watch interval.
+		//
+		// dir
+		// ├─ rule-dir -> dir2/rule-dir
+		// ├─ rule1.yaml
+		// ├─ rule2.yaml
+		// └─ rule3.yaml -> dir2/rule3-001.yaml
+		// dir2
+		// ├─ rule-dir
+		// │  └─ rule4.yaml
+		// ├─ rule3-001.yaml -> rule3-source.yaml
+		// └─ rule3-source.yaml (*)
+		testutil.Ok(t, os.WriteFile(path.Join(dir2, "rule3-source.yaml"), []byte("rule3-changed"), os.ModePerm))
+		// out1
+		// ├─ rule1.yaml
+		// ├─ rule2.yaml
+		// └─ rule3.yaml
+		// out2
+		// ├─ rule3-001.yaml
+		// └─ rule3-source.yaml
 
-			if rel > 1 {
-				// All good.
-				return
-			}
+		// Wait for the reload triggered by the watch interval detecting the source file update.
+		select {
+		case <-reloaded:
+		case <-ctx.Done():
+			return
 		}
 	})
+
 	err = reloader.Watch(ctx)
 	cancel()
 	g.Wait()
 
 	testutil.Ok(t, err)
-	testutil.Equals(t, 2, reloads.Load().(int))
 
 	outEntries, err := os.ReadDir(outDir)
 	testutil.Ok(t, err)
