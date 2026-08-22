@@ -1,0 +1,12 @@
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:f9f84bd968430d7d35e8e6d55c40efb0b980829ec42920a49e60e65eac0d83fc
+# The base image runs as the nonroot user (UID/GID 65532).
+
+LABEL maintainer="The Thanos Authors"
+LABEL io.thanos.image.variant="distroless"
+
+ARG ARCH="amd64"
+ARG OS="linux"
+
+COPY .build/${OS}-${ARCH}/thanos /bin/thanos
+
+ENTRYPOINT [ "/bin/thanos" ]
