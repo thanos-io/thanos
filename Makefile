@@ -214,16 +214,27 @@ docker-multi-stage:
 .PHONY: docker-build $(BUILD_DOCKER_ARCHS)
 docker-build: $(BUILD_DOCKER_ARCHS)
 $(BUILD_DOCKER_ARCHS): docker-build-%:
-	@docker build -t "thanos-linux-$*" \
-  --build-arg BASE_DOCKER_SHA="$($*)" \
-  --build-arg ARCH="$*" \
-  -f Dockerfile.multi-arch .
+	@for variant in busybox distroless; do \
+		dockerfile="Dockerfile.multi-arch"; \
+		suffix=""; \
+		if [ "$$variant" = "distroless" ]; then \
+			dockerfile="Dockerfile.distroless"; \
+			suffix="-distroless"; \
+		fi; \
+		echo ">> building $$variant image for linux/$*"; \
+		docker build --platform="linux/$*" -t "thanos-linux-$*$$suffix" \
+			--build-arg BASE_DOCKER_SHA="$($*)" \
+			--build-arg ARCH="$*" \
+			-f "$$dockerfile" . || exit 1; \
+	done
 
 .PHONY: docker-test $(TEST_DOCKER_ARCHS)
 docker-test: $(TEST_DOCKER_ARCHS)
 $(TEST_DOCKER_ARCHS): docker-test-%:
-	@echo ">> testing image"
-	@docker run "thanos-linux-$*" --help
+	@for suffix in "" "-distroless"; do \
+		echo ">> testing thanos-linux-$*$$suffix"; \
+		docker run --rm "thanos-linux-$*$$suffix" --help || exit 1; \
+	done
 
 .PHONY: docker-e2e
 docker-e2e: ## Builds 'thanos' docker for e2e tests
@@ -234,17 +245,21 @@ docker-e2e:
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
 docker-manifest:
-	@echo ">> creating and pushing manifest"
-	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_IMAGE_TAG))
-	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+	@for suffix in "" "-distroless"; do \
+		echo ">> creating and pushing$$suffix manifest"; \
+		DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)$$suffix" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_IMAGE_TAG)$$suffix) || exit 1; \
+		DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)$$suffix" || exit 1; \
+	done
 
 .PHONY: docker-push $(PUSH_DOCKER_ARCHS)
 docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
 docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
-	@echo ">> pushing image"
-	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
-	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@for suffix in "" "-distroless"; do \
+		echo ">> pushing thanos-linux-$*$$suffix"; \
+		docker tag "thanos-linux-$*$$suffix" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)$$suffix" || exit 1; \
+		docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)$$suffix" || exit 1; \
+	done
 
 .PHONY: docs
 docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.
