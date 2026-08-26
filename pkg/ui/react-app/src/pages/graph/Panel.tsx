@@ -32,6 +32,7 @@ import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
 import { defaultTenant, tenantHeader, displayTenantBox } from '../../thanos/config';
+import { getStorageItem, setStorageItem, hasStorageItem } from '../../hooks/useLocalStorage';
 
 export interface PanelProps {
   id: string;
@@ -217,12 +218,11 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   componentDidMount(): void {
     this.executeQuery();
-    const storedValue = localStorage.getItem('usePartialResponse');
-    if (storedValue !== null) {
+    if (hasStorageItem('usePartialResponse')) {
       // Set the default value in state and local storage
       this.setOptions({ usePartialResponse: true });
       this.props.onUsePartialResponseChange(true);
-      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+      setStorageItem('usePartialResponse', true);
     }
   }
 
@@ -414,15 +414,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
     let newValue = event.target.checked;
 
-    const storedValue = localStorage.getItem('usePartialResponse');
+    const storedValue = getStorageItem<boolean | null>('usePartialResponse', null);
 
-    if (storedValue === 'true') {
+    if (storedValue === true) {
       newValue = true;
     }
     this.setOptions({ usePartialResponse: newValue });
     this.props.onUsePartialResponseChange(newValue);
 
-    localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
+    setStorageItem('usePartialResponse', event.target.checked);
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
