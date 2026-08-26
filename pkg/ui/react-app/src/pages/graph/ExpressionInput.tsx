@@ -21,8 +21,6 @@ import { faSearch, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import PathPrefixProps from '../../types/PathPrefixProps';
 import { useTheme } from '../../contexts/ThemeContext';
 
-const promqlExtension = new PromQLExtension();
-
 interface CMExpressionInputProps {
   value: string;
   onExpressionChange: (expr: string) => void;
@@ -37,12 +35,32 @@ interface CMExpressionInputProps {
   disableExplain: boolean;
 }
 
-const dynamicConfigCompartment = new Compartment();
-
 export interface ExplainTree {
   name: string;
   children?: ExplainTree[];
 }
+// Clamp a completion result's range to the current document bounds.
+//
+// If a completion result whose `from`/`to` reference a position beyond the
+// document is stored in CodeMirror's autocomplete state, every subsequent
+// transaction re-maps that stale range through ChangeSet.mapPos and throws
+// "Position X is out of range for changeset of length Y". That exception is
+// raised while applying the transaction, so the edit never commits and the
+// input becomes permanently uneditable. Cutting text and pasting it into a
+// different panel is one way to end up with such an out-of-range range.
+// See https://github.com/thanos-io/thanos/issues/8232.
+export function clampCompletionResult(result: CompletionResult | null, docLength: number): CompletionResult | null {
+  if (result === null) {
+    return null;
+  }
+  const from = Math.max(0, Math.min(result.from, docLength));
+  const to = result.to === undefined ? undefined : Math.max(from, Math.min(result.to, docLength));
+  if (from === result.from && to === result.to) {
+    return result;
+  }
+  return { ...result, from, to };
+}
+
 // Autocompletion strategy that wraps the main one and enriches
 // it with past query items.
 export class HistoryCompleteStrategy implements CompleteStrategy {
@@ -60,7 +78,7 @@ export class HistoryCompleteStrategy implements CompleteStrategy {
       const start = res != null ? res.from : tree.from;
 
       if (start !== 0) {
-        return res;
+        return clampCompletionResult(res, state.doc.length);
       }
 
       const historyItems: CompletionResult = {
@@ -78,7 +96,7 @@ export class HistoryCompleteStrategy implements CompleteStrategy {
       if (res !== null) {
         historyItems.options = historyItems.options.concat(res.options);
       }
-      return historyItems;
+      return clampCompletionResult(historyItems, state.doc.length);
     });
   }
 }
@@ -99,6 +117,21 @@ const ExpressionInput: FC<PathPrefixProps & CMExpressionInputProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  // PromQLExtension and Compartment are stateful and must not be shared between
+  // editor instances: several ExpressionInputs (one per panel) are mounted at
+  // once, and a module-level instance would let one panel's reconfiguration
+  // leak into another panel's editor, producing out-of-range positions that
+  // freeze the input (thanos-io/thanos#8232). Keep one of each per instance.
+  const promqlExtensionRef = useRef<PromQLExtension>();
+  if (!promqlExtensionRef.current) {
+    promqlExtensionRef.current = new PromQLExtension();
+  }
+  const promqlExtension = promqlExtensionRef.current;
+  const dynamicConfigCompartmentRef = useRef<Compartment>();
+  if (!dynamicConfigCompartmentRef.current) {
+    dynamicConfigCompartmentRef.current = new Compartment();
+  }
+  const dynamicConfigCompartment = dynamicConfigCompartmentRef.current;
   const { theme } = useTheme();
   // (Re)initialize editor based on settings / setting changes.
   useEffect(() => {
