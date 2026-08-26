@@ -708,6 +708,43 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 	}
 }
 
+func TestMultiTSDBPruneSkipsUnreadyTenant(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	maxBlockDuration := (2 * time.Hour).Milliseconds()
+	retentionDuration := (6 * time.Hour).Milliseconds()
+	m := NewMultiTSDB(
+		openTestRoot(t, dir),
+		log.NewNopLogger(),
+		prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  maxBlockDuration,
+			MaxBlockDuration:  maxBlockDuration,
+			RetentionDuration: retentionDuration,
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+
+	const tenantID = "unready-tenant"
+	tenant := newTenant(log.NewNopLogger(), retentionDuration, maxBlockDuration, tenantID)
+	m.addTenantLocked(tenantID, tenant)
+	t.Cleanup(func() {
+		m.mtx.Lock()
+		m.removeTenantUnlocked(tenantID)
+		m.mtx.Unlock()
+		m.Close()
+	})
+
+	testutil.Ok(t, m.Prune(context.Background()))
+	testutil.Equals(t, false, tenant.readOnly.Load())
+}
+
 func TestAlignedHeadFlush(t *testing.T) {
 	t.Parallel()
 

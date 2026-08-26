@@ -343,7 +343,11 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 	// NOTE(GiedriusS): it could also happen that compaction is failing and it is not producing new blocks.
 	// But if compaction is failing then that probably also means that the storage layer is hosed
 	// and if that is the case then we cannot do anything about it anyway.
-	head := t.tsdb.Head()
+	db := t.readyS.Get()
+	if db == nil {
+		return false
+	}
+	head := db.Head()
 	if head.MaxTime() < 0 {
 		return false
 	}
