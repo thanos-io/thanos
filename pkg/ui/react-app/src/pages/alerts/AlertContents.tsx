@@ -8,7 +8,7 @@ import { KVSearch } from '@nexucis/kvsearch';
 import CustomInfiniteScroll, { InfiniteScrollItemsProps } from '../../components/CustomInfiniteScroll';
 import SearchBar from '../../components/SearchBar';
 
-export type RuleState = keyof RuleStatus<any>;
+export type RuleState = keyof RuleStatus<number>;
 
 export interface RuleStatus<T> {
   firing: T;
@@ -160,7 +160,7 @@ interface GroupInfoProps {
 }
 
 export const GroupInfo: FC<GroupInfoProps> = ({ rules, children }) => {
-  const statesCounter = rules.reduce<any>(
+  const statesCounter = rules.reduce<RuleStatus<number>>(
     (acc, r) => {
       return {
         ...acc,
@@ -170,6 +170,7 @@ export const GroupInfo: FC<GroupInfoProps> = ({ rules, children }) => {
     {
       firing: 0,
       pending: 0,
+      inactive: 0,
     }
   );
 

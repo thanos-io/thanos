@@ -1,14 +1,18 @@
-import React, { ErrorInfo } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { Container, UncontrolledCollapse, Button } from 'reactstrap';
 import styles from './ErrorBoundary.module.css';
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
 
 interface ErrorState {
   error: Error | null;
   errorInfo: ErrorInfo | null;
 }
 
-class ErrorBoundary extends React.Component<any, ErrorState> {
-  constructor(props: any) {
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
       error: null,
@@ -22,6 +26,7 @@ class ErrorBoundary extends React.Component<any, ErrorState> {
       errorInfo,
     });
   }
+
   render(): React.ReactNode {
     if (this.state.errorInfo) {
       return (

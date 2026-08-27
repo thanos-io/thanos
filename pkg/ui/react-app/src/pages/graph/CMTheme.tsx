@@ -12,7 +12,7 @@ export const baseTheme = EditorView.theme({
   '&.cm-editor': {
     '&.cm-focused': {
       outline: 'none',
-      outline_fallback: 'none',
+      outlineFallback: 'none',
     },
   },
   '.cm-scroller': {
