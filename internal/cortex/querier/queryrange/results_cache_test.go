@@ -1209,6 +1209,81 @@ func TestResultsCacheUsesLowerStepCache(t *testing.T) {
 	require.Equal(t, mkAPIResponse(0, 120*1000, 30*1000), resp)
 }
 
+func TestResultsCacheLowerStepHitPreservesRequestStep(t *testing.T) {
+	const (
+		lowerStep   = 15 * 1000
+		requestStep = 30 * 1000
+		requestEnd  = 120 * 1000
+	)
+
+	for _, tc := range []struct {
+		name    string
+		extents []Extent
+	}{
+		{
+			name: "multiple extents collectively cover request",
+			extents: []Extent{
+				mkExtentWithStep(0, 75*1000, lowerStep),
+				mkExtentWithStep(75*1000, requestEnd, lowerStep),
+			},
+		},
+		{
+			name: "partial extent has unaligned end",
+			extents: []Extent{
+				mkExtentWithStep(0, 75*1000, lowerStep),
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cacheBackend := cache.NewMockCache()
+			splitter := alternativeStepSplitter{
+				interval: day,
+				steps:    []int64{lowerStep},
+			}
+			cfg := ResultsCacheConfig{
+				CacheConfig: cache.Config{Cache: cacheBackend},
+			}
+			rcm, _, err := NewResultsCacheMiddleware(
+				log.NewNopLogger(),
+				cfg,
+				splitter,
+				mockLimits{},
+				PrometheusCodec,
+				PrometheusResponseExtractor{},
+				nil,
+				nil,
+				nil,
+			)
+			require.NoError(t, err)
+
+			rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+				return mkAPIResponse(req.GetStart(), req.GetEnd(), req.GetStep()), nil
+			})).(*resultsCache)
+			ctx := user.InjectOrgID(context.Background(), "1")
+
+			lowerStepReq := &PrometheusRequest{
+				Path:  "/api/v1/query_range",
+				Start: 0,
+				End:   requestEnd,
+				Step:  lowerStep,
+				Query: "up",
+			}
+			rc.put(ctx, splitter.GenerateCacheKey("1", lowerStepReq), tc.extents)
+
+			request := &PrometheusRequest{
+				Path:  "/api/v1/query_range",
+				Start: 0,
+				End:   requestEnd,
+				Step:  requestStep,
+				Query: "up",
+			}
+			resp, err := rc.Do(ctx, request)
+			require.NoError(t, err)
+			require.Equal(t, mkAPIResponse(0, requestEnd, requestStep), resp)
+		})
+	}
+}
+
 func TestResultsCacheFetchesAlternativeKeysInBulk(t *testing.T) {
 	cacheRecorder := &recordingCache{Cache: cache.NewMockCache()}
 	splitter := alternativeStepSplitter{
