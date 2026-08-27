@@ -9,6 +9,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
@@ -18,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/sony/gobreaker"
+	"golang.org/x/sync/singleflight"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -61,12 +63,12 @@ var (
 )
 
 var (
-	_ RemoteCacheClient = (*memcachedClient)(nil)
-	_ RemoteCacheClient = (*RedisClient)(nil)
+	_ ReadThroughRemoteCache = (*memcachedClient)(nil)
+	_ ReadThroughRemoteCache = (*RedisClient)(nil)
 )
 
-// RemoteCacheClient is a high level client to interact with remote cache.
-type RemoteCacheClient interface {
+// ReadThroughRemoteCache is a high level client to interact with remote cache.
+type ReadThroughRemoteCache interface {
 	// GetMulti fetches multiple keys at once from remoteCache. In case of error,
 	// an empty map is returned and the error tracked/logged.
 	GetMulti(ctx context.Context, keys []string) map[string][]byte
@@ -76,12 +78,16 @@ type RemoteCacheClient interface {
 	// underlying async operation will fail, the error will be tracked/logged.
 	SetAsync(key string, value []byte, ttl time.Duration) error
 
+	// GrabKeys fetches multiple keys from the cache and returns a map containing the fetched data.
+	// It ensures that the cache filling function is called only once even if there are multiple requests for the same key.
+	GrabKeys(ctx context.Context, keys []string) map[string][]byte
+
 	// Stop client and release underlying resources.
 	Stop()
 }
 
 // MemcachedClient for compatible.
-type MemcachedClient = RemoteCacheClient
+type MemcachedClient = ReadThroughRemoteCache
 
 // memcachedClientBackend is an interface used to mock the underlying client in tests.
 type memcachedClientBackend interface {
@@ -108,7 +114,7 @@ type updatableServerSelector interface {
 	PickServerForKeys(keys []string) (map[string][]string, error)
 }
 
-// MemcachedClientConfig is the config accepted by RemoteCacheClient.
+// MemcachedClientConfig is the config accepted by ReadThroughRemoteCache.
 type MemcachedClientConfig struct {
 	// Addresses specifies the list of memcached addresses. The addresses get
 	// resolved with the DNS provider.
@@ -226,7 +232,7 @@ type memcachedGetMultiResult struct {
 	err   error
 }
 
-// NewMemcachedClient makes a new RemoteCacheClient.
+// NewMemcachedClient makes a new ReadThroughRemoteCache.
 func NewMemcachedClient(logger log.Logger, name string, conf []byte, reg prometheus.Registerer) (*memcachedClient, error) {
 	config, err := parseMemcachedClientConfig(conf)
 	if err != nil {
@@ -236,7 +242,7 @@ func NewMemcachedClient(logger log.Logger, name string, conf []byte, reg prometh
 	return NewMemcachedClientWithConfig(logger, name, config, reg)
 }
 
-// NewMemcachedClientWithConfig makes a new RemoteCacheClient.
+// NewMemcachedClientWithConfig makes a new ReadThroughRemoteCache.
 func NewMemcachedClientWithConfig(logger log.Logger, name string, config MemcachedClientConfig, reg prometheus.Registerer) (*memcachedClient, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -458,6 +464,43 @@ func (c *memcachedClient) GetMulti(ctx context.Context, keys []string) map[strin
 	}
 
 	return hits
+}
+
+func (c *memcachedClient) GrabKeys(ctx context.Context, keys []string) map[string][]byte {
+	var group singleflight.Group
+	fetchedData := make(map[string][]byte)
+	var mu sync.Mutex
+
+	fetchData := func(key string) ([]byte, error) {
+		result := c.GetMulti(ctx, []string{key})
+		if data, ok := result[key]; ok {
+			return data, nil
+		}
+		return nil, errors.New("key not found in cache")
+	}
+
+	for _, key := range keys {
+		val, err, _ := group.Do(key, func() (interface{}, error) {
+			return fetchData(key)
+		})
+
+		if err != nil {
+			level.Warn(c.logger).Log("Failed to fetch data for key:", key, "Error:", err)
+			continue
+		}
+
+		data, ok := val.([]byte)
+		if !ok {
+			level.Warn(c.logger).Log("Failed to convert data for key:", key, "to []byte")
+			continue
+		}
+
+		mu.Lock()
+		fetchedData[key] = data
+		mu.Unlock()
+	}
+
+	return fetchedData
 }
 
 func (c *memcachedClient) getMultiBatched(ctx context.Context, keys []string) ([]map[string]*memcache.Item, error) {
