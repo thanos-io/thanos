@@ -78,7 +78,7 @@ func (b *gatedExistsBucket) WithExpectedErrs(objstore.IsOpFailureExpectedFunc) o
 // returns, including on the path where the bucket listing itself fails.
 //
 // Asserting on the panic directly would be racy: once the group context is
-// cancelled a parked worker usually takes its ctx.Done branch, and only
+// canceled a parked worker usually takes its ctx.Done branch, and only
 // sometimes loses the select to the closed channel. Holding one worker inside
 // Exists makes the same invariant deterministic.
 func TestConcurrentLister_WaitsForWorkersOnIterError(t *testing.T) {
