@@ -1279,6 +1279,17 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 	}
 }
 
+// TenantExtLabels returns the full external label set that the receiver exposes
+// for the given tenant: the globally configured --label set, the tenant label,
+// and any hashring external_labels. This mirrors the label set applied to the
+// tenant's TSDB store at query time (see startTSDB / SetHashringConfig) and is
+// used by the write path to detect incoming labels that would otherwise be
+// silently overwritten.
+func (t *MultiTSDB) TenantExtLabels(tenantID string) labels.Labels {
+	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
+	return t.extractTenantsLabels(tenantID, initialLset)
+}
+
 // extractTenantsLabels extracts tenant's external labels from hashring configs.
 // If one tenant appears in multiple hashring configs,
 // only the external label set from the first hashring config is applied.

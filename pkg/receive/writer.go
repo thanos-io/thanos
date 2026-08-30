@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/go-kit/log"
@@ -28,6 +29,68 @@ type Appendable interface {
 
 type TenantStorage interface {
 	TenantAppendable(string) (Appendable, error)
+	// TenantExtLabels returns the external labels (configured via --label and
+	// hashring external_labels, plus the tenant label) that the receiver
+	// applies to the tenant's series at query time.
+	TenantExtLabels(string) labels.Labels
+}
+
+// resolveLabelConflicts renames incoming labels whose names collide with the
+// tenant's external labels by prefixing them with "exported_", mirroring
+// Prometheus' honor_labels=false behavior. Without this, the external labels
+// applied at query time silently overwrite the colliding incoming label values,
+// losing data (see thanos-io/thanos#8130).
+//
+// If the "exported_<name>" name is itself taken (by another incoming label or an
+// external label), the prefix is applied repeatedly until a free name is found,
+// matching Prometheus' resolveConflictingExposedLabels. It returns the resulting
+// labels and whether any rename happened; when there is no collision the input is
+// returned unchanged.
+func resolveLabelConflicts(lset, extLset labels.Labels) (labels.Labels, bool) {
+	if extLset.IsEmpty() {
+		return lset, false
+	}
+
+	var b *labels.Builder
+	extLset.Range(func(l labels.Label) {
+		v := lset.Get(l.Name)
+		if v == "" {
+			// No incoming label collides with this external label name.
+			return
+		}
+		if b == nil {
+			b = labels.NewBuilder(lset)
+		}
+		newName := l.Name
+		for {
+			newName = model.ExportedLabelPrefix + newName
+			// The renamed label must not collide with another incoming label
+			// nor with an external label (which would overwrite it again at
+			// query time).
+			if b.Get(newName) == "" && extLset.Get(newName) == "" {
+				break
+			}
+		}
+		b.Del(l.Name)
+		b.Set(newName, v)
+	})
+
+	if b == nil {
+		return lset, false
+	}
+	return b.Labels(), true
+}
+
+// detachLabels returns a deep copy of lset with freshly allocated strings so that
+// the TSDB, which holds labels long term, does not retain references to the
+// underlying request buffer.
+func detachLabels(lset labels.Labels) labels.Labels {
+	builder := labels.NewScratchBuilder(lset.Len())
+	lset.Range(func(l labels.Label) {
+		builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
+	})
+	builder.Sort()
+	return builder.Labels()
 }
 
 // Wraps storage.Appender to add validation and logging.
@@ -97,6 +160,8 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 		Appender:       app,
 	}
 
+	extLset := r.multiTSDB.TenantExtLabels(tenantID)
+
 	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
 		// and report the error.
@@ -108,10 +173,23 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 
 		lset := labelpb.ZLabelsToPromLabels(t.Labels)
 
+		// Rename incoming labels that collide with the tenant's external labels
+		// to exported_<name>, so their values are not overwritten at query time.
+		lset, renamed := resolveLabelConflicts(lset, extLset)
+
 		// Check if the TSDB has cached reference for those labels.
-		ref, lset = getRef.GetRef(lset, lset.Hash())
-		if ref == 0 {
-			// If not, copy labels, as TSDB will hold those strings long term. Given no
+		var cachedLset labels.Labels
+		ref, cachedLset = getRef.GetRef(lset, lset.Hash())
+		switch {
+		case ref != 0:
+			// Reuse the labels held by the TSDB for this existing series.
+			lset = cachedLset
+		case renamed:
+			// New series with rebuilt labels. They may still reference the request
+			// buffer, so detach their strings, as TSDB will hold them long term.
+			lset = detachLabels(lset)
+		default:
+			// New series. Copy labels, as TSDB will hold those strings long term. Given no
 			// copy unmarshal we don't want to keep memory for whole protobuf, only for labels.
 			// Do the reallocation here instead of one level higher because this ensures that we
 			// do _not_ intern all strings even if they are already exist. This is a high likelihood

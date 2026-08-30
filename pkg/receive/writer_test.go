@@ -361,6 +361,71 @@ func TestWriter(t *testing.T) {
 				},
 			},
 		},
+		// The multiTSDB is set up with external labels {replica="01", tenant_id=<tenant>},
+		// so incoming labels named "replica" or "tenant_id" collide with them.
+		"should rename incoming label colliding with an external label to exported_": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "replica", Value: "foo"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "exported_replica", Value: "foo"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
+		"should not modify incoming labels when there is no collision": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels:  append(lbls, labelpb.ZLabel{Name: "foo", Value: "bar"}),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels:  append(lbls, labelpb.ZLabel{Name: "foo", Value: "bar"}),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
+		"should double-prefix when exported_ label already exists": {
+			reqs: []*prompb.WriteRequest{
+				{
+					Timeseries: []prompb.TimeSeries{
+						{
+							Labels: append(lbls,
+								labelpb.ZLabel{Name: "exported_replica", Value: "bar"},
+								labelpb.ZLabel{Name: "replica", Value: "foo"},
+							),
+							Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+						},
+					},
+				},
+			},
+			expectedErr: nil,
+			expectedIngested: []prompb.TimeSeries{
+				{
+					Labels: append(lbls,
+						labelpb.ZLabel{Name: "exported_exported_replica", Value: "foo"},
+						labelpb.ZLabel{Name: "exported_replica", Value: "bar"},
+					),
+					Samples: []prompb.Sample{{Value: 1, Timestamp: 10}},
+				},
+			},
+		},
 	}
 
 	for testName, testData := range tests {
@@ -421,6 +486,56 @@ func TestWriter(t *testing.T) {
 
 				assertWrittenData(t, app, testData.expectedIngested)
 			})
+		})
+	}
+}
+
+func TestResolveLabelConflicts(t *testing.T) {
+	t.Parallel()
+
+	extLset := labels.FromStrings("replica", "01", "tenant_id", "acme")
+
+	for name, tc := range map[string]struct {
+		lset        labels.Labels
+		extLset     labels.Labels
+		expected    labels.Labels
+		expectedMod bool
+	}{
+		"no collision returns input unchanged": {
+			lset:        labels.FromStrings("__name__", "metric", "foo", "bar"),
+			extLset:     extLset,
+			expected:    labels.FromStrings("__name__", "metric", "foo", "bar"),
+			expectedMod: false,
+		},
+		"empty external labels returns input unchanged": {
+			lset:        labels.FromStrings("__name__", "metric", "replica", "k8s"),
+			extLset:     labels.EmptyLabels(),
+			expected:    labels.FromStrings("__name__", "metric", "replica", "k8s"),
+			expectedMod: false,
+		},
+		"single collision is renamed to exported_": {
+			lset:        labels.FromStrings("__name__", "metric", "replica", "k8s"),
+			extLset:     extLset,
+			expected:    labels.FromStrings("__name__", "metric", "exported_replica", "k8s"),
+			expectedMod: true,
+		},
+		"multiple collisions are all renamed": {
+			lset:        labels.FromStrings("__name__", "metric", "replica", "k8s", "tenant_id", "team"),
+			extLset:     extLset,
+			expected:    labels.FromStrings("__name__", "metric", "exported_replica", "k8s", "exported_tenant_id", "team"),
+			expectedMod: true,
+		},
+		"already-has-exported_ is prefixed again": {
+			lset:        labels.FromStrings("__name__", "metric", "exported_replica", "existing", "replica", "k8s"),
+			extLset:     extLset,
+			expected:    labels.FromStrings("__name__", "metric", "exported_exported_replica", "k8s", "exported_replica", "existing"),
+			expectedMod: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, mod := resolveLabelConflicts(tc.lset, tc.extLset)
+			testutil.Equals(t, tc.expectedMod, mod)
+			testutil.Equals(t, tc.expected, got)
 		})
 	}
 }
