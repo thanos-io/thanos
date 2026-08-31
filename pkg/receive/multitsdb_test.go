@@ -1193,3 +1193,68 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestMultiTSDBPruneNeverAppendedTenant(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name              string
+		retentionDuration time.Duration
+		waitBeforePrune   time.Duration
+		expectPruned      bool
+	}{
+		{
+			name:              "never appended and older than retention is pruned",
+			retentionDuration: 500 * time.Millisecond,
+			waitBeforePrune:   time.Second,
+			expectPruned:      true,
+		},
+		{
+			name:              "never appended but within retention is kept",
+			retentionDuration: time.Hour,
+			waitBeforePrune:   0,
+			expectPruned:      false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := NewMultiTSDB(
+				openTestRoot(t, t.TempDir()),
+				log.NewNopLogger(),
+				prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: tc.retentionDuration.Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				nil,
+				false,
+				false,
+				metadata.NoneFunc,
+				WithGCImmediately(),
+			)
+			t.Cleanup(m.Close)
+
+			const tenantID = "never-appended-tenant"
+
+			// Create the tenant the way a write does, but never append to it.
+			// Its head stays empty, so Head.MaxTime() is math.MinInt64.
+			_, err := m.TenantAppendable(tenantID)
+			testutil.Ok(t, err)
+			testutil.Assert(t, m.testGetTenant(tenantID) != nil, "tenant should exist before pruning")
+
+			time.Sleep(tc.waitBeforePrune)
+			testutil.Ok(t, m.Prune(context.Background()))
+
+			if tc.expectPruned {
+				testutil.Assert(t, m.testGetTenant(tenantID) == nil, "zombie tenant should have been pruned")
+				testutil.Equals(t, 0, len(m.TSDBLocalClients()))
+			} else {
+				testutil.Assert(t, m.testGetTenant(tenantID) != nil, "tenant within retention should be kept")
+			}
+		})
+	}
+}
