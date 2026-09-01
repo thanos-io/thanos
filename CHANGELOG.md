@@ -18,6 +18,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9003](https://github.com/thanos-io/thanos/pull/9003) Receive: Treat an unset `tenant_matcher_type` in a shuffle sharding override as an exact match, instead of skipping the override and falling back to the default shard size.
+
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
 - [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
 - [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
