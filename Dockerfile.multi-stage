@@ -18,6 +18,7 @@ RUN git update-index --refresh; make build
 
 FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
 LABEL maintainer="The Thanos Authors"
+LABEL org.opencontainers.image.source="https://github.com/thanos-io/thanos"
 
 COPY --from=builder /go/bin/thanos /bin/thanos
 
