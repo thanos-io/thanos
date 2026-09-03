@@ -28,6 +28,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#9006](https://github.com/thanos-io/thanos/pull/9006): Store/Receive: the metric-name store filter (`--enable-feature=metric-names-filter`) now also prunes fan-out for regex `__name__=~"a|b"` matchers whose value set is fully enumerable, not only exact `__name__=` matchers.
 - [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
