@@ -335,6 +335,11 @@ type tenant struct {
 
 	maxBlockDuration int64
 
+	// createdAt is when this tenant object was constructed. It is the only time
+	// reference available for a tenant whose head never took a successful append,
+	// because Head.MaxTime() is math.MinInt64 until the first append lands.
+	createdAt time.Time
+
 	lastSuccessfulHeadCompaction atomic.Int64
 }
 
@@ -349,7 +354,15 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 	}
 	head := db.Head()
 	if head.MaxTime() < 0 {
-		return false
+		// A head that never took a successful append has no time reference to
+		// measure staleness from, so fall back to when the tenant was created.
+		// Only mark such a tenant inactive when it holds nothing at all: no
+		// samples in the head and no blocks on disk. There is nothing to ship in
+		// that case either, so the shipper checks below would be vacuous.
+		if len(db.Blocks()) > 0 {
+			return false
+		}
+		return time.Since(t.createdAt).Milliseconds() > t.retentionDuration
 	}
 
 	sinceLastAppendMillis := time.Since(time.UnixMilli(head.MaxTime())).Milliseconds()
@@ -566,6 +579,7 @@ func newTenant(l log.Logger, retentionDuration, maxBlockDuration int64, name str
 		doneC:             make(chan struct{}),
 		tenantName:        name,
 		maxBlockDuration:  maxBlockDuration,
+		createdAt:         time.Now(),
 	}
 }
 

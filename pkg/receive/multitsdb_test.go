@@ -1193,3 +1193,74 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestMultiTSDBPruneNeverAppendedTenant(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		retentionDuration time.Duration
+		waitBeforePrune   time.Duration
+		expectPruned      bool
+	}{
+		{
+			name:              "never appended and older than retention is pruned",
+			retentionDuration: 100 * time.Millisecond,
+			waitBeforePrune:   300 * time.Millisecond,
+			expectPruned:      true,
+		},
+		{
+			name:              "never appended but within retention is kept",
+			retentionDuration: 10 * time.Hour,
+			waitBeforePrune:   300 * time.Millisecond,
+			expectPruned:      false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			synctest.Test(t, func(t *testing.T) {
+				m := NewMultiTSDB(
+					openTestRoot(t, dir),
+					log.NewNopLogger(),
+					prometheus.NewRegistry(),
+					&tsdb.Options{
+						MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+						MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+						RetentionDuration: tc.retentionDuration.Milliseconds(),
+					},
+					labels.FromStrings("replica", "test"),
+					"tenant_id",
+					nil,
+					false,
+					false,
+					metadata.NoneFunc,
+					WithGCImmediately(),
+				)
+				t.Cleanup(m.Close)
+
+				const tenantID = "never-appended-tenant"
+
+				// Create the tenant the way a write does, but never append to it.
+				// Its head stays empty, so Head.MaxTime() is math.MinInt64.
+				_, err := m.TenantAppendable(tenantID)
+				testutil.Ok(t, err)
+				testutil.Assert(t, m.testGetTenant(tenantID) != nil, "tenant should exist before pruning")
+
+				// synctest virtualizes this sleep, so it costs no real time. Keep it
+				// under the TSDB block-reload interval (which floors at 1s) so the
+				// DB's background reload loop stays parked instead of doing real work
+				// on every simulated tick.
+				time.Sleep(tc.waitBeforePrune)
+				synctest.Wait()
+
+				testutil.Ok(t, m.Prune(context.Background()))
+
+				if tc.expectPruned {
+					testutil.Assert(t, m.testGetTenant(tenantID) == nil, "zombie tenant should have been pruned")
+					testutil.Equals(t, 0, len(m.TSDBLocalClients()))
+				} else {
+					testutil.Assert(t, m.testGetTenant(tenantID) != nil, "tenant within retention should be kept")
+				}
+			})
+		})
+	}
+}
