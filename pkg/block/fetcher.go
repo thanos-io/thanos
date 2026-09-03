@@ -304,7 +304,7 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, acti
 		})
 	}
 
-	if err = f.bkt.Iter(ctx, "", func(name string) error {
+	iterErr := f.bkt.Iter(ctx, "", func(name string) error {
 		id, ok := IsBlockDir(name)
 		if !ok {
 			return nil
@@ -315,13 +315,20 @@ func (f *ConcurrentLister) GetActiveAndPartialBlockIDs(ctx context.Context, acti
 		case metaChan <- id:
 		}
 		return nil
-	}); err != nil {
-		return nil, err
-	}
+	})
+	// Close and wait on every path, including the error one. The caller closes
+	// the activeBlocks channel as soon as this returns, so a worker still
+	// selecting on it would send on a closed channel; and a worker parked on the
+	// metaChan range would never be released, since canceling gCtx does not
+	// break out of a receive.
 	close(metaChan)
+	waitErr := eg.Wait()
 
-	if err := eg.Wait(); err != nil {
-		return nil, err
+	if iterErr != nil {
+		return nil, iterErr
+	}
+	if waitErr != nil {
+		return nil, waitErr
 	}
 	return partialBlocks, nil
 }
