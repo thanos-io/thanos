@@ -118,7 +118,7 @@ Flags:
                                  exceeded. 0 means no limit.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
-                                 Series request, The Series call fails if
+                                 Series request. The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
