@@ -2,6 +2,7 @@
 ARG BASE_DOCKER_SHA="14d68ca3d69fceaa6224250c83d81d935c053fb13594c811038c461194599973"
 FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
 LABEL maintainer="The Thanos Authors"
+LABEL org.opencontainers.image.source="https://github.com/thanos-io/thanos"
 
 RUN adduser \
     -D `#Dont assign a password` \
