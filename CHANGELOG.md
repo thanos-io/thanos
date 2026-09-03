@@ -25,6 +25,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
 - [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
+- [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
 
 ### Changed
 
