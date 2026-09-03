@@ -3,6 +3,7 @@ ARG BASE_DOCKER_SHA="97a9aacc097e5dbdec33b0d671adea0785e76d26ff2b979ee28570baf6a
 
 FROM quay.io/prometheus/busybox@sha256:${BASE_DOCKER_SHA}
 LABEL maintainer="The Thanos Authors"
+LABEL org.opencontainers.image.source="https://github.com/thanos-io/thanos"
 
 ARG ARCH="amd64"
 ARG OS="linux"
