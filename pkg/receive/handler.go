@@ -719,7 +719,7 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 
 	totalSamples := 0
 	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
+		totalSamples += len(timeseries.Samples) + len(timeseries.Histograms)
 	}
 	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
 		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
