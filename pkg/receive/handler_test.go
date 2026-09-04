@@ -72,6 +72,10 @@ func (t *fakeTenantAppendable) TenantAppendable(_ string) (Appendable, error) {
 	return t.f, nil
 }
 
+func (t *fakeTenantAppendable) TenantExtLabels(_ string) labels.Labels {
+	return labels.EmptyLabels()
+}
+
 type fakeAppendable struct {
 	appender    storage.Appender
 	appenderErr func() error

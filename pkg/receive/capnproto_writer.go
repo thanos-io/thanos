@@ -66,6 +66,8 @@ func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) e
 		Appender:       app,
 	}
 
+	extLset := r.multiTSDB.TenantExtLabels(wreq.Tenant)
+
 	var (
 		series  writecapnp.Series
 		builder labels.ScratchBuilder
@@ -83,17 +85,22 @@ func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) e
 			continue
 		}
 
+		// Rename incoming labels that collide with the tenant's external labels
+		// to exported_<name>, so their values are not overwritten at query time.
+		incoming, _ := resolveLabelConflicts(series.Labels, extLset)
+
 		var lset labels.Labels
 		// Check if the TSDB has cached reference for those labels.
-		ref, lset = getRef.GetRef(series.Labels, series.Labels.Hash())
+		ref, lset = getRef.GetRef(incoming, incoming.Hash())
 		if ref == 0 {
 			// NOTE(GiedriusS): do a deep copy because the labels are reused in the capnp message.
 			// Creation of new series is much rarer compared to adding extra samples
 			// to an existing series.
 			builder.Reset()
-			series.Labels.Range(func(l labels.Label) {
+			incoming.Range(func(l labels.Label) {
 				builder.Add(strings.Clone(l.Name), strings.Clone(l.Value))
 			})
+			builder.Sort()
 			lset = builder.Labels()
 		}
 
