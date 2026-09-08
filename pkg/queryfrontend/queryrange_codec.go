@@ -214,7 +214,10 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 func parseDurationMillis(s string) (int64, error) {
 	if d, err := strconv.ParseFloat(s, 64); err == nil {
 		ts := d * float64(time.Second/time.Millisecond)
-		if ts > float64(math.MaxInt64) || ts < float64(math.MinInt64) {
+		// float64(math.MaxInt64) rounds up to 2^63, which int64 cannot hold, and
+		// NaN compares false against every bound. float64(math.MinInt64) is exact,
+		// so the lower bound stays inclusive.
+		if math.IsNaN(ts) || ts >= float64(math.MaxInt64) || ts < float64(math.MinInt64) {
 			return 0, httpgrpc.Errorf(http.StatusBadRequest, "cannot parse %q to a valid duration. It overflows int64", s)
 		}
 		return int64(ts), nil
