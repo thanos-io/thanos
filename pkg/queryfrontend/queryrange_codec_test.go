@@ -182,6 +182,35 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 				StoreMatchers: [][]*labels.Matcher{},
 			},
 		},
+		{
+			// float64(math.MaxInt64) rounds up to 2^63, so this used to be
+			// accepted and then overflow int64 to a negative lookback delta.
+			name:            "lookback_delta overflows int64",
+			url:             `/api/v1/query_range?start=123&end=456&step=1&lookback_delta=9223372036854775.808`,
+			partialResponse: false,
+			expectedError:   httpgrpc.Errorf(http.StatusBadRequest, `cannot parse "9223372036854775.808" to a valid duration. It overflows int64`),
+		},
+		{
+			name:            "lookback_delta is NaN",
+			url:             `/api/v1/query_range?start=123&end=456&step=1&lookback_delta=NaN`,
+			partialResponse: false,
+			expectedError:   httpgrpc.Errorf(http.StatusBadRequest, `cannot parse "NaN" to a valid duration. It overflows int64`),
+		},
+		{
+			// float64(math.MinInt64) is exact, so the lower bound stays inclusive.
+			name:            "lookback_delta at the negative bound",
+			url:             `/api/v1/query_range?start=123&end=456&step=1&lookback_delta=-9223372036854775.808`,
+			partialResponse: false,
+			expectedRequest: &ThanosQueryRangeRequest{
+				Path:          "/api/v1/query_range",
+				Start:         123000,
+				End:           456000,
+				Step:          1000,
+				Dedup:         true,
+				LookbackDelta: -9223372036854775808,
+				StoreMatchers: [][]*labels.Matcher{},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)
