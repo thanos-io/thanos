@@ -18,10 +18,24 @@ import (
 )
 
 // generateConfigData creates a realistic Prometheus config buffer of approx targetBytes.
-func generateConfigData(targetBytes int) []byte {
+func generateConfigData(targetBytes int, withEnvVars bool) []byte {
 	var buf bytes.Buffer
-	buf.WriteString("global:\n  scrape_interval: 15s\n  external_labels:\n    replica: '$(RELOADER_TEST_REPLICA)'\n    env: '$(RELOADER_TEST_ENV)'\nscrape_configs:\n")
+	if withEnvVars {
+		buf.WriteString("global:\n  scrape_interval: 15s\n  external_labels:\n    replica: '$(RELOADER_TEST_REPLICA)'\n    env: '$(RELOADER_TEST_ENV)'\nscrape_configs:\n")
+	} else {
+		buf.WriteString("global:\n  scrape_interval: 15s\n  external_labels:\n    replica: 'r1'\n    env: 'production'\nscrape_configs:\n")
+	}
+
 	rulePattern := `  - job_name: 'job-%06d'
+    static_configs:
+      - targets: ['localhost:90%04d']
+        labels:
+          cluster: 'us-east-1'
+          service: 'service-%06d'
+          note: 'regular text with $ and non_var and $123'
+`
+	if withEnvVars {
+		rulePattern = `  - job_name: 'job-%06d'
     static_configs:
       - targets: ['localhost:$(RELOADER_TEST_PORT)%04d']
         labels:
@@ -29,6 +43,8 @@ func generateConfigData(targetBytes int) []byte {
           service: 'service-%06d'
           note: 'regular text with $ and non_var and $123'
 `
+	}
+
 	i := 0
 	for buf.Len() < targetBytes {
 		fmt.Fprintf(&buf, rulePattern, i, i%10000, i)
@@ -65,34 +81,36 @@ func BenchmarkNormalize(b *testing.B) {
 		{"50MB", 50 * 1024 * 1024},
 	} {
 		for _, compressed := range []bool{false, true} {
-			b.Run(fmt.Sprintf("size=%v/compressed=%v", sz.name, compressed), func(b *testing.B) {
-				data := generateConfigData(sz.bytes)
-				if compressed {
-					var gzBuf bytes.Buffer
-					gw := gzip.NewWriter(&gzBuf)
-					_, err := gw.Write(data)
-					testutil.Ok(b, err)
-					testutil.Ok(b, gw.Close())
-					data = gzBuf.Bytes()
-				}
-
-				dir := b.TempDir()
-				input := filepath.Join(dir, "input.yaml")
-				testutil.Ok(b, os.WriteFile(input, data, 0644))
-
-				r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{})
-
-				output := filepath.Join(dir, "output.yaml")
-				b.SetBytes(int64(len(data)))
-				b.ReportAllocs()
-				b.ResetTimer()
-
-				for b.Loop() {
-					if err := r.normalize(input, output); err != nil {
-						b.Fatalf("normalize error: %v", err)
+			for _, envvars := range []bool{false, true} {
+				b.Run(fmt.Sprintf("size=%v/compressed=%v/envvars=%v", sz.name, compressed, envvars), func(b *testing.B) {
+					data := generateConfigData(sz.bytes, envvars)
+					if compressed {
+						var gzBuf bytes.Buffer
+						gw := gzip.NewWriter(&gzBuf)
+						_, err := gw.Write(data)
+						testutil.Ok(b, err)
+						testutil.Ok(b, gw.Close())
+						data = gzBuf.Bytes()
 					}
-				}
-			})
+
+					dir := b.TempDir()
+					input := filepath.Join(dir, "input.yaml")
+					testutil.Ok(b, os.WriteFile(input, data, 0644))
+
+					r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{})
+
+					output := filepath.Join(dir, "output.yaml")
+					b.SetBytes(int64(len(data)))
+					b.ReportAllocs()
+					b.ResetTimer()
+
+					for b.Loop() {
+						if err := r.normalize(input, output); err != nil {
+							b.Fatalf("normalize error: %v", err)
+						}
+					}
+				})
+			}
 		}
 	}
 }
