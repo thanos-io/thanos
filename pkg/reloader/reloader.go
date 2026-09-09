@@ -758,6 +758,15 @@ func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
 		return nil
 	}
 
+	writeString := func(s string) error {
+		if _, err := io.WriteString(dst, s); err != nil {
+			return errors.Wrap(err, "write file")
+		}
+		return nil
+	}
+
+	envCache := make(map[string]string)
+
 	buf := make([]byte, defaultBufferSize+maxVarNameLength)
 	buffered := 0
 
@@ -826,22 +835,32 @@ func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
 				varName := data[2 : 2+closeIdx]
 				if isValidIdent(varName) {
 					// Complete $(VAR) match!
-					val, ok := os.LookupEnv(string(varName))
+					val, ok := envCache[string(varName)]
 					if !ok {
-						configEnvVarExpansionErrorsCount++
-						errStr := errors.Errorf("found reference to unset environment variable %q", varName)
-						if r.tolerateEnvVarExpansionErrors {
-							level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
-							// Write $(VAR) as is.
-							if err := writeBytes(data[:2+closeIdx+1]); err != nil {
-								return err
+						varNameStr := string(varName)
+						v, found := os.LookupEnv(varNameStr)
+						if !found {
+							configEnvVarExpansionErrorsCount++
+							errStr := errors.Errorf("found reference to unset environment variable %q", varNameStr)
+							if r.tolerateEnvVarExpansionErrors {
+								level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
+								// Write $(VAR) as is.
+								if err := writeBytes(data[:2+closeIdx+1]); err != nil {
+									return err
+								}
+							} else {
+								expansionErr = errors.Wrap(errStr, "expand environment variables")
+								return expansionErr
 							}
 						} else {
-							expansionErr = errors.Wrap(errStr, "expand environment variables")
-							return expansionErr
+							val = v
+							envCache[varNameStr] = val
+							if err := writeString(val); err != nil {
+								return err
+							}
 						}
 					} else {
-						if err := writeBytes([]byte(val)); err != nil {
+						if err := writeString(val); err != nil {
 							return err
 						}
 					}
