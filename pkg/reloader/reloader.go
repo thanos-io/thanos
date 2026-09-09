@@ -53,6 +53,7 @@
 package reloader
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -65,7 +66,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -358,38 +358,62 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	}
 }
 
-func (r *Reloader) normalize(inputFile, outputFile string) error {
-	b, err := os.ReadFile(inputFile)
+func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
+	in, err := os.Open(inputFile)
 	if err != nil {
 		return errors.Wrap(err, "read file")
 	}
+	defer runutil.CloseWithLogOnErr(r.logger, in, "config input file close")
 
-	// Detect and extract gzipped file.
-	if bytes.Equal(b[0:3], firstGzipBytes) {
-		zr, err := gzip.NewReader(bytes.NewReader(b))
+	br := bufio.NewReader(in)
+	header, peekErr := br.Peek(len(firstGzipBytes))
+
+	var src io.Reader = br
+	isGzip := false
+	if peekErr == nil && bytes.Equal(header, firstGzipBytes) {
+		zr, err := gzip.NewReader(br)
 		if err != nil {
 			return errors.Wrap(err, "create gzip reader")
 		}
 		defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
-
-		b, err = io.ReadAll(zr)
-		if err != nil {
-			return errors.Wrap(err, "read compressed config file")
-		}
-	}
-
-	b, err = r.expandEnv(b)
-	if err != nil {
-		return errors.Wrap(err, "expand environment variables")
+		src = zr
+		isGzip = true
 	}
 
 	tmpFile := outputFile + ".tmp"
 	defer func() {
 		_ = os.Remove(tmpFile)
 	}()
-	if err := os.WriteFile(tmpFile, b, 0644); err != nil {
+
+	out, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
 		return errors.Wrap(err, "write file")
 	}
+	defer runutil.CloseWithLogOnErr(r.logger, out, "tmp file close")
+
+	bw := bufio.NewWriterSize(out, defaultBufferSize)
+	if err := r.expandEnvStream(src, bw); err != nil {
+		var rErr readError
+		if errors.As(err, &rErr) {
+			if isGzip {
+				return errors.Wrap(rErr.err, "read compressed config file")
+			}
+			return errors.Wrap(rErr.err, "read file")
+		}
+		var wErr writeError
+		if errors.As(err, &wErr) {
+			return errors.Wrap(wErr.err, "write file")
+		}
+		return errors.Wrap(err, "expand environment variables")
+	}
+
+	if err := bw.Flush(); err != nil {
+		return errors.Wrap(err, "write file")
+	}
+	if err := out.Close(); err != nil {
+		return errors.Wrap(err, "write file")
+	}
+
 	if err := os.Rename(tmpFile, outputFile); err != nil {
 		return errors.Wrap(err, "rename file")
 	}
@@ -700,32 +724,222 @@ func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
 	return u.JoinPath("/api/v1/status/runtimeinfo")
 }
 
-var envRe = regexp.MustCompile(`\$\(([a-zA-Z_0-9]+)\)`)
+type readError struct {
+	err error
+}
 
-func (r *Reloader) expandEnv(b []byte) (replaced []byte, err error) {
-	configEnvVarExpansionErrorsCount := 0
-	replaced = envRe.ReplaceAllFunc(b, func(n []byte) []byte {
-		if err != nil {
-			return nil
+func (e readError) Error() string {
+	return e.err.Error()
+}
+
+func (e readError) Unwrap() error {
+	return e.err
+}
+
+type writeError struct {
+	err error
+}
+
+func (e writeError) Error() string {
+	return e.err.Error()
+}
+
+func (e writeError) Unwrap() error {
+	return e.err
+}
+
+const (
+	defaultBufferSize = 64 * 1024
+	maxVarNameLength  = 4 * 1024
+)
+
+func isIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+func isValidIdent(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	for _, c := range b {
+		if !isIdentChar(c) {
+			return false
 		}
-		m := n
-		n = n[2 : len(n)-1]
+	}
+	return true
+}
 
-		v, ok := os.LookupEnv(string(n))
-		if !ok {
-			configEnvVarExpansionErrorsCount++
-			errStr := errors.Errorf("found reference to unset environment variable %q", n)
-			if r.tolerateEnvVarExpansionErrors {
-				level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
-				return m
+func isAllIdentChars(b []byte) bool {
+	for _, c := range b {
+		if !isIdentChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func (r *Reloader) expandEnv(b []byte) ([]byte, error) {
+	var out bytes.Buffer
+	out.Grow(len(b))
+	if err := r.expandEnvStream(bytes.NewReader(b), &out); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func (r *Reloader) expandEnvStream(src io.Reader, dst io.Writer) error {
+	var (
+		configEnvVarExpansionErrorsCount = 0
+		expansionErr                     error
+	)
+	defer func() {
+		r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
+	}()
+
+	writeBytes := func(p []byte) error {
+		if _, err := dst.Write(p); err != nil {
+			return writeError{err: err}
+		}
+		return nil
+	}
+
+	buf := make([]byte, defaultBufferSize+maxVarNameLength)
+	buffered := 0
+
+	for {
+		n, err := src.Read(buf[buffered:])
+		if n > 0 {
+			buffered += n
+		}
+		if err != nil && err != io.EOF {
+			return readError{err: err}
+		}
+
+		eof := (err == io.EOF)
+		data := buf[:buffered]
+		consumed := 0
+
+		for len(data) > 0 {
+			idx := bytes.IndexByte(data, '$')
+			if idx == -1 {
+				// No '$' found in remaining data. Write everything out.
+				if err := writeBytes(data); err != nil {
+					return err
+				}
+				consumed += len(data)
+				data = nil
+				break
 			}
-			err = errStr
-			return nil
+
+			// Write everything preceding '$'.
+			if idx > 0 {
+				if err := writeBytes(data[:idx]); err != nil {
+					return err
+				}
+				consumed += idx
+				data = data[idx:]
+			}
+
+			// Now data starts with '$'.
+			if len(data) < 2 {
+				if !eof {
+					// Need more bytes to determine if this is '$('
+					break
+				}
+				// At EOF, trailing '$' is literal.
+				if err := writeBytes(data); err != nil {
+					return err
+				}
+				consumed += len(data)
+				data = nil
+				break
+			}
+
+			if data[1] != '(' {
+				// '$' not followed by '(', write '$' and advance.
+				if err := writeBytes(data[:1]); err != nil {
+					return err
+				}
+				consumed++
+				data = data[1:]
+				continue
+			}
+
+			// data starts with "$(". Look for ')'.
+			closeIdx := bytes.IndexByte(data[2:], ')')
+			if closeIdx != -1 {
+				varName := data[2 : 2+closeIdx]
+				if isValidIdent(varName) {
+					// Complete $(VAR) match!
+					val, ok := os.LookupEnv(string(varName))
+					if !ok {
+						configEnvVarExpansionErrorsCount++
+						errStr := errors.Errorf("found reference to unset environment variable %q", varName)
+						if r.tolerateEnvVarExpansionErrors {
+							level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
+							// Write $(VAR) as is.
+							if err := writeBytes(data[:2+closeIdx+1]); err != nil {
+								return err
+							}
+						} else {
+							expansionErr = errStr
+							return expansionErr
+						}
+					} else {
+						if err := writeBytes([]byte(val)); err != nil {
+							return err
+						}
+					}
+					consumed += 2 + closeIdx + 1
+					data = data[2+closeIdx+1:]
+					continue
+				}
+
+				// Not a valid identifier (e.g. "$()" or "$(foo bar)").
+				// Advance past the '$' so any subsequent '$' can still be processed.
+				if err := writeBytes(data[:1]); err != nil {
+					return err
+				}
+				consumed++
+				data = data[1:]
+				continue
+			}
+
+			// ')' not found in data[2:].
+			// Could ')' be in the next chunk?
+			// Check if all characters in data[2:] so far are valid identifier chars.
+			if isAllIdentChars(data[2:]) && len(data[2:]) < maxVarNameLength && !eof {
+				// It could still be a valid variable name waiting for ')'.
+				break
+			}
+
+			// Either not all chars are ident chars, or varName exceeded max length, or we reached EOF.
+			// In all these cases, it cannot be a valid $(VAR). Write '$' and advance.
+			if err := writeBytes(data[:1]); err != nil {
+				return err
+			}
+			consumed++
+			data = data[1:]
 		}
-		return []byte(v)
-	})
-	r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
-	return replaced, err
+
+		// Shift remaining unconsumed bytes to the start of buf.
+		remaining := buffered - consumed
+		if remaining > 0 && consumed > 0 {
+			copy(buf, buf[consumed:buffered])
+		}
+		buffered = remaining
+
+		if eof {
+			if buffered > 0 {
+				if err := writeBytes(buf[:buffered]); err != nil {
+					return err
+				}
+			}
+			break
+		}
+	}
+
+	return expansionErr
 }
 
 type watcher struct {
