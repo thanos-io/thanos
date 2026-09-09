@@ -83,9 +83,15 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
+const (
+	defaultBufferSize = 64 * 1024
+	maxVarNameLength  = 4 * 1024
+)
+
 // Reloader can watch config files and trigger reloads of a Prometheus server.
 // It optionally substitutes environment variables in the configuration.
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
+// "var" name can't be longer than maxVarNameLength (4KB).
 type Reloader struct {
 	logger                        log.Logger
 	cfgFile                       string
@@ -369,7 +375,6 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	header, peekErr := br.Peek(len(firstGzipBytes))
 
 	var src io.Reader = br
-	isGzip := false
 	if peekErr == nil && bytes.Equal(header, firstGzipBytes) {
 		zr, err := gzip.NewReader(br)
 		if err != nil {
@@ -377,7 +382,6 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 		}
 		defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
 		src = zr
-		isGzip = true
 	}
 
 	tmpFile := outputFile + ".tmp"
@@ -392,19 +396,8 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	defer runutil.CloseWithLogOnErr(r.logger, out, "tmp file close")
 
 	bw := bufio.NewWriterSize(out, defaultBufferSize)
-	if err := r.expandEnvStream(src, bw); err != nil {
-		var rErr readError
-		if errors.As(err, &rErr) {
-			if isGzip {
-				return errors.Wrap(rErr.err, "read compressed config file")
-			}
-			return errors.Wrap(rErr.err, "read file")
-		}
-		var wErr writeError
-		if errors.As(err, &wErr) {
-			return errors.Wrap(wErr.err, "write file")
-		}
-		return errors.Wrap(err, "expand environment variables")
+	if err := r.expandEnv(src, bw); err != nil {
+		return err
 	}
 
 	if err := bw.Flush(); err != nil {
@@ -724,35 +717,6 @@ func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
 	return u.JoinPath("/api/v1/status/runtimeinfo")
 }
 
-type readError struct {
-	err error
-}
-
-func (e readError) Error() string {
-	return e.err.Error()
-}
-
-func (e readError) Unwrap() error {
-	return e.err
-}
-
-type writeError struct {
-	err error
-}
-
-func (e writeError) Error() string {
-	return e.err.Error()
-}
-
-func (e writeError) Unwrap() error {
-	return e.err
-}
-
-const (
-	defaultBufferSize = 64 * 1024
-	maxVarNameLength  = 4 * 1024
-)
-
 func isIdentChar(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
 }
@@ -778,16 +742,7 @@ func isAllIdentChars(b []byte) bool {
 	return true
 }
 
-func (r *Reloader) expandEnv(b []byte) ([]byte, error) {
-	var out bytes.Buffer
-	out.Grow(len(b))
-	if err := r.expandEnvStream(bytes.NewReader(b), &out); err != nil {
-		return nil, err
-	}
-	return out.Bytes(), nil
-}
-
-func (r *Reloader) expandEnvStream(src io.Reader, dst io.Writer) error {
+func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
 	var (
 		configEnvVarExpansionErrorsCount = 0
 		expansionErr                     error
@@ -798,7 +753,7 @@ func (r *Reloader) expandEnvStream(src io.Reader, dst io.Writer) error {
 
 	writeBytes := func(p []byte) error {
 		if _, err := dst.Write(p); err != nil {
-			return writeError{err: err}
+			return errors.Wrap(err, "write file")
 		}
 		return nil
 	}
@@ -812,7 +767,7 @@ func (r *Reloader) expandEnvStream(src io.Reader, dst io.Writer) error {
 			buffered += n
 		}
 		if err != nil && err != io.EOF {
-			return readError{err: err}
+			return errors.Wrap(err, "read file")
 		}
 
 		eof := (err == io.EOF)
@@ -882,7 +837,7 @@ func (r *Reloader) expandEnvStream(src io.Reader, dst io.Writer) error {
 								return err
 							}
 						} else {
-							expansionErr = errStr
+							expansionErr = errors.Wrap(errStr, "expand environment variables")
 							return expansionErr
 						}
 					} else {

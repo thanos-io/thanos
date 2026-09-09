@@ -4,8 +4,10 @@
 package reloader
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -1244,4 +1246,63 @@ config:
 	g.Wait()
 	// Check no reload request made
 	testutil.Equals(t, 0, reloads.Load().(int))
+}
+
+// chunkReader splits reads into fixed small chunks to test boundary handling.
+type chunkReader struct {
+	r         io.Reader
+	chunkSize int
+}
+
+func (cr *chunkReader) Read(p []byte) (n int, err error) {
+	toRead := cr.chunkSize
+	if toRead > len(p) {
+		toRead = len(p)
+	}
+	buf := make([]byte, toRead)
+	n, err = cr.r.Read(buf)
+	if n > 0 {
+		copy(p, buf[:n])
+	}
+	return n, err
+}
+
+func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
+	setupTestEnv(t)
+
+	testCases := []struct {
+		input    string
+		expected string
+	}{
+		{"", ""},
+		{"$", "$"},
+		{"$$", "$$"},
+		{"$()", "$()"},
+		{"$(", "$("},
+		{"$(A", "$(A"},
+		{"$(RELOADER_TEST_ENV)", "production"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
+		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
+		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
+		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
+		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
+	}
+
+	chunkSizes := []int{1, 2, 3, 5, 7, 13, 1024}
+
+	r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{
+		TolerateEnvVarExpansionErrors: true,
+	})
+
+	for _, tc := range testCases {
+		for _, sz := range chunkSizes {
+			t.Run(fmt.Sprintf("chunk_%d_%s", sz, tc.input), func(t *testing.T) {
+				cr := &chunkReader{r: strings.NewReader(tc.input), chunkSize: sz}
+				var out bytes.Buffer
+				err := r.expandEnv(cr, &out)
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expected, out.String())
+			})
+		}
+	}
 }
