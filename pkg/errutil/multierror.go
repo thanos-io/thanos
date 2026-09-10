@@ -6,6 +6,7 @@ package errutil
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -33,6 +34,24 @@ func (es MultiError) Err() error {
 		return nil
 	}
 	return NonNilMultiError(es)
+}
+
+// NewMulti returns a MultiError seeded with the given errors. Nil errors are skipped.
+func NewMulti(errs ...error) MultiError {
+	var m MultiError
+	for _, err := range errs {
+		m.Add(err)
+	}
+	return m
+}
+
+// CloseAll closes every closer and returns the combined error, or nil if all succeeded.
+func CloseAll(cs []io.Closer) error {
+	var m MultiError
+	for _, c := range cs {
+		m.Add(c.Close())
+	}
+	return m.Err()
 }
 
 // SyncMultiError is a thread-safe implementation of MultiError.

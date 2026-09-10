@@ -16,9 +16,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunks"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
 	"github.com/prometheus/prometheus/tsdb/index"
+
+	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
 // Reader is like tsdb.BlockReader but without tombstones and size methods.
@@ -69,7 +70,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 	}
 	defer func() {
 		if err != nil {
-			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
+			err = errutil.NewMulti(err, errutil.CloseAll(d.closers)).Err()
 			if err := os.RemoveAll(bTmp); err != nil {
 				level.Error(logger).Log("msg", "removed tmp folder after failed compaction", "err", err.Error())
 			}
@@ -103,7 +104,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	defer func() {
 		if err != nil {
-			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
+			err = errutil.NewMulti(err, errutil.CloseAll(d.closers)).Err()
 			if err := os.RemoveAll(d.bTmp); err != nil {
 				level.Error(d.logger).Log("msg", "removed tmp folder failed after block(s) write", "err", err.Error())
 			}
@@ -115,7 +116,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}
 	defer func() {
 		if df != nil {
-			err = tsdb_errors.NewMulti(err, df.Close()).Err()
+			err = errutil.NewMulti(err, df.Close()).Err()
 		}
 	}()
 
@@ -129,7 +130,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 	}
 	df = nil
 
-	if err := tsdb_errors.CloseAll(d.closers); err != nil {
+	if err := errutil.CloseAll(d.closers); err != nil {
 		d.closers = nil
 		return tsdb.BlockStats{}, err
 	}
@@ -181,5 +182,5 @@ func (s *statsGatheringSeriesWriter) WriteChunks(chks ...chunks.Meta) error {
 }
 
 func (s statsGatheringSeriesWriter) Close() error {
-	return tsdb_errors.NewMulti(s.iw.Close(), s.cw.Close()).Err()
+	return errutil.NewMulti(s.iw.Close(), s.cw.Close()).Err()
 }
