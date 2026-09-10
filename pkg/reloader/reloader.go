@@ -84,8 +84,7 @@ import (
 )
 
 const (
-	defaultBufferSize = 64 * 1024
-	maxVarNameLength  = 4 * 1024
+	maxVarNameLength = 4 * 1024
 )
 
 // Reloader can watch config files and trigger reloads of a Prometheus server.
@@ -395,7 +394,7 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	}
 	defer runutil.CloseWithLogOnErr(r.logger, out, "tmp file close")
 
-	bw := bufio.NewWriterSize(out, defaultBufferSize)
+	bw := bufio.NewWriterSize(out, bufio.MaxScanTokenSize)
 	if err := r.expandEnv(src, bw); err != nil {
 		return err
 	}
@@ -742,178 +741,82 @@ func isAllIdentChars(b []byte) bool {
 	return true
 }
 
+// expandEnv expands environment variable from a stream of bytes using $(var) syntax.
 func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
-	var (
-		configEnvVarExpansionErrorsCount = 0
-		expansionErr                     error
-	)
-	defer func() {
-		r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
-	}()
+	var configEnvVarExpansionErrorsCount = 0
 
-	writeBytes := func(p []byte) error {
-		if _, err := dst.Write(p); err != nil {
+	envCache := make(map[string][]byte)
+
+	s := bufio.NewScanner(src)
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		idx := bytes.IndexByte(data, '$')
+		if idx < 0 || (len(data) < 3 && atEOF) {
+			// No $ found, or too short data for the variable.
+			return len(data), data, nil
+		}
+		if idx > 0 {
+			// Pass the prefix to scanner.
+			return idx, data[:idx], nil
+		}
+		// At this point we have a potential variable (data starts with '$').
+		// Ensure it contains valid characters and ends with ).
+		// We are validating chars to reduce risk of hitting reloading errors on accidental substitutions like PromQL regex matching in recording rules.
+		// Historically, we only substituted for variable names matching [a-zA-Z_0-9]+
+		if len(data) < 2 {
+			if atEOF {
+				return 1, data[:1], nil
+			}
+			return 0, nil, nil
+		}
+		if data[1] != '(' {
+			return 1, data[:1], nil
+		}
+		// data starts with "$(". Look for ')'.
+		closeIdx := bytes.IndexByte(data[2:], ')')
+		if closeIdx < 0 {
+			if atEOF {
+				return 1, data[:1], nil
+			}
+			if !isAllIdentChars(data[2:]) || len(data[2:]) >= maxVarNameLength {
+				// Not a valid variable or too long, ignore.
+				return 1, data[:1], nil
+			}
+			// Read more data.
+			return 0, nil, nil
+		}
+		varName := data[2 : 2+closeIdx]
+		if !isValidIdent(varName) {
+			return 1, data[:1], nil
+		}
+
+		advance := 2 + closeIdx + 1
+		val, ok := envCache[string(varName)]
+		if !ok {
+			v, found := os.LookupEnv(string(varName))
+			if !found {
+				configEnvVarExpansionErrorsCount++
+				if r.tolerateEnvVarExpansionErrors {
+					level.Warn(r.logger).Log("msg", "found reference to unset environment variable", "var", string(varName))
+					return advance, data[:advance], nil
+				}
+				return 0, nil, errors.Errorf("found reference to unset environment variable %q", string(varName))
+			}
+			val = []byte(v)
+			envCache[string(varName)] = val
+		}
+		return advance, val, nil
+	})
+
+	for s.Scan() {
+		if _, err := dst.Write(s.Bytes()); err != nil {
 			return errors.Wrap(err, "write file")
 		}
-		return nil
 	}
-
-	writeString := func(s string) error {
-		if _, err := io.WriteString(dst, s); err != nil {
-			return errors.Wrap(err, "write file")
-		}
-		return nil
-	}
-
-	envCache := make(map[string]string)
-
-	buf := make([]byte, defaultBufferSize+maxVarNameLength)
-	buffered := 0
-
-	for {
-		n, err := src.Read(buf[buffered:])
-		if n > 0 {
-			buffered += n
-		}
-		if err != nil && err != io.EOF {
-			return errors.Wrap(err, "read file")
-		}
-
-		eof := (err == io.EOF)
-		data := buf[:buffered]
-		consumed := 0
-
-		for len(data) > 0 {
-			idx := bytes.IndexByte(data, '$')
-			if idx == -1 {
-				// No '$' found in remaining data. Write everything out.
-				if err := writeBytes(data); err != nil {
-					return err
-				}
-				consumed += len(data)
-				data = nil
-				break
-			}
-
-			// Write everything preceding '$'.
-			if idx > 0 {
-				if err := writeBytes(data[:idx]); err != nil {
-					return err
-				}
-				consumed += idx
-				data = data[idx:]
-			}
-
-			// Now data starts with '$'.
-			if len(data) < 2 {
-				if !eof {
-					// Need more bytes to determine if this is '$('
-					break
-				}
-				// At EOF, trailing '$' is literal.
-				if err := writeBytes(data); err != nil {
-					return err
-				}
-				consumed += len(data)
-				data = nil
-				break
-			}
-
-			if data[1] != '(' {
-				// '$' not followed by '(', write '$' and advance.
-				if err := writeBytes(data[:1]); err != nil {
-					return err
-				}
-				consumed++
-				data = data[1:]
-				continue
-			}
-
-			// data starts with "$(". Look for ')'.
-			closeIdx := bytes.IndexByte(data[2:], ')')
-			if closeIdx != -1 {
-				varName := data[2 : 2+closeIdx]
-				if isValidIdent(varName) {
-					// Complete $(VAR) match!
-					val, ok := envCache[string(varName)]
-					if !ok {
-						varNameStr := string(varName)
-						v, found := os.LookupEnv(varNameStr)
-						if !found {
-							configEnvVarExpansionErrorsCount++
-							errStr := errors.Errorf("found reference to unset environment variable %q", varNameStr)
-							if r.tolerateEnvVarExpansionErrors {
-								level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
-								// Write $(VAR) as is.
-								if err := writeBytes(data[:2+closeIdx+1]); err != nil {
-									return err
-								}
-							} else {
-								expansionErr = errors.Wrap(errStr, "expand environment variables")
-								return expansionErr
-							}
-						} else {
-							val = v
-							envCache[varNameStr] = val
-							if err := writeString(val); err != nil {
-								return err
-							}
-						}
-					} else {
-						if err := writeString(val); err != nil {
-							return err
-						}
-					}
-					consumed += 2 + closeIdx + 1
-					data = data[2+closeIdx+1:]
-					continue
-				}
-
-				// Not a valid identifier (e.g. "$()" or "$(foo bar)").
-				// Advance past the '$' so any subsequent '$' can still be processed.
-				if err := writeBytes(data[:1]); err != nil {
-					return err
-				}
-				consumed++
-				data = data[1:]
-				continue
-			}
-
-			// ')' not found in data[2:].
-			// Could ')' be in the next chunk?
-			// Check if all characters in data[2:] so far are valid identifier chars.
-			if isAllIdentChars(data[2:]) && len(data[2:]) < maxVarNameLength && !eof {
-				// It could still be a valid variable name waiting for ')'.
-				break
-			}
-
-			// Either not all chars are ident chars, or varName exceeded max length, or we reached EOF.
-			// In all these cases, it cannot be a valid $(VAR). Write '$' and advance.
-			if err := writeBytes(data[:1]); err != nil {
-				return err
-			}
-			consumed++
-			data = data[1:]
-		}
-
-		// Shift remaining unconsumed bytes to the start of buf.
-		remaining := buffered - consumed
-		if remaining > 0 && consumed > 0 {
-			copy(buf, buf[consumed:buffered])
-		}
-		buffered = remaining
-
-		if eof {
-			if buffered > 0 {
-				if err := writeBytes(buf[:buffered]); err != nil {
-					return err
-				}
-			}
-			break
-		}
-	}
-
-	return expansionErr
+	r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
+	return s.Err()
 }
 
 type watcher struct {

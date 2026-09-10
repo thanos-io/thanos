@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -111,6 +112,46 @@ func BenchmarkNormalize(b *testing.B) {
 					}
 				})
 			}
+		}
+	}
+}
+
+// Recommended CLI invocation:
+/*
+	export bench=expand && go test ./... \
+		-run '^$' -bench '^BenchmarkExpandEnv' \
+		-benchtime 2s -count 6 -cpu 2 -timeout 999m \
+		| tee ${bench}.txt
+*/
+func BenchmarkExpandEnv(b *testing.B) {
+	setupTestEnv(b)
+
+	for _, sz := range []struct {
+		name  string
+		bytes int
+	}{
+		{"10KB", 10 * 1024},
+		{"1MB", 1024 * 1024},
+		{"10MB", 10 * 1024 * 1024},
+		{"50MB", 50 * 1024 * 1024},
+	} {
+		for _, envvars := range []bool{false, true} {
+			data := generateConfigData(sz.bytes, envvars)
+			b.Run(fmt.Sprintf("size=%v/envvars=%v", sz.name, envvars), func(b *testing.B) {
+				r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{})
+				src := bytes.NewReader(data)
+
+				b.SetBytes(int64(len(data)))
+				b.ReportAllocs()
+				b.ResetTimer()
+
+				for b.Loop() {
+					src.Reset(data)
+					if err := r.expandEnv(src, io.Discard); err != nil {
+						b.Fatal(err)
+					}
+				}
+			})
 		}
 	}
 }

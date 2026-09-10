@@ -4,6 +4,7 @@
 package reloader
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -1270,33 +1271,38 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
 	setupTestEnv(t)
 
-	testCases := []struct {
-		input    string
-		expected string
-	}{
-		{"", ""},
-		{"$", "$"},
-		{"$$", "$$"},
-		{"$()", "$()"},
-		{"$(", "$("},
-		{"$(A", "$(A"},
-		{"$(RELOADER_TEST_ENV)", "production"},
-		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
-		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
-		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
-		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
-		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
-	}
-
 	chunkSizes := []int{1, 2, 3, 5, 7, 13, 1024}
 
 	r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{
 		TolerateEnvVarExpansionErrors: true,
 	})
 
-	for _, tc := range testCases {
+	for _, tc := range []struct {
+		input    string
+		expected string
+	}{
+		{"", ""},
+		{"$", "$"},
+		{"prefix $", "prefix $"},
+		{"$$", "$$"},
+		{"prefix $$", "prefix $$"},
+		{"$()", "$()"},
+		{"prefix $()", "prefix $()"},
+		{"$(", "$("},
+		{"prefix $(", "prefix $("},
+		{"$(A", "$(A"},
+		{"prefix $(A", "prefix $(A"},
+		{"$(RELOADER_TEST_ENV)", "production"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
+		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
+		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
+		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
+		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
+		{"$(RELOADER_TEST/_# _ENV)", "$(RELOADER_TEST/_# _ENV)"},
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")"},
+	} {
 		for _, sz := range chunkSizes {
-			t.Run(fmt.Sprintf("chunk_%d_%s", sz, tc.input), func(t *testing.T) {
+			t.Run(fmt.Sprintf("chunk=%d/input=%s", sz, trim(tc.input, 16)), func(t *testing.T) {
 				cr := &chunkReader{r: strings.NewReader(tc.input), chunkSize: sz}
 				var out bytes.Buffer
 				err := r.expandEnv(cr, &out)
@@ -1305,4 +1311,11 @@ func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
 			})
 		}
 	}
+}
+
+func trim(in string, by int) string {
+	if len(in) > by {
+		return in[:by]
+	}
+	return in
 }
