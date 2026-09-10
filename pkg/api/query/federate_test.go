@@ -118,6 +118,9 @@ func TestFederateEndpoints(t *testing.T) {
 	gateCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	t.Cleanup(cancel)
 
+	zeroLookbackAPI := newAPI(false)
+	zeroLookbackAPI.lookbackDeltaCreate = func(int64) time.Duration { return 0 }
+
 	partialAPI := newAPI(false)
 	partialAPI.enableQueryPartialResponse = true
 	partialAPI.queryableCreate = query.NewQueryableCreator(nil, nil, newFailingProxyStore(), 2, timeout, dedup.AlgorithmPenalty, 1)
@@ -182,6 +185,17 @@ test_metric2{foo="boo"} 4 540000
 			expectedCode:        http.StatusOK,
 			expectedContentType: textContentType,
 			expectedBody:        "",
+		},
+		{
+			name:                "zero lookback delta falls back to the default five minute window",
+			api:                 zeroLookbackAPI,
+			match:               []string{"test_metric1"},
+			expectedCode:        http.StatusOK,
+			expectedContentType: textContentType,
+			expectedBody: `# TYPE test_metric1 untyped
+test_metric1{foo="bar"} 2 540000
+test_metric1{foo="boo"} 3 540000
+`,
 		},
 		{
 			name:                "series whose latest sample is a stale marker is dropped",

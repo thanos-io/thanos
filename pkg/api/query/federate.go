@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -50,6 +51,10 @@ import (
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
+
+// defaultLookbackDelta is the fallback for a zero lookback delta. It is the
+// same value as the unexported default of the PromQL engines.
+const defaultLookbackDelta = 5 * time.Minute
 
 // RegisterFederate registers the /federate endpoint on the given router. It is
 // separate from Register because federation serves raw exposition text instead
@@ -100,12 +105,18 @@ func (qapi *QueryAPI) federate(w http.ResponseWriter, r *http.Request) {
 	}
 	defer qapi.gate.Done()
 
+	// A zero lookback delta would make the select window a single instant,
+	// which matches no samples.
+	lookbackDelta := qapi.lookbackDeltaCreate(0)
+	if lookbackDelta == 0 {
+		lookbackDelta = defaultLookbackDelta
+	}
+
 	var (
-		lookbackDelta = qapi.lookbackDeltaCreate(0)
-		mint          = timestamp.FromTime(qapi.baseAPI.Now().Add(-lookbackDelta))
-		maxt          = timestamp.FromTime(qapi.baseAPI.Now())
-		format        = expfmt.Negotiate(r.Header)
-		enc           = expfmt.NewEncoder(w, format)
+		mint   = timestamp.FromTime(qapi.baseAPI.Now().Add(-lookbackDelta))
+		maxt   = timestamp.FromTime(qapi.baseAPI.Now())
+		format = expfmt.Negotiate(r.Header)
+		enc    = expfmt.NewEncoder(w, format)
 	)
 	w.Header().Set("Content-Type", string(format))
 
