@@ -25,6 +25,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
 - [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
+- [#8873](https://github.com/thanos-io/thanos/pull/8873): Rule: Log PromQL info annotations (e.g. "metric might not be a counter") at debug level instead of warn, to avoid log spam on every rule evaluation.
+- [#8874](https://github.com/thanos-io/thanos/pull/8874): Reloader: Watch the parent directory of the config file instead of the file itself, so reload is no longer missed after the file is replaced atomically (e.g. ConfigMap mounts, editors using temp-file-and-rename).
 
 ### Changed
 

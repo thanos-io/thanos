@@ -803,9 +803,15 @@ func (w *watcher) addDirectory(name string) error {
 	return w.addPath(name)
 }
 
+// addFile watches the parent directory of name, rather than name itself, so
+// that the watch survives the file being atomically replaced (e.g. via a
+// temp-file-and-rename, which is how ConfigMap-mounted files and many editors
+// update files in place). Watching the file's inode directly would otherwise
+// stop receiving events once the inode is replaced.
 func (w *watcher) addFile(name string) error {
-	w.watchedDirs[filepath.Dir(name)] = struct{}{}
-	return w.addPath(name)
+	dir := filepath.Dir(name)
+	w.watchedDirs[dir] = struct{}{}
+	return w.addPath(dir)
 }
 
 func (w *watcher) run(ctx context.Context) {
