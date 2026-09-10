@@ -64,7 +64,7 @@ func setupTestEnv(t testing.TB) {
 
 // Recommended CLI invocation:
 /*
-	export bench=normalize && go test ./... \
+	export bench=normalize && go test ./pkg/reloader/... \
 		-run '^$' -bench '^BenchmarkNormalize' \
 		-benchtime 2s -count 6 -cpu 2 -timeout 999m \
 		| tee ${bench}.txt
@@ -118,7 +118,7 @@ func BenchmarkNormalize(b *testing.B) {
 
 // Recommended CLI invocation:
 /*
-	export bench=expand && go test ./... \
+	export bench=expand && go test ./pkg/reloader/... \
 		-run '^$' -bench '^BenchmarkExpandEnv' \
 		-benchtime 2s -count 6 -cpu 2 -timeout 999m \
 		| tee ${bench}.txt
