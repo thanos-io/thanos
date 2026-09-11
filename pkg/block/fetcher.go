@@ -1401,19 +1401,45 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
 	}
-	for _, cfg := range relabelConfig {
-		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
-			return nil, errors.Wrap(err, "validate relabel config")
+	if err := validateRelabelConfig(relabelConfig, supportedActions); err != nil {
+		return nil, err
+	}
+	return relabelConfig, nil
+}
+
+// ParseRelabelConfigWithTenants parses relabel configuration provided either as
+// a single list applied to all tenants or as a map of tenant ID to relabel configs.
+func ParseRelabelConfigWithTenants(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
+	var global []*relabel.Config
+	if err := yaml.Unmarshal(contentYaml, &global); err == nil {
+		if err := validateRelabelConfig(global, supportedActions); err != nil {
+			return nil, nil, err
 		}
+		return global, nil, nil
 	}
 
-	if supportedActions != nil {
-		for _, cfg := range relabelConfig {
+	var perTenant map[string][]*relabel.Config
+	if err := yaml.Unmarshal(contentYaml, &perTenant); err != nil {
+		return nil, nil, errors.Wrap(err, "parsing relabel configuration")
+	}
+	for tenant, cfgs := range perTenant {
+		if err := validateRelabelConfig(cfgs, supportedActions); err != nil {
+			return nil, nil, errors.Wrapf(err, "tenant %q", tenant)
+		}
+	}
+	return nil, perTenant, nil
+}
+
+func validateRelabelConfig(relabelConfig []*relabel.Config, supportedActions map[relabel.Action]struct{}) error {
+	for _, cfg := range relabelConfig {
+		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
+			return errors.Wrap(err, "validate relabel config")
+		}
+		if supportedActions != nil {
 			if _, ok := supportedActions[cfg.Action]; !ok {
-				return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+				return errors.Errorf("unsupported relabel action: %v", cfg.Action)
 			}
 		}
 	}
-
-	return relabelConfig, nil
+	return nil
 }

@@ -368,11 +368,36 @@ This number of workers is controlled by `--receive.forward.async-workers=`.
 
 Please see the metric `thanos_receive_forward_delay_seconds` to see if you need to increase the number of forwarding workers.
 
+## Relabeling
+
+Thanos Receive can apply [Prometheus relabel rules](https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) to incoming series before ingestion, using `--receive.relabel-config` or `--receive.relabel-config-file`.
+
+The configuration is either a list of relabel rules applied to every tenant:
+
+```yaml
+- source_labels: [__name__]
+  regex: "unwanted_metric_.*"
+  action: drop
+```
+
+or a map of tenant ID to relabel rules, in which case rules are only applied to matching tenants and other tenants are left untouched:
+
+```yaml
+tenant-a:
+  - source_labels: [__name__]
+    regex: "tenant_a_unwanted_.*"
+    action: drop
+tenant-b:
+  - source_labels: [__name__]
+    regex: "tenant_b_wanted_.*"
+    action: keep
+```
+
 ## Quorum
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1348,1358p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1349,1359p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -607,11 +632,17 @@ Flags:
                                  https://github.com/grpc/grpc/blob/master/doc/service_config.md
       --receive.relabel-config-file=<file-path>
                                  Path to YAML file that contains relabeling
-                                 configuration.
+                                 configuration. It supports two formats: a list
+                                 of relabel configs applied to all tenants,
+                                 or a map of tenant ID to relabel configs for
+                                 per-tenant relabeling.
       --receive.relabel-config=<content>
                                  Alternative to 'receive.relabel-config-file'
-                                 flag (mutually exclusive). Content of YAML file
-                                 that contains relabeling configuration.
+                                 flag (mutually exclusive). Content of YAML
+                                 file that contains relabeling configuration. It
+                                 supports two formats: a list of relabel configs
+                                 applied to all tenants, or a map of tenant ID
+                                 to relabel configs for per-tenant relabeling.
       --tsdb.too-far-in-future.time-window=0s
                                  Configures the allowed time window for
                                  ingesting samples too far in the future.
