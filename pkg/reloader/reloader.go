@@ -371,11 +371,9 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	defer runutil.CloseWithLogOnErr(r.logger, in, "config input file close")
 
 	br := bufio.NewReader(in)
-	header, peekErr := br.Peek(len(firstGzipBytes))
-
 	var src io.Reader = br
-	if peekErr == nil && bytes.Equal(header, firstGzipBytes) {
-		zr, err := gzip.NewReader(br)
+	if header, err := br.Peek(len(firstGzipBytes)); err == nil && bytes.Equal(header, firstGzipBytes) {
+		zr, err := gzip.NewReader(src)
 		if err != nil {
 			return errors.Wrap(err, "create gzip reader")
 		}
@@ -392,7 +390,7 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "write file")
 	}
-	defer runutil.CloseWithLogOnErr(r.logger, out, "tmp file close")
+	defer runutil.CloseWithErrCapture(&err, out, "tmp file close")
 
 	bw := bufio.NewWriterSize(out, bufio.MaxScanTokenSize)
 	if err := r.expandEnv(src, bw); err != nil {
@@ -721,18 +719,9 @@ func isIdentChar(c byte) bool {
 }
 
 func isValidIdent(b []byte) bool {
-	if len(b) == 0 {
+	if len(b) == 0 || len(b) >= maxVarNameLength {
 		return false
 	}
-	for _, c := range b {
-		if !isIdentChar(c) {
-			return false
-		}
-	}
-	return true
-}
-
-func isAllIdentChars(b []byte) bool {
 	for _, c := range b {
 		if !isIdentChar(c) {
 			return false
@@ -766,9 +755,6 @@ func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
 		// We are validating chars to reduce risk of hitting reloading errors on accidental substitutions like PromQL regex matching in recording rules.
 		// Historically, we only substituted for variable names matching [a-zA-Z_0-9]+
 		if len(data) < 2 {
-			if atEOF {
-				return 1, data[:1], nil
-			}
 			return 0, nil, nil
 		}
 		if data[1] != '(' {
@@ -778,9 +764,9 @@ func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
 		closeIdx := bytes.IndexByte(data[2:], ')')
 		if closeIdx < 0 {
 			if atEOF {
-				return 1, data[:1], nil
+				return len(data), data, nil
 			}
-			if !isAllIdentChars(data[2:]) || len(data[2:]) >= maxVarNameLength {
+			if len(data[2:]) > 0 && !isValidIdent(data[2:]) {
 				// Not a valid variable or too long, ignore.
 				return 1, data[:1], nil
 			}

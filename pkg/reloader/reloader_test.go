@@ -1300,6 +1300,8 @@ func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
 		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
 		{"$(RELOADER_TEST/_# _ENV)", "$(RELOADER_TEST/_# _ENV)"},
 		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")"},
+		{"$(in.valid$(variable)", "$(in.valid$(variable)"},
+		{"$(5kbytesgohere$(variable))", "$(5kbytesgohere$(variable))"},
 	} {
 		for _, sz := range chunkSizes {
 			t.Run(fmt.Sprintf("chunk=%d/input=%s", sz, trim(tc.input, 16)), func(t *testing.T) {
