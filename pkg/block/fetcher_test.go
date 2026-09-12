@@ -1288,6 +1288,14 @@ func Test_ParseRelabelConfig(t *testing.T) {
     `), SelectorSupportedRelabelActions)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
+
+	_, err = ParseRelabelConfig([]byte(`
+    - action: drop
+      regex: "A"
+    -
+    `), nil)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "relabel config at index 1 is empty", err.Error())
 }
 
 func Test_ParseRelabelConfigWithTenants(t *testing.T) {
@@ -1335,6 +1343,40 @@ tenant-b:
 		testutil.Equals(t, 1, len(perTenant["tenant-a"]))
 		testutil.Equals(t, relabel.Drop, perTenant["tenant-a"][0].Action)
 		testutil.Equals(t, relabel.Keep, perTenant["tenant-b"][0].Action)
+	})
+
+	t.Run("per-tenant empty list is allowed", func(t *testing.T) {
+		content := []byte(`
+tenant-a: []
+tenant-b:
+`)
+		_, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, len(perTenant))
+		testutil.Equals(t, 0, len(perTenant["tenant-a"]))
+		testutil.Equals(t, 0, len(perTenant["tenant-b"]))
+	})
+
+	t.Run("empty global entry is rejected", func(t *testing.T) {
+		content := []byte(`
+- source_labels: [__name__]
+  action: drop
+  regex: "a"
+-
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "relabel config at index 1 is empty", err.Error())
+	})
+
+	t.Run("empty per-tenant entry is rejected", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - null
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `tenant "tenant-a": relabel config at index 0 is empty`, err.Error())
 	})
 
 	t.Run("invalid global config fails validation", func(t *testing.T) {

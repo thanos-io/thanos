@@ -2063,43 +2063,53 @@ func TestRelabelPerTenant(t *testing.T) {
 		"tenant-empty": {},
 	}
 
+	// Global and per-tenant relabel configs are mutually exclusive: the config
+	// file is parsed either as a list (global) or as a map (per-tenant).
 	for _, tcase := range []struct {
 		name                string
 		tenant              string
 		globalRelabel       []*relabel.Config
+		tenantRelabel       map[string][]*relabel.Config
 		inputMetricNames    []string
 		expectedMetricNames []string
 	}{
 		{
-			name:                "tenant with specific config uses it instead of global",
+			name:                "tenant with specific config uses it",
 			tenant:              "tenant-a",
-			globalRelabel:       globalRelabelConfigs,
-			inputMetricNames:    []string{"tenant_a_drop_metric", "global_drop_metric", "keep_metric"},
-			expectedMetricNames: []string{"global_drop_metric", "keep_metric"},
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
 		},
 		{
-			name:                "tenant with empty config skips global",
+			name:                "tenant with empty config is left untouched",
 			tenant:              "tenant-empty",
-			globalRelabel:       globalRelabelConfigs,
-			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
-			expectedMetricNames: []string{"global_drop_metric", "keep_metric"},
-		},
-		{
-			name:                "tenant without specific config falls back to global",
-			tenant:              "tenant-b",
-			globalRelabel:       globalRelabelConfigs,
-			inputMetricNames:    []string{"tenant_a_drop_metric", "global_drop_metric", "keep_metric"},
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
 			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
 		},
 		{
-			name:                "empty tenant falls back to global",
+			name:                "tenant without specific config is left untouched",
+			tenant:              "tenant-b",
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "global config applies to any tenant",
+			tenant:              "tenant-a",
+			globalRelabel:       globalRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
+		},
+		{
+			name:                "global config applies to empty tenant",
 			tenant:              "",
 			globalRelabel:       globalRelabelConfigs,
 			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
 			expectedMetricNames: []string{"keep_metric"},
 		},
 		{
-			name:                "no relabel configs for tenant and no global configs",
+			name:                "no relabel configs",
 			tenant:              "tenant-no-config",
 			inputMetricNames:    []string{"any_metric"},
 			expectedMetricNames: []string{"any_metric"},
@@ -2108,7 +2118,7 @@ func TestRelabelPerTenant(t *testing.T) {
 		t.Run(tcase.name, func(t *testing.T) {
 			h := NewHandler(nil, &Options{
 				RelabelConfigs:       tcase.globalRelabel,
-				TenantRelabelConfigs: tenantRelabelConfigs,
+				TenantRelabelConfigs: tcase.tenantRelabel,
 			})
 
 			wreq := prompb.WriteRequest{}
@@ -2128,6 +2138,68 @@ func TestRelabelPerTenant(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRelabelPerTenantWithSplitTenantLabel(t *testing.T) {
+	t.Parallel()
+
+	const tenantLabelName = "thanos_tenant_id"
+
+	dropMetric := func(regex string) []*relabel.Config {
+		return []*relabel.Config{{
+			SourceLabels:         model.LabelNames{"__name__"},
+			Action:               relabel.Drop,
+			Regex:                relabel.MustNewRegexp(regex),
+			NameValidationScheme: model.UTF8Validation,
+		}}
+	}
+
+	h := NewHandler(nil, &Options{
+		SplitTenantLabelName: tenantLabelName,
+		TenantRelabelConfigs: map[string][]*relabel.Config{
+			"tenant-a":       dropMetric("tenant_a_drop"),
+			"header-tenant":  dropMetric("header_drop"),
+			"tenant-no-rule": {},
+		},
+	})
+
+	series := func(name, tenant string) prompb.TimeSeries {
+		lbls := labels.FromStrings("__name__", name)
+		if tenant != "" {
+			lbls = labels.FromStrings("__name__", name, tenantLabelName, tenant)
+		}
+		return prompb.TimeSeries{
+			Labels:  labelpb.ZLabelsFromPromLabels(lbls),
+			Samples: []prompb.Sample{{Timestamp: 0, Value: 1}},
+		}
+	}
+
+	wreq := prompb.WriteRequest{Timeseries: []prompb.TimeSeries{
+		// Split label tenant rules apply, not the header tenant's.
+		series("tenant_a_drop", "tenant-a"),
+		series("header_drop", "tenant-a"),
+		// No split label: header tenant rules apply.
+		series("header_drop", ""),
+		series("tenant_a_drop", ""),
+		// Split label tenant without rules is left untouched.
+		series("header_drop", "tenant-b"),
+		// Split label tenant with empty rules is left untouched.
+		series("tenant_a_drop", "tenant-no-rule"),
+	}}
+
+	h.relabel(&wreq, "header-tenant")
+
+	var got []string
+	for _, ts := range wreq.Timeseries {
+		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+		got = append(got, lbls.Get("__name__")+"/"+lbls.Get(tenantLabelName))
+	}
+	testutil.Equals(t, []string{
+		"header_drop/tenant-a",
+		"tenant_a_drop/",
+		"header_drop/tenant-b",
+		"tenant_a_drop/tenant-no-rule",
+	}, got)
 }
 
 func TestGetStatsLimitParameter(t *testing.T) {

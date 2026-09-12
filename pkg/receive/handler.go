@@ -1467,26 +1467,37 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-// A tenant-specific relabel config takes precedence over the global one.
 func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
-	relabelConfigs, ok := h.options.TenantRelabelConfigs[tenant]
-	if !ok {
-		relabelConfigs = h.options.RelabelConfigs
-	}
-	if len(relabelConfigs) == 0 {
+	if len(h.options.RelabelConfigs) == 0 && len(h.options.TenantRelabelConfigs) == 0 {
 		return
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), relabelConfigs...)
-		if !keep {
-			continue
+		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+		if relabelConfigs := h.relabelConfigsFor(tenant, lbls); len(relabelConfigs) > 0 {
+			var keep bool
+			if lbls, keep = relabel.Process(lbls, relabelConfigs...); !keep {
+				continue
+			}
+			ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries
+}
+
+// relabelConfigsFor returns the relabel configs of the tenant the series will be
+// stored under, which is the split tenant label when present.
+func (h *Handler) relabelConfigsFor(tenant string, lbls labels.Labels) []*relabel.Config {
+	if h.splitTenantLabelName != "" {
+		if splitTenant := lbls.Get(h.splitTenantLabelName); splitTenant != "" {
+			tenant = splitTenant
+		}
+	}
+	if relabelConfigs, ok := h.options.TenantRelabelConfigs[tenant]; ok {
+		return relabelConfigs
+	}
+	return h.options.RelabelConfigs
 }
 
 // isConflict returns whether or not the given error represents a conflict.

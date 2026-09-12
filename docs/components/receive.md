@@ -380,7 +380,7 @@ The configuration is either a list of relabel rules applied to every tenant:
   action: drop
 ```
 
-or a map of tenant ID to relabel rules, in which case rules are only applied to matching tenants and other tenants are left untouched:
+or a map of tenant ID to relabel rules, in which case rules are only applied to matching tenants and other tenants are left untouched. The tenant of a series is the one it will be stored under, so when `--receive.split-tenant-label-name` is set, the value of that label takes precedence over the tenant of the request:
 
 ```yaml
 tenant-a:

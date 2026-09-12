@@ -341,7 +341,7 @@ func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{})
 func (r *relabelCfg) RelabelConfigWithTenants(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
 	relabelContentYaml, err := r.Content()
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "get content of relabel configuration")
+		return nil, nil, errors.Wrap(err, "get content of relabel configuration with tenants")
 	}
 	return block.ParseRelabelConfigWithTenants(relabelContentYaml, supportedActions)
 }

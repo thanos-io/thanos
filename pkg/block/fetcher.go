@@ -1431,7 +1431,10 @@ func ParseRelabelConfigWithTenants(contentYaml []byte, supportedActions map[rela
 }
 
 func validateRelabelConfig(relabelConfig []*relabel.Config, supportedActions map[relabel.Action]struct{}) error {
-	for _, cfg := range relabelConfig {
+	for i, cfg := range relabelConfig {
+		if cfg == nil {
+			return errors.Errorf("relabel config at index %d is empty", i)
+		}
 		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
 			return errors.Wrap(err, "validate relabel config")
 		}
