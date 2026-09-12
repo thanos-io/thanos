@@ -276,6 +276,89 @@ func TestOverlapSplitSet(t *testing.T) {
 	testutil.Equals(t, exp, got)
 }
 
+func TestIsCounter(t *testing.T) {
+	for _, tc := range []struct {
+		f        string
+		expected bool
+	}{
+		{f: "rate", expected: true},
+		{f: "increase", expected: true},
+		{f: "irate", expected: true},
+		{f: "resets", expected: true},
+		{f: "xrate", expected: true},
+		{f: "xincrease", expected: true},
+		{f: "", expected: false},
+		{f: "sum", expected: false},
+		{f: "avg", expected: false},
+		{f: "count", expected: false},
+	} {
+		t.Run(tc.f, func(t *testing.T) {
+			testutil.Equals(t, tc.expected, isCounter(tc.f))
+		})
+	}
+}
+
+// TestDedupSeriesSet_XFunctions verifies that xrate and xincrease trigger
+// counter-based deduplication (counterErrAdjustSeriesIterator), producing
+// the same adjusted results as rate/increase.
+func TestDedupSeriesSet_XFunctions(t *testing.T) {
+	// Two HA replicas of a counter where replica B has a gap followed by
+	// a lower value (simulating an app restart seen by one replica).
+	// Counter adjustment during dedup should correct for this.
+	input := []series{
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{10000, 8.0},
+				{20000, 9.0},
+				{50001, 9 + 1.0},
+				{60000, 9 + 2.0},
+				{70000, 9 + 3.0},
+				{80000, 9 + 4.0},
+				{90000, 9 + 5.0},
+				{100000, 9 + 6.0},
+			},
+		},
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{10001, 8.0},
+				{45001, 8 + 0.5},
+				{55001, 8 + 1.5},
+				{65001, 8 + 2.5},
+			},
+		},
+	}
+	expected := []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}}
+
+	// Get the expected result using "rate" (known-working counter function).
+	rateSet := NewSeriesSet(&mockedSeriesSet{series: input}, "rate", AlgorithmPenalty)
+	var rateSeries []storage.Series
+	for rateSet.Next() {
+		rateSeries = append(rateSeries, rateSet.At())
+	}
+	testutil.Ok(t, rateSet.Err())
+	testutil.Equals(t, 1, len(rateSeries))
+	rateResult := expandSeries(t, rateSeries[0].Iterator(nil))
+	testutil.Equals(t, expected, rateResult)
+
+	// Verify xrate and xincrease produce the same counter-adjusted results.
+	for _, f := range []string{"xrate", "xincrease"} {
+		t.Run(f, func(t *testing.T) {
+			dedupSet := NewSeriesSet(&mockedSeriesSet{series: input}, f, AlgorithmPenalty)
+			var ats []storage.Series
+			for dedupSet.Next() {
+				ats = append(ats, dedupSet.At())
+			}
+			testutil.Ok(t, dedupSet.Err())
+			testutil.Equals(t, 1, len(ats))
+
+			res := expandSeries(t, ats[0].Iterator(nil))
+			testutil.Equals(t, expected, res)
+		})
+	}
+}
+
 func TestDedupSeriesSet(t *testing.T) {
 	for _, tcase := range []struct {
 		name      string
