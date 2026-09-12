@@ -123,6 +123,7 @@ type Options struct {
 	MaxBackoff              time.Duration
 	MaxArtificialDelay      time.Duration
 	RelabelConfigs          []*relabel.Config
+	TenantRelabelConfigs    map[string][]*relabel.Config
 	TSDBStats               TSDBStats
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
@@ -727,7 +728,7 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	// Apply relabeling configs.
-	h.relabel(wreq)
+	h.relabel(wreq, tenantHTTP)
 	if len(wreq.Timeseries) == 0 {
 		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
 		return nil
@@ -1466,21 +1467,37 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 }
 
 // relabel relabels the time series labels in the remote write request.
-func (h *Handler) relabel(wreq *prompb.WriteRequest) {
-	if len(h.options.RelabelConfigs) == 0 {
+func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
+	if len(h.options.RelabelConfigs) == 0 && len(h.options.TenantRelabelConfigs) == 0 {
 		return
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-		if !keep {
-			continue
+		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+		if relabelConfigs := h.relabelConfigsFor(tenant, lbls); len(relabelConfigs) > 0 {
+			var keep bool
+			if lbls, keep = relabel.Process(lbls, relabelConfigs...); !keep {
+				continue
+			}
+			ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries
+}
+
+// relabelConfigsFor returns the relabel configs of the tenant the series will be
+// stored under, which is the split tenant label when present.
+func (h *Handler) relabelConfigsFor(tenant string, lbls labels.Labels) []*relabel.Config {
+	if h.splitTenantLabelName != "" {
+		if splitTenant := lbls.Get(h.splitTenantLabelName); splitTenant != "" {
+			tenant = splitTenant
+		}
+	}
+	if relabelConfigs, ok := h.options.TenantRelabelConfigs[tenant]; ok {
+		return relabelConfigs
+	}
+	return h.options.RelabelConfigs
 }
 
 // isConflict returns whether or not the given error represents a conflict.
