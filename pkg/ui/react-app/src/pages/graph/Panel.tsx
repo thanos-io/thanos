@@ -219,10 +219,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     this.executeQuery();
     const storedValue = localStorage.getItem('usePartialResponse');
     if (storedValue !== null) {
-      // Set the default value in state and local storage
-      this.setOptions({ usePartialResponse: true });
-      this.props.onUsePartialResponseChange(true);
-      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+      // Restore the previously persisted value instead of forcing it on.
+      const usePartialResponse = storedValue === 'true';
+      this.setOptions({ usePartialResponse });
+      this.props.onUsePartialResponseChange(usePartialResponse);
     }
   }
 
@@ -412,17 +412,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    let newValue = event.target.checked;
-
-    const storedValue = localStorage.getItem('usePartialResponse');
-
-    if (storedValue === 'true') {
-      newValue = true;
-    }
+    const newValue = event.target.checked;
     this.setOptions({ usePartialResponse: newValue });
     this.props.onUsePartialResponseChange(newValue);
-
-    localStorage.setItem('usePartialResponse', JSON.stringify(event.target.checked));
+    localStorage.setItem('usePartialResponse', JSON.stringify(newValue));
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
