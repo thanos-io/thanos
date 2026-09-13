@@ -17,7 +17,7 @@ thanos query \
 
 ## Querier use cases, why do I need this component?
 
-Thanos Querier essentially allows to aggregate and optionally deduplicate multiple metrics backends under single Prometheus Query endpoint.
+Thanos Querier essentially allows you to aggregate and optionally deduplicate multiple metrics backends under a single Prometheus Query endpoint.
 
 ### Global View
 
