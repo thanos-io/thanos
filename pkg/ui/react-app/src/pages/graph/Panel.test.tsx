@@ -213,4 +213,36 @@ describe('Panel', () => {
       expect(executeQuerySpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('usePartialResponse persistence', () => {
+    afterEach(() => {
+      localStorage.removeItem('usePartialResponse');
+    });
+
+    it('does not force usePartialResponse on when the persisted value is false', () => {
+      localStorage.setItem('usePartialResponse', JSON.stringify(false));
+      const onUsePartialResponseChange = jest.fn();
+      shallow(<Panel {...defaultProps} onUsePartialResponseChange={onUsePartialResponseChange} />);
+      expect(onUsePartialResponseChange).toHaveBeenCalledWith(false);
+      expect(onUsePartialResponseChange).not.toHaveBeenCalledWith(true);
+      expect(localStorage.getItem('usePartialResponse')).toEqual('false');
+    });
+
+    it('restores usePartialResponse when the persisted value is true', () => {
+      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+      const onUsePartialResponseChange = jest.fn();
+      shallow(<Panel {...defaultProps} onUsePartialResponseChange={onUsePartialResponseChange} />);
+      expect(onUsePartialResponseChange).toHaveBeenCalledWith(true);
+    });
+
+    it('lets the user uncheck usePartialResponse even when true was persisted', () => {
+      localStorage.setItem('usePartialResponse', JSON.stringify(true));
+      const onUsePartialResponseChange = jest.fn();
+      const panel = shallow(<Panel {...defaultProps} onUsePartialResponseChange={onUsePartialResponseChange} />);
+      const instance: any = panel.instance();
+      instance.handleChangePartialResponse({ target: { checked: false } });
+      expect(onUsePartialResponseChange).toHaveBeenLastCalledWith(false);
+      expect(localStorage.getItem('usePartialResponse')).toEqual('false');
+    });
+  });
 });
