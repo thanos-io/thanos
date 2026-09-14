@@ -1332,7 +1332,7 @@ type GatherNoDownsampleMarkFilter struct {
 	bkt                   objstore.InstrumentedBucketReader
 	noDownsampleMarkedMap map[ulid.ULID]*metadata.NoDownsampleMark
 	concurrency           int
-	listedMarkers         *block.ListedMarkers
+	markerSource          block.ListedMarkersSource
 	mtx                   sync.Mutex
 }
 
@@ -1346,10 +1346,10 @@ func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.Instrumente
 }
 
 // WithListedMarkers makes the filter read no-downsample-mark.json only for
-// blocks whose marker was observed by the bucket listing recorded in m. A nil m
-// keeps the default behaviour of probing every block.
-func (f *GatherNoDownsampleMarkFilter) WithListedMarkers(m *block.ListedMarkers) *GatherNoDownsampleMarkFilter {
-	f.listedMarkers = m
+// blocks whose marker was seen by the latest complete bucket listing provided
+// by src. A nil src keeps the default behavior of probing every block.
+func (f *GatherNoDownsampleMarkFilter) WithListedMarkers(src block.ListedMarkersSource) *GatherNoDownsampleMarkFilter {
+	f.markerSource = src
 	return f
 }
 
@@ -1367,6 +1367,11 @@ func (f *GatherNoDownsampleMarkFilter) NoDownsampleMarkedBlocks() map[ulid.ULID]
 // this code with that of GatherNoCompactionMarkFilter
 // Filter passes all metas, while gathering no downsample markers.
 func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
+	var listed *block.ListedMarkers
+	if f.markerSource != nil {
+		listed = f.markerSource.ListedMarkers()
+	}
+
 	f.mtx.Lock()
 	f.noDownsampleMarkedMap = make(map[ulid.ULID]*metadata.NoDownsampleMark)
 	f.mtx.Unlock()
@@ -1387,7 +1392,7 @@ func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[uli
 		eg.Go(func() error {
 			var lastErr error
 			for id := range ch {
-				if !f.listedMarkers.ShouldProbe(id, metadata.NoDownsampleMarkFilename) {
+				if !listed.ShouldProbe(id, metadata.NoDownsampleMarkFilename) {
 					continue
 				}
 				m := &metadata.NoDownsampleMark{}

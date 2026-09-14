@@ -154,7 +154,7 @@ func (sc *storeConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("15m").DurationVar(&sc.syncInterval)
 
 	strategies := strings.Join([]string{string(concurrentDiscovery), string(recursiveDiscovery)}, ", ")
-	cmd.Flag("block-discovery-strategy", "One of "+strategies+". When set to concurrent, stores will concurrently issue one call per directory to discover active blocks in the bucket. The recursive strategy iterates through all objects in the bucket, recursively traversing into each directory. This avoids N+1 calls at the expense of having slower bucket iterations.").
+	cmd.Flag("block-discovery-strategy", "One of "+strategies+". When set to concurrent, stores will concurrently issue one call per directory to discover active blocks in the bucket. The recursive strategy iterates through all objects in the bucket, recursively traversing into each directory. This avoids N+1 calls at the expense of having slower bucket iterations. With recursive, the deletion, no-compact and no-downsample marker filters take marker presence from the listing and only fetch the markers that exist instead of probing every block.").
 		Default(string(concurrentDiscovery)).StringVar(&sc.blockListStrategy)
 
 	cmd.Flag("block-sync-concurrency", "Number of goroutines to use when constructing index-cache.json blocks from object storage. Must be equal or greater than 1.").
@@ -383,14 +383,16 @@ func runStore(
 
 	// With recursive block discovery the listing already tells which blocks carry a deletion mark,
 	// so the filter can skip the GET for blocks without one instead of probing every block.
-	var listedMarkers *block.ListedMarkers
-	var blockLister block.Lister
+	var (
+		blockLister   block.Lister
+		listedMarkers block.ListedMarkersSource
+	)
 	switch syncStrategy(conf.blockListStrategy) {
 	case concurrentDiscovery:
 		blockLister = block.NewConcurrentLister(logger, insBkt)
 	case recursiveDiscovery:
-		listedMarkers = block.NewListedMarkers()
-		blockLister = block.NewRecursiveListerWithMarkers(logger, insBkt, listedMarkers)
+		recursiveLister := block.NewRecursiveLister(logger, insBkt)
+		blockLister, listedMarkers = recursiveLister, recursiveLister
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}

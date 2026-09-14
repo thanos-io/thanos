@@ -32,6 +32,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
+	"go.uber.org/atomic"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v2"
 
@@ -197,10 +198,12 @@ type Lister interface {
 }
 
 // RecursiveLister lists block IDs by recursively iterating through a bucket.
+// Because it sees every object name it also records which marker files each
+// block carries, see ListedMarkers.
 type RecursiveLister struct {
 	logger  log.Logger
 	bkt     objstore.InstrumentedBucketReader
-	markers *ListedMarkers
+	markers atomic.Pointer[ListedMarkers]
 }
 
 func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader) *RecursiveLister {
@@ -210,15 +213,13 @@ func NewRecursiveLister(logger log.Logger, bkt objstore.InstrumentedBucketReader
 	}
 }
 
-// NewRecursiveListerWithMarkers returns a RecursiveLister that, after every
-// successful listing, records the marker files it has seen into markers so
-// that marker filters can skip probing blocks without one.
-func NewRecursiveListerWithMarkers(logger log.Logger, bkt objstore.InstrumentedBucketReader, markers *ListedMarkers) *RecursiveLister {
-	return &RecursiveLister{
-		logger:  logger,
-		bkt:     bkt,
-		markers: markers,
+// ListedMarkers returns the marker files seen by the latest complete listing,
+// or nil when no listing has completed yet.
+func (f *RecursiveLister) ListedMarkers() *ListedMarkers {
+	if f == nil {
+		return nil
 	}
+	return f.markers.Load()
 }
 
 type ActiveBlockFetchData struct {
@@ -226,65 +227,43 @@ type ActiveBlockFetchData struct {
 	ulid.ULID
 }
 
-// ListedMarkers records which marker files (deletion-mark.json,
-// no-compact-mark.json, no-downsample-mark.json) were observed while listing
-// the bucket. Marker filters consult it and skip the per-block GET for blocks
-// whose marker was not listed. Without it every metadata sync issues one GET
-// per block and per marker type, nearly all of them answered with "not found".
+// ListedMarkers is the immutable set of marker files (deletion-mark.json,
+// no-compact-mark.json, no-downsample-mark.json) one complete bucket listing
+// has seen, per block. Marker filters consult it and skip the per-block GET for
+// blocks whose marker was not listed. Without it every metadata sync issues one
+// GET per block and per marker type, nearly all of them answered with "not
+// found".
 //
-// Only listers that see full object names can populate it (RecursiveLister).
-// Until a complete listing has been recorded, ShouldProbe returns true for
-// every block, so filters behave exactly as they do without ListedMarkers.
+// Only listers that see full object names can provide it (RecursiveLister,
+// through ListedMarkersSource). A nil *ListedMarkers means "no listing
+// information": ShouldProbe then returns true for every block, so filters
+// behave exactly as they do without it.
 //
-// A marker uploaded between the listing and the filter run is not seen until
-// the next sync. This is the same window that exists today between a filter's
-// GET and the actions taken on its result.
+// Marker presence then depends on the listing the same way block discovery
+// already does with RecursiveLister: a marker uploaded after the listing passed
+// its block is only seen by the next sync, whereas a per-block GET would have
+// seen it up to the moment the filter ran. Marking is idempotent, so a marker
+// applied one sync later has no other effect than the delay.
 type ListedMarkers struct {
-	mtx      sync.RWMutex
-	complete bool
-	markers  map[ulid.ULID]map[string]struct{}
-}
-
-// NewListedMarkers returns an empty ListedMarkers that is not complete yet.
-func NewListedMarkers() *ListedMarkers {
-	return &ListedMarkers{}
-}
-
-// Set replaces the recorded markers with the result of a complete listing.
-func (l *ListedMarkers) Set(markers map[ulid.ULID]map[string]struct{}) {
-	l.mtx.Lock()
-	defer l.mtx.Unlock()
-
-	l.markers = markers
-	l.complete = true
-}
-
-// Complete returns true once a full listing has been recorded.
-func (l *ListedMarkers) Complete() bool {
-	if l == nil {
-		return false
-	}
-	l.mtx.RLock()
-	defer l.mtx.RUnlock()
-
-	return l.complete
+	markers map[ulid.ULID]map[string]struct{}
 }
 
 // ShouldProbe returns whether the given marker file of the block has to be read
-// from the bucket: true when no complete listing is available (including a nil
+// from the bucket: true when no listing information is available (nil
 // receiver) or when the listing contains the marker.
 func (l *ListedMarkers) ShouldProbe(id ulid.ULID, markerFilename string) bool {
 	if l == nil {
 		return true
 	}
-	l.mtx.RLock()
-	defer l.mtx.RUnlock()
-
-	if !l.complete {
-		return true
-	}
 	_, ok := l.markers[id][markerFilename]
 	return ok
+}
+
+// ListedMarkersSource provides the markers of the latest complete bucket
+// listing. Filters ask once per run, so a whole run works on one listing.
+// RecursiveLister implements it.
+type ListedMarkersSource interface {
+	ListedMarkers() *ListedMarkers
 }
 
 func isMarkerFile(file string) bool {
@@ -297,11 +276,7 @@ func isMarkerFile(file string) bool {
 
 func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activeBlocks chan<- ActiveBlockFetchData) (partialBlocks map[ulid.ULID]bool, err error) {
 	partialBlocks = make(map[ulid.ULID]bool)
-
-	var seenMarkers map[ulid.ULID]map[string]struct{}
-	if f.markers != nil {
-		seenMarkers = make(map[ulid.ULID]map[string]struct{})
-	}
+	seenMarkers := make(map[ulid.ULID]map[string]struct{})
 
 	err = f.bkt.IterWithAttributes(ctx, "", func(attrs objstore.IterObjectAttributes) error {
 		name := attrs.Name
@@ -315,7 +290,7 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activ
 		if _, ok := partialBlocks[id]; !ok {
 			partialBlocks[id] = true
 		}
-		if seenMarkers != nil && len(parts) == 2 && isMarkerFile(file) {
+		if len(parts) == 2 && isMarkerFile(file) {
 			if seenMarkers[id] == nil {
 				seenMarkers[id] = make(map[string]struct{})
 			}
@@ -339,8 +314,8 @@ func (f *RecursiveLister) GetActiveAndPartialBlockIDs(ctx context.Context, activ
 		}
 		return nil
 	}, objstore.WithUpdatedAt(), objstore.WithRecursiveIter())
-	if err == nil && f.markers != nil {
-		f.markers.Set(seenMarkers)
+	if err == nil {
+		f.markers.Store(&ListedMarkers{markers: seenMarkers})
 	}
 	return partialBlocks, err
 }
@@ -1361,11 +1336,11 @@ func (f *IgnoreParquetConvertedBlocksFilter) readMigratedBlocksFromParquetMetada
 // Delay is not considered when computing DeletionMarkBlocks map.
 // Not go-routine safe.
 type IgnoreDeletionMarkFilter struct {
-	logger        log.Logger
-	delay         time.Duration
-	concurrency   int
-	bkt           objstore.InstrumentedBucketReader
-	listedMarkers *ListedMarkers
+	logger       log.Logger
+	delay        time.Duration
+	concurrency  int
+	bkt          objstore.InstrumentedBucketReader
+	markerSource ListedMarkersSource
 
 	mtx             sync.Mutex
 	deletionMarkMap map[ulid.ULID]*metadata.DeletionMark
@@ -1382,10 +1357,10 @@ func NewIgnoreDeletionMarkFilter(logger log.Logger, bkt objstore.InstrumentedBuc
 }
 
 // WithListedMarkers makes the filter read deletion-mark.json only for blocks
-// whose marker was observed by the bucket listing recorded in m. A nil m keeps
-// the default behaviour of probing every block.
-func (f *IgnoreDeletionMarkFilter) WithListedMarkers(m *ListedMarkers) *IgnoreDeletionMarkFilter {
-	f.listedMarkers = m
+// whose marker was seen by the latest complete bucket listing provided by src.
+// A nil src keeps the default behavior of probing every block.
+func (f *IgnoreDeletionMarkFilter) WithListedMarkers(src ListedMarkersSource) *IgnoreDeletionMarkFilter {
+	f.markerSource = src
 	return f
 }
 
@@ -1403,6 +1378,11 @@ func (f *IgnoreDeletionMarkFilter) DeletionMarkBlocks() map[ulid.ULID]*metadata.
 // Filter filters out blocks that are marked for deletion after a given delay.
 // It also returns the blocks that can be deleted since they were uploaded delay duration before current time.
 func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced GaugeVec, modified GaugeVec) error {
+	var listed *ListedMarkers
+	if f.markerSource != nil {
+		listed = f.markerSource.ListedMarkers()
+	}
+
 	deletionMarkMap := make(map[ulid.ULID]*metadata.DeletionMark)
 
 	// Make a copy of block IDs to check, in order to avoid concurrency issues
@@ -1427,7 +1407,7 @@ func (f *IgnoreDeletionMarkFilter) Filter(ctx context.Context, metas map[ulid.UL
 		eg.Go(func() error {
 			var lastErr error
 			for id := range ch {
-				if !f.listedMarkers.ShouldProbe(id, metadata.DeletionMarkFilename) {
+				if !listed.ShouldProbe(id, metadata.DeletionMarkFilename) {
 					continue
 				}
 				m := &metadata.DeletionMark{}

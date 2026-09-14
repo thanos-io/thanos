@@ -355,9 +355,13 @@ Flags:
                                 one call per directory to discover active
                                 blocks in the bucket. The recursive strategy
                                 iterates through all objects in the bucket,
-                                recursively traversing into each directory.
-                                This avoids N+1 calls at the expense of having
-                                slower bucket iterations.
+                                recursively traversing into each directory. This
+                                avoids N+1 calls at the expense of having slower
+                                bucket iterations. With recursive, the deletion,
+                                no-compact and no-downsample marker filters take
+                                marker presence from the listing and only fetch
+                                the markers that exist instead of probing every
+                                block.
       --block-meta-fetch-concurrency=32
                                 Number of goroutines to use when fetching block
                                 metadata from object storage.
