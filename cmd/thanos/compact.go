@@ -225,13 +225,20 @@ func runCompact(
 		}
 	}()
 
+	// With recursive block discovery the listing already tells which blocks carry marker files,
+	// so the marker filters can skip the GET for blocks without one instead of probing every block.
+	var listedMarkers *block.ListedMarkers
+	if syncStrategy(conf.blockListStrategy) == recursiveDiscovery {
+		listedMarkers = block.NewListedMarkers()
+	}
+
 	// While fetching blocks, we filter out blocks that were marked for deletion by using IgnoreDeletionMarkFilter.
 	// The delay of deleteDelay/2 is added to ensure we fetch blocks that are meant to be deleted but do not have a replacement yet.
 	// This is to make sure compactor will not accidentally perform compactions with gap instead.
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, deleteDelay/2, conf.blockMetaFetchConcurrency).WithListedMarkers(listedMarkers)
 	duplicateBlocksFilter := block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency)
-	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
-	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency)
+	noCompactMarkerFilter := compact.NewGatherNoCompactionMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency).WithListedMarkers(listedMarkers)
+	noDownsampleMarkerFilter := downsample.NewGatherNoDownsampleMarkFilter(logger, insBkt, conf.blockMetaFetchConcurrency).WithListedMarkers(listedMarkers)
 	labelShardedMetaFilter := block.NewLabelShardedMetaFilter(relabelConfig, conf.dedupReplicaLabels...)
 	consistencyDelayMetaFilter := block.NewConsistencyDelayMetaFilter(logger, conf.consistencyDelay, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	timePartitionMetaFilter := block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime)
@@ -241,7 +248,7 @@ func runCompact(
 	case concurrentDiscovery:
 		blockLister = block.NewConcurrentLister(logger, insBkt)
 	case recursiveDiscovery:
-		blockLister = block.NewRecursiveLister(logger, insBkt)
+		blockLister = block.NewRecursiveListerWithMarkers(logger, insBkt, listedMarkers)
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}

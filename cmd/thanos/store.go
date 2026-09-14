@@ -381,16 +381,20 @@ func runStore(
 		}
 	}
 
+	// With recursive block discovery the listing already tells which blocks carry a deletion mark,
+	// so the filter can skip the GET for blocks without one instead of probing every block.
+	var listedMarkers *block.ListedMarkers
 	var blockLister block.Lister
 	switch syncStrategy(conf.blockListStrategy) {
 	case concurrentDiscovery:
 		blockLister = block.NewConcurrentLister(logger, insBkt)
 	case recursiveDiscovery:
-		blockLister = block.NewRecursiveLister(logger, insBkt)
+		listedMarkers = block.NewListedMarkers()
+		blockLister = block.NewRecursiveListerWithMarkers(logger, insBkt, listedMarkers)
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency).WithListedMarkers(listedMarkers)
 	parquetConvertedBlocksFilter, err := block.NewIgnoreParquetConvertedBlocksFilter(logger, parquetBktConfigYaml, conf.blockMetaFetchConcurrency, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create parquet converted blocks filter")

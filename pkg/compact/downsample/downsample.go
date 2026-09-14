@@ -1332,6 +1332,7 @@ type GatherNoDownsampleMarkFilter struct {
 	bkt                   objstore.InstrumentedBucketReader
 	noDownsampleMarkedMap map[ulid.ULID]*metadata.NoDownsampleMark
 	concurrency           int
+	listedMarkers         *block.ListedMarkers
 	mtx                   sync.Mutex
 }
 
@@ -1342,6 +1343,14 @@ func NewGatherNoDownsampleMarkFilter(logger log.Logger, bkt objstore.Instrumente
 		bkt:         bkt,
 		concurrency: concurrency,
 	}
+}
+
+// WithListedMarkers makes the filter read no-downsample-mark.json only for
+// blocks whose marker was observed by the bucket listing recorded in m. A nil m
+// keeps the default behaviour of probing every block.
+func (f *GatherNoDownsampleMarkFilter) WithListedMarkers(m *block.ListedMarkers) *GatherNoDownsampleMarkFilter {
+	f.listedMarkers = m
+	return f
 }
 
 // NoDownsampleMarkedBlocks returns block ids that were marked for no downsample.
@@ -1378,6 +1387,9 @@ func (f *GatherNoDownsampleMarkFilter) Filter(ctx context.Context, metas map[uli
 		eg.Go(func() error {
 			var lastErr error
 			for id := range ch {
+				if !f.listedMarkers.ShouldProbe(id, metadata.NoDownsampleMarkFilename) {
+					continue
+				}
 				m := &metadata.NoDownsampleMark{}
 
 				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
