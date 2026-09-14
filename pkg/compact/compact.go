@@ -1648,6 +1648,7 @@ type GatherNoCompactionMarkFilter struct {
 	bkt                objstore.InstrumentedBucketReader
 	noCompactMarkedMap map[ulid.ULID]*metadata.NoCompactMark
 	concurrency        int
+	markerSource       block.ListedMarkersSource
 	mtx                sync.Mutex
 }
 
@@ -1658,6 +1659,14 @@ func NewGatherNoCompactionMarkFilter(logger log.Logger, bkt objstore.Instrumente
 		bkt:         bkt,
 		concurrency: concurrency,
 	}
+}
+
+// WithListedMarkers makes the filter read no-compact-mark.json only for blocks
+// whose marker was seen by the latest complete bucket listing provided by src.
+// A nil src keeps the default behavior of probing every block.
+func (f *GatherNoCompactionMarkFilter) WithListedMarkers(src block.ListedMarkersSource) *GatherNoCompactionMarkFilter {
+	f.markerSource = src
+	return f
 }
 
 // NoCompactMarkedBlocks returns block ids that were marked for no compaction.
@@ -1672,6 +1681,11 @@ func (f *GatherNoCompactionMarkFilter) NoCompactMarkedBlocks() map[ulid.ULID]*me
 
 // Filter passes all metas, while gathering no compact markers.
 func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[ulid.ULID]*metadata.Meta, synced block.GaugeVec, modified block.GaugeVec) error {
+	var listed *block.ListedMarkers
+	if f.markerSource != nil {
+		listed = f.markerSource.ListedMarkers()
+	}
+
 	var localNoCompactMapMtx sync.Mutex
 
 	noCompactMarkedMap := make(map[ulid.ULID]*metadata.NoCompactMark)
@@ -1692,6 +1706,9 @@ func (f *GatherNoCompactionMarkFilter) Filter(ctx context.Context, metas map[uli
 		eg.Go(func() error {
 			var lastErr error
 			for id := range ch {
+				if !listed.ShouldProbe(id, metadata.NoCompactMarkFilename) {
+					continue
+				}
 				m := &metadata.NoCompactMark{}
 				// TODO(bwplotka): Hook up bucket cache here + reset API so we don't introduce API calls .
 				if err := metadata.ReadMarker(ctx, f.logger, f.bkt, id.String(), m); err != nil {
