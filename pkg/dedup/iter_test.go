@@ -868,3 +868,143 @@ func expandHistogramSeries(t testing.TB, it chunkenc.Iterator) (res []any) {
 	testutil.Ok(t, it.Err())
 	return res
 }
+
+// mixedTypeSample holds a sample that can be either a float or a histogram.
+type mixedTypeSample struct {
+	t   int64
+	f   float64
+	h   *histogram.Histogram
+	typ chunkenc.ValueType
+}
+
+// mixedTypeIterator is a test iterator that supports both float and histogram
+// samples, returning the correct valueType for each.
+type mixedTypeIterator struct {
+	samples []mixedTypeSample
+	cur     int
+}
+
+func newMixedTypeIterator(samples []mixedTypeSample) *mixedTypeIterator {
+	return &mixedTypeIterator{samples: samples, cur: -1}
+}
+
+func (it *mixedTypeIterator) Next() chunkenc.ValueType {
+	it.cur++
+	if it.cur < len(it.samples) {
+		return it.samples[it.cur].typ
+	}
+	return chunkenc.ValNone
+}
+
+func (it *mixedTypeIterator) Seek(t int64) chunkenc.ValueType {
+	for it.cur < len(it.samples) {
+		if it.cur >= 0 && it.samples[it.cur].t >= t {
+			return it.samples[it.cur].typ
+		}
+		it.cur++
+	}
+	return chunkenc.ValNone
+}
+
+func (it *mixedTypeIterator) At() (int64, float64) {
+	return it.samples[it.cur].t, it.samples[it.cur].f
+}
+
+func (it *mixedTypeIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.samples[it.cur].t, it.samples[it.cur].h
+}
+
+func (it *mixedTypeIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	panic("not implemented")
+}
+
+func (it *mixedTypeIterator) AtT() int64 {
+	return it.samples[it.cur].t
+}
+
+func (it *mixedTypeIterator) Err() error { return nil }
+
+func TestBoundedSeriesIteratorNextValueType(t *testing.T) {
+	h := &histogram.Histogram{
+		Schema:          1,
+		Count:           10,
+		Sum:             100.0,
+		ZeroThreshold:   0.001,
+		ZeroCount:       2,
+		PositiveSpans:   []histogram.Span{{Offset: 0, Length: 2}},
+		PositiveBuckets: []int64{1, 1},
+	}
+
+	t.Run("float before mint, histogram at mint", func(t *testing.T) {
+		// A float sample at t=50 (before mint=100) and a histogram at t=100.
+		// After seeking past the float, Next() must return ValHistogram, not ValFloat.
+		inner := newMixedTypeIterator([]mixedTypeSample{
+			{t: 50, f: 1.0, typ: chunkenc.ValFloat},
+			{t: 100, h: h, typ: chunkenc.ValHistogram},
+			{t: 200, h: h, typ: chunkenc.ValHistogram},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValHistogram, vt, "expected ValHistogram after seeking past float sample before mint")
+		ts := it.AtT()
+		require.Equal(t, int64(100), ts)
+	})
+
+	t.Run("float before mint, float at mint", func(t *testing.T) {
+		// Both samples are floats — valueType should remain ValFloat.
+		inner := newMixedTypeIterator([]mixedTypeSample{
+			{t: 50, f: 1.0, typ: chunkenc.ValFloat},
+			{t: 100, f: 2.0, typ: chunkenc.ValFloat},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValFloat, vt)
+		ts, v := it.At()
+		require.Equal(t, int64(100), ts)
+		require.Equal(t, 2.0, v)
+	})
+
+	t.Run("sample already within bounds", func(t *testing.T) {
+		// First sample is already at mint — no seeking needed.
+		inner := newMixedTypeIterator([]mixedTypeSample{
+			{t: 100, h: h, typ: chunkenc.ValHistogram},
+			{t: 200, f: 5.0, typ: chunkenc.ValFloat},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValHistogram, vt)
+		ts := it.AtT()
+		require.Equal(t, int64(100), ts)
+
+		vt = it.Next()
+		require.Equal(t, chunkenc.ValFloat, vt)
+		ts, v := it.At()
+		require.Equal(t, int64(200), ts)
+		require.Equal(t, 5.0, v)
+	})
+
+	t.Run("all samples before mint", func(t *testing.T) {
+		inner := newMixedTypeIterator([]mixedTypeSample{
+			{t: 10, f: 1.0, typ: chunkenc.ValFloat},
+			{t: 20, f: 2.0, typ: chunkenc.ValFloat},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValNone, vt)
+	})
+
+	t.Run("sample beyond maxt", func(t *testing.T) {
+		inner := newMixedTypeIterator([]mixedTypeSample{
+			{t: 50, f: 1.0, typ: chunkenc.ValFloat},
+			{t: 400, f: 2.0, typ: chunkenc.ValFloat},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValNone, vt)
+	})
+}
