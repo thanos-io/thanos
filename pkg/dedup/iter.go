@@ -37,7 +37,7 @@ type dedupSeriesSet struct {
 // isCounter deduces whether a counter metric has been passed. There must be
 // a better way to deduce this.
 func isCounter(f string) bool {
-	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
+	return f == "increase" || f == "rate" || f == "irate" || f == "resets" || f == "xincrease" || f == "xrate"
 }
 
 // NewOverlapSplit splits overlapping chunks into separate series entry, so existing algorithm can work as usual.
