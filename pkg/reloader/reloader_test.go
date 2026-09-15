@@ -1281,27 +1281,49 @@ func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
 		input    string
 		expected string
 	}{
+		// Empty and literal '$' forms.
 		{"", ""},
 		{"$", "$"},
 		{"prefix $", "prefix $"},
 		{"$$", "$$"},
 		{"prefix $$", "prefix $$"},
+		{"$RELOADER_TEST_ENV", "$RELOADER_TEST_ENV"},
+		{"${RELOADER_TEST_ENV}", "${RELOADER_TEST_ENV}"},
+		{"$1 $2 $9", "$1 $2 $9"},
+		{`handler=~"^(api|admin)$"`, `handler=~"^(api|admin)$"`},
+		// Incomplete '$(' and empty '$()'.
 		{"$()", "$()"},
 		{"prefix $()", "prefix $()"},
 		{"$(", "$("},
 		{"prefix $(", "prefix $("},
 		{"$(A", "$(A"},
 		{"prefix $(A", "prefix $(A"},
+		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
+		{"$($($(", "$($($("},
+		{"$(foo$(bar", "$(foo$(bar"},
+		// Valid variable substitutions.
 		{"$(RELOADER_TEST_ENV)", "production"},
 		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_ENV)", "productionproduction"},
 		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
+		// Unset variables and invalid identifier characters.
 		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
-		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
-		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
 		{"$(RELOADER_TEST/_# _ENV)", "$(RELOADER_TEST/_# _ENV)"},
-		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize) + ")"},
-		{"$(in.valid$(variable)", "$(in.valid$(variable)"},
-		{"$(5kbytesgohere$(variable))", "$(5kbytesgohere$(variable))"},
+		{"$(RELOADER_TEST_ENV:-default)", "$(RELOADER_TEST_ENV:-default)"},
+		{"$( RELOADER_TEST_ENV )", "$( RELOADER_TEST_ENV )"},
+		{"prefix $(\nRELOADER_TEST_ENV\n) suffix", "prefix $(\nRELOADER_TEST_ENV\n) suffix"},
+		// Nested and adjacent parentheses.
+		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
+		{"$((RELOADER_TEST_ENV))", "$((RELOADER_TEST_ENV))"},
+		{"$(($(RELOADER_TEST_ENV)))", "$((production))"},
+		{"$(RELOADER_TEST_ENV))trailing", "production)trailing"},
+		{"$(RELOADER_TEST_ENV$(RELOADER_TEST_PORT))", "$(RELOADER_TEST_ENV90)"},
+		{"$(not_existing$(RELOADER_TEST_ENV))", "$(not_existingproduction)"},
+		{"$(in.valid$(RELOADER_TEST_ENV))", "$(in.validproduction)"},
+		// Length boundaries and large stream tokens.
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")"},
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "$(RELOADER_TEST_ENV))", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "production)"},
+		{strings.Repeat("plain_text_step\n", 5000), strings.Repeat("plain_text_step\n", 5000)},
 	} {
 		for _, sz := range chunkSizes {
 			t.Run(fmt.Sprintf("chunk=%d/input=%s", sz, trim(tc.input, 16)), func(t *testing.T) {
