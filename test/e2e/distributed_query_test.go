@@ -109,7 +109,10 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs-test1"
-	minio1 := e2edb.NewMinio(e, "1", bucket1, e2edb.WithMinioTLS())
+	minio1 := e2edb.NewMinio(
+		e, "1", bucket1, e2edb.WithMinioTLS(),
+		e2edb.WithImage(e2ethanos.DefaultMinioImage),
+	)
 	testutil.Ok(t, e2e.StartAndWaitReady(minio1))
 
 	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test", nil)
@@ -202,7 +205,11 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs2-test2"
-	minio1 := e2edb.NewMinio(e, "1", bucket1, e2edb.WithMinioTLS())
+	minio1 := e2edb.NewMinio(
+		e, "1", bucket1,
+		e2edb.WithMinioTLS(),
+		e2edb.WithImage(e2ethanos.DefaultMinioImage),
+	)
 	testutil.Ok(t, e2e.StartAndWaitReady(minio1))
 
 	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test", nil)

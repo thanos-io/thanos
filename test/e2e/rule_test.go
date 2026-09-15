@@ -767,7 +767,7 @@ func TestRule_CanShipBlocks(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "rule-shipper-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS())
+	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	rFuture := e2ethanos.NewRulerBuilder(e, "1")
