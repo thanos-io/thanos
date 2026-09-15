@@ -4,8 +4,11 @@
 package reloader
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -1244,4 +1247,99 @@ config:
 	g.Wait()
 	// Check no reload request made
 	testutil.Equals(t, 0, reloads.Load().(int))
+}
+
+// chunkReader splits reads into fixed small chunks to test boundary handling.
+type chunkReader struct {
+	r         io.Reader
+	chunkSize int
+}
+
+func (cr *chunkReader) Read(p []byte) (n int, err error) {
+	toRead := cr.chunkSize
+	if toRead > len(p) {
+		toRead = len(p)
+	}
+	buf := make([]byte, toRead)
+	n, err = cr.r.Read(buf)
+	if n > 0 {
+		copy(p, buf[:n])
+	}
+	return n, err
+}
+
+func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
+	setupTestEnv(t)
+
+	chunkSizes := []int{1, 2, 3, 5, 7, 13, 1024}
+
+	r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{
+		TolerateEnvVarExpansionErrors: true,
+	})
+
+	for _, tc := range []struct {
+		input    string
+		expected string
+	}{
+		// Empty and literal '$' forms.
+		{"", ""},
+		{"$", "$"},
+		{"prefix $", "prefix $"},
+		{"$$", "$$"},
+		{"prefix $$", "prefix $$"},
+		{"$RELOADER_TEST_ENV", "$RELOADER_TEST_ENV"},
+		{"${RELOADER_TEST_ENV}", "${RELOADER_TEST_ENV}"},
+		{"$1 $2 $9", "$1 $2 $9"},
+		{`handler=~"^(api|admin)$"`, `handler=~"^(api|admin)$"`},
+		// Incomplete '$(' and empty '$()'.
+		{"$()", "$()"},
+		{"prefix $()", "prefix $()"},
+		{"$(", "$("},
+		{"prefix $(", "prefix $("},
+		{"$(A", "$(A"},
+		{"prefix $(A", "prefix $(A"},
+		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
+		{"$($($(", "$($($("},
+		{"$(foo$(bar", "$(foo$(bar"},
+		// Valid variable substitutions.
+		{"$(RELOADER_TEST_ENV)", "production"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_ENV)", "productionproduction"},
+		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
+		// Unset variables and invalid identifier characters.
+		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
+		{"$(RELOADER_TEST/_# _ENV)", "$(RELOADER_TEST/_# _ENV)"},
+		{"$(RELOADER_TEST_ENV:-default)", "$(RELOADER_TEST_ENV:-default)"},
+		{"$( RELOADER_TEST_ENV )", "$( RELOADER_TEST_ENV )"},
+		{"prefix $(\nRELOADER_TEST_ENV\n) suffix", "prefix $(\nRELOADER_TEST_ENV\n) suffix"},
+		// Nested and adjacent parentheses.
+		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
+		{"$((RELOADER_TEST_ENV))", "$((RELOADER_TEST_ENV))"},
+		{"$(($(RELOADER_TEST_ENV)))", "$((production))"},
+		{"$(RELOADER_TEST_ENV))trailing", "production)trailing"},
+		{"$(RELOADER_TEST_ENV$(RELOADER_TEST_PORT))", "$(RELOADER_TEST_ENV90)"},
+		{"$(not_existing$(RELOADER_TEST_ENV))", "$(not_existingproduction)"},
+		{"$(in.valid$(RELOADER_TEST_ENV))", "$(in.validproduction)"},
+		// Length boundaries and large stream tokens.
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")"},
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "$(RELOADER_TEST_ENV))", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "production)"},
+		{strings.Repeat("plain_text_step\n", 5000), strings.Repeat("plain_text_step\n", 5000)},
+	} {
+		for _, sz := range chunkSizes {
+			t.Run(fmt.Sprintf("chunk=%d/input=%s", sz, trim(tc.input, 16)), func(t *testing.T) {
+				cr := &chunkReader{r: strings.NewReader(tc.input), chunkSize: sz}
+				var out bytes.Buffer
+				err := r.expandEnv(cr, &out)
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expected, out.String())
+			})
+		}
+	}
+}
+
+func trim(in string, by int) string {
+	if len(in) > by {
+		return in[:by]
+	}
+	return in
 }
