@@ -368,7 +368,7 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	if err != nil {
 		return errors.Wrap(err, "read file")
 	}
-	defer runutil.CloseWithLogOnErr(r.logger, in, "config input file close")
+	defer runutil.CloseWithLogOnErr(r.logger, in, "close file")
 
 	br := bufio.NewReader(in)
 	var src io.Reader = br
@@ -388,9 +388,13 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 
 	out, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
 	if err != nil {
-		return errors.Wrap(err, "write file")
+		return errors.Wrap(err, "open tmp file")
 	}
-	defer runutil.CloseWithErrCapture(&err, out, "tmp file close")
+	defer func() {
+		if out != nil {
+			runutil.CloseWithErrCapture(&err, out, "close tmp file")
+		}
+	}()
 
 	bw := bufio.NewWriterSize(out, bufio.MaxScanTokenSize)
 	if err := r.expandEnv(src, bw); err != nil {
@@ -398,14 +402,15 @@ func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
 	}
 
 	if err := bw.Flush(); err != nil {
-		return errors.Wrap(err, "write file")
+		return errors.Wrap(err, "write tmp file")
 	}
 	if err := out.Close(); err != nil {
-		return errors.Wrap(err, "write file")
+		return errors.Wrap(err, "close tmp file")
 	}
+	out = nil // Avoid double close.
 
 	if err := os.Rename(tmpFile, outputFile); err != nil {
-		return errors.Wrap(err, "rename file")
+		return errors.Wrap(err, "rename tmp file")
 	}
 	return nil
 }
