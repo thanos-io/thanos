@@ -147,7 +147,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//
 	m1 := e2edb.NewMinio(
 		e, "minio-1", "default",
-		e2edb.WithImage("quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z"),
+		e2edb.WithImage("quay.io/thanos/minio:RELEASE.2022-03-14T18-25-24Z"),
 	)
 	testutil.Ok(t, exec("cp", "-r", store1Data+"/.", filepath.Join(m1.Dir(), "bkt1")))
 	testutil.Ok(t, exec("cp", "-r", store2Data+"/.", filepath.Join(m1.Dir(), "bkt2")))

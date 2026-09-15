@@ -70,7 +70,7 @@ const (
 	// DefaultMinioImage is the default Minio image used in e2e tests.
 	// NOTE: Minio was archived, so we mirror the image for now.
 	// See https://quay.io/repository/thanos/minio?tab=tags.
-	DefaultMinioImage = "quay.io/thanos/minio:RELEASE.2025-09-07T16-13-09Z"
+	DefaultMinioImage = "quay.io/thanos/minio:RELEASE.2022-03-14T18-25-24Z"
 )
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
