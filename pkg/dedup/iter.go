@@ -492,7 +492,8 @@ func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
 
 	// Advance the iterator if we are before the valid interval.
 	if t < it.mint {
-		if it.Seek(it.mint) == chunkenc.ValNone {
+		valueType = it.Seek(it.mint)
+		if valueType == chunkenc.ValNone {
 			return chunkenc.ValNone
 		}
 		t = it.it.AtT()
