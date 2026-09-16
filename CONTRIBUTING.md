@@ -239,3 +239,25 @@ Ports for container: e2e_test_store_gateway-querier-1 Mapping: map[80:32825 9091
 This output indicates that the HTTP (`80`) endpoint will be available on `http://localhost:32825`. You can quickly craft your own test case with our framework as well!
 
 NOTE: `make docker` has to work in order for `make test-e2e` to run. This currently might not work properly on macOS.
+
+### AI Guidance
+
+Using AI tools to help write your PR is acceptable, but as the author, you are
+responsible for understanding every change. If you used AI tools in preparing
+your PR, you must disclose this in the description of your PR. For example,
+including "This PR was written in part with the assistance of generative AI,"
+in the PR description is sufficient.
+
+Listing AI tooling as a co-author, co-signing commits using an AI tool, or
+using the assisted-by, co-developed or similar commit trailer is not allowed.
+
+Large AI generated PRs and AI generated commit messages are not allowed.
+
+Do not leave the first review of AI generated changes to the reviewers. Verify
+the changes (code review, testing, etc.) before submitting your PR. Reviewers
+may ask questions about your AI-assisted code, and if you cannot explain why a
+change was made, the PR will be closed.
+
+When responding to review comments, you must do so without relying on AI tools.
+Reviewers want to engage directly with you, not with generated responses. If
+you do not engage directly with reviewers, the PR will be closed.
