@@ -7,7 +7,7 @@ WORKDIR $GOPATH/src/github.com/thanos-io/thanos
 
 COPY . $GOPATH/src/github.com/thanos-io/thanos
 
-RUN CGO_ENABLED=1 GOFLAGS="$GOFLAGS" go build -tags slicelabels -o $GOBIN/thanos -race ./cmd/thanos
+RUN CGO_ENABLED=1 GOFLAGS="$GOFLAGS" go build -tags slicelabels -o $GOBIN/thanos -race -cover ./cmd/thanos
 # -----------------------------------------------------------------------------
 
 FROM golang:1.26.4
