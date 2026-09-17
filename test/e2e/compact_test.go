@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	"github.com/go-kit/log"
@@ -349,7 +348,7 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
@@ -878,7 +877,7 @@ func TestCompactorDownsampleIgnoresMarked(t *testing.T) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bktCfg := e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir())
@@ -926,7 +925,7 @@ func TestCompactorIssue6775(t *testing.T) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,
@@ -998,7 +997,7 @@ func TestCompactorDownsampleNativeHistograms(t *testing.T) {
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bkt, err := s3.NewBucketWithConfig(logger,

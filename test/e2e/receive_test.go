@@ -1408,7 +1408,7 @@ func TestReceiveUploadOnShutdown(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "receive-upload-shutdown-test"
-	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	bktConfig := client.BucketConfig{

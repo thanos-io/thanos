@@ -14,7 +14,6 @@ import (
 
 	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/config"
@@ -66,11 +65,6 @@ func wrapWithDefaults(opt e2e.StartOptions) e2e.StartOptions {
 const (
 	// FeatureExemplarStorage is a feature flag that enables exemplar storage on Prometheus.
 	FeatureExemplarStorage = "exemplar-storage"
-
-	// DefaultMinioImage is the default Minio image used in e2e tests.
-	// NOTE: Minio was archived, so we mirror the image for now.
-	// See https://quay.io/repository/thanos/minio?tab=tags.
-	DefaultMinioImage = "quay.io/thanos/minio:RELEASE.2022-03-14T18-25-24Z"
 )
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
@@ -1292,8 +1286,8 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 
 	return s3.Config{
 		Bucket:           bucket,
-		AccessKey:        e2edb.MinioAccessKey,
-		SecretKey:        e2edb.MinioSecretKey,
+		AccessKey:        SeaweedFSAccessKey,
+		SecretKey:        SeaweedFSSecretKey,
 		Endpoint:         endpoint,
 		Insecure:         false,
 		HTTPConfig:       httpDefaultConf,

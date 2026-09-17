@@ -4,6 +4,7 @@
 package e2ebench_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	execlib "os/exec"
@@ -18,6 +19,7 @@ import (
 	e2eprof "github.com/efficientgo/e2e/profiling"
 
 	"github.com/efficientgo/e2e/monitoring/promconfig"
+	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"gopkg.in/yaml.v2"
@@ -135,7 +137,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//
 	//	┌──────────────┐
 	//	│              │
-	//	│    Minio     │
+	//	│  SeaweedFS   │
 	//	│              │
 	//	├──────────────┼──────────────────────────────────────────────────┐
 	//	│ Bucket: bkt1 │ {cluster=eu1, replica=0} 10k series [t-2w, t-1w] │
@@ -145,12 +147,27 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	│ Bucket: bkt2 │ {cluster=us1, replica=0} 10k series [t-2w, t-1w] │
 	//	└──────────────┴──────────────────────────────────────────────────┘
 	//
-	m1 := e2edb.NewMinio(
-		e, "minio-1", "default",
-		e2edb.WithImage("quay.io/thanos/minio:RELEASE.2022-03-14T18-25-24Z"),
-	)
-	testutil.Ok(t, exec("cp", "-r", store1Data+"/.", filepath.Join(m1.Dir(), "bkt1")))
-	testutil.Ok(t, exec("cp", "-r", store2Data+"/.", filepath.Join(m1.Dir(), "bkt2")))
+	s3Server := e2ethanos.NewSeaweedFS(e, "seaweedfs-1", "")
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
+
+	newBucketConfig := func(bucket, endpoint string) s3.Config {
+		return s3.Config{
+			Bucket:           bucket,
+			AccessKey:        e2ethanos.SeaweedFSAccessKey,
+			SecretKey:        e2ethanos.SeaweedFSSecretKey,
+			Endpoint:         endpoint,
+			Insecure:         true,
+			BucketLookupType: s3.PathLookup,
+		}
+	}
+	uploadBlocks := func(bucket, sourceDir string) {
+		bkt, cleanup, err := s3.NewTestBucketFromConfig(t, "", newBucketConfig(bucket, s3Server.Endpoint("http")), false)
+		testutil.Ok(t, err)
+		t.Cleanup(cleanup)
+		testutil.Ok(t, objstore.UploadDir(context.Background(), log.NewLogfmtLogger(os.Stdout), bkt, sourceDir, ""))
+	}
+	uploadBlocks("bkt1", store1Data)
+	uploadBlocks("bkt2", store2Data)
 
 	// Setup Jaeger.
 	j := e.Runnable("tracing").WithPorts(map[string]int{"http-front": 16686, "jaeger.thrift": 14268}).Init(e2e.StartOptions{Image: "jaegertracing/all-in-one:1.25"})
@@ -180,14 +197,8 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	                    │           │
 	//	                    └───────────┘
 	bkt1Config, err := yaml.Marshal(client.BucketConfig{
-		Type: objstore.S3,
-		Config: s3.Config{
-			Bucket:    "bkt1",
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m1.InternalEndpoint("http"),
-			Insecure:  true,
-		},
+		Type:   objstore.S3,
+		Config: newBucketConfig("bkt1", s3Server.InternalEndpoint("http")),
 	})
 	testutil.Ok(t, err)
 	store1 := e2edb.NewThanosStore(
@@ -202,14 +213,8 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	)
 
 	bkt2Config, err := yaml.Marshal(client.BucketConfig{
-		Type: objstore.S3,
-		Config: s3.Config{
-			Bucket:    "bkt2",
-			AccessKey: e2edb.MinioAccessKey,
-			SecretKey: e2edb.MinioSecretKey,
-			Endpoint:  m1.InternalEndpoint("http"),
-			Insecure:  true,
-		},
+		Type:   objstore.S3,
+		Config: newBucketConfig("bkt2", s3Server.InternalEndpoint("http")),
 	})
 	testutil.Ok(t, err)
 
@@ -289,14 +294,13 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 		},
 	}))
 
-	testutil.Ok(t, e2e.StartAndWaitReady(m1))
 	testutil.Ok(t, e2e.StartAndWaitReady(promHA0, promHA1, prom2, sidecarHA0, sidecarHA1, sidecar2, store1, store2, receive1))
 
 	// Let's start query on top of all those 6 store APIs (global query engine).
 	//
 	//  ┌──────────────┐
 	//  │              │
-	//  │    Minio     │                                                       ┌───────────┐
+	//  │  SeaweedFS   │                                                       ┌───────────┐
 	//  │              │                                                       │           │
 	//  ├──────────────┼──────────────────────────────────────────────────┐    │  Store 1  │◄──────┐
 	//  │ Bucket: bkt1 │ {cluster=eu1, replica=0} 10k series [t-2w, t-1w] │◄───┤           │       │
@@ -369,5 +373,7 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	testutil.Ok(t, p.OpenUserInterfaceInBrowser())
 	// Monitoring Endpoint.
 	testutil.Ok(t, m.OpenUserInterfaceInBrowser())
+	// Object storage endpoint.
+	testutil.Ok(t, e2einteractive.OpenInBrowser("http://"+s3Server.Endpoint("admin")))
 	testutil.Ok(t, e2einteractive.RunUntilEndpointHit())
 }

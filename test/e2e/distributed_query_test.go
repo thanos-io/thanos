@@ -13,7 +13,6 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -109,13 +108,10 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs-test1"
-	minio1 := e2edb.NewMinio(
-		e, "1", bucket1, e2edb.WithMinioTLS(),
-		e2edb.WithImage(e2ethanos.DefaultMinioImage),
-	)
-	testutil.Ok(t, e2e.StartAndWaitReady(minio1))
+	s3Server := e2ethanos.NewSeaweedFS(e, "1", bucket1, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
-	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test", nil)
+	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Setup a storage GW with 2 blocks that have a gap to trigger distributed query MinT bug
@@ -153,7 +149,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket1, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -205,14 +201,10 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs2-test2"
-	minio1 := e2edb.NewMinio(
-		e, "1", bucket1,
-		e2edb.WithMinioTLS(),
-		e2edb.WithImage(e2ethanos.DefaultMinioImage),
-	)
-	testutil.Ok(t, e2e.StartAndWaitReady(minio1))
+	s3Server := e2ethanos.NewSeaweedFS(e, "1", bucket1, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
-	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, minio1.Endpoint("http"), minio1.Dir()), "test", nil)
+	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Setup a storage GW with 2 blocks that have a gap to trigger distributed query MinT bug
@@ -250,7 +242,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket1, minio1.InternalEndpoint("http"), minio1.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket1, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",

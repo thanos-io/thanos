@@ -719,11 +719,11 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Preparing 3 different blocks for the tests.
@@ -768,7 +768,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -907,11 +907,11 @@ func TestQueryStoreDedup(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-dedup-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	storeGW := e2ethanos.NewStoreGW(
@@ -919,7 +919,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -2150,11 +2150,11 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Add series from different tenants
@@ -2217,7 +2217,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
