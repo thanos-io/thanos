@@ -1968,7 +1968,7 @@ func TestRelabel(t *testing.T) {
 				RelabelConfigs: tcase.relabel,
 			})
 
-			h.relabel(&tcase.writeRequest)
+			h.relabel(&tcase.writeRequest, "")
 			testutil.Equals(t, tcase.expectedWriteRequest, tcase.writeRequest)
 		})
 	}
@@ -2020,7 +2020,7 @@ func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 	}
 
 	// This would panic before the fix.
-	h.relabel(&wreq)
+	h.relabel(&wreq, "")
 
 	expected := prompb.WriteRequest{
 		Timeseries: []prompb.TimeSeries{
@@ -2037,6 +2037,169 @@ func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 		},
 	}
 	testutil.Equals(t, expected, wreq)
+}
+
+func TestRelabelPerTenant(t *testing.T) {
+	t.Parallel()
+
+	globalRelabelConfigs := []*relabel.Config{
+		{
+			SourceLabels:         model.LabelNames{"__name__"},
+			Action:               relabel.Drop,
+			Regex:                relabel.MustNewRegexp("global_drop_.*"),
+			NameValidationScheme: model.UTF8Validation,
+		},
+	}
+
+	tenantRelabelConfigs := map[string][]*relabel.Config{
+		"tenant-a": {
+			{
+				SourceLabels:         model.LabelNames{"__name__"},
+				Action:               relabel.Drop,
+				Regex:                relabel.MustNewRegexp("tenant_a_drop_.*"),
+				NameValidationScheme: model.UTF8Validation,
+			},
+		},
+		"tenant-empty": {},
+	}
+
+	// Global and per-tenant relabel configs are mutually exclusive: the config
+	// file is parsed either as a list (global) or as a map (per-tenant).
+	for _, tcase := range []struct {
+		name                string
+		tenant              string
+		globalRelabel       []*relabel.Config
+		tenantRelabel       map[string][]*relabel.Config
+		inputMetricNames    []string
+		expectedMetricNames []string
+	}{
+		{
+			name:                "tenant with specific config uses it",
+			tenant:              "tenant-a",
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
+		},
+		{
+			name:                "tenant with empty config is left untouched",
+			tenant:              "tenant-empty",
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "tenant without specific config is left untouched",
+			tenant:              "tenant-b",
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "global config applies to any tenant",
+			tenant:              "tenant-a",
+			globalRelabel:       globalRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
+		},
+		{
+			name:                "global config applies to empty tenant",
+			tenant:              "",
+			globalRelabel:       globalRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"keep_metric"},
+		},
+		{
+			name:                "no relabel configs",
+			tenant:              "tenant-no-config",
+			inputMetricNames:    []string{"any_metric"},
+			expectedMetricNames: []string{"any_metric"},
+		},
+	} {
+		t.Run(tcase.name, func(t *testing.T) {
+			h := NewHandler(nil, &Options{
+				RelabelConfigs:       tcase.globalRelabel,
+				TenantRelabelConfigs: tcase.tenantRelabel,
+			})
+
+			wreq := prompb.WriteRequest{}
+			for _, name := range tcase.inputMetricNames {
+				wreq.Timeseries = append(wreq.Timeseries, prompb.TimeSeries{
+					Labels:  labelpb.ZLabelsFromPromLabels(labels.FromStrings("__name__", name)),
+					Samples: []prompb.Sample{{Timestamp: 0, Value: 1}},
+				})
+			}
+
+			h.relabel(&wreq, tcase.tenant)
+
+			testutil.Equals(t, len(tcase.expectedMetricNames), len(wreq.Timeseries))
+			for i, ts := range wreq.Timeseries {
+				gotName := labelpb.ZLabelsToPromLabels(ts.Labels).Get("__name__")
+				testutil.Equals(t, tcase.expectedMetricNames[i], gotName)
+			}
+		})
+	}
+}
+
+func TestRelabelPerTenantWithSplitTenantLabel(t *testing.T) {
+	t.Parallel()
+
+	const tenantLabelName = "thanos_tenant_id"
+
+	dropMetric := func(regex string) []*relabel.Config {
+		return []*relabel.Config{{
+			SourceLabels:         model.LabelNames{"__name__"},
+			Action:               relabel.Drop,
+			Regex:                relabel.MustNewRegexp(regex),
+			NameValidationScheme: model.UTF8Validation,
+		}}
+	}
+
+	h := NewHandler(nil, &Options{
+		SplitTenantLabelName: tenantLabelName,
+		TenantRelabelConfigs: map[string][]*relabel.Config{
+			"tenant-a":       dropMetric("tenant_a_drop"),
+			"header-tenant":  dropMetric("header_drop"),
+			"tenant-no-rule": {},
+		},
+	})
+
+	series := func(name, tenant string) prompb.TimeSeries {
+		lbls := labels.FromStrings("__name__", name)
+		if tenant != "" {
+			lbls = labels.FromStrings("__name__", name, tenantLabelName, tenant)
+		}
+		return prompb.TimeSeries{
+			Labels:  labelpb.ZLabelsFromPromLabels(lbls),
+			Samples: []prompb.Sample{{Timestamp: 0, Value: 1}},
+		}
+	}
+
+	wreq := prompb.WriteRequest{Timeseries: []prompb.TimeSeries{
+		// Split label tenant rules apply, not the header tenant's.
+		series("tenant_a_drop", "tenant-a"),
+		series("header_drop", "tenant-a"),
+		// No split label: header tenant rules apply.
+		series("header_drop", ""),
+		series("tenant_a_drop", ""),
+		// Split label tenant without rules is left untouched.
+		series("header_drop", "tenant-b"),
+		// Split label tenant with empty rules is left untouched.
+		series("tenant_a_drop", "tenant-no-rule"),
+	}}
+
+	h.relabel(&wreq, "header-tenant")
+
+	var got []string
+	for _, ts := range wreq.Timeseries {
+		lbls := labelpb.ZLabelsToPromLabels(ts.Labels)
+		got = append(got, lbls.Get("__name__")+"/"+lbls.Get(tenantLabelName))
+	}
+	testutil.Equals(t, []string{
+		"header_drop/tenant-a",
+		"tenant_a_drop/",
+		"header_drop/tenant-b",
+		"tenant_a_drop/tenant-no-rule",
+	}, got)
 }
 
 func TestGetStatsLimitParameter(t *testing.T) {
