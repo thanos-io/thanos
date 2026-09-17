@@ -121,19 +121,27 @@ The following screenshots from our dashboards about the query pipeline show how 
 
 #### As perceived by Grafana:
 
-![Grafana Request Duration](img/grafana-request-duration.png)
+<div style="max-width: 100%; overflow: hidden;">
+  <img src="img/grafana-request-duration.png" alt="Grafana Request Duration" style="max-width: 100%; height: auto;">
+</div>
 
 #### Instant queries, as perceived by the global-scoped Thanos Query (includes Thanos Ruler queries):
 
-![Instant Query Latency](img/instant-query-latency.png)
+<div style="max-width: 100%; overflow: hidden;">
+  <img src="img/instant-query-latency.png" alt="Instant Query Latency" style="max-width: 100%; height: auto;">
+</div>
 
 #### Range queries, as perceived by the global-scoped Thanos Query:
 
-![Range Query Latency](img/range-query-latency.png)
+<div style="max-width: 100%; overflow: hidden;">
+  <img src="img/range-query-latency.png" alt="Range Query Latency" style="max-width: 100%; height: auto;">
+</div>
 
 #### A trace showing the large number of components involved in serving a query across multiple data centers:
 
-![Query Trace](img/query-trace.png)
+<div style="max-width: 100%; overflow: hidden;">
+  <img src="img/query-trace.png" alt="Query Trace" style="max-width: 100%; height: auto;">
+</div>
 
 ## Future Steps - the next chapter
 
