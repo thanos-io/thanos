@@ -385,7 +385,8 @@ func (e *EndpointSet) Update(ctx context.Context) {
 
 			e.updateEndpoint(ctx, spec, newRef)
 			if !newRef.isQueryable() {
-				newRef.Close(e.gcTimeout)
+				// Never queryable, so no in-flight request Close()'s gcDelay would protect.
+				newRef.Close(0)
 				return
 			}
 
