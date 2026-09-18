@@ -554,7 +554,7 @@ func runReceive(
 		}
 	}
 
-	{
+	if receive.ReplicationProtocol(conf.replicationProtocol) == receive.CapNProtoReplication {
 		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
 			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 		})
