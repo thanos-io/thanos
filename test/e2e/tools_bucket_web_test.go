@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
@@ -44,7 +43,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	externalPrefix := "testThanos"
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "thanos", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -77,8 +76,8 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	const bucket = "tools-bucket-web-test"
+	m := e2ethanos.NewSeaweedFS(e, "thanos", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -117,8 +116,8 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 
 	externalPrefix := "testThanos"
 	routePrefix := "test"
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	const bucket = "tools-bucket-web-test"
+	m := e2ethanos.NewSeaweedFS(e, "thanos", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -154,9 +153,8 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	// Create Minio.
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	const bucket = "tools-bucket-web-test"
+	m := e2ethanos.NewSeaweedFS(e, "thanos", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create bucket.

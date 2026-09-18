@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	common_cfg "github.com/prometheus/common/config"
@@ -767,7 +766,7 @@ func TestRule_CanShipBlocks(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "rule-shipper-test"
-	m := e2edb.NewMinio(e, "minio", bucket, e2edb.WithMinioTLS(), e2edb.WithImage(e2ethanos.DefaultMinioImage))
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	rFuture := e2ethanos.NewRulerBuilder(e, "1")
