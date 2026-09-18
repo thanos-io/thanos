@@ -370,6 +370,8 @@ func setupEndpointSet(
 
 	// Perform initial DNS resolution before starting periodic updates.
 	// This ensures that DNS providers have addresses when the first endpoint update runs.
+	// Resolution is retried until every address resolves or the interval elapses, so that
+	// the first update sees the full endpoint list even when DNS fails transiently at startup.
 	{
 		resolveCtx, resolveCancel := context.WithTimeout(context.Background(), dnsSDInterval)
 		defer resolveCancel()
@@ -387,7 +389,13 @@ func setupEndpointSet(
 		}
 		// Note: legacyFileSDCache will be empty at this point since file SD hasn't started yet
 		if len(addresses) > 0 {
-			if err := dnsEndpointProvider.Resolve(resolveCtx, addresses, true); err != nil {
+			if err := runutil.Retry(2*time.Second, resolveCtx.Done(), func() error {
+				if err := dnsEndpointProvider.Resolve(resolveCtx, addresses, true); err != nil {
+					level.Warn(logger).Log("msg", "initial DNS resolution failed, retrying", "err", err)
+					return err
+				}
+				return nil
+			}); err != nil {
 				level.Error(logger).Log("msg", "initial DNS resolution failed", "err", err)
 			}
 		}
