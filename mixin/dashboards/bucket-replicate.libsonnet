@@ -16,7 +16,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.row('Bucket Replicate Runs')
         .addPanel(
-          g.panel('Rate') +
+          g.timeseriesPanel('Rate') +
           g.qpsErrTotalPanel(
             'thanos_replicate_replication_runs_total{result="error", %s}' % thanos.bucketReplicate.dashboard.selector,
             'thanos_replicate_replication_runs_total{%s}' % thanos.bucketReplicate.dashboard.selector,
@@ -24,7 +24,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Errors', 'Shows rate of errors.') +
+          g.timeseriesPanel('Errors', 'Shows rate of errors.') +
           g.queryPanel(
             'sum by (%(dimensions)s, result) (rate(thanos_replicate_replication_runs_total{result="error", %(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,
             '{{result}}'
@@ -33,7 +33,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to run a replication cycle.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to run a replication cycle.') +
           g.latencyPanel(
             'thanos_replicate_replication_run_duration_seconds',
             'result="success",  %s' % thanos.bucketReplicate.dashboard.selector,
@@ -44,7 +44,7 @@ local g = import '../lib/thanos-grafana-builder/builder.libsonnet';
       .addRow(
         g.row('Bucket Replication')
         .addPanel(
-          g.panel('Metrics') +
+          g.timeseriesPanel('Metrics') +
           g.queryPanel(
             [
               'sum by (%(dimensions)s) (rate(blocks_meta_synced{state="loaded", %(selector)s}[$__rate_interval]))' % thanos.bucketReplicate.dashboard,

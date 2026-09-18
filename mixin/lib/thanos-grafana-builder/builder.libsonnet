@@ -6,8 +6,8 @@ local utils = import '../utils.libsonnet';
     collapse: true,
   },
 
-  panel(title, description=null)::
-    super.panel(title) { [if description != null then 'description']: description },
+  timeseriesPanel(title, description=null)::
+    super.timeseriesPanel(title) { [if description != null then 'description']: description },
 
   addDashboardLink(name): {
     links+: [
@@ -143,7 +143,7 @@ local utils = import '../utils.libsonnet';
   resourceUtilizationRow(selector, dimensions)::
     $.row('Resources')
     .addPanel(
-      $.panel('Memory Used') +
+      $.timeseriesPanel('Memory Used') +
       $.queryPanel(
         [
           'go_memstats_alloc_bytes{%s}' % selector,
@@ -165,14 +165,14 @@ local utils = import '../utils.libsonnet';
       { yaxes: $.yaxes('bytes') },
     )
     .addPanel(
-      $.panel('Goroutines') +
+      $.timeseriesPanel('Goroutines') +
       $.queryPanel(
         'go_goroutines{%s}' % selector,
         '{{instance}}'
       )
     )
     .addPanel(
-      $.panel('GC Time Quantiles') +
+      $.timeseriesPanel('GC Time Quantiles') +
       $.queryPanel(
         'go_gc_duration_seconds{%s}' % selector,
         '{{quantile}} {{instance}}'
