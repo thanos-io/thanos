@@ -1227,7 +1227,17 @@ func (cg *Group) compact(ctx context.Context, dir string, planner Planner, comp 
 					stats, e = block.GatherIndexHealthStats(ctx, cg.logger, filepath.Join(bdir, block.IndexFilename), meta.MinTime, meta.MaxTime)
 					return e
 				}, opentracing.Tags{"block.id": meta.ULID}); err != nil {
-					return errors.Wrapf(err, "gather index issues for block %s", bdir)
+					if errors.Is(err, context.Canceled) {
+						// Context was canceled, e.g. because a sibling block in this
+						// compaction batch already failed, or on shutdown; do not mask
+						// that with a halt error.
+						return errors.Wrapf(err, "gather index issues for block %s", bdir)
+					}
+					// The index of this block could not be read locally after a successful
+					// download (e.g. missing/corrupted index, likely from an aborted upload).
+					// Retrying will not fix this, so halt for investigation instead of
+					// crash-looping the whole process. See #5363.
+					return halt(errors.Wrapf(err, "gather index issues for block %s", bdir))
 				}
 
 				if err := stats.CriticalErr(); err != nil {

@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 
@@ -820,4 +821,71 @@ func TestCompactExtensions(t *testing.T) {
 			testutil.Assert(t, len(groups) > 0)
 		})
 	}
+}
+
+type fakePlanner struct {
+	metas []*metadata.Meta
+}
+
+func (p fakePlanner) Plan(context.Context, []*metadata.Meta, chan error, any) ([]*metadata.Meta, error) {
+	return p.metas, nil
+}
+
+type fakeCompactor struct{}
+
+func (fakeCompactor) Compact(string, []string, []*tsdb.Block) ([]ulid.ULID, error) {
+	return nil, errors.New("unexpected call to Compact")
+}
+
+func (fakeCompactor) CompactWithBlockPopulator(string, []string, []*tsdb.Block, tsdb.BlockPopulator) ([]ulid.ULID, error) {
+	return nil, errors.New("unexpected call to CompactWithBlockPopulator")
+}
+
+// TestGroupCompactHaltsOnMissingIndex ensures that a block whose index file is
+// missing from the bucket (e.g. left behind by an aborted upload, see #5363)
+// halts the compactor for investigation instead of returning a plain error
+// that would otherwise crash the whole process and trigger an endless
+// restart loop on every subsequent run.
+func TestGroupCompactHaltsOnMissingIndex(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+	bkt := objstore.NewInMemBucket()
+
+	id := ulid.MustNew(1, nil)
+	meta := &metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{
+			ULID:    id,
+			MinTime: 0,
+			MaxTime: 10,
+			Version: metadata.TSDBVersion1,
+		},
+	}
+	var buf bytes.Buffer
+	testutil.Ok(t, json.NewEncoder(&buf).Encode(meta))
+	// Only upload meta.json, simulating an aborted upload that never wrote the index file.
+	testutil.Ok(t, bkt.Upload(ctx, path.Join(id.String(), metadata.MetaFilename), &buf))
+
+	reg := prometheus.NewRegistry()
+	counter := promauto.With(reg).NewCounter(prometheus.CounterOpts{Name: "test_metric_for_missing_index"})
+	cg, err := NewGroup(
+		logger,
+		bkt,
+		"group-key",
+		labels.EmptyLabels(),
+		0,
+		false,
+		false,
+		counter, counter, counter, counter, counter, counter, counter, counter,
+		metadata.NoneFunc,
+		1,
+		1,
+	)
+	testutil.Ok(t, err)
+	testutil.Ok(t, cg.AppendMeta(meta))
+
+	_, _, err = cg.compact(ctx, t.TempDir(), fakePlanner{metas: cg.metasByMinTime}, fakeCompactor{}, DefaultBlockDeletableChecker{}, DefaultCompactionLifecycleCallback{}, make(chan error, 1))
+	testutil.NotOk(t, err)
+	testutil.Assert(t, IsHaltError(err), "expected a halt error for a block with a missing index file, got: %v", err)
 }
