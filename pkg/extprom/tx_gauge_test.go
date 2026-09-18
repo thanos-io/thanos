@@ -5,6 +5,7 @@ package extprom
 
 import (
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -519,4 +520,48 @@ func toProtoMessage(t *testing.T, c prometheus.Collector) []proto.Message {
 	}
 
 	return messages
+}
+
+// TestTxGaugeVecConcurrentTransactions runs the transaction cycle
+// (ResetTx -> WithLabelValues -> Submit) concurrently with Collect on a single
+// TxGaugeVec. Every method other than ResetTx already takes tx.mtx, so an
+// unguarded ResetTx (and an unguarded nil check in Submit) races the reads of
+// tx.tx. This mirrors concurrent block.MetaFetcher.Fetch calls sharing one
+// FetcherMetrics, which BaseFetcher's thread-safe run group allows. Run with
+// -race; it must not report a data race.
+func TestTxGaugeVecConcurrentTransactions(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	g := NewTxGaugeVec(reg, prometheus.GaugeOpts{Name: "metric"}, []string{"a"})
+
+	const (
+		writers = 8
+		iters   = 2000
+	)
+
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < iters; j++ {
+				g.ResetTx()
+				g.WithLabelValues("x").Inc()
+				g.Submit()
+			}
+		}()
+	}
+
+	// Registry scrapes call Collect concurrently with the transactions above.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for j := 0; j < iters; j++ {
+			if _, err := reg.Gather(); err != nil {
+				t.Errorf("gather: %v", err)
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
 }
