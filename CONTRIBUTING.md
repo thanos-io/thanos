@@ -64,6 +64,20 @@ However, when discussing these components in a more general manner we use the `a
 
 The following section explains various suggestions and procedures to note during development of Thanos.
 
+### AI Guidance
+
+Using AI tools to help write your PR is acceptable, but as the author, you are responsible for understanding every change. If you used AI tools in preparing your PR, you must disclose this in the description of your PR. For example, including "This PR was written in part with the assistance of generative AI," in the PR description is sufficient.
+
+Listing AI tooling as a co-author, co-signing commits using an AI tool, or using the assisted-by, co-developed or similar commit trailer is not allowed.
+
+The commit message or the PR description is the primary way in which you communicate the intention of a pull request to maintainers and other contributors.
+
+Please do not use AI to generate the commit message, as it can often turn into an unnecessary wall of text, with code-level details about the change, without capturing original motivations for it. If such a description is raised, it will be ignored for review until rectified.
+
+Do not leave the first review of AI generated changes to the reviewers. Verify the changes (code review, testing, etc.) before submitting your PR. Reviewers may ask questions about your AI-assisted code, and if you cannot explain why a change was made, the PR will be closed.
+
+When responding to review comments, you must do so without relying on AI tools. Reviewers want to engage directly with you, not with generated responses. If you do not engage directly with reviewers, the PR will be closed.
+
 ### Prerequisites
 
 * It is strongly recommended that you use Linux distributions systems or macOS for development.
