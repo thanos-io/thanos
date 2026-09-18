@@ -43,6 +43,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -976,10 +977,11 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name          string
-		status        int
-		amountSeries  int
-		amountSamples int
+		name             string
+		status           int
+		amountSeries     int
+		amountSamples    int
+		amountHistograms int
 	}{
 		{
 			name:         "Request above limit of series",
@@ -1002,6 +1004,15 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 			status:        http.StatusOK,
 			amountSeries:  10,
 			amountSamples: 2,
+		},
+		{
+			// Floats alone (10*10=100) stay under the 200 samples limit, but once
+			// native histograms (10*11=110) are also counted the total (210) exceeds it.
+			name:             "Request above limit of samples once native histograms are counted",
+			status:           http.StatusRequestEntityTooLarge,
+			amountSeries:     10,
+			amountSamples:    10,
+			amountHistograms: 11,
 		},
 		{
 			name:          "Request above body size limit",
@@ -1077,6 +1088,10 @@ func TestReceiveWriteRequestLimits(t *testing.T) {
 				for j := 0; j < tc.amountSamples; j += 1 {
 					sample := prompb.Sample{Value: float64(j), Timestamp: int64(j)}
 					series.Samples = append(series.Samples, sample)
+				}
+				for j := 0; j < tc.amountHistograms; j += 1 {
+					histogram := prompb.HistogramToHistogramProto(int64(j), tsdbutil.GenerateTestHistogram(int64(j)))
+					series.Histograms = append(series.Histograms, histogram)
 				}
 				wreq.Timeseries = append(wreq.Timeseries, series)
 			}
