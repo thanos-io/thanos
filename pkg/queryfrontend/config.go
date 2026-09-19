@@ -69,6 +69,8 @@ type MemcachedResponseCacheConfig struct {
 	Memcached cacheutil.MemcachedClientConfig `yaml:",inline"`
 	// Expiration sets a global expiration limit for all cached items.
 	Expiration time.Duration `yaml:"expiration"`
+	// TTL is an alias for Expiration, matching the name the store caches use.
+	TTL time.Duration `yaml:"ttl"`
 }
 
 // RedisResponseCacheConfig holds the configs for the redis cache provider.
@@ -76,6 +78,8 @@ type RedisResponseCacheConfig struct {
 	Redis cacheutil.RedisClientConfig `yaml:",inline"`
 	// Expiration sets a global expiration limit for all cached items.
 	Expiration time.Duration `yaml:"expiration"`
+	// TTL is an alias for Expiration, matching the name the store caches use.
+	TTL time.Duration `yaml:"ttl"`
 }
 
 // CacheProviderConfig is the initial CacheProviderConfig struct holder before parsing it into a specific cache provider.
@@ -83,6 +87,28 @@ type RedisResponseCacheConfig struct {
 type CacheProviderConfig struct {
 	Type   ResponseCacheProvider `yaml:"type"`
 	Config any                   `yaml:"config"`
+}
+
+// resolveCacheExpiration returns the expiration the user actually wrote, accepting `ttl`
+// as an alias for `expiration`. The store caches (pkg/store/cache) spell this setting
+// `ttl` and the response cache spells it `expiration`; the two were never unified, so
+// `ttl` here used to abort startup instead of configuring anything. It returns nil when
+// the user set neither, so callers keep their own default.
+func resolveCacheExpiration(backendConfig []byte) (*time.Duration, error) {
+	var probe struct {
+		Expiration *time.Duration `yaml:"expiration"`
+		TTL        *time.Duration `yaml:"ttl"`
+	}
+	if err := yaml.Unmarshal(backendConfig, &probe); err != nil {
+		return nil, errors.Wrap(err, "parsing cache expiration")
+	}
+	if probe.Expiration != nil && probe.TTL != nil {
+		return nil, errors.New("'expiration' and 'ttl' must not be set at the same time in the response cache config")
+	}
+	if probe.TTL != nil {
+		return probe.TTL, nil
+	}
+	return probe.Expiration, nil
 }
 
 // NewCacheConfig is a parser that converts a Thanos cache config yaml into a cortex cache config struct.
@@ -116,6 +142,13 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		config := defaultMemcachedConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
+		}
+		expiration, err := resolveCacheExpiration(backendConfig)
+		if err != nil {
+			return nil, err
+		}
+		if expiration != nil {
+			config.Expiration = *expiration
 		}
 		if config.Expiration == 0 {
 			level.Warn(logger).Log("msg", "memcached cache valid time set to 0, so using a default of 24 hours expiration time")
@@ -155,6 +188,13 @@ func NewCacheConfig(logger log.Logger, confContentYaml []byte) (*cortexcache.Con
 		config := DefaultRedisConfig
 		if err := yaml.UnmarshalStrict(backendConfig, &config); err != nil {
 			return nil, err
+		}
+		expiration, err := resolveCacheExpiration(backendConfig)
+		if err != nil {
+			return nil, err
+		}
+		if expiration != nil {
+			config.Expiration = *expiration
 		}
 		if config.Expiration <= 0 {
 			level.Warn(logger).Log("msg", "redis cache valid time set to 0, so using a default of 24 hours expiration time")

@@ -85,9 +85,12 @@ config:
     consecutive_failures: 0
     failure_percent: 0
   expiration: 0s
+  ttl: 0s
 ```
 
 `expiration` specifies memcached cache valid time. If set to 0s, so using a default of 24 hours expiration time.
+
+`ttl` is accepted as an alias for `expiration`, matching the name the store caches use. Setting both is an error.
 
 If a `set` operation is skipped because of the item size is larger than `max_item_size`, this event is tracked by a counter metric `cortex_memcache_client_set_skip_total`.
 
@@ -149,9 +152,12 @@ config:
     consecutive_failures: 5
     failure_percent: 0.05
   expiration: 24h0m0s
+  ttl: 0s
 ```
 
 `expiration` specifies redis cache valid time. If set to 0s, so using a default of 24 hours expiration time.
+
+`ttl` is accepted as an alias for `expiration`, matching the name the store caches use. Setting both is an error.
 
 Other cache configuration parameters, you can refer to [redis-index-cache](store.md#redis-index-cache).
 
