@@ -204,6 +204,49 @@ func TestPrometheusConverter_addSumNumberDataPoints(t *testing.T) {
 			},
 		},
 		{
+			name: "monotonic cumulative sum with missing start time on first point still converts later points",
+			metric: func() pmetric.Metric {
+				metric := pmetric.NewMetric()
+				metric.SetName("test_sum")
+				metric.SetEmptySum().SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+				metric.SetEmptySum().SetIsMonotonic(true)
+
+				dpNoStart := metric.Sum().DataPoints().AppendEmpty()
+				dpNoStart.SetDoubleValue(1)
+				dpNoStart.SetTimestamp(ts)
+
+				dpWithStart := metric.Sum().DataPoints().AppendEmpty()
+				dpWithStart.SetDoubleValue(2)
+				dpWithStart.SetTimestamp(ts + 1)
+				dpWithStart.SetStartTimestamp(ts)
+
+				return metric
+			},
+			want: func() map[uint64]*prompb.TimeSeries {
+				labels := []labelpb.ZLabel{
+					{Name: model.MetricNameLabel, Value: "test_sum"},
+				}
+				createdLabels := []labelpb.ZLabel{
+					{Name: model.MetricNameLabel, Value: "test_sum" + createdSuffix},
+				}
+				return map[uint64]*prompb.TimeSeries{
+					timeSeriesSignature(labels): {
+						Labels: labels,
+						Samples: []prompb.Sample{
+							{Value: 1, Timestamp: convertTimeStamp(ts)},
+							{Value: 2, Timestamp: convertTimeStamp(ts + 1)},
+						},
+					},
+					timeSeriesSignature(createdLabels): {
+						Labels: createdLabels,
+						Samples: []prompb.Sample{
+							{Value: float64(convertTimeStamp(ts)), Timestamp: convertTimeStamp(ts + 1)},
+						},
+					},
+				}
+			},
+		},
+		{
 			name: "non-monotonic cumulative sum with start time",
 			metric: func() pmetric.Metric {
 				metric := pmetric.NewMetric()
