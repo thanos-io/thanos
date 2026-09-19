@@ -29,6 +29,7 @@ import (
 type sample struct {
 	t int64
 	f float64
+	h *histogram.Histogram
 }
 
 func (s sample) T() int64 {
@@ -39,21 +40,26 @@ func (s sample) F() float64 {
 	return s.f
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (s sample) H() *histogram.Histogram {
-	panic("not implemented")
+	return s.h
 }
 
 func (s sample) FH() *histogram.FloatHistogram {
-	panic("not implemented")
+	if s.h != nil {
+		return s.h.ToFloat(nil)
+	}
+	return nil
 }
 
 func (s sample) Type() chunkenc.ValueType {
+	if s.h != nil {
+		return chunkenc.ValHistogram
+	}
 	return chunkenc.ValFloat
 }
 
 func (s sample) Copy() chunks.Sample {
-	c := sample{t: s.t, f: s.f}
+	c := sample{t: s.t, f: s.f, h: s.h}
 	return c
 }
 
@@ -94,29 +100,32 @@ func newMockedSeriesIterator(samples []sample) *mockedSeriesIterator {
 	return &mockedSeriesIterator{samples: samples, cur: -1}
 }
 
-// TODO(rabenhorst): Native histogram support needs to be added, currently hardcoded to float.
 func (s *mockedSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	s.cur = sort.Search(len(s.samples), func(n int) bool {
 		return s.samples[n].t >= t
 	})
 	if s.cur < len(s.samples) {
-		return chunkenc.ValFloat
+		return s.samples[s.cur].Type()
 	}
 	return chunkenc.ValNone
 }
 
 func (s *mockedSeriesIterator) At() (t int64, v float64) {
-	sample := s.samples[s.cur]
-	return sample.t, sample.f
+	sm := s.samples[s.cur]
+	return sm.t, sm.f
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
-func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
-	panic("not implemented")
+func (s *mockedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	sm := s.samples[s.cur]
+	return sm.t, sm.h
 }
 
-func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	panic("not implemented")
+func (s *mockedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	sm := s.samples[s.cur]
+	if sm.h != nil {
+		return sm.t, sm.h.ToFloat(nil)
+	}
+	return sm.t, nil
 }
 
 func (s *mockedSeriesIterator) AtT() int64 {
@@ -126,7 +135,7 @@ func (s *mockedSeriesIterator) AtT() int64 {
 func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 	s.cur++
 	if s.cur < len(s.samples) {
-		return chunkenc.ValFloat
+		return s.samples[s.cur].Type()
 	}
 
 	return chunkenc.ValNone
@@ -309,27 +318,27 @@ func TestDedupSeriesSet_XFunctions(t *testing.T) {
 		{
 			lset: labels.FromStrings("a", "1"),
 			samples: []sample{
-				{10000, 8.0},
-				{20000, 9.0},
-				{50001, 9 + 1.0},
-				{60000, 9 + 2.0},
-				{70000, 9 + 3.0},
-				{80000, 9 + 4.0},
-				{90000, 9 + 5.0},
-				{100000, 9 + 6.0},
+				{t: 10000, f: 8.0},
+				{t: 20000, f: 9.0},
+				{t: 50001, f: 9 + 1.0},
+				{t: 60000, f: 9 + 2.0},
+				{t: 70000, f: 9 + 3.0},
+				{t: 80000, f: 9 + 4.0},
+				{t: 90000, f: 9 + 5.0},
+				{t: 100000, f: 9 + 6.0},
 			},
 		},
 		{
 			lset: labels.FromStrings("a", "1"),
 			samples: []sample{
-				{10001, 8.0},
-				{45001, 8 + 0.5},
-				{55001, 8 + 1.5},
-				{65001, 8 + 2.5},
+				{t: 10001, f: 8.0},
+				{t: 45001, f: 8 + 0.5},
+				{t: 55001, f: 8 + 1.5},
+				{t: 65001, f: 8 + 2.5},
 			},
 		},
 	}
-	expected := []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}}
+	expected := []sample{{t: 10000, f: 8}, {t: 20000, f: 9}, {t: 45001, f: 9}, {t: 55001, f: 10}, {t: 65001, f: 11}, {t: 90000, f: 14}, {t: 100000, f: 15}}
 
 	// Get the expected result using "rate" (known-working counter function).
 	rateSet := NewSeriesSet(&mockedSeriesSet{series: input}, "rate", AlgorithmPenalty)
@@ -371,46 +380,46 @@ func TestDedupSeriesSet(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{60000, 3}, {70000, 4}},
+					samples: []sample{{t: 60000, f: 3}, {t: 70000, f: 4}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{200000, 5}, {210000, 6}},
+					samples: []sample{{t: 200000, f: 5}, {t: 210000, f: 6}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{60000, 3}, {70000, 4}},
+					samples: []sample{{t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 60000, f: 3}, {t: 70000, f: 4}, {t: 200000, f: 5}, {t: 210000, f: 6}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 		},
@@ -419,50 +428,50 @@ func TestDedupSeriesSet(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{60000, 3}, {70000, 4}},
+					samples: []sample{{t: 60000, f: 3}, {t: 70000, f: 4}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{200000, 5}, {210000, 6}},
+					samples: []sample{{t: 200000, f: 5}, {t: 210000, f: 6}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{60000, 3}, {70000, 4}},
+					samples: []sample{{t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}, {200000, 5}, {210000, 6}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 60000, f: 3}, {t: 70000, f: 4}, {t: 200000, f: 5}, {t: 210000, f: 6}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3", "d", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "4"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 		},
@@ -471,16 +480,16 @@ func TestDedupSeriesSet(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				}, {
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{60000, 3}, {70000, 4}},
+					samples: []sample{{t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {60000, 3}, {70000, 4}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 60000, f: 3}, {t: 70000, f: 4}},
 				},
 			},
 		},
@@ -497,25 +506,25 @@ func TestDedupSeriesSet(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10000, 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
-						{20000, 9.0}, // Same. CurrValue = 9.0.
+						{t: 10000, f: 8.0}, // Smaller timestamp, this will be chosen. CurrValue = 8.0.
+						{t: 20000, f: 9.0}, // Same. CurrValue = 9.0.
 						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
-						{50001, 9 + 1.0}, // Next after 20000+1 has a bit higher than timestamp then in second series. Penalty 5000 will be added.
-						{60000, 9 + 2.0},
-						{70000, 9 + 3.0},
-						{80000, 9 + 4.0},
-						{90000, 9 + 5.0}, // This should be now taken, and we expect 14 to be correct value now.
-						{100000, 9 + 6.0},
+						{t: 50001, f: 9 + 1.0}, // Next after 20000+1 has a bit higher than timestamp then in second series. Penalty 5000 will be added.
+						{t: 60000, f: 9 + 2.0},
+						{t: 70000, f: 9 + 3.0},
+						{t: 80000, f: 9 + 4.0},
+						{t: 90000, f: 9 + 5.0}, // This should be now taken, and we expect 14 to be correct value now.
+						{t: 100000, f: 9 + 6.0},
 					},
 				}, {
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10001, 8.0}, // Penalty 5000 will be added.
+						{t: 10001, f: 8.0}, // Penalty 5000 will be added.
 						// 20001 was app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator. Penalty 2 * (20000 - 10000) will be added.
 						// 30001 no sample. Within penalty, ignored.
-						{45001, 8 + 0.5}, // Smaller timestamp, this will be chosen. CurrValue = 8.5 which is smaller than last chosen value.
-						{55001, 8 + 1.5},
-						{65001, 8 + 2.5},
+						{t: 45001, f: 8 + 0.5}, // Smaller timestamp, this will be chosen. CurrValue = 8.5 which is smaller than last chosen value.
+						{t: 55001, f: 8 + 1.5},
+						{t: 65001, f: 8 + 2.5},
 						// {Gap} app reset. No sample, because stale marker but removed by downsample.CounterSeriesIterator.
 					},
 				},
@@ -523,7 +532,7 @@ func TestDedupSeriesSet(t *testing.T) {
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1"),
-					samples: []sample{{10000, 8}, {20000, 9}, {45001, 9}, {55001, 10}, {65001, 11}, {90000, 14}, {100000, 15}},
+					samples: []sample{{t: 10000, f: 8}, {t: 20000, f: 9}, {t: 45001, f: 9}, {t: 55001, f: 10}, {t: 65001, f: 11}, {t: 90000, f: 14}, {t: 100000, f: 15}},
 				},
 			},
 		},
@@ -535,19 +544,19 @@ func TestDedupSeriesSet(t *testing.T) {
 				{
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10000, 8.0}, {20000, 9.0}, {50001, 9 + 1.0}, {60000, 9 + 2.0}, {70000, 9 + 3.0}, {80000, 9 + 4.0}, {90000, 9 + 5.0}, {100000, 9 + 6.0},
+						{t: 10000, f: 8.0}, {t: 20000, f: 9.0}, {t: 50001, f: 9 + 1.0}, {t: 60000, f: 9 + 2.0}, {t: 70000, f: 9 + 3.0}, {t: 80000, f: 9 + 4.0}, {t: 90000, f: 9 + 5.0}, {t: 100000, f: 9 + 6.0},
 					},
 				}, {
 					lset: labels.FromStrings("a", "1"),
 					samples: []sample{
-						{10001, 8.0}, {45001, 8 + 0.5}, {55001, 8 + 1.5}, {65001, 8 + 2.5},
+						{t: 10001, f: 8.0}, {t: 45001, f: 8 + 0.5}, {t: 55001, f: 8 + 1.5}, {t: 65001, f: 8 + 2.5},
 					},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1"),
-					samples: []sample{{10000, 8}, {20000, 9}, {45001, 8.5}, {55001, 9.5}, {65001, 10.5}, {90000, 14}, {100000, 15}},
+					samples: []sample{{t: 10000, f: 8}, {t: 20000, f: 9}, {t: 45001, f: 8.5}, {t: 55001, f: 9.5}, {t: 65001, f: 10.5}, {t: 90000, f: 14}, {t: 100000, f: 15}},
 				},
 			},
 		},
@@ -655,17 +664,17 @@ func TestDedupSeriesSet_Chain(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 			},
 		},
@@ -674,17 +683,17 @@ func TestDedupSeriesSet_Chain(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 			},
 		},
@@ -693,17 +702,17 @@ func TestDedupSeriesSet_Chain(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 			},
 		},
@@ -712,29 +721,29 @@ func TestDedupSeriesSet_Chain(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+					samples: []sample{{t: 10000, f: 101}, {t: 20000, f: 102}, {t: 30000, f: 103}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+					samples: []sample{{t: 10000, f: 101}, {t: 20000, f: 102}, {t: 30000, f: 103}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+					samples: []sample{{t: 10000, f: 101}, {t: 20000, f: 102}, {t: 30000, f: 103}},
 				},
 			},
 		},
@@ -743,29 +752,29 @@ func TestDedupSeriesSet_Chain(t *testing.T) {
 			input: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{20000, 2}, {30000, 3}},
+					samples: []sample{{t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {20000, 102}},
+					samples: []sample{{t: 10000, f: 101}, {t: 20000, f: 102}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {30000, 103}},
+					samples: []sample{{t: 10000, f: 101}, {t: 30000, f: 103}},
 				},
 			},
 			exp: []series{
 				{
 					lset:    labels.FromStrings("a", "1", "c", "3"),
-					samples: []sample{{10000, 1}, {20000, 2}, {30000, 3}},
+					samples: []sample{{t: 10000, f: 1}, {t: 20000, f: 2}, {t: 30000, f: 3}},
 				},
 				{
 					lset:    labels.FromStrings("a", "2", "c", "3"),
-					samples: []sample{{10000, 101}, {20000, 102}, {30000, 103}},
+					samples: []sample{{t: 10000, f: 101}, {t: 20000, f: 102}, {t: 30000, f: 103}},
 				},
 			},
 		},
@@ -796,29 +805,29 @@ func TestDedupSeriesIterator(t *testing.T) {
 		a, b, exp []sample
 	}{
 		{ // Generally prefer the first series.
-			a:   []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
-			b:   []sample{{10000, 20}, {20000, 21}, {30000, 22}, {40000, 23}},
-			exp: []sample{{10000, 10}, {20000, 11}, {30000, 12}, {40000, 13}},
+			a:   []sample{{t: 10000, f: 10}, {t: 20000, f: 11}, {t: 30000, f: 12}, {t: 40000, f: 13}},
+			b:   []sample{{t: 10000, f: 20}, {t: 20000, f: 21}, {t: 30000, f: 22}, {t: 40000, f: 23}},
+			exp: []sample{{t: 10000, f: 10}, {t: 20000, f: 11}, {t: 30000, f: 12}, {t: 40000, f: 13}},
 		},
 		{ // Prefer b if it starts earlier.
-			a:   []sample{{10100, 1}, {20100, 1}, {30100, 1}, {40100, 1}},
-			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
-			exp: []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
+			a:   []sample{{t: 10100, f: 1}, {t: 20100, f: 1}, {t: 30100, f: 1}, {t: 40100, f: 1}},
+			b:   []sample{{t: 10000, f: 2}, {t: 20000, f: 2}, {t: 30000, f: 2}, {t: 40000, f: 2}},
+			exp: []sample{{t: 10000, f: 2}, {t: 20000, f: 2}, {t: 30000, f: 2}, {t: 40000, f: 2}},
 		},
 		{ // Don't switch series on a single delta sized gap.
-			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
-			b:   []sample{{10000, 2}, {20000, 2}, {30000, 2}, {40000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			a:   []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 40000, f: 1}},
+			b:   []sample{{t: 10000, f: 2}, {t: 20000, f: 2}, {t: 30000, f: 2}, {t: 40000, f: 2}},
+			exp: []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 40000, f: 1}},
 		},
 		{
-			a:   []sample{{10000, 1}, {20000, 1}, {40000, 1}},
-			b:   []sample{{15000, 2}, {25000, 2}, {35000, 2}, {45000, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {40000, 1}},
+			a:   []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 40000, f: 1}},
+			b:   []sample{{t: 15000, f: 2}, {t: 25000, f: 2}, {t: 35000, f: 2}, {t: 45000, f: 2}},
+			exp: []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 40000, f: 1}},
 		},
 		{ // Once the gap gets bigger than 2 deltas, switch and stay with the new series.
-			a:   []sample{{10000, 1}, {20000, 1}, {30000, 1}, {60000, 1}, {70000, 1}},
-			b:   []sample{{10100, 2}, {20100, 2}, {30100, 2}, {40100, 2}, {50100, 2}, {60100, 2}},
-			exp: []sample{{10000, 1}, {20000, 1}, {30000, 1}, {50100, 2}, {60100, 2}},
+			a:   []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 30000, f: 1}, {t: 60000, f: 1}, {t: 70000, f: 1}},
+			b:   []sample{{t: 10100, f: 2}, {t: 20100, f: 2}, {t: 30100, f: 2}, {t: 40100, f: 2}, {t: 50100, f: 2}, {t: 60100, f: 2}},
+			exp: []sample{{t: 10000, f: 1}, {t: 20000, f: 1}, {t: 30000, f: 1}, {t: 50100, f: 2}, {t: 60100, f: 2}},
 		},
 	}
 	for i, c := range cases {
@@ -927,7 +936,7 @@ func expandSeries(t testing.TB, it chunkenc.Iterator) (res []sample) {
 		if math.IsNaN(v) {
 			v = hackyStaleMarker
 		}
-		res = append(res, sample{t, v})
+		res = append(res, sample{t: t, f: v})
 	}
 	testutil.Ok(t, it.Err())
 	return res
@@ -950,4 +959,89 @@ func expandHistogramSeries(t testing.TB, it chunkenc.Iterator) (res []any) {
 	}
 	testutil.Ok(t, it.Err())
 	return res
+}
+
+func TestBoundedSeriesIteratorNextValueType(t *testing.T) {
+	h := &histogram.Histogram{
+		Schema:          1,
+		Count:           10,
+		Sum:             100.0,
+		ZeroThreshold:   0.001,
+		ZeroCount:       2,
+		PositiveSpans:   []histogram.Span{{Offset: 0, Length: 2}},
+		PositiveBuckets: []int64{1, 1},
+	}
+
+	t.Run("float before mint, histogram at mint", func(t *testing.T) {
+		// A float sample at t=50 (before mint=100) and a histogram at t=100.
+		// After seeking past the float, Next() must return ValHistogram, not ValFloat.
+		inner := newMockedSeriesIterator([]sample{
+			{t: 50, f: 1.0},
+			{t: 100, h: h},
+			{t: 200, h: h},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValHistogram, vt, "expected ValHistogram after seeking past float sample before mint")
+		ts := it.AtT()
+		require.Equal(t, int64(100), ts)
+	})
+
+	t.Run("float before mint, float at mint", func(t *testing.T) {
+		// Both samples are floats — valueType should remain ValFloat.
+		inner := newMockedSeriesIterator([]sample{
+			{t: 50, f: 1.0},
+			{t: 100, f: 2.0},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValFloat, vt)
+		ts, v := it.At()
+		require.Equal(t, int64(100), ts)
+		require.Equal(t, 2.0, v)
+	})
+
+	t.Run("sample already within bounds", func(t *testing.T) {
+		// First sample is already at mint — no seeking needed.
+		inner := newMockedSeriesIterator([]sample{
+			{t: 100, h: h},
+			{t: 200, f: 5.0},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValHistogram, vt)
+		ts := it.AtT()
+		require.Equal(t, int64(100), ts)
+
+		vt = it.Next()
+		require.Equal(t, chunkenc.ValFloat, vt)
+		ts, v := it.At()
+		require.Equal(t, int64(200), ts)
+		require.Equal(t, 5.0, v)
+	})
+
+	t.Run("all samples before mint", func(t *testing.T) {
+		inner := newMockedSeriesIterator([]sample{
+			{t: 10, f: 1.0},
+			{t: 20, f: 2.0},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValNone, vt)
+	})
+
+	t.Run("sample beyond maxt", func(t *testing.T) {
+		inner := newMockedSeriesIterator([]sample{
+			{t: 50, f: 1.0},
+			{t: 400, f: 2.0},
+		})
+		it := NewBoundedSeriesIterator(inner, 100, 300)
+
+		vt := it.Next()
+		require.Equal(t, chunkenc.ValNone, vt)
+	})
 }
