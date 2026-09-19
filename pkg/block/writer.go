@@ -71,7 +71,7 @@ func NewDiskWriter(ctx context.Context, logger log.Logger, bDir string) (_ *Disk
 		if err != nil {
 			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
 			if err := os.RemoveAll(bTmp); err != nil {
-				level.Error(logger).Log("msg", "removed tmp folder after failed compaction", "err", err.Error())
+				level.Error(logger).Log("msg", "failed to remove tmp folder after failed compaction", "err", err.Error())
 			}
 		}
 	}()
@@ -105,7 +105,7 @@ func (d *DiskWriter) Flush() (_ tsdb.BlockStats, err error) {
 		if err != nil {
 			err = tsdb_errors.NewMulti(err, tsdb_errors.CloseAll(d.closers)).Err()
 			if err := os.RemoveAll(d.bTmp); err != nil {
-				level.Error(d.logger).Log("msg", "removed tmp folder failed after block(s) write", "err", err.Error())
+				level.Error(d.logger).Log("msg", "failed to remove tmp folder after block(s) write", "err", err.Error())
 			}
 		}
 	}()
