@@ -18,6 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9039](https://github.com/thanos-io/thanos/pull/9039): Query Frontend: Accept `ttl` as an alias for `expiration` in the memcached and redis response cache configs, so a config using the store caches' spelling no longer stops the component from starting.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
 - [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
