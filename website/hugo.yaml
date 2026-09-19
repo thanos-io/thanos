@@ -1,0 +1,87 @@
+title: "Thanos - Highly available Prometheus setup with long term storage capabilities"
+# This is controlled by makefile: baseURL: "https://thanos.io"
+languageCode: "en-us"
+
+enableGitInfo: true
+enableEmoji: true
+pygmentsCodeFences: true
+pygmentsUseClasses: true
+
+# We use preprocessing script so it will not work as expected anyway.
+disableLiveReload: true
+googleAnalytics: "UA-137374921-1"
+
+# So /thanos/docs/b link from /thanos/docs/some/a will be rewritten as ../b
+uglyURLs: false
+canonifyURLs: true
+relativeURL: true
+
+# NOTE: Hugo is expected to run from `website`
+contentDir: "docs-pre-processed"
+archetypeDir: "archetypes"
+layoutDir: "layouts"
+publishDir: "public"
+staticDir: "static"
+
+permalinks:
+  # Generate those for every file.
+  # TODO(bwplotka): Move to mdox + fixes to ensure we don't need to manually do this.
+  # For now we added few entries for advance.
+  tip: "/:sections/:filename.md"
+  v0.42: "/:sections/:filename.md"
+  v0.41: "/:sections/:filename.md"
+  v0.40: "/:sections/:filename.md"
+  v0.39: "/:sections/:filename.md"
+  v0.38: "/:sections/:filename.md"
+  v0.37: "/:sections/:filename.md"
+  v0.36: "/:sections/:filename.md"
+  v0.35: "/:sections/:filename.md"
+  v0.34: "/:sections/:filename.md"
+  v0.33: "/:sections/:filename.md"
+  v0.32: "/:sections/:filename.md"
+  v0.31: "/:sections/:filename.md"
+  v0.30: "/:sections/:filename.md"
+  v0.29: "/:sections/:filename.md"
+  v0.28: "/:sections/:filename.md"
+  v0.27: "/:sections/:filename.md"
+  v0.26: "/:sections/:filename.md"
+  v0.25: "/:sections/:filename.md"
+  v0.24: "/:sections/:filename.md"
+  v0.23: "/:sections/:filename.md"
+  v0.22: "/:sections/:filename.md"
+  v0.21: "/:sections/:filename.md"
+  v0.20: "/:sections/:filename.md"
+  v0.19: "/:sections/:filename.md"
+  v0.18: "/:sections/:filename.md"
+  v0.17: "/:sections/:filename.md"
+  v0.16: "/:sections/:filename.md"
+  v0.15: "/:sections/:filename.md"
+  v0.14: "/:sections/:filename.md"
+  v0.13: "/:sections/:filename.md"
+  v0.12: "/:sections/:filename.md"
+  v0.11: "/:sections/:filename.md"
+  v0.10: "/:sections/:filename.md"
+
+params:
+  SlackInvite: "https://slack.cncf.io"
+  GithubUser: "thanos-io"
+  GithubProject: "thanos"
+  QuayIoUser: "thanos"
+  QuayIoRepository: "thanos"
+  DockerHubUser: "thanosio"
+  DockerHubRepository: "thanos"
+  TwitterHandle: "ThanosMetrics"
+  Description: "Highly available Prometheus setup with long term storage capabilities."
+
+# TOC to include h1 - h4
+markup:
+  tableOfContents:
+    endLevel: 4
+    ordered: false
+    startLevel: 1
+  goldmark:
+    renderer:
+      # We want to be able to put our own HTML.
+      unsafe: true
+
+summaryLength: 50

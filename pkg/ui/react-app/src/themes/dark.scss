@@ -1,0 +1,27 @@
+/* THIS FILE WAS COPIED INTO THANOS FROM PROMETHEUS 
+   (LIVING AT https://github.com/prometheus/prometheus/blob/main/web/ui/react-app/src/themes/dark.scss),
+   PROMETHEUS CODE WAS LICENSED UNDER AN APACHE 2.0 LICENSE, SEE
+   https://github.com/prometheus/prometheus/blob/main/LICENSE.
+*/
+@import 'bootstrap_dark';
+
+@import '~bootstrap/scss/functions';
+@import '~bootstrap/scss/variables';
+@import '~@forevolve/bootstrap-dark/scss/_dark-variables.scss';
+
+$alert-cell-color: $white;
+$rule-cell-bg: $gray-900;
+
+$config-yaml-color: $black;
+$config-yaml-bg: $gray-500;
+$config-yaml-border: $gray-700;
+
+$query-stats-color: $secondary;
+
+$metrics-explorer-bg: $dropdown-link-hover-bg;
+
+$clear-time-btn-bg: $secondary;
+
+.bootstrap-dark {
+  @import './shared';
+}

@@ -1,0 +1,1195 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+package receive
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"math"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"testing/synctest"
+	"time"
+
+	"github.com/efficientgo/core/testutil"
+	"github.com/go-kit/log"
+	"github.com/oklog/ulid/v2"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/stretchr/testify/require"
+	"github.com/thanos-io/objstore"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+
+	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
+	"github.com/thanos-io/thanos/pkg/runutil"
+	"github.com/thanos-io/thanos/pkg/shipper"
+	"github.com/thanos-io/thanos/pkg/store"
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
+)
+
+func openTestRoot(t testing.TB, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { root.Close() })
+	return root
+}
+
+func TestMultiTSDB(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	logger := log.NewLogfmtLogger(os.Stderr)
+
+	t.Run("run fresh", func(t *testing.T) {
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
+			RetentionDuration:     (6 * time.Hour).Milliseconds(),
+			NoLockfile:            true,
+			MaxExemplars:          100,
+			EnableExemplarStorage: true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
+		t.Cleanup(m.Close)
+
+		testutil.Ok(t, m.Flush())
+		testutil.Ok(t, m.Open())
+
+		app, err := m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		var a storage.Appender
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+			a, err = app.Appender(context.Background())
+			return err
+		}))
+
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 2.41241)
+		testutil.Ok(t, err)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
+		testutil.Ok(t, err)
+		ref, err := a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
+		testutil.Ok(t, err)
+
+		// Test exemplars.
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 1, Ts: 1, HasTs: true})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 2.1212, Ts: 2, HasTs: true})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 3.1313, Ts: 3, HasTs: true})
+		testutil.Ok(t, err)
+		testutil.Ok(t, a.Commit())
+
+		// Check if not leaking.
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+
+		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		app, err = m.TenantAppendable("bar")
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+			a, err = app.Appender(context.Background())
+			return err
+		}))
+
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 20.41241)
+		testutil.Ok(t, err)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 30.41241)
+		testutil.Ok(t, err)
+		ref, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 40.41241)
+		testutil.Ok(t, err)
+
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 11, Ts: 1, HasTs: true, Labels: labels.FromStrings("traceID", "abc")})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 22.1212, Ts: 2, HasTs: true, Labels: labels.FromStrings("traceID", "def")})
+		testutil.Ok(t, err)
+		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 33.1313, Ts: 3, HasTs: true, Labels: labels.FromStrings("traceID", "ghi")})
+		testutil.Ok(t, err)
+		testutil.Ok(t, a.Commit())
+
+		testMulitTSDBSeries(t, m)
+		testMultiTSDBExemplars(t, m)
+	})
+	t.Run("run on existing storage", func(t *testing.T) {
+		m := NewMultiTSDB(
+			openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			},
+			labels.FromStrings("replica", "01"),
+			"tenant_id",
+			nil,
+			false,
+			false,
+			metadata.NoneFunc, WithGCImmediately(),
+		)
+		defer m.Close()
+
+		testutil.Ok(t, m.Flush())
+		testutil.Ok(t, m.Open())
+
+		// Get appender just for test.
+		app, err := m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+			_, err := app.Appender(context.Background())
+			return err
+		}))
+
+		// Check if not leaking.
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+		_, err = m.TenantAppendable("foo")
+		testutil.Ok(t, err)
+
+		testMulitTSDBSeries(t, m)
+	})
+
+	t.Run("open ignores lost+found directory", func(t *testing.T) {
+		lostFound := filepath.Join(dir, "lost+found")
+		testutil.Ok(t, os.MkdirAll(lostFound, 0750))
+
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
+		defer m.Close()
+
+		testutil.Ok(t, m.Open())
+		testutil.Equals(t, (*tenant)(nil), m.testGetTenant("lost+found"))
+	})
+
+	t.Run("flush with one sample produces a block", func(t *testing.T) {
+		const testTenant = "test_tenant"
+		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			NoLockfile:        true,
+		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
+		defer m.Close()
+
+		testutil.Ok(t, m.Flush())
+		testutil.Ok(t, m.Open())
+		testutil.Ok(t, appendSample(m, testTenant, time.Now()))
+
+		tenant := m.testGetTenant(testTenant)
+		db := tenant.readyStorage().Get()
+
+		testutil.Equals(t, 0, len(db.Blocks()))
+		testutil.Ok(t, m.Flush())
+		testutil.Equals(t, 1, len(db.Blocks()))
+	})
+}
+
+var (
+	expectedFooResp = &storepb.Series{
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@\003L\235\2354X\315\001\330\r\257Mui\251\327:U"), Hash: 9768694233508509040}}},
+	}
+	expectedBarResp = &storepb.Series{
+		Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}},
+		Chunks: []storepb.AggrChunk{{MinTime: 1, MaxTime: 3, Raw: &storepb.Chunk{Data: []byte("\000\003\002@4i\223\263\246\213\032\001\330\035i\337\322\352\323S\256t\270"), Hash: 2304287992246504442}}},
+	}
+)
+
+func testMulitTSDBSeries(t *testing.T, m *MultiTSDB) {
+	g := &errgroup.Group{}
+	respFoo := make(chan *storepb.Series)
+	respBar := make(chan *storepb.Series)
+	for range 100 {
+		ss := m.TSDBLocalClients()
+		testutil.Equals(t, 2, len(ss))
+
+		for _, s := range ss {
+
+			switch isFoo := strings.Contains(labelpb.PromLabelSetsToString(s.LabelSets()), "foo"); isFoo {
+			case true:
+				g.Go(func() error {
+					return getResponses(s, respFoo)
+				})
+			case false:
+				g.Go(func() error {
+					return getResponses(s, respBar)
+				})
+			}
+		}
+	}
+	var err error
+	go func() {
+		err = g.Wait()
+		close(respFoo)
+		close(respBar)
+	}()
+Outer:
+	for {
+		select {
+		case r, ok := <-respFoo:
+			if !ok {
+				break Outer
+			}
+			testutil.Equals(t, expectedFooResp, r)
+		case r, ok := <-respBar:
+			if !ok {
+				break Outer
+			}
+			testutil.Equals(t, expectedBarResp, r)
+		}
+	}
+	testutil.Ok(t, err)
+}
+
+func getResponses(storeClient store.Client, respCh chan<- *storepb.Series) error {
+	sc, err := storeClient.Series(context.Background(), &storepb.SeriesRequest{
+		MinTime:  0,
+		MaxTime:  10,
+		Matchers: []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+	})
+	if err != nil {
+		return err
+	}
+
+	for {
+		resp, err := sc.Recv()
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		respCh <- resp.GetSeries()
+	}
+
+	return nil
+}
+
+var (
+	expectedFooRespExemplars = []exemplarspb.ExemplarData{
+		{
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "foo"}}},
+			Exemplars: []*exemplarspb.Exemplar{
+				{Value: 1, Ts: 1},
+				{Value: 2.1212, Ts: 2},
+				{Value: 3.1313, Ts: 3},
+			},
+		},
+	}
+	expectedBarRespExemplars = []exemplarspb.ExemplarData{
+		{
+			SeriesLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "a", Value: "1"}, {Name: "b", Value: "2"}, {Name: "replica", Value: "01"}, {Name: "tenant_id", Value: "bar"}}},
+			Exemplars: []*exemplarspb.Exemplar{
+				{Value: 11, Ts: 1, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "abc"}}}},
+				{Value: 22.1212, Ts: 2, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "def"}}}},
+				{Value: 33.1313, Ts: 3, Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "traceID", Value: "ghi"}}}},
+			},
+		},
+	}
+)
+
+func testMultiTSDBExemplars(t *testing.T, m *MultiTSDB) {
+	g := &errgroup.Group{}
+	respFoo := make(chan []exemplarspb.ExemplarData)
+	respBar := make(chan []exemplarspb.ExemplarData)
+	for range 100 {
+		s := m.TSDBExemplars()
+		testutil.Assert(t, len(s) == 2)
+
+		g.Go(func() error {
+			srv := newExemplarsServer(context.Background())
+			if err := s["foo"].Exemplars(
+				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+				0,
+				10,
+				srv,
+			); err != nil {
+				return err
+			}
+			respFoo <- srv.Data
+			return nil
+		})
+		g.Go(func() error {
+			srv := newExemplarsServer(context.Background())
+			if err := s["bar"].Exemplars(
+				[][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "a", "1")}},
+				0,
+				10,
+				srv,
+			); err != nil {
+				return err
+			}
+			respBar <- srv.Data
+			return nil
+		})
+	}
+	var err error
+	go func() {
+		err = g.Wait()
+		close(respFoo)
+		close(respBar)
+	}()
+OuterE:
+	for {
+		select {
+		case r, ok := <-respFoo:
+			if !ok {
+				break OuterE
+			}
+			checkExemplarsResponse(t, expectedFooRespExemplars, r)
+		case r, ok := <-respBar:
+			if !ok {
+				break OuterE
+			}
+			checkExemplarsResponse(t, expectedBarRespExemplars, r)
+		}
+	}
+	testutil.Ok(t, err)
+}
+
+// exemplarsServer is test gRPC exemplarsAPI exemplars server.
+type exemplarsServer struct {
+	// This field just exist to pseudo-implement the unused methods of the interface.
+	exemplarspb.Exemplars_ExemplarsServer
+
+	ctx context.Context
+
+	Data     []exemplarspb.ExemplarData
+	Warnings []string
+
+	Size int64
+}
+
+func newExemplarsServer(ctx context.Context) *exemplarsServer {
+	return &exemplarsServer{ctx: ctx}
+}
+
+func (e *exemplarsServer) Send(r *exemplarspb.ExemplarsResponse) error {
+	e.Size += int64(r.Size())
+
+	if r.GetWarning() != "" {
+		e.Warnings = append(e.Warnings, r.GetWarning())
+		return nil
+	}
+
+	if r.GetData() != nil {
+		e.Data = append(e.Data, *r.GetData())
+		return nil
+	}
+
+	// Unsupported field, skip.
+	return nil
+}
+
+func (s *exemplarsServer) Context() context.Context {
+	return s.ctx
+}
+
+func checkExemplarsResponse(t *testing.T, expected, data []exemplarspb.ExemplarData) {
+	testutil.Equals(t, len(expected), len(data))
+	for i := range data {
+		testutil.Equals(t, expected[i].SeriesLabels, data[i].SeriesLabels)
+		testutil.Equals(t, len(expected[i].Exemplars), len(data[i].Exemplars))
+		for j := range data[i].Exemplars {
+			testutil.Equals(t, *expected[i].Exemplars[j], *data[i].Exemplars[j])
+		}
+	}
+}
+
+/*
+TODO: Testing for segfault.
+func TestMultiTSDBPrune(t *testing.T) {
+	tests := []struct {
+		name            string
+		bucket          objstore.Bucket
+		expectedTenants int
+		expectedUploads int
+	}{
+		{
+			name:            "prune tsdbs without object storage",
+			bucket:          nil,
+			expectedTenants: 1,
+			expectedUploads: 0,
+		},
+		{
+			name:            "prune tsdbs with object storage",
+			bucket:          objstore.NewInMemBucket(),
+			expectedTenants: 1,
+			// NOTE(GiedriusS): block lengths are exclusive on the end so one sample goes to a 1ms block.
+			// Deleted tenant is not aligned to the block length on purpose to test flushing.
+			expectedUploads: 4,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			synctest.Test(t, func(t *testing.T) {
+				m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+					&tsdb.Options{
+						MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+						MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+						RetentionDuration: (10 * time.Hour).Milliseconds(),
+					},
+					labels.FromStrings("replica", "test"),
+					"tenant_id",
+					test.bucket,
+					false,
+					false,
+					metadata.NoneFunc,
+				)
+				t.Cleanup(m.Close)
+
+				now := time.Now()
+				for step := time.Duration(0); step <= 2*time.Hour; step += time.Minute {
+					testutil.Ok(t, appendSample(m, "deleted-tenant", now.Add(-8*time.Hour-30*time.Minute+step)))
+					testutil.Ok(t, appendSample(m, "active-tenant", now.Add(step)))
+				}
+				testutil.Equals(t, 2, len(m.TSDBLocalClients()))
+
+				ctx := context.Background()
+
+				time.Sleep(4*time.Hour + 30*time.Minute)
+				synctest.Wait()
+
+				testutil.Ok(t, m.Flush())
+				if test.bucket != nil {
+					t.Log("uploading!")
+					uploaded, err := m.SyncAllTenants(ctx)
+					testutil.Ok(t, err)
+					t.Logf("uploaded %d tenants", uploaded)
+				}
+
+				testutil.Ok(t, m.Prune(ctx))
+				time.Sleep(tenantGCDelay)
+				synctest.Wait()
+
+				testutil.Equals(t, test.expectedTenants, len(m.TSDBLocalClients()))
+				var shippedBlocks int
+				if test.bucket == nil && shippedBlocks > 0 {
+					t.Fatal("can't expect uploads when there is no bucket")
+				}
+				if test.bucket != nil {
+					testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
+						shippedBlocks++
+						return nil
+					}))
+				}
+				testutil.Equals(t, test.expectedUploads, shippedBlocks)
+			})
+		})
+	}
+}*/
+
+func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+
+		reg := prometheus.NewRegistry()
+		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), reg,
+			&tsdb.Options{
+				MinBlockDuration:    (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:    (2 * time.Hour).Milliseconds(),
+				RetentionDuration:   (6 * time.Hour).Milliseconds(),
+				BlockReloadInterval: 1 * time.Hour,
+			},
+			labels.FromStrings("replica", "test"),
+			"tenant_id",
+			objstore.NewInMemBucket(),
+			false,
+			false,
+			metadata.NoneFunc,
+			WithGCImmediately(),
+		)
+		defer m.Close()
+
+		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
+		testutil.Assert(t, tenantMetricCount(t, reg, "foo") > 0, "tenant TSDB metrics should be registered")
+		time.Sleep(5 * time.Hour)
+		synctest.Wait()
+		testutil.Ok(t, m.Prune(context.Background()))
+		testutil.Equals(t, 0, len(m.TSDBLocalClients()))
+		testutil.Assert(t, tenantMetricCount(t, reg, "foo") == 0, "tenant TSDB metrics should be not registered")
+		_, err := reg.Gather()
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
+		testutil.Equals(t, 1, len(m.TSDBLocalClients()))
+	})
+
+}
+
+// tenantMetricCount returns how many gathered metric series carry the
+// tenant="<tenant>" label that startTSDB attaches to a tenant's TSDB metrics.
+func tenantMetricCount(t *testing.T, g prometheus.Gatherer, tenant string) int {
+	t.Helper()
+	mfs, err := g.Gather()
+	testutil.Ok(t, err)
+	count := 0
+	for _, mf := range mfs {
+		for _, metric := range mf.GetMetric() {
+			for _, lp := range metric.GetLabel() {
+				if lp.GetName() == "tenant" && lp.GetValue() == tenant {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+// synctest.Test controls fake time so t.Parallel() is not used.
+func TestPeriodicHeadCompaction(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+
+		maxBlockDuration := (2 * time.Hour).Milliseconds()
+
+		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+			&tsdb.Options{
+				MinBlockDuration:     maxBlockDuration,
+				MaxBlockDuration:     maxBlockDuration,
+				RetentionDuration:    (24 * time.Hour).Milliseconds(),
+				OutOfOrderTimeWindow: (4 * time.Hour).Milliseconds(),
+				BlockReloadInterval:  time.Hour,
+			},
+			labels.FromStrings("replica", "test"),
+			"tenant_id",
+			nil,
+			false,
+			false,
+			metadata.NoneFunc,
+			WithGCImmediately(),
+		)
+		defer m.Close()
+
+		// Write 10 hours of samples upfront, simulating a large head
+		// backlog (e.g. WAL replay after a long downtime).
+		now := time.Now()
+		for step := time.Duration(0); step <= 10*time.Hour; step += time.Minute {
+			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step)))
+		}
+
+		// OOO samples.
+		for step := 7 * time.Hour; step <= 8*time.Hour; step += time.Minute {
+			testutil.Ok(t, appendSample(m, "test-tenant", now.Add(step+30*time.Second)))
+		}
+
+		tenant := m.testGetTenant("test-tenant")
+		db := tenant.readyStorage().Get()
+		testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+		testutil.Assert(t, db.Head().MaxOOOTime() > 0)
+
+		// Precondition: head must contain the full 10h of data before
+		// we advance time, otherwise the test could pass vacuously.
+		headSpanBefore := db.Head().MaxTime() - db.Head().MinTime()
+		testutil.Assert(t, headSpanBefore >= (10*time.Hour).Milliseconds(),
+			"precondition: head should span at least 10h, got %dms", headSpanBefore)
+
+		// Advance time to let the periodic compaction ticker fire.
+		// The ticker interval is 2*maxBlockDuration (4h) with a random
+		// initial delay up to 10% of maxBlockDuration (~12min). After
+		// 8h, 1-2 ticks will have fired. A correct implementation
+		// should drain the full backlog within a single tick.
+		time.Sleep(8 * time.Hour)
+		synctest.Wait()
+
+		head := db.Head()
+		headSpanMs := head.MaxTime() - head.MinTime()
+		maxAcceptableHeadSpanMs := 2 * maxBlockDuration
+
+		testutil.Assert(t, headSpanMs <= maxAcceptableHeadSpanMs,
+			"head span is %dms, expected at most %dms",
+			headSpanMs, maxAcceptableHeadSpanMs)
+
+		// 10h of data with 2h blocks should produce at least 3 on-disk
+		// blocks. The exact count depends on the random compaction delay
+		// and how many ticks fired within the 8h window.
+		testutil.Assert(t, len(db.Blocks()) >= 3,
+			"expected at least 3 blocks, got %d",
+			len(db.Blocks()))
+
+		oooBlocks := 0
+		for _, b := range db.Blocks() {
+			meta := b.Meta()
+			if meta.Compaction.FromOutOfOrder() {
+				oooBlocks++
+			}
+		}
+		testutil.Assert(t, oooBlocks > 0)
+	})
+}
+
+func TestMultiTSDBAddNewTenant(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
+	t.Parallel()
+	const iterations = 3
+	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
+	for i := range iterations {
+		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
+			dir := t.TempDir()
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				objstore.NewInMemBucket(),
+				false,
+				false,
+				metadata.NoneFunc,
+			)
+			defer m.Close()
+
+			concurrency := 50
+			var wg sync.WaitGroup
+			for i := range concurrency {
+				wg.Add(1)
+				// simulate remote write with new tenant concurrently
+				go func(i int) {
+					defer wg.Done()
+					testutil.Ok(t, appendSample(m, fmt.Sprintf("tenant-%d", i), time.UnixMilli(int64(10))))
+				}(i)
+				// simulate read request concurrently
+				go func() {
+					m.TSDBLocalClients()
+				}()
+			}
+			wg.Wait()
+			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
+		})
+	}
+}
+
+func TestMultiTSDBPruneSkipsUnreadyTenant(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	maxBlockDuration := (2 * time.Hour).Milliseconds()
+	retentionDuration := (6 * time.Hour).Milliseconds()
+	m := NewMultiTSDB(
+		openTestRoot(t, dir),
+		log.NewNopLogger(),
+		prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  maxBlockDuration,
+			MaxBlockDuration:  maxBlockDuration,
+			RetentionDuration: retentionDuration,
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+
+	const tenantID = "unready-tenant"
+	tenant := newTenant(log.NewNopLogger(), retentionDuration, maxBlockDuration, tenantID)
+	m.addTenantLocked(tenantID, tenant)
+	t.Cleanup(func() {
+		m.mtx.Lock()
+		m.removeTenantUnlocked(tenantID)
+		m.mtx.Unlock()
+		m.Close()
+	})
+
+	testutil.Ok(t, m.Prune(context.Background()))
+	testutil.Equals(t, false, tenant.readOnly.Load())
+}
+
+func TestAlignedHeadFlush(t *testing.T) {
+	t.Parallel()
+
+	hourInSeconds := int64(1 * 60 * 60)
+
+	tests := []struct {
+		name                string
+		tsdbStart           int64
+		headDurationSeconds int64
+		bucket              objstore.Bucket
+		expectedUploads     int
+		expectedMaxTs       []int64
+	}{
+		{
+			name:                "short head",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: hourInSeconds,
+			expectedUploads:     1,
+			expectedMaxTs:       []int64{hourInSeconds * 1000},
+		},
+		{
+			name:                "aligned head start",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: 3 * hourInSeconds,
+			expectedUploads:     2,
+			expectedMaxTs:       []int64{2 * hourInSeconds * 1000, 3 * hourInSeconds * 1000},
+		},
+		{
+			name:                "unaligned TSDB start",
+			bucket:              objstore.NewInMemBucket(),
+			headDurationSeconds: 3 * hourInSeconds,
+			tsdbStart:           90 * 60, // 90 minutes
+			expectedUploads:     2,
+			expectedMaxTs:       []int64{2 * hourInSeconds * 1000, 3*hourInSeconds*1000 + 90*60},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				test.bucket,
+				false,
+				false,
+				metadata.NoneFunc,
+			)
+			defer m.Close()
+
+			for i := 0; i <= int(test.headDurationSeconds); i += 60 {
+				tsMillis := int64(i*1000) + test.tsdbStart
+				testutil.Ok(t, appendSample(m, "test-tenant", time.UnixMilli(tsMillis)))
+			}
+
+			testutil.Ok(t, m.Flush())
+
+			_, err := m.SyncAllTenants(t.Context())
+			testutil.Ok(t, err)
+
+			var shippedBlocks int
+			var maxts []int64
+			testutil.Ok(t, test.bucket.Iter(context.Background(), "", func(s string) error {
+				meta, err := metadata.ReadFromDir(path.Join(m.dataDir.Name(), "test-tenant", s))
+				testutil.Ok(t, err)
+
+				maxts = append(maxts, meta.MaxTime)
+				shippedBlocks++
+				return nil
+			}))
+			testutil.Equals(t, test.expectedUploads, shippedBlocks)
+			testutil.Equals(t, test.expectedMaxTs, maxts)
+		})
+	}
+}
+
+func TestMultiTSDBStats(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		tenants       []string
+		expectedStats int
+	}{
+		{
+			name:          "single tenant",
+			tenants:       []string{"foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "missing tenant",
+			tenants:       []string{"missing-foo"},
+			expectedStats: 0,
+		},
+		{
+			name:          "multiple tenants with missing tenant",
+			tenants:       []string{"foo", "missing-foo"},
+			expectedStats: 1,
+		},
+		{
+			name:          "all tenants",
+			tenants:       []string{"foo", "bar", "baz"},
+			expectedStats: 3,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
+				&tsdb.Options{
+					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+					RetentionDuration: (6 * time.Hour).Milliseconds(),
+				},
+				labels.FromStrings("replica", "test"),
+				"tenant_id",
+				nil,
+				false,
+				false,
+				metadata.NoneFunc,
+			)
+			defer m.Close()
+
+			testutil.Ok(t, appendSample(m, "foo", time.Now()))
+			testutil.Ok(t, appendSample(m, "bar", time.Now()))
+			testutil.Ok(t, appendSample(m, "baz", time.Now()))
+			testutil.Equals(t, 3, len(m.TSDBLocalClients()))
+
+			stats := m.TenantStats(10, labels.MetricName, test.tenants...)
+			testutil.Equals(t, test.expectedStats, len(stats))
+		})
+	}
+}
+
+// Regression test for https://github.com/thanos-io/thanos/issues/6047.
+func TestMultiTSDBWithNilStore(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	defer m.Close()
+	const tenantID = "test-tenant"
+	_, err := m.TenantAppendable(tenantID)
+	testutil.Ok(t, err)
+
+	// Get LabelSets of newly created TSDB.
+	clients := m.TSDBLocalClients()
+	for _, client := range clients {
+		testutil.Ok(t, testutil.FaultOrPanicToErr(func() { client.LabelSets() }))
+	}
+
+	// Wait for tenant to become ready before terminating the test.
+	// This allows the tear down procedure to cleanup properly.
+	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
+}
+
+type slowClient struct {
+	store.Client
+}
+
+func (s *slowClient) LabelValues(ctx context.Context, r *storepb.LabelValuesRequest, _ ...grpc.CallOption) (*storepb.LabelValuesResponse, error) {
+	<-time.After(10 * time.Millisecond)
+	return s.Client.LabelValues(ctx, r)
+}
+
+func TestProxyLabelValues(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	m := NewMultiTSDB(
+		openTestRoot(t, dir), nil, prometheus.NewRegistry(), &tsdb.Options{
+			RetentionDuration: 10 * time.Minute.Milliseconds(),
+			MinBlockDuration:  5 * time.Minute.Milliseconds(),
+			MaxBlockDuration:  5 * time.Minute.Milliseconds(),
+			NoLockfile:        true,
+		},
+		labels.FromStrings("replica", "01"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	defer m.Close()
+
+	ctx := t.Context()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				testutil.Ok(t, queryLabelValues(ctx, m))
+			}
+		}
+	}()
+
+	// Append several samples to a TSDB outside the retention period.
+	testutil.Ok(t, appendSampleWithLabels(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-a"), time.Now().Add(-5*time.Hour)))
+	testutil.Ok(t, appendSampleWithLabels(m, "tenant-a", labels.FromStrings(labels.MetricName, "metric-b"), time.Now().Add(-3*time.Hour)))
+	testutil.Ok(t, appendSampleWithLabels(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-c"), time.Now().Add(-1*time.Hour)))
+
+	// Append a sample within the retention period and flush all tenants.
+	// This will lead deletion of blocks that fall out of the retention period.
+	testutil.Ok(t, appendSampleWithLabels(m, "tenant-b", labels.FromStrings(labels.MetricName, "metric-d"), time.Now()))
+	testutil.Ok(t, m.Flush())
+}
+
+func appendSample(m *MultiTSDB, tenant string, timestamp time.Time) error {
+	return appendSampleWithLabels(m, tenant, labels.FromStrings("foo", "bar"), timestamp)
+}
+
+func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, timestamp time.Time) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	app, err := m.TenantAppendable(tenant)
+	if err != nil {
+		return err
+	}
+
+	var a storage.Appender
+	if err := runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+		a, err = app.Appender(ctx)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	_, err = a.Append(0, lbls, timestamp.UnixMilli(), 10)
+	if err != nil {
+		return err
+	}
+
+	return a.Commit()
+}
+
+func queryLabelValues(ctx context.Context, m *MultiTSDB) error {
+	proxy := store.NewProxyStore(nil, nil, func() []store.Client {
+		m.mtx.Lock()
+		defer m.mtx.Unlock()
+		clients := make([]store.Client, len(m.tsdbClients))
+		copy(clients, m.tsdbClients)
+		if len(clients) > 0 {
+			clients[0] = &slowClient{clients[0]}
+		}
+		return clients
+	}, component.Store, labels.EmptyLabels(), 1*time.Minute, store.LazyRetrieval)
+
+	req := &storepb.LabelValuesRequest{
+		Label: labels.MetricName,
+		Start: math.MinInt64,
+		End:   math.MaxInt64,
+	}
+	_, err := proxy.LabelValues(ctx, req)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func BenchmarkMultiTSDB(b *testing.B) {
+	dir := b.TempDir()
+
+	m := NewMultiTSDB(openTestRoot(b, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+		RetentionDuration: (6 * time.Hour).Milliseconds(),
+		NoLockfile:        true,
+	}, labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	defer m.Close()
+
+	testutil.Ok(b, m.Flush())
+	testutil.Ok(b, m.Open())
+
+	app, err := m.TenantAppendable("foo")
+	testutil.Ok(b, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var a storage.Appender
+	testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+		a, err = app.Appender(context.Background())
+		return err
+	}))
+
+	l := labels.FromStrings("a", "1", "b", "2")
+
+	b.ReportAllocs()
+
+	for i := 0; b.Loop(); i++ {
+		_, _ = a.Append(0, l, int64(i), float64(i))
+	}
+}
+
+func TestMultiTSDBDoesNotDeleteNotUploadedBlocks(t *testing.T) {
+	t.Parallel()
+
+	tenant := &tenant{
+		mtx: &sync.RWMutex{},
+	}
+
+	t.Run("no blocks", func(t *testing.T) {
+		require.Equal(t, (map[ulid.ULID]struct{})(nil), tenant.blocksToDelete(nil))
+	})
+
+	tenant.tsdb = &tsdb.DB{}
+
+	mockBlockIDs := []ulid.ULID{
+		ulid.MustNew(1, nil),
+		ulid.MustNew(2, nil),
+	}
+
+	t.Run("no shipper", func(t *testing.T) {
+		tenant.blocksToDeleteFn = func(db *tsdb.DB) tsdb.BlocksToDeleteFunc {
+			return func(_ []*tsdb.Block) map[ulid.ULID]struct{} {
+				return map[ulid.ULID]struct{}{
+					mockBlockIDs[0]: {},
+					mockBlockIDs[1]: {},
+				}
+			}
+		}
+
+		require.Equal(t, map[ulid.ULID]struct{}{
+			mockBlockIDs[0]: {},
+			mockBlockIDs[1]: {},
+		}, tenant.blocksToDelete(nil))
+	})
+
+	t.Run("some blocks uploaded", func(t *testing.T) {
+		tenant.blocksToDeleteFn = func(db *tsdb.DB) tsdb.BlocksToDeleteFunc {
+			return func(_ []*tsdb.Block) map[ulid.ULID]struct{} {
+				return map[ulid.ULID]struct{}{
+					mockBlockIDs[0]: {},
+					mockBlockIDs[1]: {},
+				}
+			}
+		}
+
+		td := t.TempDir()
+
+		require.NoError(t, shipper.WriteMetaFile(log.NewNopLogger(), filepath.Join(td, shipper.DefaultMetaFilename), &shipper.Meta{
+			Version:  shipper.MetaVersion1,
+			Uploaded: []ulid.ULID{mockBlockIDs[0]},
+		}))
+
+		tenant.ship = shipper.New(
+			nil,
+			openTestRoot(t, td),
+			shipper.WithLogger(log.NewNopLogger()),
+			shipper.WithSource(metadata.BucketUploadSource),
+			shipper.WithHashFunc(metadata.NoneFunc),
+		)
+		require.Equal(t, map[ulid.ULID]struct{}{
+			mockBlockIDs[0]: {},
+		}, tenant.blocksToDelete(nil))
+	})
+}
+
+func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
+		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+		RetentionDuration: (6 * time.Hour).Milliseconds(),
+	}, labels.FromStrings("replica", "test"), "tenant_id", objstore.NewInMemBucket(), false, false, metadata.NoneFunc)
+	t.Cleanup(func() {
+		m.Close()
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	const iterations = 50
+
+	wg := sync.WaitGroup{}
+	wg.Go(func() {
+		for i := range iterations {
+			tenant := fmt.Sprintf("pruned-tenant-%d", i)
+
+			testutil.Ok(t, appendSample(m, tenant, time.UnixMilli(int64(10))))
+
+			testutil.Ok(t, m.Prune(ctx))
+		}
+	})
+
+	wg.Go(func() {
+		for range iterations {
+			clients := m.TSDBLocalClients()
+			req := &storepb.SeriesRequest{
+				MinTime:  0,
+				MaxTime:  10,
+				Matchers: []storepb.LabelMatcher{{Name: "foo", Value: ".*", Type: storepb.LabelMatcher_RE}},
+			}
+
+			for _, c := range clients {
+				sc, err := c.Series(ctx, req)
+				testutil.Ok(t, err)
+
+				for {
+					_, err := sc.Recv()
+					if err == io.EOF {
+						break
+					}
+					testutil.Ok(t, err)
+				}
+			}
+		}
+	})
+
+	wg.Wait()
+}

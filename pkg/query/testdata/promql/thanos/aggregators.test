@@ -1,0 +1,220 @@
+store {} 0 30m
+
+load 5m
+  http_requests{job="api-server", instance="0", group="production"} 0+10x10
+  http_requests{job="api-server", instance="1", group="production"} 0+20x10
+  http_requests{job="api-server", instance="0", group="canary"}   0+30x10
+  http_requests{job="api-server", instance="1", group="canary"}   0+40x10
+
+store {} 30m 10d
+
+load 5m
+  http_requests{job="api-server", instance="0", group="production"} 0+10x10
+  http_requests{job="api-server", instance="1", group="production"} 0+20x10
+  http_requests{job="api-server", instance="0", group="canary"}   0+30x10
+  http_requests{job="api-server", instance="1", group="canary"}   0+40x10
+
+store {} 0 30m
+
+load 5m
+  http_requests{job="app-server", instance="0", group="production"} 0+50x10
+  http_requests{job="app-server", instance="1", group="production"} 0+60x10
+  http_requests{job="app-server", instance="0", group="canary"}   0+70x10
+  http_requests{job="app-server", instance="1", group="canary"}   0+80x10
+
+store {} 30m 10d
+
+load 5m
+  http_requests{job="app-server", instance="0", group="production"} 0+50x10
+  http_requests{job="app-server", instance="1", group="production"} 0+60x10
+  http_requests{job="app-server", instance="0", group="canary"}   0+70x10
+  http_requests{job="app-server", instance="1", group="canary"}   0+80x10
+
+store {} 0 10d
+
+load 5m
+  foo{job="api-server", instance="0", region="europe"} 0+90x10
+  foo{job="api-server"} 0+100x10
+
+# Simple sum.
+eval instant at 50m SUM BY (group) (http_requests{job="api-server"})
+  {group="canary"} 700
+  {group="production"} 300
+
+eval instant at 50m SUM BY (group) (((http_requests{job="api-server"})))
+  {group="canary"} 700
+  {group="production"} 300
+
+# Test alternative "by"-clause order.
+eval instant at 50m sum by (group) (http_requests{job="api-server"})
+  {group="canary"} 700
+  {group="production"} 300
+
+# Simple average.
+eval instant at 50m avg by (group) (http_requests{job="api-server"})
+  {group="canary"} 350
+  {group="production"} 150
+
+# Simple count.
+eval instant at 50m count by (group) (http_requests{job="api-server"})
+  {group="canary"} 2
+  {group="production"} 2
+
+# Simple without.
+eval instant at 50m sum without (instance) (http_requests{job="api-server"})
+  {group="canary",job="api-server"} 700
+  {group="production",job="api-server"} 300
+
+# Empty by.
+eval instant at 50m sum by () (http_requests{job="api-server"})
+  {} 1000
+
+# No by/without.
+eval instant at 50m sum(http_requests{job="api-server"})
+  {} 1000
+
+# Empty without.
+eval instant at 50m sum without () (http_requests{job="api-server",group="production"})
+  {group="production",job="api-server",instance="0"} 100
+  {group="production",job="api-server",instance="1"} 200
+
+# Without with mismatched and missing labels. Do not do this.
+eval instant at 50m sum without (instance) (http_requests{job="api-server"} or foo)
+  {group="canary",job="api-server"} 700
+  {group="production",job="api-server"} 300
+  {region="europe",job="api-server"} 900
+  {job="api-server"} 1000
+
+# Lower-cased aggregation operators should work too.
+eval instant at 50m sum(http_requests) by (job) + min(http_requests) by (job) + max(http_requests) by (job) + avg(http_requests) by (job)
+  {job="app-server"} 4550
+  {job="api-server"} 1750
+
+# Test alternative "by"-clause order.
+eval instant at 50m sum by (group) (http_requests{job="api-server"})
+  {group="canary"} 700
+  {group="production"} 300
+
+# Test both alternative "by"-clause orders in one expression.
+# Public health warning: stick to one form within an expression (or even
+# in an organization), or risk serious user confusion.
+eval instant at 50m sum(sum by (group) (http_requests{job="api-server"})) by (job)
+  {} 1000
+
+eval instant at 50m SUM(http_requests)
+	{} 3600
+
+eval instant at 50m SUM(http_requests{instance="0"}) BY(job)
+	{job="api-server"} 400
+	{job="app-server"} 1200
+
+eval instant at 50m SUM(http_requests) BY (job)
+	{job="api-server"} 1000
+	{job="app-server"} 2600
+
+# Non-existent labels mentioned in BY-clauses shouldn't propagate to output.
+eval instant at 50m SUM(http_requests) BY (job, nonexistent)
+	{job="api-server"} 1000
+	{job="app-server"} 2600
+
+eval instant at 50m COUNT(http_requests) BY (job)
+	{job="api-server"} 4
+	{job="app-server"} 4
+
+eval instant at 50m SUM(http_requests) BY (job, group)
+	{group="canary", job="api-server"} 700
+	{group="canary", job="app-server"} 1500
+	{group="production", job="api-server"} 300
+	{group="production", job="app-server"} 1100
+
+eval instant at 50m AVG(http_requests) BY (job)
+	{job="api-server"} 250
+	{job="app-server"} 650
+
+eval instant at 50m MIN(http_requests) BY (job)
+	{job="api-server"} 100
+	{job="app-server"} 500
+
+eval instant at 50m MAX(http_requests) BY (job)
+	{job="api-server"} 400
+	{job="app-server"} 800
+
+eval instant at 50m abs(-1 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 100
+	{group="production", instance="1", job="api-server"} 200
+
+eval instant at 50m floor(0.004 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 0
+	{group="production", instance="1", job="api-server"} 0
+
+eval instant at 50m ceil(0.004 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 1
+	{group="production", instance="1", job="api-server"} 1
+
+eval instant at 50m round(0.004 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 0
+	{group="production", instance="1", job="api-server"} 1
+
+# Round should correctly handle negative numbers.
+eval instant at 50m round(-1 * (0.004 * http_requests{group="production",job="api-server"}))
+	{group="production", instance="0", job="api-server"} 0
+	{group="production", instance="1", job="api-server"} -1
+
+# Round should round half up.
+eval instant at 50m round(0.005 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 1
+	{group="production", instance="1", job="api-server"} 1
+
+eval instant at 50m round(-1 * (0.005 * http_requests{group="production",job="api-server"}))
+	{group="production", instance="0", job="api-server"} 0
+	{group="production", instance="1", job="api-server"} -1
+
+eval instant at 50m round(1 + 0.005 * http_requests{group="production",job="api-server"})
+	{group="production", instance="0", job="api-server"} 2
+	{group="production", instance="1", job="api-server"} 2
+
+eval instant at 50m round(-1 * (1 + 0.005 * http_requests{group="production",job="api-server"}))
+	{group="production", instance="0", job="api-server"} -1
+	{group="production", instance="1", job="api-server"} -2
+
+# Round should accept the number to round nearest to.
+eval instant at 50m round(0.0005 * http_requests{group="production",job="api-server"}, 0.1)
+	{group="production", instance="0", job="api-server"} 0.1
+	{group="production", instance="1", job="api-server"} 0.1
+
+eval instant at 50m round(2.1 + 0.0005 * http_requests{group="production",job="api-server"}, 0.1)
+	{group="production", instance="0", job="api-server"} 2.2
+	{group="production", instance="1", job="api-server"} 2.2
+
+eval instant at 50m round(5.2 + 0.0005 * http_requests{group="production",job="api-server"}, 0.1)
+	{group="production", instance="0", job="api-server"} 5.3
+	{group="production", instance="1", job="api-server"} 5.3
+
+# Round should work correctly with negative numbers and multiple decimal places.
+eval instant at 50m round(-1 * (5.2 + 0.0005 * http_requests{group="production",job="api-server"}), 0.1)
+	{group="production", instance="0", job="api-server"} -5.2
+	{group="production", instance="1", job="api-server"} -5.3
+
+# Round should work correctly with big toNearests.
+eval instant at 50m round(0.025 * http_requests{group="production",job="api-server"}, 5)
+	{group="production", instance="0", job="api-server"} 5
+	{group="production", instance="1", job="api-server"} 5
+
+eval instant at 50m round(0.045 * http_requests{group="production",job="api-server"}, 5)
+	{group="production", instance="0", job="api-server"} 5
+	{group="production", instance="1", job="api-server"} 10
+
+# Standard deviation and variance.
+eval instant at 50m stddev(http_requests)
+  {} 229.12878474779
+
+eval instant at 50m stddev by (instance)(http_requests)
+  {instance="0"} 223.60679774998
+  {instance="1"} 223.60679774998
+
+eval instant at 50m stdvar(http_requests)
+  {} 52500
+
+eval instant at 50m stdvar by (instance)(http_requests)
+  {instance="0"} 50000
+  {instance="1"} 50000

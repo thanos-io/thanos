@@ -1,0 +1,13 @@
+tasks:
+  - init: >
+      test -f go.mod && go get -v ./...;
+      wget https://github.com/prometheus/prometheus/releases/download/v2.22.2/prometheus-2.22.2.linux-amd64.tar.gz --directory-prefix=/tmp;
+      cd /tmp && tar xvfz prometheus-*.tar.gz && rm prometheus-*.tar.gz;
+      mv prometheus-*/prometheus /workspace/go/bin/;
+      wget https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh && chmod u+x ./wait-for-it.sh && cd /workspace/thanos/scripts && mv /tmp/wait-for-it.sh .;
+      ./quickstart.sh;
+      for i in {0..2};do ./wait-for-it.sh -q localhost:909"$i" --  && echo "Prometheus instance no.$((i+1)) localhost:909$i is up"; done;
+      ./wait-for-it.sh localhost:10914 --  && echo "Thanos frontend at localhost:10914 is up";
+ports:
+  - port: 10914
+    onOpen: open-preview

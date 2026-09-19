@@ -1,0 +1,71 @@
+version: "2"
+run:
+  build-tags:
+    - slicelabels
+  issues-exit-code: 1
+linters:
+  enable:
+    - goconst
+    - godot
+    - misspell
+    - promlinter
+    - unparam
+  settings:
+    errcheck:
+      exclude-functions:
+        - (github.com/go-kit/log.Logger).Log
+        - fmt.Fprintln
+        - fmt.Fprint
+    goconst:
+      min-occurrences: 5
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - promlinter
+        path: _test\.go
+      - linters:
+          - unused
+        text: SourceStoreAPI.implementsStoreAPI
+      - linters:
+          - unused
+        text: SourceStoreAPI.producesBlocks
+      - linters:
+          - unused
+        text: Source.producesBlocks
+      - linters:
+          - unused
+        text: newMockAlertmanager
+      - linters:
+          - unused
+        text: ruleAndAssert
+      - linters:
+          - staticcheck
+        text: 'labels.MetricName is deprecated: .*'  
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - internal/cortex
+      - .bingo
+      - third_party$
+      - builtin$
+      - examples$

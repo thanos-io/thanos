@@ -1,0 +1,244 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+package queryfrontend
+
+import (
+	"testing"
+	"time"
+
+	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
+
+	"github.com/efficientgo/core/testutil"
+)
+
+func TestGenerateCacheKey(t *testing.T) {
+	splitter := newThanosCacheKeyGenerator()
+
+	for _, tc := range []struct {
+		name     string
+		req      queryrange.Request
+		expected string
+	}{
+		{
+			name: "non downsampling resolution specified",
+			req: &ThanosQueryRangeRequest{
+				Query:         "up",
+				Start:         0,
+				Step:          60 * seconds,
+				SplitInterval: time.Hour,
+			},
+			expected: "fe::up:60000:3600000:0:2:-:0::false::false",
+		},
+		{
+			name: "10s step",
+			req: &ThanosQueryRangeRequest{
+				Query:         "up",
+				Start:         0,
+				Step:          10 * seconds,
+				SplitInterval: time.Hour,
+			},
+			expected: "fe::up:10000:3600000:0:2:-:0::false::false",
+		},
+		{
+			name: "1m downsampling resolution",
+			req: &ThanosQueryRangeRequest{
+				Query:               "up",
+				Start:               0,
+				Step:                10 * seconds,
+				MaxSourceResolution: 60 * seconds,
+				SplitInterval:       time.Hour,
+			},
+			expected: "fe::up:10000:3600000:0:2:-:0::false::false",
+		},
+		{
+			name: "5m downsampling resolution, different cache key",
+			req: &ThanosQueryRangeRequest{
+				Query:               "up",
+				Start:               0,
+				Step:                10 * seconds,
+				MaxSourceResolution: 300 * seconds,
+				SplitInterval:       time.Hour,
+			},
+			expected: "fe::up:10000:3600000:0:1:-:0::false::false",
+		},
+		{
+			name: "1h downsampling resolution, different cache key",
+			req: &ThanosQueryRangeRequest{
+				Query:               "up",
+				Start:               0,
+				Step:                10 * seconds,
+				MaxSourceResolution: hour,
+				SplitInterval:       time.Hour,
+			},
+			expected: "fe::up:10000:3600000:0:0:-:0::false::false",
+		},
+		{
+			name: "1h downsampling resolution with lookback delta",
+			req: &ThanosQueryRangeRequest{
+				Query:               "up",
+				Start:               0,
+				Step:                10 * seconds,
+				MaxSourceResolution: hour,
+				LookbackDelta:       1000,
+				SplitInterval:       time.Hour,
+			},
+			expected: "fe::up:10000:3600000:0:0:-:1000::false::false",
+		},
+		{
+			name: "partial response enabled, different cache key",
+			req: &ThanosQueryRangeRequest{
+				Query:           "up",
+				Start:           0,
+				Step:            60 * seconds,
+				SplitInterval:   time.Hour,
+				PartialResponse: true,
+			},
+			expected: "fe::up:60000:3600000:0:2:-:0::true::false",
+		},
+		{
+			name: "replica labels set, different cache key",
+			req: &ThanosQueryRangeRequest{
+				Query:         "up",
+				Start:         0,
+				Step:          60 * seconds,
+				SplitInterval: time.Hour,
+				ReplicaLabels: []string{"prometheus", "pod"},
+			},
+			expected: "fe::up:60000:3600000:0:2:-:0::false:pod,prometheus:false",
+		},
+		{
+			name: "analyze enabled, different cache key",
+			req: &ThanosQueryRangeRequest{
+				Query:         "up",
+				Start:         0,
+				Step:          60 * seconds,
+				SplitInterval: time.Hour,
+				Analyze:       true,
+			},
+			expected: "fe::up:60000:3600000:0:2:-:0::false::true",
+		},
+		{
+			name: "label names, no matcher",
+			req: &ThanosLabelsRequest{
+				Start:         0,
+				SplitInterval: time.Hour,
+			},
+			expected: "fe:::[]:3600000:0",
+		},
+		{
+			name: "label names, single matcher",
+			req: &ThanosLabelsRequest{
+				Start:         0,
+				Matchers:      [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				SplitInterval: time.Hour,
+			},
+			expected: `fe:::[[foo="bar"]]:3600000:0`,
+		},
+		{
+			name: "label names, multiple matchers",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+				Matchers: [][]*labels.Matcher{
+					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
+				},
+				SplitInterval: time.Hour,
+			},
+			expected: `fe:::[[foo="bar"] [baz="qux"]]:3600000:0`,
+		},
+		{
+			name: "label values, no matcher",
+			req: &ThanosLabelsRequest{
+				Start:         0,
+				Label:         "up",
+				SplitInterval: time.Hour,
+			},
+			expected: "fe::up:[]:3600000:0",
+		},
+		{
+			name: "label values, single matcher",
+			req: &ThanosLabelsRequest{
+				Start:         0,
+				Label:         "up",
+				Matchers:      [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")}},
+				SplitInterval: time.Hour,
+			},
+			expected: `fe::up:[[foo="bar"]]:3600000:0`,
+		},
+		{
+			name: "label values, multiple matchers",
+			req: &ThanosLabelsRequest{
+				Start: 0,
+				Label: "up",
+				Matchers: [][]*labels.Matcher{
+					{labels.MustNewMatcher(labels.MatchEqual, "foo", "bar")},
+					{labels.MustNewMatcher(labels.MatchEqual, "baz", "qux")},
+				},
+				SplitInterval: time.Hour,
+			},
+			expected: `fe::up:[[foo="bar"] [baz="qux"]]:3600000:0`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			key := splitter.GenerateCacheKey("", tc.req)
+			testutil.Equals(t, tc.expected, key)
+		})
+	}
+}
+
+func TestGenerateCacheKey_UnsupportedRequest(t *testing.T) {
+	splitter := newThanosCacheKeyGenerator()
+
+	req := &queryrange.PrometheusRequest{
+		Query: "up",
+		Start: 0,
+		Step:  60 * seconds,
+	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic")
+		} else {
+			testutil.Assert(t, r == "request type not supported", "unexpected panic: %v", r)
+		}
+	}()
+
+	splitter.GenerateCacheKey("", req)
+}
+
+func TestGenerateCacheKeyAlternatives(t *testing.T) {
+	splitter := newThanosCacheKeyGenerator()
+
+	req := &ThanosQueryRangeRequest{
+		Query:         "up",
+		Start:         0,
+		Step:          60 * seconds,
+		SplitInterval: time.Hour,
+	}
+
+	testutil.Equals(t, []string{
+		"fe::up:30000:3600000:0:2:-:0::false::false",
+		"fe::up:20000:3600000:0:2:-:0::false::false",
+		"fe::up:15000:3600000:0:2:-:0::false::false",
+		"fe::up:10000:3600000:0:2:-:0::false::false",
+		"fe::up:5000:3600000:0:2:-:0::false::false",
+		"fe::up:1000:3600000:0:2:-:0::false::false",
+	}, splitter.GenerateCacheKeyAlternatives("", req))
+
+	req.Step = 14 * seconds
+	testutil.Equals(t, []string(nil), splitter.GenerateCacheKeyAlternatives("", req))
+}
+
+func TestLowerStepCacheCandidates(t *testing.T) {
+	testutil.Equals(t, []int64{
+		15 * seconds,
+		10 * seconds,
+		5 * seconds,
+		seconds,
+	}, lowerStepCacheCandidates(30*seconds))
+
+	testutil.Equals(t, []int64(nil), lowerStepCacheCandidates(14*seconds))
+}

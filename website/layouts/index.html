@@ -1,0 +1,143 @@
+{{ define "main" }}
+<div class="container-fluid">
+    <div class="row py-3 py-lg-5">
+        <div class="col col-sm-1 col-md-6 offset-md-3 col-lg-4 offset-lg-4 text-center hero-logo-container">
+            <img class="img-fluid" style="max-width: 60%" src="Thanos-logo_full.svg" alt="Thanos Logo"/>
+        </div>
+    </div>
+    <div class="row py-3 pb-lg-5">
+        <div class="col text-center">
+            <h3 class="mb-3">Open source, highly available Prometheus setup with long term storage capabilities.</h3>
+            <ul class="list-inline mb-0">
+                <li class="list-inline-item my-3">
+                    <a href="{{ "/tip/thanos/getting-started.md" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-book"></i>&nbsp;Getting Started
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="{{ "/tip/contributing/community.md" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-comments"></i>&nbsp;Community
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/releases" class="btn btn-outline-secondary">
+                        <i class="mr-1 fas fa-fw fa-download"></i>&nbsp;Download
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://quay.io/repository/{{ .Site.Params.QuayIoUser }}/{{ .Site.Params.QuayIoRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i>&nbsp;Quay.io
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://hub.docker.com/r/{{ .Site.Params.DockerHubUser }}/{{ .Site.Params.DockerHubRepository }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-docker"></i>&nbsp;DockerHub
+                    </a>
+                </li>
+                <li class="list-inline-item my-3">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}" class="btn btn-outline-secondary">
+                        <i class="mr-1 fab fa-fw fa-github"></i>&nbsp;GitHub
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+<div class="bg-dark text-light py-3 font-weight-bold container-fluid text-center">The Thanos Team strongly condemns Russia's illegal invasion of Ukraine.
+    Please consider donating to a humanitarian aid actions such as
+    <a class="color-yellow" target="_blank" href="https://www.siepomaga.pl/en/ukraina/">Polish National Campaign to Support Ukraine</a>
+    or
+    <a class="color-yellow" target="_blank" href="https://care-in-action.org/en/pages/please-fund-emergency-aid-for-ukraine">Care in Action</a> to provide relief.
+</div>
+<div class="container-fluid bg-light">
+    <div class="row">
+        <div class="col-12 col-md-6 col-lg text-center py-5">
+            <i class="fas fa-search fa-5x db mb-3"></i>
+            <h4 class="font-weight-bold">Global Query View</h4>
+            <p>Scale your Prometheus setup by enabling querying of your Prometheus metrics across multiple Prometheus servers and clusters.</p>
+        </div>
+        <div class="col-12 col-md-6 col-lg text-center py-5">
+            <i class="fas fa-archive fa-5x db mb-3"></i>
+            <h4 class="font-weight-bold">Unlimited Retention</h4>
+            <p>Extend the system with the object storage of your choice to store your metrics for unlimited time. Supports GCP, S3, Azure, Swift and Tencent COS.</p>
+        </div>
+        <div class="col-12 col-md-6 col-lg text-center py-5">
+            <i class="fas fa-plug fa-5x db mb-3"></i>
+            <h4 class="font-weight-bold">Prometheus Compatible</h4>
+            <p>Use the same tools you love, such as Grafana and others, that support the Prometheus Query API.</p>
+        </div>
+        <div class="col-12 col-md-6 col-lg text-center py-5">
+            <i class="fas fa-file-download fa-5x db mb-3"></i>
+            <h4 class="font-weight-bold">Downsampling & Compaction</h4>
+            <p>Downsample historical data for massive query speedup when querying large time ranges or configure complex retention policies.</p>
+        </div>
+    </div>
+</div>
+<div class="container py-5">
+    <h2 class="heading-big text-center">Founded By</h2>
+    <div class="row">
+        <div class="col-6 offset-3 col-sm-6 offset-sm-3 col-md-4 offset-md-4">
+            <div class="img-adopter">
+                <a href="https://improbable.io" rel="nofollow" target="_blank"><img src="{{ "/logos/improbable.png" | relURL }}" class="img-fluid" alt="Improbable"></a>
+            </div>
+        </div>
+    </div>
+        <h2 class="heading-big text-center">Used By</h2>
+    <div class="row">
+        {{ range $adopter := sort $.Site.Data.adopters.adopters "name" }}
+        {{ if $adopter.logo }}
+        <div class="col-6 col-sm-6 col-md-3">
+            <div class="img-adopter">
+                <a href="{{ $adopter.url }}" rel="nofollow" target="_blank"><img src="{{ (printf "/logos/%s" $adopter.logo) | relURL }}" alt="{{ $adopter.name }}"></a>
+            </div>
+        </div>
+        {{ end }}
+        {{ end }}
+        <div class="col-6 col-sm-6 col-md-3">
+            <div class="img-adopter">
+                <a class="text-center text-muted" href="{{ "/tip/contributing/how-to-contribute-to-docs.md#adopters-logos" | relURL }}">Your Company</a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="container-fluid bg-light">
+    <div class="row py-5">
+        <div class="col text-center">
+            <div class="col col-sm-1 col-md-6 offset-md-3 col-lg-4 offset-lg-4 text-center">
+                <img class="img-fluid" style="max-width: 60%" src="cloud-native-computing.svg" alt="CNCF"/>
+            </div>
+            <p>We are a <a href="https://cncf.io">Cloud Native Computing Foundation</a> Incubating project.The Linux Foundation has registered trademarks and uses trademarks. For a list of trademarks of The Linux Foundation, 
+                please see our <a href="https://www.linuxfoundation.org/legal/trademark-usage">Trademark Usage page</a>.</p>
+        </div>
+    </div>
+</div>
+<div class="container-fluid bg-light">
+    <div class="row py-5">
+        <div class="col text-center">
+            <h3 class="color-purple"><a href="{{ "/tip/contributing/community.md" | relURL }}">Join the community!</a></h3>
+            <p>Join users and companies that are using Thanos in production.</p>
+            <ul class="list-inline">
+                <li class="list-inline-item">
+                    <a href="{{ "/tip/contributing/community.md" | relURL }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-fw fa-comments"></i> Community Meetings
+                    </a>
+                </li>
+                <li class="list-inline-item">
+                    <a href="{{ .Site.Params.SlackInvite }}" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-slack"></i> Slack
+                    </a>
+                </li>
+                <li class="list-inline-item">
+                    <a href="https://github.com/{{ .Site.Params.GithubUser }}/{{ .Site.Params.GithubProject }}/issues" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-github"></i> Issues</a>
+                </li>
+                <li class="list-inline-item">
+                    <a href="https://twitter.com/{{ .Site.Params.TwitterHandle }}" class="btn btn-outline-secondary">
+                        <i class="fab fa-fw fa-twitter"></i> Twitter</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+{{ partial "searchConfig/index.html" . }}
+{{ end }}

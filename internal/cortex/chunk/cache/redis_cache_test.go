@@ -1,0 +1,74 @@
+// Copyright (c) The Cortex Authors.
+// Licensed under the Apache License 2.0.
+
+package cache
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/go-kit/log"
+	"github.com/redis/rueidis"
+	"github.com/stretchr/testify/require"
+)
+
+func TestRedisCache(t *testing.T) {
+	c, err := mockRedisCache()
+	require.Nil(t, err)
+	defer c.redis.Close()
+
+	keys := []string{"key1", "key2", "key3"}
+	bufs := [][]byte{[]byte("data1"), []byte("data2"), []byte("data3")}
+	miss := []string{"miss1", "miss2"}
+
+	// ensure input correctness
+	nHit := len(keys)
+	require.Len(t, bufs, nHit)
+
+	nMiss := len(miss)
+
+	ctx := context.Background()
+
+	c.Store(ctx, keys, bufs)
+
+	// test hits
+	found, data, missed := c.Fetch(ctx, keys)
+
+	require.Len(t, found, nHit)
+	require.Len(t, missed, 0)
+	for i := range nHit {
+		require.Equal(t, keys[i], found[i])
+		require.Equal(t, bufs[i], data[i])
+	}
+
+	// test misses
+	found, _, missed = c.Fetch(ctx, miss)
+
+	require.Len(t, found, 0)
+	require.Len(t, missed, nMiss)
+	for i := range nMiss {
+		require.Equal(t, miss[i], missed[i])
+	}
+}
+
+func mockRedisCache() (*RedisCache, error) {
+	redisServer, err := miniredis.Run()
+	if err != nil {
+		return nil, err
+	}
+	cl, err := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress:  []string{redisServer.Addr()},
+		DisableCache: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	redisClient := &RedisClient{
+		expiration: time.Minute,
+		timeout:    100 * time.Millisecond,
+		rdb:        cl,
+	}
+	return NewRedisCache("mock", redisClient, nil, log.NewNopLogger()), nil
+}

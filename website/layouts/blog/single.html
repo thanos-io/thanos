@@ -1,0 +1,14 @@
+{{ define "main" }}
+<div class="container">
+    <div class="row py-5">
+        <div class="col col-12">
+            <div class="blog-post mb-5">
+                <h2><a href="{{ .Permalink }}">{{ .Title }}</a></h2>
+                <p class="text-muted">Written by {{ .Params.Author }} and published on {{ .Date.Format "Jan 02, 2006" }}</p>
+                <hr>
+                {{ .Content }}
+            </div>
+        </div>
+    </div>
+</div>
+{{ end }}

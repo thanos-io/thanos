@@ -1,0 +1,13 @@
+{{- $currentVersion := index (split .File.Dir "/") 0 }}
+{{- $latestVersion := "tip" }}
+{{- $latestUrl := replace .RelPermalink $currentVersion $latestVersion }}
+
+{{- if ne $currentVersion $latestVersion }}
+<div class="alert alert-warning" role="alert">
+    <strong>This documentation is for {{ $currentVersion }} of Thanos.
+        {{ if (fileExists $latestUrl) -}}
+             Click <a href="{{ $latestUrl }}">here </a> to see the latest version of this page.
+        {{- end }}
+    </strong>
+</div>
+{{- end }} 

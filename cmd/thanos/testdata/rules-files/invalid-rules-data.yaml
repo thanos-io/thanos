@@ -1,0 +1,12 @@
+groups:
+  - name: null
+    partial_response_strategy: "warn"
+    interval: 2m
+    rules:
+      - alert: TestAlert
+        partial_response_strategy: "warn"
+        expr: 1
+        labels:
+          key: value
+        annotations:
+          key: value

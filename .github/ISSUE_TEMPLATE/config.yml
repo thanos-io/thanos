@@ -1,0 +1,8 @@
+blank_issues_enabled: false # Show or hide the Create a blank issue choice when users select New issue.
+contact_links:
+  - name: "Questions via Thanos Community Support via the CNCF slack - #thanos"
+    url: https://cloud-native.slack.com/archives/CK5RSSC10.
+    about: "Join us for questions, answers or Thanos related chat. Please do create issues on Github for better collaboration. If you don't have an account, sign up at https://slack.cncf.io/"
+  - name: "Question via Thanos Discussions (similar to Stack Overflow)"
+    url: https://github.com/thanos-io/thanos/discussions
+    about: "Please ask and answer questions here for async response."

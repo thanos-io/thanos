@@ -1,0 +1,22 @@
+write:
+  global:
+    max_concurrency: 30
+    meta_monitoring_url: "http://localhost:9090"
+    meta_monitoring_limit_query: "sum(prometheus_tsdb_head_series) by (tenant)"
+  default:
+    request:
+      size_bytes_limit: 1024
+      series_limit: 1000
+      samples_limit: 10
+    head_series_limit: 1000
+  tenants:
+    acme:
+      request:
+        size_bytes_limit: 0
+        series_limit: 0
+        samples_limit: 0
+      head_series_limit: 2000
+    ajax:
+      request:
+        series_limit: 50000
+        samples_limit: 500

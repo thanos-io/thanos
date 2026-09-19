@@ -1,0 +1,73 @@
+version: 1
+timeout: '1m'
+host_max_conns: 10
+cache:
+  type: 'SQLite'
+  # # 60h is 2.5 days, half the default cache validity (5 days).
+  jitter: '60h'
+
+validators:
+  # Validators to skip checking PR/issue links of Thanos, Prometheus and Cortex.
+  - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)thanos-io\/thanos(\/pull\/|\/issues\/)'
+    type: 'githubPullsIssues'
+  - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)prometheus\/prometheus(\/pull\/|\/issues\/)'
+    type: 'githubPullsIssues'
+  - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)cortexproject\/cortex(\/pull\/|\/issues\/)'
+    type: 'githubPullsIssues'
+  # Ignore Thanos release links.
+  - regex: '(^http[s]?:\/\/)(www\.)?(github\.com\/)thanos-io\/thanos(\/releases\/)'
+    type: 'ignore'
+  # Causes http stream errors with statuscode 0 sometimes. But is safe to skip.
+  - regex: 'slack\.cncf\.io'
+    type: 'ignore'
+  # Slack workspace archive links require a logged-in session, so mdox gets a 403.
+  - regex: 'cloud-native\.slack\.com'
+    type: 'ignore'
+  # 301 errors even when curl-ed.
+  - regex: 'envoyproxy\.io'
+    type: 'ignore'
+  # couldn't reach even when curl-ed.
+  - regex: 'cloud\.baidu\.com'
+    type: 'ignore'
+  # 403 when curl-ed from GitHub actions, though not from a developer machine. Likely due to secondary rate limits.
+  - regex: 'docs\.github\.com'
+    type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'nginx\.com'
+    type: 'ignore'
+  # 403 when requested my mdox in GH actions.
+  - regex: 'servicenow\.com'
+    type: 'ignore'
+  # Seems like improbable.io temporarily removed their blogs.
+  - regex: 'improbable\.io'
+    type: 'ignore'
+  - regex: 'krisztianfekete\.org'
+    type: 'ignore'
+  - regex: 'twitter\.com'
+    type: 'ignore'
+  - regex: 'outshift\.cisco\.com\/blog\/multi-cluster-monitoring'
+    type: 'ignore'
+  # Expired certificate
+  - regex: 'bestpractices\.coreinfrastructure\.org\/projects\/3048'
+    type: 'ignore'
+  # Frequent DNS issues. 
+  - regex: 'build\.thebeat\.co'
+    type: 'ignore'
+  # TLS certificate issues
+  - regex: 'itnext\.io'
+    type: 'ignore'
+  - regex: 'medium\.com'
+    type: 'ignore'
+  - regex: 'engineering\.hellofresh\.com'
+    type: 'ignore'
+  - regex: 'blog\.devops\.dev'
+    type: 'ignore'
+  - regex: 'codeburst\.io'
+    type: 'ignore'
+  # Promtail docs removed after EOL (March 2026).
+  - regex: 'grafana\.com\/docs\/loki\/latest\/clients\/promtail'
+    type: 'ignore'
+  # Frequent DNS/timeout issues from CI.
+  - regex: 'db\.cs\.cmu\.edu'
+    type: 'ignore'
+

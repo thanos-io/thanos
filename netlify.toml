@@ -1,0 +1,36 @@
+# All netlify options should be defined here. UI options should stay empty.
+[build]
+  base = ""
+  publish = "website/public"
+
+# Our Makefile builds Hugo, but it's faster if Netlify grabs the correct version on their own
+# via a simple cURL.
+[build.environment]
+  HUGO_VERSION = "v0.101.0"
+  GO_VERSION = "1.26.0"
+
+[context.production]
+  # NOTE: the sleep at the end is to make sure logs are not truncated on error.
+  command = "(export GOPATH=$HOME/go && env && make web HUGO=$(which hugo)) || (sleep 30; false)"
+
+[context.deploy-preview]
+  # NOTE: the sleep at the end is to make sure logs are not truncated on error.
+  command = "(export GOPATH=$HOME/go && env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}) || (sleep 30; false)"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    # We don't use iframes. Block them.
+    X-Frame-Options = "DENY"
+    # Don't allow Mime-sniffing.
+    X-Content-Type-Options = "nosniff"
+    # Add reflective XSS protection.
+    X-XSS-Protection = "1; mode=block"
+    # Force HTTPS only.
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+    # Load scripts only via HTTPS and from allowed domains.
+    Content-Security-Policy = "default-src https:; script-src https: 'self' 'nonce-93HDK8392dfjh4Gb' 'unsafe-eval' 'sha256-3qFt4qPvMCWVUpjUxP5X57GBKae6RHYZ0rMjn9WuNF4='; style-src https: 'self' 'sha256-ouaL9aaaKO9mYd9/M+uyzYAL1CrOXJVRjV2nFgbGI2E='; object-src 'self'"
+    # Only send referred when HTTPS is used.
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    # Disable certain magic features, lol.
+    Feature-Policy = "vibrate none; usermedia *; sync-xhr self"

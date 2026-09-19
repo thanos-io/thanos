@@ -1,0 +1,294 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+package thanos;
+
+import "store/storepb/types.proto";
+import "gogoproto/gogo.proto";
+import "store/storepb/prompb/types.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "storepb";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+/// Store represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
+service Store {
+  /// Series streams each Series (Labels and chunk/downsampling chunk) for given label matchers and time range.
+  ///
+  /// Series should strictly stream full series after series, optionally split by time. This means that a single frame can contain
+  /// partition of the single series, but once a new series is started to be streamed it means that no more data will
+  /// be sent for previous one.
+  /// Series has to be sorted.
+  ///
+  /// There is no requirements on chunk sorting, however it is recommended to have chunk sorted by chunk min time.
+  /// This heavily optimizes the resource usage on Querier / Federated Queries.
+  ///
+  /// Chunks can span a range larger than the requested min and max time and it is up to the query engine to discard samples
+  /// which fall outside of the query range.
+  rpc Series(SeriesRequest) returns (stream SeriesResponse);
+
+  /// LabelNames returns all label names constrained by the given matchers.
+  rpc LabelNames(LabelNamesRequest) returns (LabelNamesResponse);
+
+  /// LabelValues returns all label values for given label name.
+  rpc LabelValues(LabelValuesRequest) returns (LabelValuesResponse);
+}
+
+/// WriteableStore represents API against instance that stores XOR encoded values with label set metadata (e.g Prometheus metrics).
+service WriteableStore {
+  // WriteRequest allows you to write metrics to this store via remote write
+  rpc RemoteWrite(WriteRequest) returns (WriteResponse) {}
+}
+
+message WriteResponse {
+}
+
+message WriteRequest {
+  // This only allows to put one tenant and a set of series in one write request.
+  // In the case of split tenant label functionality, we want to send multiple tenants worth of
+  // data to improve throughput. Will mark as deprecated once the other field's functionality
+  // is implemented.
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+  int64 replica = 3;
+  repeated TimeSeriesTenantTuple timeseriesTenantData = 4 [(gogoproto.nullable) = false];
+}
+
+message SeriesRequest {
+  int64 min_time = 1;
+  int64 max_time = 2;
+  repeated LabelMatcher matchers = 3 [(gogoproto.nullable) = false];
+
+  int64 max_resolution_window = 4;
+  repeated Aggr aggregates = 5;
+
+  // Deprecated. Use partial_response_strategy instead.
+  bool partial_response_disabled = 6;
+
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
+  PartialResponseStrategy partial_response_strategy = 7;
+
+  // skip_chunks controls whether sending chunks or not in series responses.
+  bool skip_chunks = 8;
+
+  // hints is an opaque data structure that can be used to carry additional information.
+  // The content of this field and whether it's supported depends on the
+  // implementation of a specific store.
+  google.protobuf.Any hints = 9;
+
+  // Query step size in milliseconds.
+  // Deprecated: Use query_hints instead.
+  int64 step = 10;
+
+  // Range vector selector range in milliseconds.
+  // Deprecated: Use query_hints instead.
+  int64 range = 11;
+
+  // query_hints are the hints coming from the PromQL engine when
+  // requesting a storage.SeriesSet for a given expression.
+  // As hints name suggest using those is best effort.
+  QueryHints query_hints = 12;
+
+  // shard_info is used by the querier to request a specific
+  // shard of blocks instead of entire blocks.
+  ShardInfo shard_info = 13;
+
+  // without_replica_labels are replica labels which have to be excluded from series set results.
+  // The sorting requirement has to be preserved, so series should be sorted without those labels.
+  // If the requested label is NOT a replica label (labels that identify replication group) it should be not affected by
+  // this setting (label should be included in sorting and response).
+  // It is the server responsibility to detect and track what is replica label and what is not.
+  // This allows faster deduplication by clients.
+  // NOTE(bwplotka): thanos.info.store.supports_without_replica_labels field has to return true to let client knows
+  // server supports it.
+  repeated string without_replica_labels = 14;
+
+  // limit is used to limit the number of results returned
+  int64 limit = 15;
+
+  // response_batch_size is used to batch Series messages into one SeriesResponse
+  // If set to 0 or 1, each Series is sent as a separate response
+  int64 response_batch_size = 16;
+}
+
+// QueryHints represents hints from PromQL that might help to
+// pre-aggregate or prepare series for faster use by clients.
+// Analogous to storage.SelectHints plus additional info.
+// As "hints" name suggests all of the items here are best effort.
+message QueryHints {
+  // Query step size in milliseconds.
+  int64 step_millis = 1;
+
+  // The surrounding function or aggregation.
+  Func func = 2;
+
+  // The grouping expression
+  Grouping grouping = 4;
+
+  // Range vector selector.
+  Range range = 5;
+
+  // Projection hints. They are currently unused in the Thanos promql engine but can be used by different
+  // implementations of the Store interface and engines.
+  // These hints are useful for queries like `sum by (label) (rate(metric[5m]))` - we can safely evaluate it
+  // even if we only fetch the `label` label. For some storage implementations this is beneficial.
+
+  // projection_labels are the minimum amount of labels required to be fetched for this Series call.
+  // When honored it is required to add a label with name `series_hash_label` (as in the parameter in this message) containing the hash of all labels
+  // of a particular series so that the engine can still perform horizontal joins.
+  repeated string projection_labels = 6;
+
+  // projection_include defines if we have to include or exclude the labels from the projection_labels field.
+  bool projection_include = 7;
+
+  // series_hash_label_name defines the name of the label which should contain the hash of all values.
+  string series_hash_label_name = 8;
+}
+
+// ShardInfo are the parameters used to shard series in Stores.
+message ShardInfo {
+  // The index of the current shard.
+  int64 shard_index = 1;
+
+  // The total number of shards.
+  int64 total_shards = 2;
+
+  // Group by or without labels.
+  bool by = 3;
+
+  // Labels on which to partition series.
+  repeated string labels = 4;
+}
+
+message Func {
+  // The function or aggregation name
+  string name = 1;
+}
+
+message Grouping {
+  // Indicate whether it is without or by.
+  bool by = 1;
+
+  // List of label names used in the grouping.
+  repeated string labels = 3;
+}
+
+message Range {
+  int64 millis = 1;
+}
+
+enum Aggr {
+  RAW = 0;
+  COUNT = 1;
+  SUM = 2;
+  MIN = 3;
+  MAX = 4;
+  COUNTER = 5;
+}
+
+message TimeSeriesTenantTuple {
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+}
+
+message SeriesResponse {
+  oneof result {
+    /// series contains 1 response series. The series labels are sorted by name.
+    Series series = 1;
+
+    /// warning is considered an information piece in place of series for warning purposes.
+    /// It is used to warn store API user about suspicious cases or partial response (if enabled).
+    string warning = 2;
+
+    /// hints is an opaque data structure that can be used to carry additional information from
+    /// the store. The content of this field and whether it's supported depends on the
+    /// implementation of a specific store. It's also implementation specific if it's allowed that
+    /// multiple SeriesResponse frames contain hints for a single Series() request and how should they
+    /// be handled in such case (ie. merged vs keep the first/last one).
+    google.protobuf.Any hints = 3;
+
+    /// batch is an array of series so more than 1 series can be included in the response
+    SeriesBatch batch = 4;
+  }
+}
+
+message LabelNamesRequest {
+  bool partial_response_disabled = 1;
+
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
+  PartialResponseStrategy partial_response_strategy = 2;
+
+  int64 start = 3;
+
+  int64 end = 4;
+
+  // hints is an opaque data structure that can be used to carry additional information.
+  // The content of this field and whether it's supported depends on the
+  // implementation of a specific store.
+  google.protobuf.Any hints = 5;
+
+  repeated LabelMatcher matchers = 6 [(gogoproto.nullable) = false];
+
+  // same as in series request.
+  repeated string without_replica_labels = 7;
+
+  // limit is used to limit the number of results returned
+  int64 limit = 8;
+}
+
+message LabelNamesResponse {
+  repeated string names = 1;
+  repeated string warnings = 2;
+
+  /// hints is an opaque data structure that can be used to carry additional information from
+  /// the store. The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
+  google.protobuf.Any hints = 3;
+}
+
+message LabelValuesRequest {
+  string label = 1;
+
+  bool partial_response_disabled = 2;
+
+  // TODO(bwplotka): Move Thanos components to use strategy instead. Including QueryAPI.
+  PartialResponseStrategy partial_response_strategy = 3;
+
+  int64 start = 4;
+
+  int64 end = 5;
+
+  // hints is an opaque data structure that can be used to carry additional information.
+  // The content of this field and whether it's supported depends on the
+  // implementation of a specific store.
+  google.protobuf.Any hints = 6;
+
+  repeated LabelMatcher matchers = 7 [(gogoproto.nullable) = false];
+
+  // same as in series request.
+  repeated string without_replica_labels = 8;
+
+    // limit is used to limit the number of results returned
+    int64 limit = 9;
+}
+
+message LabelValuesResponse {
+  repeated string values = 1;
+  repeated string warnings = 2;
+
+  /// hints is an opaque data structure that can be used to carry additional information from
+  /// the store. The content of this field and whether it's supported depends on the
+  /// implementation of a specific store.
+  google.protobuf.Any hints = 3;
+}

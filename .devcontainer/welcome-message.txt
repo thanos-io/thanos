@@ -1,0 +1,10 @@
+👋 Welcome to "Thanos" in GitHub Codespaces!
+
+🛠️  Your environment is fully setup with all the required software.
+
+🚀 All the components of Thanos are spinning up with the "quickstart" script, navigate over to the "Ports" tab to access it.
+
+ℹ️  Note: Change the visibility of "Prometheus instances" to "public" so that the API endpoints can be updated.
+
+🔍 To explore VS Code to its fullest, search using the Command Palette (Cmd/Ctrl + Shift + P or F1).
+

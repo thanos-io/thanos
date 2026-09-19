@@ -1,0 +1,113 @@
+rule_files:
+  - alerts.yaml
+  - rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+- interval: 1m
+  input_series:
+  - series: 'thanos_sidecar_prometheus_up{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-0", pod="prometheus-0"}'
+    values: '1x5 0x15'
+  - series: 'thanos_sidecar_prometheus_up{namespace="production", job="thanos-sidecar", instance="thanos-sidecar-1", pod="prometheus-1"}'
+    values: '1x4 0x15'
+  - series: 'prometheus_tsdb_data_replay_duration_seconds{namespace="production", job="prometheus-k8s", instance="prometheus-k8s-0", pod="prometheus-0"}'
+    values: '4x5 0x5 5x15'
+  - series: 'prometheus_tsdb_data_replay_duration_seconds{namespace="production", job="prometheus-k8s", instance="prometheus-k8s-1", pod="prometheus-1"}'
+    values: '10x14 0x6'
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+  - eval_time: 2m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+  - eval_time: 3m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+  - eval_time: 10m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+  - eval_time: 11m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+  - eval_time: 12m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-1
+        namespace: production
+        pod: prometheus-1
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-1 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+  - eval_time: 20m
+    alertname: ThanosSidecarNoConnectionToStartedPrometheus
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-sidecar
+        instance: thanos-sidecar-0
+        namespace: production
+        pod: prometheus-0
+      exp_annotations:
+        description: 'Thanos Sidecar thanos-sidecar-0 is unhealthy.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanossidecarnoconnectiontostartedprometheus'
+        summary: 'Thanos Sidecar cannot access Prometheus, even though Prometheus seems healthy and has reloaded WAL.'
+
+- interval: 1m
+  input_series:
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '5x7 0x8'
+  - series: 'prometheus_rule_evaluations_total{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '5x7 0x8'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-0"}'
+    values: '0x5 5x10'
+  - series: 'thanos_rule_loaded_rules{namespace="production", job="thanos-ruler", instance="thanos-ruler-1"}'
+    values: '0x5 5x10'
+  alert_rule_test:
+    - eval_time: 1m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 5m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 6m
+      alertname: ThanosNoRuleEvaluations
+    - eval_time: 11m
+      alertname: ThanosNoRuleEvaluations
+      exp_alerts:
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-0
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-0 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'
+      - exp_labels:
+          severity: critical
+          job: thanos-ruler
+          instance: thanos-ruler-1
+        exp_annotations:
+          description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
+          runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
+          summary: 'Thanos Rule did not perform any rule evaluations.'

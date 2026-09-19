@@ -1,0 +1,202 @@
+.container {
+  display: flex;
+  --top: 72px;
+  min-height: calc(100vh - var(--top));
+  position: relative;
+  z-index: 1;
+}
+
+.grid {
+  width: 100%;
+}
+
+.sources {
+  max-height: calc(100vh - 2 * var(--top));
+  overflow-y: auto;
+  scrollbar-color: #b1b1b1 transparent;
+  scrollbar-width: thin;
+}
+
+.sources::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sources::-webkit-scrollbar-thumb {
+  background-color: #b1b1b1;
+  border-radius: 6px;
+}
+
+.blockDetails {
+  width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
+  max-width: 55vw;
+  box-sizing: border-box;
+  transition: all 0.2s ease-in-out;
+  margin-top: -16px;
+  margin-right: -15px;
+}
+
+.blockDetails.open {
+  min-width: 420px;
+  padding: 2em;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.19), 0 6px 6px rgba(0, 0, 0, 0.23);
+}
+
+.detailsTop {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap-reverse;
+}
+
+.header {
+  margin: 0;
+  padding: 0;
+  font-weight: 700;
+  font-size: 1.1em;
+}
+
+.closeBtn {
+  border: none;
+  background: none;
+  font-size: 2em;
+  transform: translateY(-10%);
+}
+
+.timeRangeDiv {
+  box-sizing: border-box;
+  padding: 0em 3em;
+  display: flex;
+  justify-content: space-evenly;
+  flex-direction: column;
+  align-items: center;
+  height: var(--top);
+}
+
+.timeRange {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9em;
+  width: 100%;
+}
+
+.source {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  box-sizing: border-box;
+  padding: 0 1em;
+}
+
+.title > span {
+  display: block;
+  width: 8vw;
+  margin: 0;
+  text-align: center;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.rowsContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  border-left: solid 3px teal;
+}
+
+.row {
+  width: 100%;
+  position: relative;
+  --block-height: 1.2em;
+  height: var(--block-height);
+  box-sizing: content-box;
+  margin: 0.1em 0;
+  overflow-x: hidden;
+}
+
+.blockSpan {
+  position: absolute;
+  border: none;
+  height: 100%;
+  min-width: 0.5%;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  box-sizing: border-box;
+  mix-blend-mode: multiply;
+}
+
+.blockSpan:hover,
+.blockSpan:focus {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.3) inset;
+}
+
+/*
+* block colors
+* https://coolors.co/9b5de5-f15bb5-fee440-00bbf9-00f5d4
+*/
+.res-0 {
+  --level-1: #bd96ee;
+  --level-2: #9250e2;
+  --level-3: #7c2cdd;
+  --level-4: #681fc1;
+  --level-5: #4c178c;
+  --level-6: #391169;
+}
+
+.res-300000 {
+  --level-1: #f15bb5;
+  --level-2: #ef43aa;
+  --level-3: #eb1e99;
+  --level-4: #ce1283;
+  --level-5: #a90f6b;
+  --level-6: #830b53;
+}
+
+.res-3600000 {
+  --level-1: #70dbff;
+  --level-2: #47d1ff;
+  --level-3: #1fc7ff;
+  --level-4: #00b8f5;
+  --level-5: #0099cc;
+  --level-6: #007aa3;
+}
+
+.level-1 {
+  background: var(--level-1);
+}
+.level-2 {
+  background: var(--level-2);
+}
+.level-3 {
+  background: var(--level-3);
+}
+.level-4 {
+  background: var(--level-4);
+}
+.level-5 {
+  background: var(--level-5);
+}
+.level-6 {
+  background: var(--level-6);
+}
+
+.blockInput {
+  margin-bottom: 12px;
+}
+
+.blockFilter {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}

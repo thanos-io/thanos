@@ -1,0 +1,37 @@
+{{ define "main" }}
+    <div class="container">
+        <div class="row py-5">
+            <div class="col col-3">
+                {{ partial "_default/sidemenu.html" . }}
+            </div>
+            <div class="col col-9">
+                <h1>{{ .Title }}</h1>
+                <dl>
+                    <dt>Status</dt>
+                    {{ if eq .Params.Status "accepted"}}
+                        <dd><span class="badge badge-success">{{ .Params.status }}</span></dd>
+                    {{ end }}
+                    {{ if eq .Params.Status "complete"}}
+                        <dd><span class="badge badge-success">{{ .Params.status }}</span></dd>
+                    {{ end }}
+                    {{ if eq .Params.Status "rejected"}}
+                        <dd><span class="badge badge-danger">{{ .Params.status }}</span></dd>
+                    {{ end }}
+                    {{ if eq .Params.Status "draft"}}
+                        <dd><span class="badge badge-info">{{ .Params.status }}</span></dd>
+                    {{ end }}
+                    {{ if eq .Params.Status "in-review"}}
+                        <dd><span class="badge badge-info">{{ .Params.status }}</span></dd>
+                    {{ end }}
+                    <dt>Owner</dt>
+                    <dd><a href="https://github.com/{{ .Params.owner }}">@{{ .Params.owner }}</a></dd>
+                    {{ if .Params.issue }}
+                    <dt>Issue</dt>
+                    <dd>@{{ .Params.issue}}</dd>
+                    {{ end }}
+                </dl>
+                {{ replace .Content "<table>" "<table class='table table-striped'>" | safeHTML }}
+            </div>
+        </div>
+    </div>
+{{ end }}

@@ -1,0 +1,42 @@
+// Copyright (c) The Thanos Authors.
+// Licensed under the Apache License 2.0.
+
+syntax = "proto3";
+
+package queryfrontend;
+
+import "gogoproto/gogo.proto";
+import "store/labelpb/types.proto";
+
+option (gogoproto.sizer_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.goproto_getters_all) = false;
+
+// Do not generate XXX fields to reduce memory footprint and opening a door
+// for zero-copy casts to/from prometheus data types.
+option (gogoproto.goproto_unkeyed_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.goproto_sizecache_all) = false;
+
+
+message ThanosLabelsResponse {
+  string Status = 1 [(gogoproto.jsontag) = "status"];
+  repeated string Data = 2 [(gogoproto.jsontag) = "data"];
+  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
+  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  repeated ResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
+}
+
+message ThanosSeriesResponse {
+  string Status = 1 [(gogoproto.jsontag) = "status"];
+  repeated thanos.ZLabelSet Data = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "data"];
+  string ErrorType = 3 [(gogoproto.jsontag) = "errorType,omitempty"];
+  string Error = 4 [(gogoproto.jsontag) = "error,omitempty"];
+  repeated ResponseHeader Headers = 5 [(gogoproto.jsontag) = "-"];
+}
+
+message ResponseHeader {
+  string Name = 1 [(gogoproto.jsontag) = "-"];
+  repeated string Values = 2 [(gogoproto.jsontag) = "-"];
+}

@@ -1,0 +1,13 @@
+<div class="dropdown show">
+    <a class="nav-link dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Docs</a>
+    <div class="dropdown-menu" aria-labelledby="dropdownMenuLink">
+        {{- range .Site.Sections.Reverse }}
+      {{- $version := .Section }}
+      {{- if eq $version "blog" }}{{continue}}{{end}}
+      {{- if eq $version "support" }}{{continue}}{{end}}
+      <a class="dropdown-item" href="{{ printf "../../../../%s" $version }}/thanos/getting-started.md">
+        {{ $version }}
+      </a>
+      {{- end }}
+    </div>
+</div>

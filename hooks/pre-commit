@@ -1,0 +1,16 @@
+#!/bin/sh
+
+white=$(tput setaf 15)
+green=$(tput setaf 34)
+red=$(tput setaf 1)
+normal=$(tput sgr0)
+
+
+
+printf "%40s\n" "${white}RUNNING make test-local-short${normal}"
+make test-local-short
+if [[ $? == 1 ]]; then
+  printf "%40s\n" "${red}FAILED make test-local-short${normal}"
+  exit 1
+fi
+printf "%40s\n" "${green}PASS make test-local-short${normal}"

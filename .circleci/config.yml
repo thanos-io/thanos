@@ -1,0 +1,104 @@
+# NOTE: Current plan gives 1500 build minutes per month.
+version: 2.1
+
+orbs:
+  go: circleci/go@1.7.3
+  git-shallow-clone: guitarrapc/git-shallow-clone@2.5.0
+
+executors:
+  golang:
+    docker:
+      - image: cimg/go:1.26.0-node
+  golang-test:
+    docker:
+      - image: cimg/go:1.26.0-node
+      - image: quay.io/thanos/docker-swift-onlyone-authv2-keystone:v0.1
+
+jobs:
+  # Cross build is needed for publish_release but needs to be done outside of docker.
+  cross_build:
+    machine: true
+    working_directory: /home/circleci/.go_workspace/src/github.com/thanos-io/thanos
+    environment:
+      GOBIN: "/home/circleci/.go_workspace/go/bin"
+      PROMU_VERSION: "0.17.0"
+    steps:
+      - git-shallow-clone/checkout
+      - run: mkdir -p ${GOBIN}
+      - run: curl -L "https://github.com/prometheus/promu/releases/download/v${PROMU_VERSION}/promu-${PROMU_VERSION}.$(go env GOOS)-$(go env GOARCH).tar.gz" | tar --strip-components=1 -xzf - -C ${GOBIN}
+      - run: mv -f ${GOBIN}/promu "${GOBIN}/promu-v${PROMU_VERSION}"
+      - run: make crossbuild -W ${GOBIN}/promu-v${PROMU_VERSION} # Ignore make dependency, it needs to be enforced somehow.
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .build
+
+  publish_main:
+    executor: golang
+    steps:
+      - git-shallow-clone/checkout
+      - go/mod-download-cached
+      - setup_remote_docker:
+          version: docker24
+      - attach_workspace:
+          at: .
+      # Register qemu to support multi-arch.
+      - run: docker run --privileged tonistiigi/binfmt:qemu-v6.1.0 --install all
+      - run: make crossbuild
+      - run: make docker-build
+      - run: make docker-test
+      # Upload to both dockerhub and quay.io.
+      - run: echo "${DOCKERHUB_PASSWORD}" | docker login -u="${DOCKERHUB_USERNAME}" --password-stdin
+      - run: make docker-push DOCKER_IMAGE_REPO=thanosio/thanos
+      - run: make docker-manifest DOCKER_IMAGE_REPO=thanosio/thanos
+      - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
+      - run: make docker-push
+      - run: make docker-manifest
+
+  publish_release:
+    executor: golang
+    steps:
+      - git-shallow-clone/checkout
+      - go/mod-download-cached
+      - setup_remote_docker:
+          version: docker24
+      - attach_workspace:
+          at: .
+      - run: make tarballs-release
+      - store_artifacts:
+          path: .tarballs
+          destination: releases
+      # Register qemu to support multi-arch.
+      - run: docker run --privileged tonistiigi/binfmt:qemu-v6.1.0 --install all
+      - run: make docker-build
+      - run: make docker-test
+      # Upload to both dockerhub and quay.io.
+      - run: echo "${DOCKERHUB_PASSWORD}" | docker login -u="${DOCKERHUB_USERNAME}" --password-stdin
+      - run: make docker-push DOCKER_IMAGE_REPO=thanosio/thanos DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      - run: make docker-manifest DOCKER_IMAGE_REPO=thanosio/thanos DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
+      - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      - run: make docker-manifest DOCKER_IMAGE_TAG=$CIRCLE_TAG
+
+workflows:
+  version: 2
+  thanos:
+    jobs:
+      - publish_main:
+          filters:
+            branches:
+              only: main
+      - cross_build:
+          filters:
+            tags:
+              only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
+            branches:
+              ignore: /.*/
+      - publish_release:
+          requires:
+            - cross_build
+          filters:
+            tags:
+              only: /^v[0-9]+(\.[0-9]+){2}(-.+|[^-.]*)$/
+            branches:
+              ignore: /.*/
