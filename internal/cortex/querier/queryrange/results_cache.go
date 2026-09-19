@@ -278,8 +278,12 @@ func (s resultsCache) Do(ctx context.Context, r Request) (Response, error) {
 	} else {
 		cached, _, ok = s.getFirst(ctx, alternativeCacheKeys(s.generateAlternativeCacheKeys(tenantIDs, r), key))
 		if ok {
-			response, extents, err = s.handleHit(ctx, r, cached, maxCacheTime, extractMatchingStep)
-			writeBack = false
+			if covering, covered := findCoveringExtent(r, cached); covered {
+				response, extents, err = s.handleHit(ctx, r, []Extent{covering}, maxCacheTime, extractMatchingStep)
+				writeBack = false
+			} else {
+				ok = false
+			}
 		}
 		if !ok {
 			response, extents, err = s.handleMiss(ctx, r, maxCacheTime)
@@ -306,6 +310,15 @@ func (s resultsCache) generateAlternativeCacheKeys(tenantIDs []string, r Request
 		return nil
 	}
 	return splitter.GenerateCacheKeyAlternatives(tenant.JoinTenantIDs(tenantIDs), r)
+}
+
+func findCoveringExtent(r Request, extents []Extent) (Extent, bool) {
+	for _, extent := range extents {
+		if extent.Start <= r.GetStart() && extent.End >= r.GetEnd() {
+			return extent, true
+		}
+	}
+	return Extent{}, false
 }
 
 func alternativeCacheKeys(keys []string, primaryKey string) []string {
