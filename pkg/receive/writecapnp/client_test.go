@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"capnproto.org/go/capnp/v3"
+	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
@@ -69,4 +71,55 @@ func TestRemoteWriteErrorCodes(t *testing.T) {
 			require.Equal(t, tc.wantCode, st.Code())
 		})
 	}
+}
+
+type nopWriter struct{}
+
+func (nopWriter) Write(context.Context, Writer_write) error { return nil }
+
+// RemoteWriteClient relies on separate references building params in parallel.
+func TestWriterReferencesBuildInParallel(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	srvConn, cliConn := net.Pipe()
+	srv := rpc.NewConn(rpc.NewStreamTransport(srvConn), &rpc.Options{
+		BootstrapClient: capnp.Client(Writer_ServerToClient(nopWriter{})),
+	})
+	defer srv.Close()
+	cli := rpc.NewConn(rpc.NewStreamTransport(cliConn), nil)
+	defer cli.Close()
+
+	w := Writer(cli.Bootstrap(ctx))
+	defer w.Release()
+
+	write := func(build func()) error {
+		ref := w.AddRef()
+		defer ref.Release()
+		res, release := ref.Write(ctx, func(Writer_write_Params) error { build(); return nil })
+		defer release()
+		_, err := res.Struct()
+		return err
+	}
+
+	firstBuilding, secondBuilt := make(chan struct{}), make(chan struct{})
+	errs := make(chan error, 1)
+	go func() {
+		errs <- write(func() {
+			close(firstBuilding)
+			select {
+			case <-secondBuilt:
+			case <-ctx.Done():
+			}
+		})
+	}()
+	select {
+	case <-firstBuilding:
+	case err := <-errs:
+		t.Fatal(err)
+	}
+	require.NoError(t, write(func() { close(secondBuilt) }))
+	require.NoError(t, <-errs)
 }

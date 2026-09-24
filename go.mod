@@ -3,7 +3,7 @@ module github.com/thanos-io/thanos
 go 1.26.0
 
 require (
-	capnproto.org/go/capnp/v3 v3.1.0-alpha.1
+	capnproto.org/go/capnp/v3 v3.1.0-alpha.2.0.20260727122444-5d74edb9db42
 	cloud.google.com/go/trace v1.11.6
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace v1.27.0
 	github.com/KimMachineGun/automemlimit v0.7.5
@@ -316,13 +316,9 @@ require (
 	google.golang.org/api v0.257.0 // indirect
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
 	howett.net/plist v1.0.1 // indirect
-	zenhack.net/go/util v0.0.0-20230414204917-531d38494cf5 // indirect
 )
 
 replace (
-	// Pinnning capnp due to https://github.com/thanos-io/thanos/issues/7944
-	capnproto.org/go/capnp/v3 => capnproto.org/go/capnp/v3 v3.0.0-alpha.30
-
 	// Using a 3rd-party branch for custom dialer - see https://github.com/bradfitz/gomemcache/pull/86.
 	// Required by Cortex https://github.com/cortexproject/cortex/pull/3051.
 	github.com/bradfitz/gomemcache => github.com/themihai/gomemcache v0.0.0-20180902122335-24332e2d58ab

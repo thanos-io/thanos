@@ -18,6 +18,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9045](https://github.com/thanos-io/thanos/pull/9045): Receive: Build Cap'n Proto replication requests to the same peer in parallel, and bump `capnproto.org/go/capnp/v3`.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
 - [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
