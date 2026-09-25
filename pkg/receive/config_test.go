@@ -74,6 +74,81 @@ func TestValidateConfig(t *testing.T) {
 	}
 }
 
+// TestParseConfig verifies that ParseConfig successfully unmarshals raw JSON
+// configuration and executes a post-parsing normalization pass. Omitted
+// "tenant_matcher_type" fields (both top-level and inside overrides) must
+// automatically hydrate to "exact" to prevent downstream routing bugs.
+func TestParseConfig(t *testing.T) {
+	// JSON payload testing three distinct cases:
+	// 1. Explicit "exact" matcher (should remain unchanged)
+	// 2. Missing "tenant_matcher_type" (should trigger hydration to "exact")
+	// 3. Explicit "glob" matcher (should preserve non-default matchers)
+	inputJSON := []byte(`[
+    {
+        "hashring": "test-ring",
+        "endpoints": ["node-1"],
+        "shuffle_sharding_config": {
+            "shard_size": 2,
+            "overrides": [
+                {
+                    "shard_size": 3,
+                    "tenants": ["tenant-1"],
+                    "tenant_matcher_type": "exact"
+                },
+                {
+                  "shard_size": 4,
+                  "tenants": ["tenant-2"]
+                },
+                {
+                    "shard_size": 5,
+                    "tenants": ["tenant-3"],
+                    "tenant_matcher_type": "glob"
+                }
+            ]
+        }
+    }
+]`)
+	configs, err := ParseConfig(inputJSON)
+	testutil.Ok(t, err)
+	// Assert that ParseConfig returns fully normalized data:
+	// - Top-level TenantMatcherType is hydrated to TenantMatcherTypeExact.
+	// - Omitted override matcher ("tenant-2") is hydrated to TenantMatcherTypeExact.
+	// - Explicit matchers ("tenant-1", "tenant-3") retain their exact values.
+	expected := []HashringConfig{
+		{
+			Hashring:          "test-ring",
+			TenantMatcherType: TenantMatcherTypeExact,
+			Endpoints: []Endpoint{
+				{
+					Address:          "node-1",
+					CapNProtoAddress: "node-1:19391",
+				},
+			},
+			ShuffleShardingConfig: ShuffleShardingConfig{
+				ShardSize: 2,
+				Overrides: []ShuffleShardingOverrideConfig{
+					{
+						ShardSize:         3,
+						Tenants:           []string{"tenant-1"},
+						TenantMatcherType: TenantMatcherTypeExact,
+					},
+					{
+						ShardSize:         4,
+						Tenants:           []string{"tenant-2"},
+						TenantMatcherType: TenantMatcherTypeExact,
+					},
+					{
+						ShardSize:         5,
+						Tenants:           []string{"tenant-3"},
+						TenantMatcherType: TenantMatcherGlob,
+					},
+				},
+			},
+		},
+	}
+	testutil.Equals(t, expected, configs)
+}
+
 func TestUnmarshalEndpointSlice(t *testing.T) {
 	t.Parallel()
 
