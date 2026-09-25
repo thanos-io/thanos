@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"go.opentelemetry.io/otel/attribute"
@@ -503,6 +504,177 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+func determineRWVersion(r *http.Request) (int, error) {
+	if r.Header.Get("X-Prometheus-Remote-Write-Version") != "2.0.0" {
+		return 1, nil
+	}
+
+	switch r.Header.Get("Content-Type") {
+	case "application/x-protobuf;proto=io.prometheus.write.v2.Request":
+		return 2, nil
+	case "application/x-protobuf", "application/x-protobuf;proto=prometheus.WriteRequest":
+		return 1, nil
+	case "":
+		return 0, errors.New("missing Content-Type header")
+	default:
+		return 0, errors.New("required headers Content-Type and/or X-Prometheus-Remote-Write-Version not found")
+	}
+}
+
+func translateV2Labels(refs []uint32, symbols []string) ([]labelpb.ZLabel, error) {
+	if len(refs)%2 != 0 {
+		return nil, errors.Errorf("invalid label refs length %d", len(refs))
+	}
+
+	result := make([]labelpb.ZLabel, 0, len(refs)/2)
+	for i := 0; i < len(refs); i += 2 {
+		nameRef, valueRef := refs[i], refs[i+1]
+		if int(nameRef) >= len(symbols) || int(valueRef) >= len(symbols) {
+			return nil, errors.Errorf("label refs %d (name) and %d (value) outside symbols table of size %d", nameRef, valueRef, len(symbols))
+		}
+		result = append(result, labelpb.ZLabel{Name: symbols[nameRef], Value: symbols[valueRef]})
+	}
+	return result, nil
+}
+
+func translateV2ToV1(wreq *writev2.Request) (*prompb.WriteRequest, error) {
+	result := &prompb.WriteRequest{Timeseries: make([]prompb.TimeSeries, 0, len(wreq.Timeseries))}
+
+	for _, ts := range wreq.Timeseries {
+		labels, err := translateV2Labels(ts.LabelsRefs, wreq.Symbols)
+		if err != nil {
+			return nil, errors.Wrap(err, "translate series labels")
+		}
+
+		translated := prompb.TimeSeries{
+			Labels:     labels,
+			Samples:    make([]prompb.Sample, 0, len(ts.Samples)),
+			Histograms: make([]prompb.Histogram, 0, len(ts.Histograms)),
+			Exemplars:  make([]prompb.Exemplar, 0, len(ts.Exemplars)),
+		}
+		for _, sample := range ts.Samples {
+			translated.Samples = append(translated.Samples, prompb.Sample{Value: sample.Value, Timestamp: sample.Timestamp})
+		}
+		for _, h := range ts.Histograms {
+			if h.IsFloatHistogram() {
+				translated.Histograms = append(translated.Histograms, prompb.FloatHistogramToHistogramProto(h.Timestamp, h.ToFloatHistogram()))
+			} else {
+				translated.Histograms = append(translated.Histograms, prompb.HistogramToHistogramProto(h.Timestamp, h.ToIntHistogram()))
+			}
+		}
+		for _, exemplar := range ts.Exemplars {
+			labels, err := translateV2Labels(exemplar.LabelsRefs, wreq.Symbols)
+			if err != nil {
+				return nil, errors.Wrap(err, "translate exemplar labels")
+			}
+			translated.Exemplars = append(translated.Exemplars, prompb.Exemplar{
+				Labels:    labels,
+				Value:     exemplar.Value,
+				Timestamp: exemplar.Timestamp,
+			})
+		}
+
+		result.Timeseries = append(result.Timeseries, translated)
+	}
+	return result, nil
+}
+
+func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {
+	var v2req writev2.Request
+	if err := proto.Unmarshal(reqBuf, &v2req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	wreq, err := translateV2ToV1(&v2req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.handleV1HTTP(ctx, w, r, wreq, tLogger, tenantHTTP, requestLimiter); err != nil {
+		return
+	}
+
+	var samples, histograms, exemplars int
+	for _, ts := range v2req.Timeseries {
+		samples += len(ts.Samples)
+		histograms += len(ts.Histograms)
+		exemplars += len(ts.Exemplars)
+	}
+	w.Header().Set("X-Prometheus-Remote-Write-Samples-Written", strconv.Itoa(samples))
+	w.Header().Set("X-Prometheus-Remote-Write-Histograms-Written", strconv.Itoa(histograms))
+	w.Header().Set("X-Prometheus-Remote-Write-Exemplars-Written", strconv.Itoa(exemplars))
+}
+
+func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
+	var err error
+	rep := uint64(0)
+	// If the header is empty, we assume the request is not yet replicated.
+	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
+			http.Error(w, "could not parse replica header", http.StatusBadRequest)
+			return errors.Wrap(err, "parse replica header")
+		}
+	}
+
+	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
+	// this would mean lack of forward compatibility for remote write proto.
+	if len(wreq.Timeseries) == 0 {
+		// TODO(yeya24): Handle remote write metadata.
+		if len(wreq.Metadata) > 0 {
+			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
+			return nil
+		}
+		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
+		return nil
+	}
+
+	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return errors.New("too many timeseries")
+	}
+
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples) + len(timeseries.Histograms)
+	}
+	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return errors.New("too many samples")
+	}
+
+	// Apply relabeling configs.
+	h.relabel(wreq)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
+		return nil
+	}
+
+	responseStatusCode := http.StatusOK
+	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, wreq)
+	if err != nil {
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
+		switch errors.Cause(err) {
+		case errNotReady, errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		http.Error(w, err.Error(), responseStatusCode)
+	}
+
+	for tenant, stats := range tenantStats {
+		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+	}
+	return err
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -571,81 +743,27 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
-	// from the whole request. Ensure that we always copy those when we want to
-	// store them for longer time.
-	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+	rwVersion, err := determineRWVersion(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	rep := uint64(0)
-	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
-		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
-			http.Error(w, "could not parse replica header", http.StatusBadRequest)
+	switch rwVersion {
+	case 1:
+		// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
+		// from the whole request. Ensure that we always copy those when we want to
+		// store them for longer time.
+		var wreq prompb.WriteRequest
+		if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-	}
-
-	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
-	// this would mean lack of forward compatibility for remote write proto.
-	if len(wreq.Timeseries) == 0 {
-		// TODO(yeya24): Handle remote write metadata.
-		if len(wreq.Metadata) > 0 {
-			// TODO(bwplotka): Do we need this error message?
-			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
-			return
-		}
-		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
-		return
-	}
-
-	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
-		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	totalSamples := 0
-	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
-	}
-	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
-		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	// Apply relabeling configs.
-	h.relabel(&wreq)
-	if len(wreq.Timeseries) == 0 {
-		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
-		return
-	}
-
-	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, tenantHTTP, &wreq)
-	if err != nil {
-		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
-		switch errors.Cause(err) {
-		case errNotReady:
-			responseStatusCode = http.StatusServiceUnavailable
-		case errUnavailable:
-			responseStatusCode = http.StatusServiceUnavailable
-		case errConflict:
-			responseStatusCode = http.StatusConflict
-		case errBadReplica:
-			responseStatusCode = http.StatusBadRequest
-		default:
-			level.Error(tLogger).Log("err", err, "msg", "internal server error")
-			responseStatusCode = http.StatusInternalServerError
-		}
-		http.Error(w, err.Error(), responseStatusCode)
-	}
-
-	for tenant, stats := range tenantStats {
-		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+		_ = h.handleV1HTTP(ctx, w, r, &wreq, tLogger, tenantHTTP, requestLimiter)
+	case 2:
+		h.handleV2HTTP(ctx, w, r, reqBuf, tLogger, tenantHTTP, requestLimiter)
+	default:
+		panic("unsupported remote write version")
 	}
 }
 
@@ -735,7 +853,7 @@ func (h *Handler) gatherWriteStats(rf int, writes ...map[endpointReplica]map[str
 				samples := 0
 
 				for _, ts := range series.timeSeries {
-					samples += len(ts.Samples)
+					samples += len(ts.Samples) + len(ts.Histograms)
 				}
 
 				if st, ok := stats[tenant]; ok {

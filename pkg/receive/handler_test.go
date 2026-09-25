@@ -38,8 +38,11 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
+	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
+	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
@@ -983,6 +986,160 @@ func makeRequest(h *Handler, tenant string, wreq *prompb.WriteRequest) (*httptes
 	rec.Flush()
 
 	return rec, nil
+}
+
+func makeV2Request(h *Handler, tenant string, wreq *writev2.Request) (*httptest.ResponseRecorder, error) {
+	buf, err := proto.Marshal(wreq)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshal request")
+	}
+	req, err := http.NewRequest(http.MethodPost, h.options.Endpoint, bytes.NewBuffer(snappy.Encode(nil, buf)))
+	if err != nil {
+		return nil, errors.Wrap(err, "create request")
+	}
+	req.Header.Set(h.options.TenantHeader, tenant)
+	req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+	req.Header.Set("X-Prometheus-Remote-Write-Version", "2.0.0")
+
+	rec := httptest.NewRecorder()
+	h.receiveHTTP(rec, req)
+	rec.Flush()
+	return rec, nil
+}
+
+func TestDetermineRWVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		version     string
+		contentType string
+		expected    int
+		expectError bool
+	}{
+		{name: "legacy headers", expected: 1},
+		{name: "v1 content type", version: "2.0.0", contentType: "application/x-protobuf", expected: 1},
+		{name: "v2", version: "2.0.0", contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request", expected: 2},
+		{name: "v2 missing content type", version: "2.0.0", expectError: true},
+		{name: "unsupported content type", version: "2.0.0", contentType: "application/json", expectError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", nil)
+			if tc.version != "" {
+				req.Header.Set("X-Prometheus-Remote-Write-Version", tc.version)
+			}
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+
+			got, err := determineRWVersion(req)
+			if tc.expectError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+func TestTranslateV2ToV1RejectsInvalidLabelReferences(t *testing.T) {
+	_, err := translateV2ToV1(&writev2.Request{
+		Symbols: []string{""},
+		Timeseries: []writev2.TimeSeries{{
+			LabelsRefs: []uint32{1, 0},
+		}},
+	})
+	require.ErrorContains(t, err, "outside symbols table")
+
+	_, err = translateV2ToV1(&writev2.Request{
+		Symbols: []string{"", "__name__"},
+		Timeseries: []writev2.TimeSeries{{
+			LabelsRefs: []uint32{1},
+		}},
+	})
+	require.ErrorContains(t, err, "invalid label refs length")
+}
+
+func TestHandlerReceiveRemoteWriteV2CustomBucketHistograms(t *testing.T) {
+	logger, multiTSDB, app := setupMultitsdb(t, 0)
+	handlers, _, closeHandlers, err := newTestHandlerHashring([]*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}, 1, AlgorithmHashmod, false)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, closeHandlers()) })
+	handler := handlers[0]
+	handler.writer = NewWriter(logger, multiTSDB, &WriterOptions{})
+
+	const timestamp = int64(10)
+	intHistogram := tsdbutil.GenerateTestCustomBucketsHistogram(0)
+	floatHistogram := tsdbutil.GenerateTestCustomBucketsFloatHistogram(1)
+	symbols := writev2.NewSymbolTable()
+	v2req := &writev2.Request{Timeseries: []writev2.TimeSeries{
+		{
+			LabelsRefs: symbols.SymbolizeLabels(labels.FromStrings("__name__", "rw2_nhcb_int"), nil),
+			Histograms: []writev2.Histogram{writev2.FromIntHistogram(timestamp, intHistogram)},
+		},
+		{
+			LabelsRefs: symbols.SymbolizeLabels(labels.FromStrings("__name__", "rw2_nhcb_float"), nil),
+			Histograms: []writev2.Histogram{writev2.FromFloatHistogram(timestamp, floatHistogram)},
+		},
+	}}
+	v2req.Symbols = symbols.Symbols()
+
+	rec, err := makeV2Request(handler, tenancy.DefaultTenant, v2req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Equal(t, "0", rec.Header().Get("X-Prometheus-Remote-Write-Samples-Written"))
+	require.Equal(t, "2", rec.Header().Get("X-Prometheus-Remote-Write-Histograms-Written"))
+	require.Equal(t, "0", rec.Header().Get("X-Prometheus-Remote-Write-Exemplars-Written"))
+
+	querier, err := app.(storage.Queryable).Querier(timestamp, timestamp)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, querier.Close()) })
+
+	intSeries := querier.Select(context.Background(), false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "rw2_nhcb_int"))
+	require.True(t, intSeries.Next())
+	intIterator := intSeries.At().Iterator(nil)
+	require.Equal(t, chunkenc.ValHistogram, intIterator.Next())
+	_, gotIntHistogram := intIterator.AtHistogram(nil)
+	require.Equal(t, intHistogram.Schema, gotIntHistogram.Schema)
+	require.Equal(t, intHistogram.CustomValues, gotIntHistogram.CustomValues)
+	require.Equal(t, intHistogram.PositiveSpans, gotIntHistogram.PositiveSpans)
+	require.Equal(t, intHistogram.PositiveBuckets, gotIntHistogram.PositiveBuckets)
+	require.NoError(t, intIterator.Err())
+	require.False(t, intSeries.Next())
+	require.NoError(t, intSeries.Err())
+
+	floatSeries := querier.Select(context.Background(), false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "rw2_nhcb_float"))
+	require.True(t, floatSeries.Next())
+	floatIterator := floatSeries.At().Iterator(nil)
+	require.Equal(t, chunkenc.ValFloatHistogram, floatIterator.Next())
+	_, gotFloatHistogram := floatIterator.AtFloatHistogram(nil)
+	require.Equal(t, floatHistogram.Schema, gotFloatHistogram.Schema)
+	require.Equal(t, floatHistogram.CustomValues, gotFloatHistogram.CustomValues)
+	require.Equal(t, floatHistogram.PositiveSpans, gotFloatHistogram.PositiveSpans)
+	require.Equal(t, floatHistogram.PositiveBuckets, gotFloatHistogram.PositiveBuckets)
+	require.NoError(t, floatIterator.Err())
+	require.False(t, floatSeries.Next())
+	require.NoError(t, floatSeries.Err())
+
+	v1rec, err := makeRequest(handler, tenancy.DefaultTenant, &prompb.WriteRequest{Timeseries: []prompb.TimeSeries{{
+		Labels:  []labelpb.ZLabel{{Name: "__name__", Value: "rw1_compat"}},
+		Samples: []prompb.Sample{{Timestamp: timestamp, Value: 1}},
+	}}})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, v1rec.Code, v1rec.Body.String())
+	require.Empty(t, v1rec.Header().Get("X-Prometheus-Remote-Write-Samples-Written"))
+
+	invalidHistogram := tsdbutil.GenerateTestCustomBucketsHistogram(0)
+	invalidHistogram.ZeroCount = 1
+	invalidSymbols := writev2.NewSymbolTable()
+	invalidReq := &writev2.Request{Timeseries: []writev2.TimeSeries{{
+		LabelsRefs: invalidSymbols.SymbolizeLabels(labels.FromStrings("__name__", "rw2_invalid_nhcb"), nil),
+		Histograms: []writev2.Histogram{writev2.FromIntHistogram(timestamp, invalidHistogram)},
+	}}}
+	invalidReq.Symbols = invalidSymbols.Symbols()
+	invalidRec, err := makeV2Request(handler, tenancy.DefaultTenant, invalidReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, invalidRec.Code, invalidRec.Body.String())
+	require.Equal(t, "1", invalidRec.Header().Get("X-Prometheus-Remote-Write-Histograms-Written"))
 }
 
 type addrGen struct{ n int }
