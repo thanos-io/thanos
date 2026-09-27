@@ -802,6 +802,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	under, err := h.Limiter.HeadSeriesLimiter().isUnderLimit(tenantHTTP)
 	if err != nil {
 		level.Error(tLogger).Log("msg", "error while limiting", "err", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	// Fail request fully if tenant has exceeded set limit.
