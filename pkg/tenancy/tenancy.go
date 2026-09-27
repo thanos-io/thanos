@@ -40,7 +40,7 @@ const (
 
 func IsTenantValid(tenant string) error {
 	if tenant != path.Base(tenant) {
-		return errors.New("Tenant name not valid")
+		return errors.New("tenant name not valid")
 	}
 	return nil
 }

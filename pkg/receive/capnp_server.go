@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 )
@@ -57,8 +58,11 @@ type CapNProtoHandler struct {
 	logger log.Logger
 }
 
-func NewCapNProtoHandler(logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
-	return &CapNProtoHandler{logger: logger, writer: writer}
+func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
+	return &CapNProtoHandler{
+		logger: logger,
+		writer: writer,
+	}
 }
 
 func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
@@ -67,18 +71,51 @@ func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_writ
 	if err != nil {
 		return err
 	}
-	t, err := wr.Tenant()
-	if err != nil {
-		return err
-	}
-	req, err := writecapnp.NewRequest(wr)
-	if err != nil {
-		return err
-	}
-	defer req.Close()
 
 	var errs writeErrors
-	errs.Add(c.writer.Write(ctx, t, req))
+
+	if wr.HasTimeSeries() {
+		t, err := wr.Tenant()
+		if err != nil {
+			return err
+		}
+
+		req, err := writecapnp.NewSingleTenantRequest(wr, t)
+		if err != nil {
+			return err
+		}
+
+		errs.Add(c.writer.Write(ctx, req))
+		errs.Add(req.Close())
+	} else {
+		data, err := wr.Data()
+		if err != nil {
+			return err
+		}
+
+		symTable, err := wr.Symbols()
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < data.Len(); i++ {
+			d := data.At(i)
+
+			tenant, err := d.Tenant()
+			if err != nil {
+				return err
+			}
+
+			req, err := writecapnp.NewRequest(d, symTable, tenant)
+			if err != nil {
+				return err
+			}
+
+			errs.Add(c.writer.Write(ctx, req))
+			errs.Add(req.Close())
+		}
+	}
+
 	if err := errs.ErrOrNil(); err != nil {
 		level.Debug(c.logger).Log("msg", "failed to handle request", "err", err)
 		result, allocErr := call.AllocResults()

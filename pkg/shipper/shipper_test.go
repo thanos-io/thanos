@@ -28,6 +28,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 )
 
+func openTestRoot(t testing.TB, dir string) *os.Root {
+	t.Helper()
+	root, err := os.OpenRoot(dir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { root.Close() })
+	return root
+}
+
 func TestIterBlockMetas(t *testing.T) {
 	dir := t.TempDir()
 
@@ -66,7 +74,7 @@ func TestIterBlockMetas(t *testing.T) {
 
 	shipper := New(
 		nil,
-		dir,
+		openTestRoot(t, dir),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
 	)
@@ -108,7 +116,7 @@ func TestIterBlockMetasWhenMissingMeta(t *testing.T) {
 
 	shipper := New(
 		nil,
-		dir,
+		openTestRoot(t, dir),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
 		WithSkipCorruptedBlocks(true),
@@ -148,7 +156,7 @@ func BenchmarkIterBlockMetas(b *testing.B) {
 
 	shipper := New(
 		nil,
-		dir,
+		openTestRoot(b, dir),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
 	)
@@ -163,7 +171,7 @@ func TestShipperAddsSegmentFiles(t *testing.T) {
 	lbls := labels.FromStrings("test", "test")
 	s := New(
 		inmemory,
-		dir,
+		openTestRoot(t, dir),
 		WithRegisterer(metrics),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
@@ -214,7 +222,7 @@ func TestShipperSkipCorruptedBlocks(t *testing.T) {
 	lbls := labels.FromStrings("test", "test")
 	s := New(
 		inmemory,
-		dir,
+		openTestRoot(t, dir),
 		WithRegisterer(metrics),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
@@ -271,7 +279,7 @@ func TestShipperNotSkipCorruptedBlocks(t *testing.T) {
 	lbls := labels.FromStrings("test", "test")
 	s := New(
 		inmemory,
-		dir,
+		openTestRoot(t, dir),
 		WithRegisterer(metrics),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
@@ -334,7 +342,7 @@ func TestShipperExistingThanosLabels(t *testing.T) {
 	lbls := labels.FromStrings("test", "test")
 	s := New(
 		inmemory,
-		dir,
+		openTestRoot(t, dir),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
 		WithLabels(func() labels.Labels { return lbls }),

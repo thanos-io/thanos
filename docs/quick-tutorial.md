@@ -78,7 +78,7 @@ Rolling this out has little to no impact on the running Prometheus instance. Thi
 If you are not interested in backing up any data, the `--objstore.config-file` flag can simply be omitted.
 
 * *[Example Kubernetes manifests using Prometheus operator](https://github.com/coreos/prometheus-operator/tree/master/example/thanos)*
-* *[Example Deploying Sidecar using official Prometheus Helm Chart](../tutorials/kubernetes-helm/README.md)*
+* *[Example Deploying Sidecar using official Prometheus Helm Chart](https://github.com/thanos-io/thanos/blob/main/tutorials/kubernetes-helm/README.md)*
 * *[Details & Config for other object stores](storage.md)*
 * *[Example Thanos Setup integrated with Cilium(Service Map)](../tutorials/thanos-with-cilium/README.md)*
 

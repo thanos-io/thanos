@@ -69,7 +69,7 @@ type Endpoint struct {
 	AZ               string `json:"az"`
 }
 
-func (e *Endpoint) String() string {
+func (e Endpoint) String() string {
 	return fmt.Sprintf("addr: %s, capnp_addr: %s, az: %s", e.Address, e.CapNProtoAddress, e.AZ)
 }
 

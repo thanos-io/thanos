@@ -23,7 +23,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 - Configure an envoy sidecar container to the Thanos Querier pod (unfortunately this also isn't supported by a lot of Thanos charts) an example pod config is below (see `deployment.yaml`)
 - Make sure that the envoy sidecar has the correct certificates (using a mounted secret) and a valid configuration (using a mounted configmap) an example envoy config is below (`envoy.yaml`)
 - Configure a service for the envoy sidecar an example service is shown below (`service.yaml`) you may have another service already for local cluster access (for Thanos Ruler or Grafana etc.)
-- Point the querier at the service and the correct port an example `--store ` field is below (`thanos-querier args`)
+- Point the querier at the service and the correct port an example `--endpoint` field is below (`thanos-querier args`)
 - Make sure your remote cluster has TLS setup and an appropriate HTTP2 supported ingress, example below `ingress.yaml`
 
 ### Observer Cluster: Querier with Envoy `deployment.yaml`
@@ -32,7 +32,7 @@ Envoy can be implemented as a sidecar container (example shown here) within the 
 - `[service-name]` is the name of the envoy service
 - `[namespace]` is the name of the envoy service namespace
 
-You may need to change cluster.local depending on your cluster domain. The `--store` entries for thanos storegateway etc. may be named different in your setup
+You may need to change cluster.local depending on your cluster domain. The `--endpoint` entries for thanos storegateway etc. may be named different in your setup
 
 ```yaml
 kind: Deployment

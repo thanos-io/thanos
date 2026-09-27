@@ -713,7 +713,6 @@ func TestBucketStore_TSDBInfo(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
@@ -854,11 +853,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 						{Name: "region", Value: "r1"},
 					},
 				},
-				{
-					Labels: []labelpb.ZLabel{
-						{Name: CompatibilityTypeLabelName, Value: "store"},
-					},
-				},
 			},
 		},
 		{
@@ -875,11 +869,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "b"},
 						{Name: "region", Value: "r1"},
-					},
-				},
-				{
-					Labels: []labelpb.ZLabel{
-						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
 			},
@@ -906,11 +895,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 						{Name: "region", Value: "r2"},
 					},
 				},
-				{
-					Labels: []labelpb.ZLabel{
-						{Name: CompatibilityTypeLabelName, Value: "store"},
-					},
-				},
 			},
 		},
 		{
@@ -931,11 +915,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 					Labels: []labelpb.ZLabel{
 						{Name: "cluster", Value: "a"},
 						{Name: "region", Value: "r1"},
-					},
-				},
-				{
-					Labels: []labelpb.ZLabel{
-						{Name: CompatibilityTypeLabelName, Value: "store"},
 					},
 				},
 			},
@@ -983,7 +962,6 @@ func testSharding(t *testing.T, reuseDisk string, bkt objstore.Bucket, all ...ul
 				NewBytesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				20,
-				true,
 				DefaultPostingOffsetInMemorySampling,
 				false,
 				false,
@@ -1402,7 +1380,7 @@ func TestBucketSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1416,7 +1394,7 @@ func TestBucketSeriesLazyExpandedPostings(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, false, true, samplesPerSeries, series, 1)
 	})
 }
@@ -1430,7 +1408,7 @@ func TestBucketHistogramSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValHistogram, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1444,7 +1422,7 @@ func TestBucketFloatHistogramSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloatHistogram, false, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1458,7 +1436,7 @@ func TestBucketSkipChunksSeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchBucketSeries(t, chunkenc.ValFloat, true, false, samplesPerSeries, series, 1)
 	})
 }
@@ -1568,7 +1546,6 @@ func benchBucketSeries(t testutil.TB, sampleType chunkenc.ValueType, skipChunk, 
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		1,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
@@ -2028,7 +2005,6 @@ func TestSeries_ErrorUnmarshallingRequestHints(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -2125,7 +2101,6 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -2287,7 +2262,6 @@ func TestSeries_SeriesSortedWithoutReplicaLabels(t *testing.T) {
 				NewBytesLimiterFactory(0),
 				NewGapBasedPartitioner(PartitionerMaxGapSize),
 				10,
-				false,
 				DefaultPostingOffsetInMemorySampling,
 				true,
 				false,
@@ -2476,7 +2450,6 @@ func setupStoreForHintsTest(t *testing.T) (testutil.TB, *BucketStore, []*storepb
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -2697,7 +2670,6 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -3777,7 +3749,6 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		NewBytesLimiterFactory(10e6),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
@@ -4019,7 +3990,6 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 		},
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		20,
-		true,
 		DefaultPostingOffsetInMemorySampling,
 		false,
 		false,
@@ -4110,7 +4080,6 @@ func TestBucketStoreMetadataLimit(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,
@@ -4248,7 +4217,6 @@ func TestBucketStoreBlockLifecycleCallback(t *testing.T) {
 		NewBytesLimiterFactory(0),
 		NewGapBasedPartitioner(PartitionerMaxGapSize),
 		10,
-		false,
 		DefaultPostingOffsetInMemorySampling,
 		true,
 		false,

@@ -38,7 +38,7 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	qBuilder := e2ethanos.NewQuerierBuilder(e, "query")
 
 	// Use querier work dir for shared resources (easiest to obtain).
-	promRulesSubDir := filepath.Join("rules")
+	promRulesSubDir := filepath.Join(rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(filepath.Join(qBuilder.Dir(), promRulesSubDir), os.ModePerm))
 	// Create the abort_on_partial_response alert for Prometheus.
 	// We don't create the warn_on_partial_response alert as Prometheus has strict yaml unmarshalling.
@@ -54,14 +54,14 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)

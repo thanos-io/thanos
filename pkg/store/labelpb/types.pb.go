@@ -136,30 +136,118 @@ func (m *ZLabelSet) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_ZLabelSet proto.InternalMessageInfo
 
+// SymTableLabel is one label encoded as two references into a SymbolTable.
+type SymTableLabel struct {
+	NameRef  uint32 `protobuf:"varint,1,opt,name=name_ref,json=nameRef,proto3" json:"name_ref,omitempty"`
+	ValueRef uint32 `protobuf:"varint,2,opt,name=value_ref,json=valueRef,proto3" json:"value_ref,omitempty"`
+}
+
+func (m *SymTableLabel) Reset()         { *m = SymTableLabel{} }
+func (m *SymTableLabel) String() string { return proto.CompactTextString(m) }
+func (*SymTableLabel) ProtoMessage()    {}
+func (*SymTableLabel) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cdcc9e7dae4870e8, []int{3}
+}
+func (m *SymTableLabel) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SymTableLabel) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SymTableLabel.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SymTableLabel) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SymTableLabel.Merge(m, src)
+}
+func (m *SymTableLabel) XXX_Size() int {
+	return m.Size()
+}
+func (m *SymTableLabel) XXX_DiscardUnknown() {
+	xxx_messageInfo_SymTableLabel.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SymTableLabel proto.InternalMessageInfo
+
+// SymbolTable is the dedup table used by SymTableLabel. The bytes of every
+// interned symbol are packed end-to-end; offsets[i] is the end
+// offset of symbol `i`, so symbol `i` is `table[offsets[i-1]:offsets[i]]`
+// (with offsets[-1] := 0).
+type SymbolTable struct {
+	Offsets []uint32 `protobuf:"varint,1,rep,packed,name=offsets,proto3" json:"offsets,omitempty"`
+	Table   []byte   `protobuf:"bytes,2,opt,name=table,proto3" json:"table,omitempty"`
+}
+
+func (m *SymbolTable) Reset()         { *m = SymbolTable{} }
+func (m *SymbolTable) String() string { return proto.CompactTextString(m) }
+func (*SymbolTable) ProtoMessage()    {}
+func (*SymbolTable) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cdcc9e7dae4870e8, []int{4}
+}
+func (m *SymbolTable) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SymbolTable) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SymbolTable.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SymbolTable) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SymbolTable.Merge(m, src)
+}
+func (m *SymbolTable) XXX_Size() int {
+	return m.Size()
+}
+func (m *SymbolTable) XXX_DiscardUnknown() {
+	xxx_messageInfo_SymbolTable.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SymbolTable proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*Label)(nil), "thanos.Label")
 	proto.RegisterType((*LabelSet)(nil), "thanos.LabelSet")
 	proto.RegisterType((*ZLabelSet)(nil), "thanos.ZLabelSet")
+	proto.RegisterType((*SymTableLabel)(nil), "thanos.SymTableLabel")
+	proto.RegisterType((*SymbolTable)(nil), "thanos.SymbolTable")
 }
 
 func init() { proto.RegisterFile("store/labelpb/types.proto", fileDescriptor_cdcc9e7dae4870e8) }
 
 var fileDescriptor_cdcc9e7dae4870e8 = []byte{
-	// 212 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2c, 0x2e, 0xc9, 0x2f,
-	0x4a, 0xd5, 0xcf, 0x49, 0x4c, 0x4a, 0xcd, 0x29, 0x48, 0xd2, 0x2f, 0xa9, 0x2c, 0x48, 0x2d, 0xd6,
-	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x62, 0x2b, 0xc9, 0x48, 0xcc, 0xcb, 0x2f, 0x96, 0x12, 0x49,
-	0xcf, 0x4f, 0xcf, 0x07, 0x0b, 0xe9, 0x83, 0x58, 0x10, 0x59, 0x25, 0x43, 0x2e, 0x56, 0x1f, 0x90,
-	0x26, 0x21, 0x21, 0x2e, 0x96, 0xbc, 0xc4, 0xdc, 0x54, 0x09, 0x46, 0x05, 0x46, 0x0d, 0xce, 0x20,
-	0x30, 0x5b, 0x48, 0x84, 0x8b, 0xb5, 0x2c, 0x31, 0xa7, 0x34, 0x55, 0x82, 0x09, 0x2c, 0x08, 0xe1,
-	0x28, 0x99, 0x73, 0x71, 0x80, 0xb5, 0x04, 0xa7, 0x96, 0x08, 0x69, 0x73, 0xb1, 0x81, 0xed, 0x2c,
-	0x96, 0x60, 0x54, 0x60, 0xd6, 0xe0, 0x36, 0xe2, 0xd5, 0x83, 0xd8, 0xa6, 0x07, 0x56, 0xe1, 0xc4,
-	0x72, 0xe2, 0x9e, 0x3c, 0x43, 0x10, 0x54, 0x89, 0x92, 0x13, 0x17, 0x67, 0x14, 0x5c, 0xa7, 0x29,
-	0x7e, 0x9d, 0x7c, 0x20, 0x9d, 0xb7, 0xee, 0xc9, 0xb3, 0x41, 0x74, 0xc0, 0xcc, 0x70, 0x52, 0x3d,
-	0xf1, 0x50, 0x8e, 0xe1, 0xc4, 0x23, 0x39, 0xc6, 0x0b, 0x8f, 0xe4, 0x18, 0x1f, 0x3c, 0x92, 0x63,
-	0x9c, 0xf0, 0x58, 0x8e, 0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2, 0xd8, 0xa1,
-	0x01, 0x90, 0xc4, 0x06, 0xf6, 0x9d, 0x31, 0x20, 0x00, 0x00, 0xff, 0xff, 0xd0, 0x80, 0xe8, 0x16,
-	0x18, 0x01, 0x00, 0x00,
+	// 299 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x91, 0x31, 0x4b, 0xc3, 0x40,
+	0x14, 0xc7, 0x73, 0xb5, 0x4d, 0x9b, 0x57, 0xe3, 0x70, 0x74, 0x48, 0x15, 0xae, 0x25, 0x20, 0x14,
+	0x84, 0x04, 0x15, 0x71, 0x72, 0xc9, 0xe2, 0xe2, 0x74, 0x71, 0xea, 0x22, 0x09, 0x5c, 0xea, 0x90,
+	0xf4, 0x42, 0x72, 0x0a, 0xf9, 0x16, 0x7e, 0xac, 0x8c, 0x1d, 0xc5, 0xa1, 0x68, 0xf2, 0x45, 0xe4,
+	0xde, 0xd5, 0x8e, 0x6e, 0xf7, 0x7f, 0xef, 0xfd, 0xfe, 0xef, 0xcf, 0x3b, 0x98, 0xd7, 0x4a, 0x56,
+	0x22, 0xcc, 0x93, 0x54, 0xe4, 0x65, 0x1a, 0xaa, 0xa6, 0x14, 0x75, 0x50, 0x56, 0x52, 0x49, 0x6a,
+	0xab, 0xd7, 0x64, 0x2b, 0xeb, 0xf3, 0xd9, 0x46, 0x6e, 0x24, 0x96, 0x42, 0xfd, 0x32, 0x5d, 0xff,
+	0x1a, 0x46, 0x4f, 0x1a, 0xa2, 0x14, 0x86, 0xdb, 0xa4, 0x10, 0x1e, 0x59, 0x92, 0x95, 0xc3, 0xf1,
+	0x4d, 0x67, 0x30, 0x7a, 0x4f, 0xf2, 0x37, 0xe1, 0x0d, 0xb0, 0x68, 0x84, 0x7f, 0x0f, 0x13, 0x44,
+	0x62, 0xa1, 0xe8, 0x15, 0xd8, 0xb8, 0xb3, 0xf6, 0xc8, 0xf2, 0x64, 0x35, 0xbd, 0x71, 0x03, 0xb3,
+	0x2d, 0xc0, 0x89, 0x68, 0xd8, 0xee, 0x17, 0x16, 0x3f, 0x8c, 0xf8, 0x11, 0x38, 0xeb, 0x23, 0x79,
+	0xf7, 0x3f, 0x79, 0xa6, 0xc9, 0xaf, 0xfd, 0xc2, 0x36, 0xc4, 0xd1, 0xe3, 0x11, 0xdc, 0xb8, 0x29,
+	0x9e, 0x93, 0x34, 0x17, 0x26, 0xf7, 0x1c, 0x26, 0x3a, 0xeb, 0x4b, 0x25, 0x32, 0xcc, 0xee, 0xf2,
+	0xb1, 0xd6, 0x5c, 0x64, 0xf4, 0x02, 0x1c, 0x4c, 0x8c, 0xbd, 0x01, 0xf6, 0x26, 0x58, 0xe0, 0x22,
+	0xf3, 0x1f, 0x60, 0x1a, 0x37, 0x45, 0x2a, 0x73, 0xf4, 0xa2, 0x1e, 0x8c, 0x65, 0x96, 0xd5, 0x42,
+	0x99, 0x3c, 0x2e, 0xff, 0x93, 0xfa, 0x08, 0x4a, 0x8f, 0xa0, 0xc3, 0x29, 0x37, 0x22, 0xba, 0x6c,
+	0x7f, 0x98, 0xd5, 0x76, 0x8c, 0xec, 0x3a, 0x46, 0xbe, 0x3b, 0x46, 0x3e, 0x7a, 0x66, 0xed, 0x7a,
+	0x66, 0x7d, 0xf6, 0xcc, 0x5a, 0x8f, 0x0f, 0x1f, 0x91, 0xda, 0x78, 0xe5, 0xdb, 0xdf, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0xc5, 0xa5, 0x8e, 0x97, 0xa0, 0x01, 0x00, 0x00,
 }
 
 func (m *Label) Marshal() (dAtA []byte, err error) {
@@ -273,6 +361,87 @@ func (m *ZLabelSet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *SymTableLabel) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SymTableLabel) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SymTableLabel) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ValueRef != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.ValueRef))
+		i--
+		dAtA[i] = 0x10
+	}
+	if m.NameRef != 0 {
+		i = encodeVarintTypes(dAtA, i, uint64(m.NameRef))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *SymbolTable) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SymbolTable) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SymbolTable) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Table) > 0 {
+		i -= len(m.Table)
+		copy(dAtA[i:], m.Table)
+		i = encodeVarintTypes(dAtA, i, uint64(len(m.Table)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Offsets) > 0 {
+		dAtA2 := make([]byte, len(m.Offsets)*10)
+		var j1 int
+		for _, num := range m.Offsets {
+			for num >= 1<<7 {
+				dAtA2[j1] = uint8(uint64(num)&0x7f | 0x80)
+				num >>= 7
+				j1++
+			}
+			dAtA2[j1] = uint8(num)
+			j1++
+		}
+		i -= j1
+		copy(dAtA[i:], dAtA2[:j1])
+		i = encodeVarintTypes(dAtA, i, uint64(j1))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintTypes(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTypes(v)
 	base := offset
@@ -327,6 +496,41 @@ func (m *ZLabelSet) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovTypes(uint64(l))
 		}
+	}
+	return n
+}
+
+func (m *SymTableLabel) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NameRef != 0 {
+		n += 1 + sovTypes(uint64(m.NameRef))
+	}
+	if m.ValueRef != 0 {
+		n += 1 + sovTypes(uint64(m.ValueRef))
+	}
+	return n
+}
+
+func (m *SymbolTable) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Offsets) > 0 {
+		l = 0
+		for _, e := range m.Offsets {
+			l += sovTypes(uint64(e))
+		}
+		n += 1 + sovTypes(uint64(l)) + l
+	}
+	l = len(m.Table)
+	if l > 0 {
+		n += 1 + l + sovTypes(uint64(l))
 	}
 	return n
 }
@@ -596,6 +800,254 @@ func (m *ZLabelSet) Unmarshal(dAtA []byte) error {
 			m.Labels = append(m.Labels, ZLabel{})
 			if err := m.Labels[len(m.Labels)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypes(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SymTableLabel) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SymTableLabel: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SymTableLabel: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NameRef", wireType)
+			}
+			m.NameRef = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NameRef |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ValueRef", wireType)
+			}
+			m.ValueRef = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ValueRef |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTypes(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SymbolTable) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTypes
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SymbolTable: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SymbolTable: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType == 0 {
+				var v uint32
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTypes
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= uint32(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Offsets = append(m.Offsets, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowTypes
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= int(b&0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthTypes
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex < 0 {
+					return ErrInvalidLengthTypes
+				}
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				var elementCount int
+				var count int
+				for _, integer := range dAtA[iNdEx:postIndex] {
+					if integer < 128 {
+						count++
+					}
+				}
+				elementCount = count
+				if elementCount != 0 && len(m.Offsets) == 0 {
+					m.Offsets = make([]uint32, 0, elementCount)
+				}
+				for iNdEx < postIndex {
+					var v uint32
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowTypes
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= uint32(b&0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Offsets = append(m.Offsets, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Offsets", wireType)
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Table", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Table = append(m.Table[:0], dAtA[iNdEx:postIndex]...)
+			if m.Table == nil {
+				m.Table = []byte{}
 			}
 			iNdEx = postIndex
 		default:

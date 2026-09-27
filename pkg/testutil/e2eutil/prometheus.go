@@ -718,7 +718,7 @@ func gatherMaxSeriesSize(ctx context.Context, fn string) (int64, error) {
 		}
 		prevId = id
 	}
-	if p.Err() != nil {
+	if err := p.Err(); err != nil {
 		return 0, errors.Wrap(err, "walk postings")
 	}
 

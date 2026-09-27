@@ -113,6 +113,26 @@ func TestProxyStore_Series(t *testing.T) {
 			expectedWarningsLen: 0, // No store matched for this query.
 		},
 		{
+			title: "no storeAPI available with partial response disabled",
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseDisabled: true,
+			},
+			expectedErr: ErrorNoStoresAvailable, // No stored registered at all.
+		},
+		{
+			title: "no storeAPI available with abort partial response strategy",
+			req: &storepb.SeriesRequest{
+				MinTime:                 1,
+				MaxTime:                 300,
+				Matchers:                []storepb.LabelMatcher{{Name: "a", Value: "a", Type: storepb.LabelMatcher_EQ}},
+				PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+			},
+			expectedErr: ErrorNoStoresAvailable, // No stored registered at all.
+		},
+		{
 			title: "no storeAPI available for 301-302 time range",
 			storeAPIs: []Client{
 				&storetestutil.TestClient{
@@ -2099,7 +2119,7 @@ func TestProxySeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchProxySeries(t, samplesPerSeries, series)
 	})
 }

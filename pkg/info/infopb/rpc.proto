@@ -67,6 +67,9 @@ message StoreInfo {
 
     // TSDBInfos holds metadata for all TSDBs exposed by the store.
     repeated TSDBInfo tsdb_infos = 6 [(gogoproto.nullable) = false];
+
+    // If true then this endpoint honors projection label hints.
+    bool supports_projections = 7;
 }
 
 // RulesInfo holds the metadata related to Rules API exposed by the component.

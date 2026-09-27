@@ -18,10 +18,12 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/annotations"
+	enginemodel "github.com/thanos-io/promql-engine/execution/model"
 
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
+	"github.com/thanos-io/thanos/pkg/query/fanout"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -292,11 +294,19 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 		matchers[i] = m.String()
 	}
 	tenant := ctx.Value(tenancy.TenantKey)
+	opID, hasOpID := enginemodel.OperatorIDFromContext(ctx)
+	tracker := fanout.FromContext(ctx)
 	// The context gets canceled as soon as query evaluation is completed by the engine.
 	// We want to prevent this from happening for the async store API calls we make while preserving tracing context.
 	// TODO(bwplotka): Does the above still is true? It feels weird to leave unfinished calls behind query API.
 	ctx = tracing.CopyTraceContext(context.Background(), ctx)
 	ctx = context.WithValue(ctx, tenancy.TenantKey, tenant)
+	if hasOpID {
+		ctx = enginemodel.ContextWithOperatorID(ctx, opID)
+	}
+	if tracker != nil {
+		ctx = fanout.NewContext(ctx, tracker)
+	}
 	ctx, cancel := context.WithTimeout(ctx, q.selectTimeout)
 	span, ctx := tracing.StartSpan(ctx, "querier_select", opentracing.Tags{
 		"minTime":  hints.Start,
@@ -344,6 +354,8 @@ func (q *querier) Select(ctx context.Context, _ bool, hints *storage.SelectHints
 	}}
 }
 
+const SeriesHashLabelName = "__cf_series_hash__"
+
 func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms ...*labels.Matcher) (storage.SeriesSet, storepb.SeriesStatsCounter, error) {
 	sms, err := storepb.PromMatchersToMatchers(ms...)
 	if err != nil {
@@ -374,6 +386,9 @@ func (q *querier) selectFn(ctx context.Context, hints *storage.SelectHints, ms .
 		QueryHints: &storepb.QueryHints{
 			ProjectionLabels:  hints.ProjectionLabels,
 			ProjectionInclude: hints.ProjectionInclude,
+			// NOTE(GiedriusS): this is what the Thanos parquet gateway uses right now so
+			// I just copied/pasted it.
+			SeriesHashLabelName: SeriesHashLabelName,
 		},
 	}
 	if q.isDedupEnabled() {

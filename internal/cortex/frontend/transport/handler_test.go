@@ -45,11 +45,12 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/query?query=absent(up)&start=1714262400&end=1714266000",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/query",
 				"param_query=absent(up)",
 				"param_start=1714262400",
 				"param_end=1714266000",
+				"trace_id=test-trace-id-123",
 			},
 		},
 		{
@@ -57,7 +58,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/series?match[]={__name__=~\"up\"}",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/series",
 			},
 		},
@@ -66,7 +67,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/api/v1/query_range?query=rate(http_requests_total[5m])&start=1714262400&end=1714266000&step=15",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/api/v1/query_range",
 				"param_query=rate(http_requests_total[5m])",
 				"param_start=1714262400",
@@ -79,7 +80,7 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 			url:  "/external-prefix/api/v1/query?query=absent(up)&start=1714262400&end=1714266000",
 			logParts: []string{
 				"slow query detected",
-				"time_taken=",
+				"time_taken_ms=",
 				"path=/external-prefix/api/v1/query",
 				"param_query=absent(up)",
 				"param_start=1714262400",
@@ -114,7 +115,9 @@ func TestHandler_SlowQueryLog(t *testing.T) {
 
 			handler := NewHandler(cfg, fakeRoundTripper, logger, prometheus.NewRegistry())
 
-			handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", tt.url, nil))
+			recorder := httptest.NewRecorder()
+			recorder.Header().Set("X-Thanos-Trace-Id", "test-trace-id-123")
+			handler.ServeHTTP(recorder, httptest.NewRequest("GET", tt.url, nil))
 
 			for _, part := range tt.logParts {
 				require.Contains(t, logWriter.String(), part)
@@ -141,11 +144,19 @@ func TestHandler_SlowQueryLogOnError(t *testing.T) {
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(logWriter))
 
 	handler := NewHandler(cfg, fakeRT, logger, prometheus.NewRegistry())
-	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/api/v1/query?query=up", nil))
+
+	// Simulate tracing middleware setting the trace ID on the ResponseWriter
+	// before the handler runs. The slow query log must include this trace ID
+	// even when the round-tripper returns an error (resp is nil).
+	recorder := httptest.NewRecorder()
+	recorder.Header().Set("X-Thanos-Trace-Id", "test-trace-abc123")
+
+	handler.ServeHTTP(recorder, httptest.NewRequest("GET", "/api/v1/query?query=up", nil))
 
 	// Verify slow query is logged even when round-tripper returns an error
 	require.Contains(t, logWriter.String(), "slow query detected")
-	require.Contains(t, logWriter.String(), "time_taken=")
+	require.Contains(t, logWriter.String(), "time_taken_ms=")
 	require.Contains(t, logWriter.String(), "path=/api/v1/query")
 	require.Contains(t, logWriter.String(), "param_query=up")
+	require.Contains(t, logWriter.String(), "test-trace-abc123")
 }

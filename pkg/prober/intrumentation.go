@@ -44,6 +44,10 @@ func NewInstrumentation(component component.Component, logger log.Logger, reg pr
 			[]string{"check"},
 		),
 	}
+	// Init both ready and healthy metrics here so they are 0 until Ready() or Healthy() is called.
+	// Without this both are missing until the first time these methods are called.
+	p.statusMetric.WithLabelValues(ready).Set(0)
+	p.statusMetric.WithLabelValues(healthy).Set(0)
 	return &p
 }
 

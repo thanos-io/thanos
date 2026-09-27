@@ -4,8 +4,11 @@
 package reloader
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,6 +33,26 @@ import (
 
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
+}
+
+func waitFor(ctx context.Context, t *testing.T, what string, cond func() bool) {
+	t.Helper()
+
+	for !cond() {
+		select {
+		case <-ctx.Done():
+			t.Fatalf("Timeout waiting for %s", what)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+}
+
+func readFile(t *testing.T, name string) string {
+	t.Helper()
+
+	b, err := os.ReadFile(name)
+	testutil.Ok(t, err)
+	return string(b)
 }
 
 func TestReloader_ConfigApply(t *testing.T) {
@@ -145,56 +168,40 @@ config:
 		testutil.Ok(t, reloader.Watch(rctx))
 	})
 
-	reloadsSeen := 0
-	attemptsCnt := 0
-Outer:
-	for {
-		select {
-		case <-ctx.Done():
-			break Outer
-		case <-time.After(300 * time.Millisecond):
-		}
-
-		rel := reloads.Load().(int)
-		reloadsSeen = rel
-
-		if reloadsSeen == 1 {
-			// Initial apply seen (without doing nothing).
-			f, err := os.ReadFile(output)
-			testutil.Ok(t, err)
-			testutil.Equals(t, `
+	waitFor(ctx, t, "initial config expansion", func() bool {
+		return readFile(t, output) == `
 config:
   a: 1
   b: 2
   c: 3
-`, string(f))
+`
+	})
 
-			// Change config, expect reload in another iteration.
-			testutil.Ok(t, os.WriteFile(input, []byte(`
+	// NOTE: os.WriteFile does a truncate + write so there could be more
+	// than 2 reloads.
+	testutil.Ok(t, os.WriteFile(input, []byte(`
 config:
   a: changed
   b: $(TEST_RELOADER_THANOS_ENV)
   c: $(TEST_RELOADER_THANOS_ENV2)
 `), os.ModePerm))
-		} else if reloadsSeen == 2 {
-			// Another apply, ensure we see change.
-			f, err := os.ReadFile(output)
-			testutil.Ok(t, err)
-			testutil.Equals(t, `
+	waitFor(ctx, t, "reload of the changed config", func() bool {
+		return reloads.Load().(int) >= 2 && readFile(t, output) == `
 config:
   a: changed
   b: 2
   c: 3
-`, string(f))
+`
+	})
 
-			// Change the mode so reloader can't read the file.
-			testutil.Ok(t, os.Chmod(input, os.ModeDir))
-			attemptsCnt++
-			// That was the second attempt to reload config. All good, break.
-			if attemptsCnt == 2 {
-				break
-			}
-		}
+	// Change the mode so reloader can't read the file. Two attempts have to fail
+	// without the reloader giving up.
+	for range 2 {
+		failuresSeen := promtest.ToFloat64(reloader.configApplyErrors)
+		testutil.Ok(t, os.Chmod(input, os.ModeDir))
+		waitFor(ctx, t, "failed apply of the unreadable config", func() bool {
+			return promtest.ToFloat64(reloader.configApplyErrors) > failuresSeen
+		})
 	}
 	cancel3()
 	g.Wait()
@@ -244,7 +251,7 @@ faulty_config:
 		f, err := os.ReadFile(output)
 		testutil.Ok(t, err)
 
-		if string(f) == string(faultyConfig) {
+		if string(f) != string(correctConfig) {
 			resp.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -277,45 +284,27 @@ faulty_config:
 		testutil.Ok(t, reloader.Watch(rctx))
 	})
 
-	reloadsSeen := 0
-	faulty := false
+	waitFor(ctx, t, "initial reload", func() bool {
+		return reloads.Load().(int) >= 1 && readFile(t, output) == string(correctConfig)
+	})
 
-	for {
-		select {
-		case <-ctx.Done():
-			t.Fatalf("Timeout with faulty = %t, reloadsSeen = %d", faulty, reloadsSeen)
-		case <-time.After(300 * time.Millisecond):
-		}
+	var curReloads = reloads.Load().(int)
 
-		rel := reloads.Load().(int)
-		reloadsSeen = rel
+	// Faulty config gets written out but its reload keeps failing.
+	testutil.Ok(t, os.WriteFile(input, faultyConfig, os.ModePerm))
+	waitFor(ctx, t, "faulty config to be written out", func() bool {
+		return readFile(t, output) == string(faultyConfig)
+	})
+	testutil.Equals(t, curReloads, reloads.Load().(int))
 
-		if reloadsSeen == 1 && !faulty {
-			// Initial apply seen (without doing anything).
-			f, err := os.ReadFile(output)
-			testutil.Ok(t, err)
-			testutil.Equals(t, string(correctConfig), string(f))
+	// Rollback to the previous config should trigger a successful reload.
+	testutil.Ok(t, os.WriteFile(input, correctConfig, os.ModePerm))
 
-			// Change to a faulty config
-			testutil.Ok(t, os.WriteFile(input, faultyConfig, os.ModePerm))
-			faulty = true
-		} else if reloadsSeen == 1 && faulty {
-			// Faulty config will trigger a reload, but reload failed
-			f, err := os.ReadFile(output)
-			testutil.Ok(t, err)
-			testutil.Equals(t, string(faultyConfig), string(f))
+	// os.WriteFile does a truncate + write so multiple reloads might be seen.
+	waitFor(ctx, t, "rollback reload", func() bool {
+		return reloads.Load().(int) >= curReloads+1 && readFile(t, output) == string(correctConfig)
+	})
 
-			// Rollback config
-			testutil.Ok(t, os.WriteFile(input, correctConfig, os.ModePerm))
-		} else if reloadsSeen >= 2 {
-			// Rollback to previous config should trigger a reload
-			f, err := os.ReadFile(output)
-			testutil.Ok(t, err)
-			testutil.Equals(t, string(correctConfig), string(f))
-
-			break
-		}
-	}
 	cancel2()
 	g.Wait()
 }
@@ -1258,4 +1247,99 @@ config:
 	g.Wait()
 	// Check no reload request made
 	testutil.Equals(t, 0, reloads.Load().(int))
+}
+
+// chunkReader splits reads into fixed small chunks to test boundary handling.
+type chunkReader struct {
+	r         io.Reader
+	chunkSize int
+}
+
+func (cr *chunkReader) Read(p []byte) (n int, err error) {
+	toRead := cr.chunkSize
+	if toRead > len(p) {
+		toRead = len(p)
+	}
+	buf := make([]byte, toRead)
+	n, err = cr.r.Read(buf)
+	if n > 0 {
+		copy(p, buf[:n])
+	}
+	return n, err
+}
+
+func TestReloader_ExpandEnvStream_ChunkBoundaries(t *testing.T) {
+	setupTestEnv(t)
+
+	chunkSizes := []int{1, 2, 3, 5, 7, 13, 1024}
+
+	r := New(log.NewNopLogger(), prometheus.NewRegistry(), &Options{
+		TolerateEnvVarExpansionErrors: true,
+	})
+
+	for _, tc := range []struct {
+		input    string
+		expected string
+	}{
+		// Empty and literal '$' forms.
+		{"", ""},
+		{"$", "$"},
+		{"prefix $", "prefix $"},
+		{"$$", "$$"},
+		{"prefix $$", "prefix $$"},
+		{"$RELOADER_TEST_ENV", "$RELOADER_TEST_ENV"},
+		{"${RELOADER_TEST_ENV}", "${RELOADER_TEST_ENV}"},
+		{"$1 $2 $9", "$1 $2 $9"},
+		{`handler=~"^(api|admin)$"`, `handler=~"^(api|admin)$"`},
+		// Incomplete '$(' and empty '$()'.
+		{"$()", "$()"},
+		{"prefix $()", "prefix $()"},
+		{"$(", "$("},
+		{"prefix $(", "prefix $("},
+		{"$(A", "$(A"},
+		{"prefix $(A", "prefix $(A"},
+		{"$(RELOADER_TEST_ENV", "$(RELOADER_TEST_ENV"},
+		{"$($($(", "$($($("},
+		{"$(foo$(bar", "$(foo$(bar"},
+		// Valid variable substitutions.
+		{"$(RELOADER_TEST_ENV)", "production"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_PORT)", "production90"},
+		{"$(RELOADER_TEST_ENV)$(RELOADER_TEST_ENV)", "productionproduction"},
+		{"prefix $(RELOADER_TEST_ENV) middle $(RELOADER_TEST_PORT) suffix", "prefix production middle 90 suffix"},
+		// Unset variables and invalid identifier characters.
+		{"$(UNKNOWN-VAR)", "$(UNKNOWN-VAR)"},
+		{"$(RELOADER_TEST/_# _ENV)", "$(RELOADER_TEST/_# _ENV)"},
+		{"$(RELOADER_TEST_ENV:-default)", "$(RELOADER_TEST_ENV:-default)"},
+		{"$( RELOADER_TEST_ENV )", "$( RELOADER_TEST_ENV )"},
+		{"prefix $(\nRELOADER_TEST_ENV\n) suffix", "prefix $(\nRELOADER_TEST_ENV\n) suffix"},
+		// Nested and adjacent parentheses.
+		{"$$($(RELOADER_TEST_ENV))", "$$(production)"},
+		{"$((RELOADER_TEST_ENV))", "$((RELOADER_TEST_ENV))"},
+		{"$(($(RELOADER_TEST_ENV)))", "$((production))"},
+		{"$(RELOADER_TEST_ENV))trailing", "production)trailing"},
+		{"$(RELOADER_TEST_ENV$(RELOADER_TEST_PORT))", "$(RELOADER_TEST_ENV90)"},
+		{"$(not_existing$(RELOADER_TEST_ENV))", "$(not_existingproduction)"},
+		{"$(in.valid$(RELOADER_TEST_ENV))", "$(in.validproduction)"},
+		// Length boundaries and large stream tokens.
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + ")"},
+		{"$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "$(RELOADER_TEST_ENV))", "$(" + strings.Repeat("a", bufio.MaxScanTokenSize+1) + "production)"},
+		{strings.Repeat("plain_text_step\n", 5000), strings.Repeat("plain_text_step\n", 5000)},
+	} {
+		for _, sz := range chunkSizes {
+			t.Run(fmt.Sprintf("chunk=%d/input=%s", sz, trim(tc.input, 16)), func(t *testing.T) {
+				cr := &chunkReader{r: strings.NewReader(tc.input), chunkSize: sz}
+				var out bytes.Buffer
+				err := r.expandEnv(cr, &out)
+				testutil.Ok(t, err)
+				testutil.Equals(t, tc.expected, out.String())
+			})
+		}
+	}
+}
+
+func trim(in string, by int) string {
+	if len(in) > by {
+		return in[:by]
+	}
+	return in
 }

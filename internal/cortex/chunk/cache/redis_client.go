@@ -60,6 +60,9 @@ func NewRedisClient(cfg *RedisConfig) (*RedisClient, error) {
 		Dialer:           net.Dialer{Timeout: cfg.Timeout},
 		ConnWriteTimeout: cfg.Timeout,
 		DisableCache:     true,
+		SendToReplicas: func(cmd rueidis.Completed) bool {
+			return cmd.IsReadOnly()
+		},
 	}
 	if cfg.EnableTLS {
 		clientOpts.TLSConfig = &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}

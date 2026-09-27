@@ -34,9 +34,9 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 		{
 			name: "single series",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}}),
 			},
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}}),
 		},
 		{
 			name: "two empty series",
@@ -49,66 +49,66 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 		{
 			name: "two non overlapping",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{5, 5}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 7, f: 7}, sample{t: 9, f: 9}}, []chunks.Sample{sample{t: 10, f: 10}}),
 			},
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{5, 5}}, []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}, sample{t: 5, f: 5}}, []chunks.Sample{sample{t: 7, f: 7}, sample{t: 9, f: 9}}, []chunks.Sample{sample{t: 10, f: 10}}),
 		},
 		{
 			name: "two overlapping",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{8, 8}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}, sample{t: 8, f: 8}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 7, f: 7}, sample{t: 9, f: 9}}, []chunks.Sample{sample{t: 10, f: 10}}),
 			},
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{3, 3}, sample{8, 8}}, []chunks.Sample{sample{10, 10}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 3, f: 3}, sample{t: 8, f: 8}}, []chunks.Sample{sample{t: 10, f: 10}}),
 		},
 		{
 			name: "two overlapping with large time diff",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}}, []chunks.Sample{sample{2, 2}, sample{5008, 5008}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{7, 7}, sample{9, 9}}, []chunks.Sample{sample{10, 10}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}}, []chunks.Sample{sample{t: 2, f: 2}, sample{t: 5008, f: 5008}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 7, f: 7}, sample{t: 9, f: 9}}, []chunks.Sample{sample{t: 10, f: 10}}),
 			},
-			// sample{5008, 5008} is added to the result due to its large timestamp.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{5008, 5008}}),
+			// sample{t: 5008, f: 5008} is added to the result due to its large timestamp.
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 5008, f: 5008}}),
 		},
 		{
 			name: "two duplicated",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{2, 2}, sample{3, 3}, sample{5, 5}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
 			},
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
 		},
 		{
 			name: "three overlapping",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{2, 2}, sample{3, 3}, sample{6, 6}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{4, 4}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 6, f: 6}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 0, f: 0}, sample{t: 4, f: 4}}),
 			},
 			// only samples from the last series are retained due to high penalty.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{4, 4}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 0, f: 0}, sample{t: 4, f: 4}}),
 		},
 		{
 			name: "three in chained overlap",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{4, 4}, sample{6, 66}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{6, 6}, sample{10, 10}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 4, f: 4}, sample{t: 6, f: 66}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 6, f: 6}, sample{t: 10, f: 10}}),
 			},
 			// only samples from the last series are retained due to high penalty.
-			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{1, 1}, sample{2, 2}, sample{3, 3}, sample{5, 5}}),
+			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 1, f: 1}, sample{t: 2, f: 2}, sample{t: 3, f: 3}, sample{t: 5, f: 5}}),
 		},
 		{
 			name: "three in chained overlap complex",
 			input: []storage.ChunkSeries{
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{0, 0}, sample{5, 5}}, []chunks.Sample{sample{10, 10}, sample{15, 15}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{2, 2}, sample{20, 20}}, []chunks.Sample{sample{25, 25}, sample{30, 30}}),
-				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{18, 18}, sample{26, 26}}, []chunks.Sample{sample{31, 31}, sample{35, 35}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 0, f: 0}, sample{t: 5, f: 5}}, []chunks.Sample{sample{t: 10, f: 10}, sample{t: 15, f: 15}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 2, f: 2}, sample{t: 20, f: 20}}, []chunks.Sample{sample{t: 25, f: 25}, sample{t: 30, f: 30}}),
+				storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"), []chunks.Sample{sample{t: 18, f: 18}, sample{t: 26, f: 26}}, []chunks.Sample{sample{t: 31, f: 31}, sample{t: 35, f: 35}}),
 			},
 			expected: storage.NewListChunkSeriesFromSamples(labels.FromStrings("bar", "baz"),
-				[]chunks.Sample{sample{0, 0}, sample{5, 5}},
-				[]chunks.Sample{sample{31, 31}, sample{35, 35}},
+				[]chunks.Sample{sample{t: 0, f: 0}, sample{t: 5, f: 5}},
+				[]chunks.Sample{sample{t: 31, f: 31}, sample{t: 35, f: 35}},
 			),
 		},
 		{
@@ -289,11 +289,11 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 				Lset: defaultLabels,
 				ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
 					samples := [][]chunks.Sample{
-						{sample{299999, 3}, sample{540000, 5}},
-						{sample{299999, 540000}, sample{540000, 2100000}},
-						{sample{299999, 120000}, sample{540000, 300000}},
-						{sample{299999, 240000}, sample{540000, 540000}},
-						{sample{299999, 240000}, sample{299999, 240000}},
+						{sample{t: 299999, f: 3}, sample{t: 540000, f: 5}},
+						{sample{t: 299999, f: 540000}, sample{t: 540000, f: 2100000}},
+						{sample{t: 299999, f: 120000}, sample{t: 540000, f: 300000}},
+						{sample{t: 299999, f: 240000}, sample{t: 540000, f: 540000}},
+						{sample{t: 299999, f: 240000}, sample{t: 299999, f: 240000}},
 					}
 					var chks [5]chunkenc.Chunk
 					for i, s := range samples {

@@ -23,14 +23,16 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	enginemodel "github.com/thanos-io/promql-engine/execution/model"
+
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
+	"github.com/thanos-io/thanos/pkg/query/fanout"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/strutil"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type ctxKey int
@@ -44,6 +46,11 @@ const StoreMatcherKey = ctxKey(0)
 // ErrorNoStoresMatched is returned if the query does not match any data.
 // This can happen with Query servers trees and external labels.
 var ErrorNoStoresMatched = errors.New("No StoreAPIs matched for this query")
+
+// ErrorNoStoresAvailable is returned if we have an empty list of stores.
+// This happens either when we didn't yet complete any discovery
+// or when all stores disappear suddenly.
+var ErrorNoStoresAvailable = errors.New("No StoreAPIs available")
 
 // Client holds meta information about a store.
 type Client interface {
@@ -195,7 +202,7 @@ func NewProxyStore(
 }
 
 func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	if len(stores) == 0 {
 		// We always want to enforce announcing the subset of data that
 		// selector-labels represents. If no stores match the filter,
@@ -243,7 +250,7 @@ func (s *ProxyStore) LabelSet() []labelpb.ZLabelSet {
 }
 
 func (s *ProxyStore) TimeRange() (int64, int64) {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	if len(stores) == 0 {
 		return math.MinInt64, math.MaxInt64
 	}
@@ -263,7 +270,7 @@ func (s *ProxyStore) TimeRange() (int64, int64) {
 }
 
 func (s *ProxyStore) TSDBInfos() []infopb.TSDBInfo {
-	stores := s.storesForTSDBSelector()
+	stores := s.storesForTSDBSelector(s.stores())
 	infos := make([]infopb.TSDBInfo, 0)
 	for _, st := range stores {
 		infos = append(infos, st.TSDBInfos()...)
@@ -306,7 +313,14 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in Series()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.MinTime, originalRequest.MaxTime, matchers)
+	// There are no stores registered at all and partial results are disabled, return an error.
+	stores := s.stores()
+	if len(stores) == 0 && (originalRequest.PartialResponseDisabled || originalRequest.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
+		level.Debug(reqLogger).Log("err", ErrorNoStoresAvailable)
+		return ErrorNoStoresAvailable
+	}
+
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, stores, originalRequest.MinTime, originalRequest.MaxTime, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return nil
@@ -329,10 +343,29 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		ResponseBatchSize:       originalRequest.ResponseBatchSize,
 	}
 
+	tracker := fanout.FromContext(ctx)
+	opID, opIDOK := enginemodel.OperatorIDFromContext(ctx)
+
 	storeResponses := make([]respSet, 0, len(stores))
 	for _, st := range stores {
+		var reporter statsReporter
 
-		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses)
+		if tracker != nil && opIDOK {
+			_, storeAddr := storeInfo(st)
+			reporter = func(rs RespSetStats) {
+				tracker.AddStore(opID, fanout.StoreFanout{
+					EndpointAddr:   storeAddr,
+					Duration:       rs.Duration,
+					BytesProcessed: rs.BytesProcessed,
+					NumResponses:   rs.NumResponses,
+					Series:         rs.Series,
+					Chunks:         rs.Chunks,
+					Samples:        rs.Samples,
+				})
+			}
+		}
+
+		respSet, err := newAsyncRespSet(ctx, st, r, s.responseTimeout, s.retrievalStrategy, &s.buffers, r.ShardInfo, reqLogger, s.metrics.emptyStreamResponses, s.lazyRetrievalMaxBufferedResponses, reporter)
 		if err != nil {
 			level.Error(reqLogger).Log("err", err)
 
@@ -411,7 +444,7 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(s.logger).Log("msg", "Tenant info in LabelNames()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, s.stores(), originalRequest.Start, originalRequest.End, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return &storepb.LabelNamesResponse{}, nil
@@ -434,16 +467,8 @@ func (s *ProxyStore) LabelNames(ctx context.Context, originalRequest *storepb.La
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-
-		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_names", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-			resp, err := st.LabelNames(spanCtx, r)
+			resp, err := st.LabelNames(gctx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label names from store %s", st)
 				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
@@ -514,7 +539,7 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	ctx = metadata.AppendToOutgoingContext(ctx, tenancy.DefaultTenantHeader, tenant)
 	level.Debug(reqLogger).Log("msg", "Tenant info in LabelValues()", "tenant", tenant)
 
-	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, originalRequest.Start, originalRequest.End, matchers)
+	stores, storeLabelSets, storeDebugMsgs := s.matchingStores(ctx, s.stores(), originalRequest.Start, originalRequest.End, matchers)
 	if len(stores) == 0 {
 		level.Debug(reqLogger).Log("err", ErrorNoStoresMatched, "stores", strings.Join(storeDebugMsgs, ";"))
 		return &storepb.LabelValuesResponse{}, nil
@@ -538,17 +563,8 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		g, gctx  = errgroup.WithContext(ctx)
 	)
 	for _, st := range stores {
-
-		storeID, storeAddr, isLocalStore := storeInfo(st)
 		g.Go(func() error {
-			span, spanCtx := tracing.StartSpan(gctx, "proxy.label_values", tracing.Tags{
-				"store.id":       storeID,
-				"store.addr":     storeAddr,
-				"store.is_local": isLocalStore,
-			})
-			defer span.Finish()
-
-			resp, err := st.LabelValues(spanCtx, r)
+			resp, err := st.LabelValues(gctx, r)
 			if err != nil {
 				err = errors.Wrapf(err, "fetch label values from store %s", st)
 				if r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT {
@@ -583,21 +599,21 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 	}, nil
 }
 
-func storeInfo(st Client) (storeID string, storeAddr string, isLocalStore bool) {
-	storeAddr, isLocalStore = st.Addr()
+func storeInfo(st Client) (storeID string, storeAddr string) {
+	storeAddr, _ = st.Addr()
 	storeID = labelpb.PromLabelSetsToString(st.LabelSets())
 	if storeID == "" {
 		storeID = "Store Gateway"
 	}
-	return storeID, storeAddr, isLocalStore
+	return storeID, storeAddr
 }
 
 // storesForTSDBSelector returns stores that match the TSDBSelector filtering criteria.
 // This centralizes the TSDBSelector filtering logic used across all ProxyStore methods
 // for cases where we don't need additional matchers or time range filtering.
-func (s *ProxyStore) storesForTSDBSelector() []Client {
+func (s *ProxyStore) storesForTSDBSelector(stores []Client) []Client {
 	var filteredStores []Client
-	for _, st := range s.stores() {
+	for _, st := range stores {
 		matches, _ := s.tsdbSelector.MatchLabelSets(st.LabelSets()...)
 		if matches {
 			filteredStores = append(filteredStores, st)
@@ -608,13 +624,13 @@ func (s *ProxyStore) storesForTSDBSelector() []Client {
 
 // TODO: consider moving the following functions into something like "pkg/pruneutils" since it is also used for exemplars.
 
-func (s *ProxyStore) matchingStores(ctx context.Context, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
+func (s *ProxyStore) matchingStores(ctx context.Context, allStores []Client, minTime, maxTime int64, matchers []*labels.Matcher) ([]Client, []labels.Labels, []string) {
 	var (
 		stores         []Client
 		storeLabelSets []labels.Labels
 		storeDebugMsgs []string
 	)
-	for _, st := range s.storesForTSDBSelector() {
+	for _, st := range s.storesForTSDBSelector(allStores) {
 		// We might be able to skip the store if its meta information indicates it cannot have series matching our query.
 		if ok, reason := storeMatches(ctx, s.debugLogging, st, minTime, maxTime, matchers...); !ok {
 			if s.debugLogging {
@@ -691,7 +707,7 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 
 	match := false
 	for _, sm := range storeDebugMatchers {
-		match = match || LabelSetsMatch(sm, labels.FromStrings("__address__", addr))
+		match = match || matchersMatchAddress(sm, addr)
 	}
 	if !match {
 		const s string = "__address__ does not match debug store metadata matchers"
@@ -701,6 +717,18 @@ func storeMatchDebugMetadata(s Client, debugLogging bool, storeDebugMatchers [][
 		return false, s
 	}
 	return true, ""
+}
+
+// matchersMatchAddress reports whether the matchers match a label set that only
+// contains __address__=addr. It mirrors LabelSetsMatch for that single synthetic
+// label without allocating a labels.Labels for every store on every request.
+func matchersMatchAddress(matchers []*labels.Matcher, addr string) bool {
+	for _, m := range matchers {
+		if m.Name == "__address__" && !m.Matches(addr) {
+			return false
+		}
+	}
+	return true
 }
 
 // LabelSetsMatch returns false if all label-sets do not match the matchers (aka: OR is between all label-sets).

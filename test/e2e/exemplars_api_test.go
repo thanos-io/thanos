@@ -43,7 +43,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.Version1PB, "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",
@@ -52,7 +52,7 @@ func TestExemplarsAPI_Fanout(t *testing.T) {
 	prom2, sidecar2 = e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", "", "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.Version1PB, "localhost:9090", qBuilder.InternalEndpoint("http"), e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(),
 		"",

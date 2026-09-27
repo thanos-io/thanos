@@ -351,8 +351,10 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 				series.Chunks[i].Data = nil
 			}
 
+			lbls := labelpb.ZLabelsFromPromLabels(completeLabelset)
+			labelpb.ReAllocZLabelsStrings(&lbls)
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
+				Labels: lbls,
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {
@@ -418,6 +420,10 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	}
 	if len(data.Results) != 1 {
 		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
+	}
+
+	for _, ts := range data.Results[0].Timeseries {
+		labelpb.ReAllocZLabelsStrings(&ts.Labels)
 	}
 
 	return &data, nil

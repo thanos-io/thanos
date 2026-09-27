@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -205,10 +206,10 @@ func TestQueryHandlesNotAvailableGrpc(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone1", e2ethanos.DefaultPromConfig("prom-alone1", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "alone2", e2ethanos.DefaultPromConfig("prom-alone2", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 
 	testutil.Ok(t, prom1.Stop())
@@ -257,7 +258,7 @@ func TestSidecarNotReady(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 	testutil.Ok(t, prom.Stop())
 
@@ -292,10 +293,10 @@ func TestQuery(t *testing.T) {
 	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom4, sidecar4 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "ha1", e2ethanos.DefaultPromConfig("prom-ha", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom4, sidecar4 := e2ethanos.NewPrometheusWithSidecar(e, "ha2", e2ethanos.DefaultPromConfig("prom-ha", 1, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3, prom4, sidecar4))
 
 	// Querier. Both fileSD and directly by flags.
@@ -373,7 +374,7 @@ func TestQueryWithExtendedFunctions(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// create prom + sidecar
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	// create querier
@@ -416,7 +417,7 @@ func TestQueryWithExperimentalFunctions(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// create prom + sidecar
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "prom", e2ethanos.DefaultPromConfig("prom", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	// create querier with enabling experimental features
@@ -529,8 +530,8 @@ func TestQueryLabelNames(t *testing.T) {
 	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
@@ -584,8 +585,8 @@ func TestQueryLabelValues(t *testing.T) {
 	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
@@ -633,8 +634,8 @@ func TestQuerySeries(t *testing.T) {
 	receiver := e2ethanos.NewReceiveBuilder(e, "1").WithIngestionEnabled().Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(receiver))
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "remote-and-sidecar", e2ethanos.DefaultPromConfig("prom-both-remote-write-and-sidecar", 1234, e2ethanos.RemoteWriteEndpoint(receiver.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc"), receiver.InternalEndpoint("grpc")).Init()
@@ -667,7 +668,7 @@ func TestQueryWithAuthorizedSidecar(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), defaultWebConfig(), e2ethanos.DefaultPrometheusImage(), "")
+	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), defaultWebConfig(), e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", []string{sidecar.InternalEndpoint("grpc")}...).Init()
@@ -718,11 +719,11 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Preparing 3 different blocks for the tests.
@@ -767,7 +768,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -906,11 +907,11 @@ func TestQueryStoreDedup(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-dedup-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	storeGW := e2ethanos.NewStoreGW(
@@ -918,7 +919,7 @@ func TestQueryStoreDedup(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -1132,9 +1133,9 @@ func TestSidecarQueryDedup(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	t.Cleanup(cancel)
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
-	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p1", 1, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom3, sidecar3 := e2ethanos.NewPrometheusWithSidecar(e, "p3", e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	{
@@ -1322,10 +1323,10 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 
 			endpoints := []string{
@@ -1351,49 +1352,59 @@ func TestSidecarQueryEvaluation(t *testing.T) {
 	}
 }
 
-var chromedpAllocator context.Context
+var (
+	chromedpAllocator context.Context
+
+	browserCtx     context.Context
+	initBrowserCtx sync.Once
+)
 
 func TestMain(m *testing.M) {
-	execAlloc, execCancel := chromedp.NewExecAllocator(
-		context.Background(),
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", true),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.WSURLReadTimeout(3*time.Minute),
 	)
+	execAlloc, execCancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	chromedpAllocator = execAlloc
 	rc := m.Run()
 	execCancel()
 	os.Exit(rc)
 }
 
+// sharedBrowserContext lazily starts a single Chrome process shared by all
+// tests; callers must open their own tab via chromedp.NewContext and never
+// cancel the returned context.
+func sharedBrowserContext(t *testing.T) context.Context {
+	initBrowserCtx.Do(func() {
+		ctx, cancel := chromedp.NewContext(chromedpAllocator)
+		if err := chromedp.Run(ctx); err != nil {
+			cancel()
+			t.Fatalf("starting shared browser: %v", err)
+		}
+		browserCtx = ctx
+	})
+	return browserCtx
+}
+
 func checkNetworkRequests(t *testing.T, addr string) {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.Flag("headless", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-gpu", true),
-	)
-	allocCtx, cancel := chromedp.NewExecAllocator(chromedpAllocator, opts...)
-	defer cancel()
+	browser := sharedBrowserContext(t)
 
-	ctx, cancel := chromedp.NewContext(allocCtx)
-	t.Cleanup(cancel)
-
-	// make sure browser is already started
-	err := chromedp.Run(ctx)
-	testutil.Ok(t, err)
-
-	testutil.Ok(t, runutil.Retry(1*time.Minute, ctx.Done(), func() error {
+	testutil.Ok(t, runutil.Retry(1*time.Minute, browser.Done(), func() error {
 		var networkErrors []string
 
-		var newCtx context.Context
-		newCtx, newCancel := chromedp.NewContext(ctx)
-		t.Cleanup(newCancel)
+		tabCtx, tabCancel := chromedp.NewContext(browser)
+		t.Cleanup(tabCancel)
 		// Listen for failed network requests and push them to an array.
-		chromedp.ListenTarget(newCtx, func(ev any) {
+		chromedp.ListenTarget(tabCtx, func(ev any) {
 			switch ev := ev.(type) {
 			case *network.EventLoadingFailed:
 				networkErrors = append(networkErrors, ev.ErrorText)
 			}
 		})
 
-		err := chromedp.Run(newCtx,
+		err := chromedp.Run(tabCtx,
 			network.Enable(),
 			chromedp.Navigate(addr),
 			chromedp.WaitVisible(`body`),
@@ -1763,7 +1774,7 @@ func TestGrpcInstantQuery(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB)
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -1869,7 +1880,7 @@ func TestGrpcQueryRange(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "")
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB)
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom, sidecar))
 
@@ -1973,7 +1984,7 @@ func TestConnectedQueriesWithLazyProxy(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget)
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 
 	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).WithProxyStrategy("lazy").WithDisablePartialResponses(true).Init()
@@ -2051,7 +2062,7 @@ func TestTenantHTTPMetrics(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	// scrape the local prometheus, and our querier metrics
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget, "q-tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "q-tenant-metrics-querier-1:8080"), "", e2ethanos.DefaultPrometheusImage(), "")
 
 	q := e2ethanos.NewQuerierBuilder(e, "1", sidecar1.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
@@ -2139,11 +2150,11 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	minio := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(minio))
+	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
-	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, minio.Endpoint("http"), minio.Dir()), "test", nil)
+	bkt, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
 	testutil.Ok(t, err)
 
 	// Add series from different tenants
@@ -2206,7 +2217,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 		"s1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, minio.InternalEndpoint("http"), minio.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",
@@ -2423,10 +2434,10 @@ func TestQuerySelectWithRelabel(t *testing.T) {
 			testutil.Ok(t, err)
 			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+			prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "p1", e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
-			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", ""), "", e2ethanos.DefaultPrometheusImage(), "")
+			prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "p2", e2ethanos.DefaultPromConfig("p2", 0, "", "", e2ethanos.Version1PB), "", e2ethanos.DefaultPrometheusImage(), "")
 			testutil.Ok(t, e2e.StartAndWaitReady(prom2, sidecar2))
 
 			endpoints := []string{
@@ -2459,7 +2470,7 @@ func TestDistributedEngineWithExtendedFunctions(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.LocalPrometheusTarget)
+	promConfig := e2ethanos.DefaultPromConfig("p1", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget)
 	prom, sidecar := e2ethanos.NewPrometheusWithSidecar(e, "p1", promConfig, "", e2ethanos.DefaultPrometheusImage(), "")
 
 	querier1 := e2ethanos.NewQuerierBuilder(e, "1", sidecar.InternalEndpoint("grpc")).

@@ -22,6 +22,8 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
 	"github.com/thanos-io/thanos/pkg/errors"
 	"gopkg.in/yaml.v2"
 
@@ -33,6 +35,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
 )
+
+const rulesSubDir = "rules"
 
 const (
 	testAlertRuleAbortOnPartialResponse = `
@@ -328,7 +332,7 @@ func TestRule(t *testing.T) {
 	queryTargetsSubDir := filepath.Join("rules_query_targets")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
 
-	rulesSubDir := filepath.Join("rules")
+	rulesSubDir := filepath.Join(rulesSubDir)
 	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 	createRuleFiles(t, rulesPath)
@@ -567,7 +571,7 @@ func TestRule_KeepFiringFor(t *testing.T) {
 	queryTargetsSubDir := filepath.Join("rules_query_targets")
 	testutil.Ok(t, os.MkdirAll(filepath.Join(rFuture.Dir(), queryTargetsSubDir), os.ModePerm))
 
-	rulesSubDir := filepath.Join("rules")
+	rulesSubDir := filepath.Join(rulesSubDir)
 	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 	createRuleFile(t, filepath.Join(rulesPath, "alert_keep_firing_for.yaml"), testAlertRuleKeepFiringFor)
@@ -679,7 +683,6 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	t.Cleanup(cancel)
 
 	rFuture := e2ethanos.NewRulerBuilder(e, "1")
-	rulesSubDir := "rules"
 	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
 	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
 
@@ -755,6 +758,41 @@ func TestRule_CanRemoteWriteData(t *testing.T) {
 	})
 }
 
+func TestRule_CanShipBlocks(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("rule-shipper")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "rule-shipper-test"
+	m := e2ethanos.NewSeaweedFS(e, "seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	rFuture := e2ethanos.NewRulerBuilder(e, "1")
+
+	rulesPath := filepath.Join(rFuture.Dir(), rulesSubDir)
+	testutil.Ok(t, os.MkdirAll(rulesPath, os.ModePerm))
+	createRuleFile(t, filepath.Join(rulesPath, "rules-0.yaml"), testRuleRecordAbsentMetric)
+
+	r := rFuture.WithObjStoreConfig(client.BucketConfig{
+		Type:   objstore.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+	}).InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
+		{
+			HTTPConfig: clientconfig.HTTPConfig{
+				EndpointsConfig: clientconfig.HTTPEndpointsConfig{
+					StaticAddresses: []string{"localhost:9090"},
+					Scheme:          "http",
+				},
+			},
+		},
+	})
+	testutil.Ok(t, e2e.StartAndWaitReady(r))
+
+	testutil.Ok(t, r.WaitSumMetricsWithOptions(e2emon.GreaterOrEqual(1), []string{"thanos_shipper_dir_syncs_total"}, e2emon.WaitMissingMetrics()))
+}
+
 func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	t.Parallel()
 
@@ -775,7 +813,6 @@ func TestStatelessRulerAlertStateRestore(t *testing.T) {
 	q := e2ethanos.NewQuerierBuilder(e, "1", receiver.InternalEndpoint("grpc")).
 		WithReplicaLabels("replica", "receive").Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
-	rulesSubDir := "rules"
 	var rulers []*e2eobs.Observable
 	for i := 1; i <= 2; i++ {
 		rFuture := e2ethanos.NewRulerBuilder(e, fmt.Sprintf("%d", i))

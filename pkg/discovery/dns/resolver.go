@@ -13,6 +13,8 @@ import (
 	"github.com/go-kit/log/level"
 
 	"github.com/pkg/errors"
+
+	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
 type QType string
@@ -24,18 +26,22 @@ const (
 	SRV = QType("dnssrv")
 	// SRVNoA qtype performs SRV lookup without any A/AAAA lookup for each SRV result.
 	SRVNoA = QType("dnssrvnoa")
+	// ADualStack qtype performs both A and AAAA lookup, returning all addresses.
+	ADualStack = QType("dnsdualstack")
 )
 
 type Resolver interface {
 	// Resolve performs a DNS lookup and returns a list of records.
 	// name is the domain name to be resolved.
-	// qtype is the query type. Accepted values are `dns` for A/AAAA lookup and `dnssrv` for SRV lookup.
+	// qtype is the query type. Accepted values are `dns` for A/AAAA lookup, `dnssrv` for SRV lookup,
+	// `dnssrvnoa` for SRV lookup without A/AAAA, and `dnsdualstack` for combined A and AAAA lookup.
 	// If scheme is passed through name, it is preserved on IP results.
 	Resolve(ctx context.Context, name string, qtype QType) ([]string, error)
 }
 
 type ipLookupResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+	LookupIPAddrByNetwork(ctx context.Context, network, host string) ([]net.IPAddr, error)
 	LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error)
 	IsNotFound(err error) bool
 }
@@ -126,6 +132,31 @@ func (s *dnsSD) Resolve(ctx context.Context, name string, qtype QType) ([]string
 			for _, resIP := range resIPs {
 				res = append(res, appendScheme(scheme, net.JoinHostPort(resIP.String(), resPort)))
 			}
+		}
+	case ADualStack:
+		if port == "" {
+			return nil, errors.Errorf("missing port in address given for dnsdualstack lookup: %v", name)
+		}
+		var ips []net.IPAddr
+		lookupErrs := errutil.MultiError{}
+
+		for _, network := range []string{"ip6", "ip4"} {
+			addrs, err := s.resolver.LookupIPAddrByNetwork(ctx, network, host)
+			if err != nil {
+				if !s.resolver.IsNotFound(err) {
+					lookupErrs.Add(err)
+				}
+				continue
+			}
+			ips = append(ips, addrs...)
+		}
+
+		if err := lookupErrs.Err(); len(ips) == 0 && err != nil {
+			return nil, errors.Wrapf(err, "lookup IP addresses (dual-stack) %q", host)
+		}
+
+		for _, ip := range ips {
+			res = append(res, appendScheme(scheme, net.JoinHostPort(ip.String(), port)))
 		}
 	default:
 		return nil, errors.Errorf("invalid lookup scheme %q", qtype)

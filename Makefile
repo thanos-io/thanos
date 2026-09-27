@@ -65,6 +65,7 @@ ARCH ?= $(shell uname -m)
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
 PROTOC_VERSION    ?= 3.20.1
 GIT               ?= $(shell which git)
+PNPM              ?= pnpm
 
 # Support gsed on OSX (installed via brew), falling back to sed. On Linux
 # systems gsed won't be installed, so will use sed as expected.
@@ -111,8 +112,8 @@ help: ## Displays help.
 .PHONY: all
 all: format build
 
-$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/package-lock.json
-	   cd $(REACT_APP_PATH) && npm ci
+$(REACT_APP_NODE_MODULES_PATH): $(REACT_APP_PATH)/package.json $(REACT_APP_PATH)/pnpm-lock.yaml
+	   cd $(REACT_APP_PATH) && $(PNPM) install --frozen-lockfile
 
 $(REACT_APP_OUTPUT_DIR): $(REACT_APP_NODE_MODULES_PATH) $(REACT_APP_SOURCE_FILES)
 	   @echo ">> building React app"
@@ -128,22 +129,22 @@ check-react-app: react-app
 .PHONY: react-app-lint
 react-app-lint: $(REACT_APP_NODE_MODULES_PATH)
 	   @echo ">> running React app linting"
-	   cd $(REACT_APP_PATH) && npm run lint:ci
+	   cd $(REACT_APP_PATH) && $(PNPM) run lint:ci
 
 .PHONY: react-app-lint-fix
 react-app-lint-fix: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app linting and fixing errors where possible"
-	cd $(REACT_APP_PATH) && npm run lint
+	cd $(REACT_APP_PATH) && $(PNPM) run lint
 
 .PHONY: react-app-test
 react-app-test: | $(REACT_APP_NODE_MODULES_PATH) react-app-lint
 	@echo ">> running React app tests"
-	cd $(REACT_APP_PATH) && export CI=true && npm test --no-watch
+	cd $(REACT_APP_PATH) && export CI=true && $(PNPM) test --no-watch
 
 .PHONY: react-app-start
 react-app-start: $(REACT_APP_NODE_MODULES_PATH)
 	@echo ">> running React app"
-	cd $(REACT_APP_PATH) && npm start
+	cd $(REACT_APP_PATH) && $(PNPM) start
 
 .PHONY: build
 build: ## Builds Thanos binary using `promu`.
@@ -228,7 +229,7 @@ $(TEST_DOCKER_ARCHS): docker-test-%:
 docker-e2e: ## Builds 'thanos' docker for e2e tests
 docker-e2e:
 	@echo ">> building docker image 'thanos' with Dockerfile.e2e-tests"
-	@docker build -f Dockerfile.e2e-tests -t "thanos" .
+	@docker build --build-arg GOFLAGS="$(E2E_GOFLAGS)" -f Dockerfile.e2e-tests -t "thanos" .
 
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
@@ -319,7 +320,7 @@ test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
 	@echo ">> install thanos GOOPTS=${GOOPTS}"
 	@echo ">> running unit tests (without /test/e2e). Do export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS if you want to skip e2e tests against all real store buckets. Current value: ${THANOS_TEST_OBJSTORE_SKIP}"
-	@go test $(SHORT) -tags slicelabels -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e);
+	@go test $(SHORT) $(if $(TEST_GOCOVERDIR),-cover) -tags slicelabels -race -timeout 15m $(shell go list ./... | grep -v /vendor/ | grep -v /test/e2e) $(if $(TEST_GOCOVERDIR),-args -test.gocoverdir=$(TEST_GOCOVERDIR));
 
 .PHONY: test-local
 test-local: ## Runs test excluding tests for ALL  object storage integrations.
@@ -333,13 +334,28 @@ test-local-short: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUN
 test-local-short:
 	$(MAKE) test SHORT="-short"
 
+COVERAGE_DIR ?= $(shell pwd)/.coverage
+
+.PHONY: test-coverage
+test-coverage: ## Runs unit tests as `test`, emitting binary coverage data to $(COVERAGE_DIR)/unit.
+	@mkdir -p $(COVERAGE_DIR)/unit
+	@$(MAKE) test TEST_GOCOVERDIR=$(COVERAGE_DIR)/unit
+
+.PHONY: coverage-report
+coverage-report: ## Merges all binary coverage data under $(COVERAGE_DIR) into $(COVERAGE_DIR)/coverage.txt (Go text profile).
+	@echo ">> merging coverage data from $(COVERAGE_DIR)"
+	@go tool covdata textfmt -i=$$(find $(COVERAGE_DIR) -name 'covmeta.*' -exec dirname {} \; | sort -u | paste -sd, -) -o $(COVERAGE_DIR)/coverage.txt
+	@echo ">> wrote $(COVERAGE_DIR)/coverage.txt"
+
 .PHONY: test-e2e
 test-e2e: ## Runs all Thanos e2e docker-based e2e tests from test/e2e. Required access to docker daemon.
-test-e2e: docker-e2e $(GOTESPLIT)
-	@echo ">> cleaning docker environment."
-	@docker system prune -f --volumes
-	@echo ">> cleaning e2e test garbage."
-	@rm -rf ./test/e2e/e2e_*
+test-e2e: $(if $(SKIP_DOCKER_BUILD),,docker-e2e) $(GOTESPLIT)
+	@if [ -z "$(SKIP_PRUNE)" ]; then \
+		echo ">> cleaning docker environment."; \
+		docker system prune -f --volumes; \
+		echo ">> cleaning e2e test garbage."; \
+		rm -rf ./test/e2e/e2e_*; \
+	fi
 	@echo ">> running /test/e2e tests."
 	# NOTE(bwplotka):
 	# * If you see errors on CI (timeouts), but not locally, try to add -parallel 1 (Wiard note: to the GOTEST_OPTS arg) to limit to single CPU to reproduce small 1CPU machine.
@@ -357,6 +373,12 @@ test-e2e-local: ## Runs all thanos e2e tests locally.
 test-e2e-local: export THANOS_TEST_OBJSTORE_SKIP=GCS,S3,AZURE,SWIFT,COS,ALIYUNOSS,BOS,OCI,OBS
 test-e2e-local:
 	$(MAKE) test-e2e
+
+.PHONY: test-e2e-coverage
+test-e2e-coverage: ## Runs e2e tests with a coverage-instrumented Thanos image, emitting binary coverage data to $(COVERAGE_DIR)/e2e.
+test-e2e-coverage: export THANOS_E2E_GOCOVERDIR=$(COVERAGE_DIR)/e2e
+test-e2e-coverage:
+	$(MAKE) test-e2e E2E_GOFLAGS=-cover
 
 .PHONY: quickstart
 quickstart: ## Installs and runs a quickstart example of thanos.
@@ -429,6 +451,8 @@ io/ioutil.{Discard,NopCloser,ReadAll,ReadDir,ReadFile,TempDir,TempFile,Writefile
 	@go run ./scripts/copyright
 	@echo ">> ensuring generated proto files are up to date"
 	@$(MAKE) proto
+	@echo ">> ensuring unique Docker environment names"
+	@scripts/checknames.sh
 	$(call require_clean_work_tree,'detected files without copyright, run make lint and commit changes')
 
 .PHONY: shell-lint

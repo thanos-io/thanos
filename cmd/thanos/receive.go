@@ -31,8 +31,8 @@ import (
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
 
+	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/compressutil"
@@ -53,6 +53,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	storecache "github.com/thanos-io/thanos/pkg/store/cache"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/tls"
 )
@@ -153,7 +154,7 @@ func runReceive(
 		}
 	}
 
-	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion)
+	rwTLSConfig, err := tls.NewServerConfig(log.With(logger, "protocol", "HTTP"), conf.rwServerCert, conf.rwServerKey, conf.rwServerClientCA, conf.rwServerTlsMinVersion, conf.rwServerTlsCiphers, conf.rwServerTlsCurves)
 	if err != nil {
 		return err
 	}
@@ -162,16 +163,17 @@ func runReceive(
 		logger,
 		reg,
 		tracer,
-		conf.rwClientSecure,
-		conf.rwClientSkipVerify,
-		conf.rwClientCert,
-		conf.rwClientKey,
-		conf.rwClientServerCA,
-		conf.rwClientServerName,
 	)
 	if err != nil {
 		return err
 	}
+
+	tlsDialOpts, err := extgrpc.StoreClientTLSCredentials(logger, conf.rwClientSecure, conf.rwClientSkipVerify, conf.rwClientCert, conf.rwClientKey, conf.rwClientServerCA, conf.rwClientServerName, conf.rwClientTlsMinVersion)
+	if err != nil {
+		return err
+	}
+	dialOpts = append(dialOpts, tlsDialOpts)
+
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
@@ -204,18 +206,26 @@ func runReceive(
 		}
 	}
 
-	// Create TSDB for the default tenant.
-	if err := createDefautTenantTSDB(logger, conf.dataDir, conf.defaultTenantID); err != nil {
-		return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
+	var dataDir *os.Root
+	if enableIngestion {
+		if err := os.MkdirAll(conf.dataDir, 0o755); err != nil {
+			return errors.Wrapf(err, "create data dir in %v", conf.dataDir)
+		}
+
+		dataDir, err = os.OpenRoot(conf.dataDir)
+		if err != nil {
+			return errors.Wrap(err, "open storage dir")
+		}
+
+		// Create TSDB for the default tenant.
+		if err := createDefautTenantTSDB(logger, conf.defaultTenantID, dataDir); err != nil {
+			return errors.Wrapf(err, "create default tenant tsdb in %v", conf.dataDir)
+		}
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabelConfig, err := conf.relabelCfg.RelabelConfig(nil)
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
+		return errors.Wrap(err, "get relabel configuration")
 	}
 
 	var cache = storecache.NoopMatchersCache
@@ -230,7 +240,7 @@ func runReceive(
 	multiTSDBOptions = append(multiTSDBOptions, receive.WithUploadConcurrency(conf.uploadConcurrency))
 
 	dbs := receive.NewMultiTSDB(
-		conf.dataDir,
+		dataDir,
 		logger,
 		reg,
 		tsdbOpts,
@@ -243,7 +253,6 @@ func runReceive(
 		multiTSDBOptions...,
 	)
 	writer := receive.NewWriter(log.With(logger, "component", "receive-writer"), dbs, &receive.WriterOptions{
-		Intern:                   conf.writerInterning,
 		TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 	})
 
@@ -289,6 +298,8 @@ func runReceive(
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
 		OtlpResourceAttributes:  conf.otlpResourceAttributes,
+		RetryAfterBackoff:       time.Duration(*conf.retryAfterBackoff),
+		RetryAfterJitter:        conf.retryAfterJitter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -346,7 +357,7 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up gRPC server")
 	{
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion)
+		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"), conf.grpcConfig.tlsSrvCert, conf.grpcConfig.tlsSrvKey, conf.grpcConfig.tlsSrvClientCA, conf.grpcConfig.tlsMinVersion, conf.grpcConfig.tlsCiphers, conf.grpcConfig.tlsCurves)
 		if err != nil {
 			return errors.Wrap(err, "setup gRPC server")
 		}
@@ -400,18 +411,48 @@ func runReceive(
 		statusSrv := status.NewServer(
 			component.Receive.String(),
 			status.WithTSDBStatisticsGetter(
-				status.TSDBStatisticsGetterFunc(func(limit int, tenantID string) (map[string]tsdb.Stats, error) {
+				status.TSDBStatisticsGetterFunc(func(limit int, matchers []storepb.LabelMatcher) (map[string]tsdb.Stats, error) {
 					if !httpProbe.IsReady() {
 						return nil, errors.New("not ready")
 					}
 
+					promMatchers, err := storepb.MatchersToPromMatchers(matchers...)
+					if err != nil {
+						return nil, errors.Wrap(err, "failed to convert matchers")
+					}
+
+					// Build the list of tenant IDs if the request matches
+					// against exact tenant values only.
 					var tenantIDs []string
-					if tenantID != "" {
-						tenantIDs = append(tenantIDs, tenantID)
+					for _, promMatcher := range promMatchers {
+						if promMatcher.Name != conf.tenantLabelName {
+							continue
+						}
+
+						if promMatcher.Type != labels.MatchEqual {
+							tenantIDs = nil
+							break
+						}
+
+						tenantIDs = append(tenantIDs, promMatcher.Value)
 					}
 
 					stats := map[string]tsdb.Stats{}
+					// Get stats for all tenants and filter based on external labels matching.
 					for _, ts := range dbs.TenantStats(limit, model.MetricNameLabel, tenantIDs...) {
+						extLabels := labels.NewBuilder(lset).Set(conf.tenantLabelName, ts.Tenant).Labels()
+
+						var skip bool
+						for _, matcher := range promMatchers {
+							if !matcher.Matches(extLabels.Get(matcher.Name)) {
+								skip = true
+								break
+							}
+						}
+						if skip {
+							continue
+						}
+
 						stats[ts.Tenant] = *ts.Stats
 					}
 
@@ -517,7 +558,7 @@ func runReceive(
 		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
 			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 		})
-		handler := receive.NewCapNProtoHandler(logger, capNProtoWriter)
+		handler := receive.NewCapNProtoHandler(reg, logger, capNProtoWriter)
 		listener, err := net.Listen("tcp", conf.replicationAddr)
 		if err != nil {
 			return err
@@ -682,8 +723,6 @@ func startTSDBAndUpload(g *run.Group,
 	// TSDBs reload logic, listening on hashring changes.
 	cancel := make(chan struct{})
 	g.Add(func() error {
-		defer close(uploadC)
-
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
 		defer func() {
 			level.Info(logger).Log("msg", "shutting down storage")
@@ -691,6 +730,11 @@ func startTSDBAndUpload(g *run.Group,
 				level.Error(logger).Log("err", err, "msg", "failed to flush storage")
 			} else {
 				level.Info(logger).Log("msg", "storage is flushed successfully")
+			}
+			close(uploadC)
+			// Wait for upload to finish before closing dbs.
+			if upload {
+				<-uploadDone
 			}
 			dbs.Close()
 			level.Info(logger).Log("msg", "storage is closed")
@@ -772,6 +816,8 @@ func startTSDBAndUpload(g *run.Group,
 					runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 				}()
 
+				defer close(uploadDone)
+
 				// Before quitting, ensure all blocks are uploaded.
 				defer func() {
 					<-uploadC // Closed by storage routine when it's done.
@@ -786,8 +832,6 @@ func startTSDBAndUpload(g *run.Group,
 					cancel()
 					level.Info(logger).Log("msg", "the final cut block was uploaded", "uploaded", uploaded)
 				}()
-
-				defer close(uploadDone)
 
 				for {
 					select {
@@ -810,23 +854,16 @@ func startTSDBAndUpload(g *run.Group,
 	return nil
 }
 
-func createDefautTenantTSDB(logger log.Logger, dataDir, defaultTenantID string) error {
-	defaultTenantDataDir := path.Join(dataDir, defaultTenantID)
-
-	if _, err := os.Stat(defaultTenantDataDir); !os.IsNotExist(err) {
+func createDefautTenantTSDB(logger log.Logger, defaultTenantID string, dataDir *os.Root) error {
+	if _, err := dataDir.Stat(defaultTenantID); !os.IsNotExist(err) {
 		level.Info(logger).Log("msg", "default tenant data dir already present, will not create")
-		return nil
-	}
-
-	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
-		level.Info(logger).Log("msg", "no existing storage found, not creating default tenant data dir")
 		return nil
 	}
 
 	level.Info(logger).Log("msg", "default tenant data dir not found, creating", "defaultTenantID", defaultTenantID)
 
-	if err := os.MkdirAll(defaultTenantDataDir, 0750); err != nil {
-		return errors.Wrapf(err, "create default tenant data dir: %v", defaultTenantDataDir)
+	if err := dataDir.MkdirAll(defaultTenantID, 0750); err != nil {
+		return errors.Wrapf(err, "create default tenant data dir: %v", path.Join(dataDir.Name(), defaultTenantID))
 	}
 
 	return nil
@@ -851,6 +888,9 @@ type receiveConfig struct {
 	rwClientServerName    string
 	rwClientSkipVerify    bool
 	rwServerTlsMinVersion string
+	rwClientTlsMinVersion string
+	rwServerTlsCiphers    []string
+	rwServerTlsCurves     []string
 
 	dataDir   string
 	labelStrs []string
@@ -876,6 +916,8 @@ type receiveConfig struct {
 	compression         string
 	replicationProtocol string
 	grpcServiceConfig   string
+	retryAfterBackoff   *model.Duration
+	retryAfterJitter    float64
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -891,7 +933,6 @@ type receiveConfig struct {
 
 	walCompression       bool
 	noLockFile           bool
-	writerInterning      bool
 	splitTenantLabelName string
 
 	hashFunc string
@@ -900,8 +941,8 @@ type receiveConfig struct {
 	skipCorruptedBlocks   bool
 	uploadConcurrency     int
 
-	reqLogConfig      *extflag.PathOrContent
-	relabelConfigPath *extflag.PathOrContent
+	reqLogConfig *extflag.PathOrContent
+	relabelCfg   *relabelCfg
 
 	writeLimitsConfig       *extflag.PathOrContent
 	storeRateLimits         store.SeriesSelectLimits
@@ -921,6 +962,18 @@ type receiveConfig struct {
 	otlpResourceAttributes                   []string
 }
 
+type relabelCfg struct {
+	*extflag.PathOrContent
+}
+
+func (r *relabelCfg) RelabelConfig(supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, error) {
+	relabelContentYaml, err := r.Content()
+	if err != nil {
+		return []*relabel.Config{}, errors.Wrap(err, "get content of relabel configuration")
+	}
+	return block.ParseRelabelConfig(relabelContentYaml, supportedActions)
+}
+
 func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.httpBindAddr, rc.httpGracePeriod, rc.httpTLSConfig = extkingpin.RegisterHTTPFlags(cmd)
 	rc.grpcConfig.registerFlag(cmd)
@@ -935,8 +988,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("remote-write.server-tls-client-ca", "TLS CA to verify clients against. If no client CA is specified, there is no client verification on server side. (tls.NoClientCert)").Default("").StringVar(&rc.rwServerClientCA)
 
-	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the gRPC server, leave blank to default to TLS 1.3, allow values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").StringVar(&rc.rwServerTlsMinVersion)
+	cmd.Flag("remote-write.server-tls-min-version", "TLS version for the HTTP server, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwServerTlsMinVersion, tls.AllowedTLSVersions...)
 
+	cmd.Flag("remote-write.server-tls-ciphers", "TLS cipher suites for the HTTP server (repeatable). If not specified, the default Go cipher suites are used. See https://pkg.go.dev/crypto/tls#pkg-constants for valid values.").StringsVar(&rc.rwServerTlsCiphers)
+
+	cmd.Flag("remote-write.server-tls-curves", "TLS curves for the HTTP server (repeatable). If not specified, the default Go curves are used. Valid values: CurveP256, CurveP384, CurveP521, X25519.").StringsVar(&rc.rwServerTlsCurves)
+
+	// For historical reasons Thanos Receive uses its own `--remote-write.client-tls-` options
+	// flags for gRPC client TLS configuration, separate to the --grpc-client-tls- options in cmd/thanos/config.go.
 	cmd.Flag("remote-write.client-tls-cert", "TLS Certificates to use to identify this client to the server.").Default("").StringVar(&rc.rwClientCert)
 
 	cmd.Flag("remote-write.client-tls-key", "TLS Key for the client's certificate.").Default("").StringVar(&rc.rwClientKey)
@@ -948,6 +1007,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("remote-write.client-tls-ca", "TLS CA Certificates to use to verify servers.").Default("").StringVar(&rc.rwClientServerCA)
 
 	cmd.Flag("remote-write.client-server-name", "Server name to verify the hostname on the returned TLS certificates. See https://tools.ietf.org/html/rfc4366#section-3.1").Default("").StringVar(&rc.rwClientServerName)
+
+	cmd.Flag("remote-write.client-tls-min-version", "TLS version for the gRPC client, leave blank to default to TLS 1.3, Allowed values: [\"1.0\", \"1.1\", \"1.2\", \"1.3\"]").Default("1.3").EnumVar(&rc.rwClientTlsMinVersion, tls.AllowedTLSVersions...)
 
 	cmd.Flag("tsdb.path", "Data directory of TSDB.").
 		Default("./data").StringVar(&rc.dataDir)
@@ -1005,7 +1066,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	rc.maxBackoff = extkingpin.ModelDuration(cmd.Flag("receive-forward-max-backoff", "Maximum backoff for each forward fan-out request").Default("5s").Hidden())
 
-	rc.relabelConfigPath = extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())
+	rc.relabelCfg = &relabelCfg{extflag.RegisterPathOrContent(cmd, "receive.relabel-config", "YAML file that contains relabeling configuration.", extflag.WithEnvSubstitution())}
 
 	rc.tsdbMinBlockDuration = extkingpin.ModelDuration(cmd.Flag("tsdb.min-block-duration", "Min duration for local TSDB blocks").Default("2h").Hidden())
 
@@ -1055,10 +1116,6 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
 		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
 
-	cmd.Flag("writer.intern",
-		"[EXPERIMENTAL] Enables string interning in receive writer, for more optimized memory usage.").
-		Default("false").Hidden().BoolVar(&rc.writerInterning)
-
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")
 
@@ -1091,6 +1148,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
+
+	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive.retry-after-backoff", "Backoff duration for the Retry-After header returned on 429 (active-series-limiting exceeded) and 503 (quorum unavailable) responses.").Default("5s"))
+
+	cmd.Flag("receive.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

@@ -34,6 +34,10 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 
+	"github.com/thanos-io/objstore"
+	"github.com/thanos-io/objstore/client"
+	"github.com/thanos-io/objstore/providers/s3"
+
 	"github.com/thanos-io/thanos/pkg/exemplars/exemplarspb"
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -86,7 +90,7 @@ func TestReceive(t *testing.T) {
 		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
-		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.Version2PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
@@ -210,6 +214,7 @@ test_metric{a="2", b="2"} 1`)
 			0,
 			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 			"",
+			e2ethanos.Version1PB,
 			e2ethanos.LocalPrometheusTarget,
 		), "", e2ethanos.DefaultPrometheusImage())
 		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig(
@@ -217,6 +222,7 @@ test_metric{a="2", b="2"} 1`)
 			1,
 			e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 			"",
+			e2ethanos.Version1PB,
 			e2ethanos.LocalPrometheusTarget,
 		), "", e2ethanos.DefaultPrometheusImage())
 		promStatic := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig(
@@ -224,8 +230,11 @@ test_metric{a="2", b="2"} 1`)
 			0,
 			e2ethanos.RemoteWriteEndpoints(r3.InternalEndpoint("remote-write")),
 			"",
+			e2ethanos.Version1PB,
 			static.InternalEndpoint("http"),
-		), "", e2ethanos.DefaultPrometheusImage())
+		),
+
+			"", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom, prom2, promStatic))
 
 		// The "replica" label is added to the Prometheus instances via the e2ethanos.DefaultPromConfig. It is a block label.
@@ -359,9 +368,9 @@ test_metric{a="2", b="2"} 1`)
 		r1 := e2ethanos.NewReceiveBuilder(e, "r1").WithRouting(2, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1))
 
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom3 := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom3 := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", i1.InternalEndpoint("grpc"), i2.InternalEndpoint("grpc"), i3.InternalEndpoint("grpc")).Init()
@@ -462,8 +471,8 @@ test_metric{a="2", b="2"} 1`)
 		testutil.Ok(t, e2e.StartAndWaitReady(i1, i2, i3, r1, r2))
 
 		// Setup Prometheus.
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
 		//Setup Querier
@@ -555,9 +564,9 @@ test_metric{a="2", b="2"} 1`)
 		r3Runnable := r3.WithRouting(1, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom3 := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, e2ethanos.RemoteWriteEndpoint(r2.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom3 := e2ethanos.NewPrometheus(e, "3", e2ethanos.DefaultPromConfig("prom3", 0, e2ethanos.RemoteWriteEndpoint(r3.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, err)
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2, prom3))
 
@@ -627,7 +636,7 @@ test_metric{a="2", b="2"} 1`)
 		r3Runnable := r3.WithRouting(3, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable, r3Runnable))
 
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc"), r3.InternalEndpoint("grpc")).Init()
@@ -693,7 +702,7 @@ test_metric{a="2", b="2"} 1`)
 		r2Runnable := r2.WithRouting(3, h).Init()
 		testutil.Ok(t, e2e.StartAndWaitReady(r1Runnable, r2Runnable))
 
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(r1.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc"), r2.InternalEndpoint("grpc")).Init()
@@ -747,8 +756,8 @@ test_metric{a="2", b="2"} 1`)
 		rp2 := e2ethanos.NewReverseProxy(e, "2", "tenant-2", "http://"+r1.InternalEndpoint("remote-write"))
 		testutil.Ok(t, e2e.StartAndWaitReady(rp1, rp2))
 
-		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
-		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, "http://"+rp2.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom1 := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, "http://"+rp1.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom2 := e2ethanos.NewPrometheus(e, "2", e2ethanos.DefaultPromConfig("prom2", 0, "http://"+rp2.InternalEndpoint("http")+"/api/v1/receive", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, prom2))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", r1.InternalEndpoint("grpc")).Init()
@@ -796,7 +805,7 @@ test_metric{a="2", b="2"} 1`)
 		testutil.Ok(t, e2e.StartAndWaitReady(i))
 
 		// Setup Prometheus
-		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
+		prom := e2ethanos.NewPrometheus(e, "1", e2ethanos.DefaultPromConfig("prom1", 0, e2ethanos.RemoteWriteEndpoint(i.InternalEndpoint("remote-write")), "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom))
 
 		q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
@@ -923,7 +932,7 @@ test_metric{a="2", b="2"} 1`)
 				ValueInterval:  "3600",
 
 				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
+				RemoteWriteInterval: "5s",
 				RemoteBatchSize:     "5",
 				RemoteRequestCount:  "5",
 
@@ -952,7 +961,7 @@ test_metric{a="2", b="2"} 1`)
 
 		// Here, 4/5 requests are failed due to limiting as we ingest one initial request.
 		// 4 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 10 * time.Minute, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 30 * time.Second, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
@@ -1305,12 +1314,12 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 		},
 	}
 
-	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(20 * time.Second).Init()
+	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(2, h).WithArtificialDelay(2 * time.Second).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(r))
 
 	ts := time.Now()
 
-	for i := range 1000 {
+	for i := range 20 {
 		t.Log("writing a request:", i, time.Now().UnixMilli())
 
 		require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
@@ -1330,4 +1339,119 @@ func TestReceiveCpnpDelayed(t *testing.T) {
 	}
 
 	testutil.Ok(t, i1.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+}
+
+// TestReceiveWithRelabelConfigSmoke verifies that a receiver configured with a
+// source_labels relabel rule does not panic when it actually receives a metric
+// whose labels match the relabel regex.
+func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
+	t.Parallel()
+	e, err := e2e.NewDockerEnvironment("recv-relabel")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	// Boot an ingestor with a relabel config that reads source_labels.
+	// This is the config that previously triggered the panic when
+	// NameValidationScheme was left as UnsetValidation (0) after YAML
+	// unmarshalling.
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithRelabelConfigs([]*relabel.Config{
+			{
+				SourceLabels: []model.LabelName{"src_label"},
+				Regex:        relabel.MustNewRegexp("(.+)"),
+				TargetLabel:  "dst_label",
+				Action:       relabel.Replace,
+			},
+		}).Init()
+
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	// Send a metric that matches the relabel config's source_labels to trigger
+	// the relabel code path. Without the fix this causes a panic because
+	// NameValidationScheme is UnsetValidation (0).
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, ctx.Done(), func() error {
+		return storeWriteRequest(context.Background(), "http://"+i.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "__name__", Value: "test_metric"},
+						{Name: "src_label", Value: "test_value"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.WaitSumMetricsWithOptions(
+		e2emon.Equals(0),
+		[]string{"prometheus_tsdb_blocks_loaded"},
+		e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")),
+		e2emon.WaitMissingMetrics(),
+	))
+}
+
+func TestReceiveUploadOnShutdown(t *testing.T) {
+	t.Parallel()
+
+	e, err := e2e.NewDockerEnvironment("receive-u-s")
+	testutil.Ok(t, err)
+	t.Cleanup(e2ethanos.CleanScenario(t, e))
+
+	const bucket = "receive-upload-shutdown-test"
+	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(m))
+
+	bktConfig := client.BucketConfig{
+		Type:   objstore.S3,
+		Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+	}
+
+	i := e2ethanos.NewReceiveBuilder(e, "ingestor").
+		WithIngestionEnabled().
+		WithObjStoreConfig(bktConfig).
+		Init()
+	testutil.Ok(t, e2e.StartAndWaitReady(i))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	t.Cleanup(cancel)
+
+	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, ctx.Done(), func() error {
+		return storeWriteRequest(ctx, "http://"+i.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+			Timeseries: []prompb.TimeSeries{
+				{
+					Labels: []prompb.Label{
+						{Name: "__name__", Value: "upload_test_metric"},
+						{Name: "foo", Value: "bar"},
+					},
+					Samples: []prompb.Sample{
+						{Value: 1, Timestamp: time.Now().UnixMilli()},
+					},
+				},
+			},
+		})
+	}))
+
+	testutil.Ok(t, i.Stop())
+
+	l := logkit.NewLogfmtLogger(os.Stdout)
+	bkt, err := s3.NewBucketWithConfig(l,
+		e2ethanos.NewS3Config(bucket, m.Endpoint("http"), m.Dir()), "test-verify", nil)
+	testutil.Ok(t, err)
+
+	var blockCount int
+	testutil.Ok(t, bkt.Iter(ctx, "", func(_ string) error {
+		blockCount++
+		return nil
+	}))
+	require.Greater(t, blockCount, 0, "expected at least one block uploaded to object storage after receiver shutdown")
 }

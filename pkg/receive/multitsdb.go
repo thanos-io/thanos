@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
 	"slices"
 	"sort"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid/v2"
+	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -53,7 +53,7 @@ type TSDBStats interface {
 }
 
 type MultiTSDB struct {
-	dataDir         string
+	dataDir         *os.Root
 	logger          log.Logger
 	reg             prometheus.Registerer
 	tsdbOpts        *tsdb.Options
@@ -152,7 +152,7 @@ Invariants:
 - Any object storage operations must not block reading or writing new samples.
 */
 func NewMultiTSDB(
-	dataDir string,
+	dataDir *os.Root,
 	l log.Logger,
 	reg prometheus.Registerer,
 	tsdbOpts *tsdb.Options,
@@ -267,7 +267,7 @@ func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
+	return l.store.ExtLabelSets()
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
@@ -343,7 +343,11 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 	// NOTE(GiedriusS): it could also happen that compaction is failing and it is not producing new blocks.
 	// But if compaction is failing then that probably also means that the storage layer is hosed
 	// and if that is the case then we cannot do anything about it anyway.
-	head := t.tsdb.Head()
+	db := t.readyS.Get()
+	if db == nil {
+		return false
+	}
+	head := db.Head()
 	if head.MaxTime() < 0 {
 		return false
 	}
@@ -403,14 +407,24 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 
 const compactionDelayPercentBlockLength = 10
 
+// lostFoundDir is the directory name that ext4 (and some other filesystems)
+// create automatically at the root of every partition. When a receiver's
+// --tsdb.path points directly at a mount point, the directory scan in Open()
+// and RemoveLockFilesIfAny() would otherwise treat it as a tenant name and
+// attempt to open or clean a TSDB for it, producing spurious errors on
+// startup. A name-based skip is the simplest cross-platform fix; checking the
+// inode or filesystem type would require platform-specific syscalls and adds
+// complexity without meaningful safety benefit, since a tenant legitimately
+// named "lost+found" is not a realistic concern.
+const lostFoundDir = "lost+found"
+
 // generateCompactionDelay() generates a time.Duration of up to compactionDelayPercentBlockLength% of the block range. Used to stagger compactions & uploads.
 func (t *tenant) generateCompactionDelay() time.Duration {
 	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
 }
 
 func (t *tenant) startPeriodicHeadCompaction() {
-	// NOTE(GiedriusS): from the old cmd/thanos/receive.go.
-	var interval = 2 * time.Duration(t.maxBlockDuration) * time.Millisecond
+	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
 	doIter := func() error {
 		db := t.readyS.Get()
@@ -421,17 +435,38 @@ func (t *tenant) startPeriodicHeadCompaction() {
 		if head.MinTime() < 0 {
 			return nil
 		}
-		sinceOldestDataMillis := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
 
-		// NOTE(GiedriusS): this is what Prometheus does. 0.5 is an extra appending window.
+		// Wall-clock time determines whether the head is old enough to compact,
+		// ensuring tenants that stopped receiving samples still get flushed.
+		// The head's data span (MaxTime - MinTime) determines how many blocks
+		// to produce, compacting until the span drops below the threshold.
 		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
-		if sinceOldestDataMillis > compactionThreshold {
+		sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
+		if sinceOldestSampleMs <= compactionThreshold {
+			return nil
+		}
+
+		for {
+			select {
+			case <-t.doneC:
+				return nil
+			default:
+			}
+
 			if err := t.compactHead(db); err != nil {
 				return fmt.Errorf("compact head: %w", err)
 			}
 			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
+
+			head = db.Head()
+			if head.MaxTime()-head.MinTime() <= compactionThreshold {
+				break
+			}
 		}
 
+		if err := db.CompactOOOHead(context.Background()); err != nil {
+			return fmt.Errorf("compact ooo head: %w", err)
+		}
 		return nil
 	}
 
@@ -468,10 +503,8 @@ func (t *tenant) startPeriodicUploader() {
 		panic("BUG: periodic uploader started but shipper is nil")
 	}
 
-	var interval = 30 * time.Second
-
 	doIter := func() error {
-		syncCtx, cancel := context.WithTimeout(context.Background(), interval)
+		syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		if _, err := s.Sync(syncCtx); err != nil {
 			return fmt.Errorf("sync: %w", err)
@@ -481,7 +514,7 @@ func (t *tenant) startPeriodicUploader() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
 		if err := doIter(); err != nil {
@@ -545,6 +578,10 @@ func (t *tenant) close(cd closeDelete) {
 	t.closeOnce.Do(func() {
 		close(t.doneC)
 
+		if t.reg != nil {
+			t.reg.UnregisterAll()
+		}
+
 		// NOTE(GiedriusS): on paper, we could Close() again but the TSDB's Close() function is not idempotent.
 		// If storage starts erroring out then we are hosed anyway, so just log an error.
 		if err := t.tsdb.Close(); err != nil {
@@ -554,6 +591,12 @@ func (t *tenant) close(cd closeDelete) {
 		if cd == DELETE_DATA {
 			if err := os.RemoveAll(t.tsdb.Dir()); err != nil {
 				level.Error(t.logger).Log("msg", "failed removing tenant's TSDB directory", "tenant", t.tenantName, "err", err)
+			}
+		}
+
+		if t.ship != nil {
+			if err := t.ship.Close(); err != nil {
+				level.Error(t.logger).Log("msg", "failed closing tenant's shipper", "tenant", t.tenantName, "err", err)
 			}
 		}
 
@@ -601,9 +644,6 @@ func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper
 	if storeTSDB == nil && t.storeTSDB != nil {
 		t.storeTSDB.Close()
 	}
-	if reg == nil && t.reg != nil {
-		t.reg.UnregisterAll()
-	}
 	t.storeTSDB = storeTSDB
 	t.reg = reg
 	t.ship = ship
@@ -612,11 +652,13 @@ func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper
 }
 
 func (t *MultiTSDB) Open() error {
-	if err := os.MkdirAll(t.dataDir, 0750); err != nil {
+	dir, err := t.dataDir.Open(".")
+	if err != nil {
 		return err
 	}
+	defer dir.Close()
 
-	files, err := os.ReadDir(t.dataDir)
+	files, err := dir.ReadDir(-1)
 	if err != nil {
 		return err
 	}
@@ -624,6 +666,9 @@ func (t *MultiTSDB) Open() error {
 	var g errgroup.Group
 	for _, f := range files {
 		if !f.IsDir() {
+			continue
+		}
+		if f.Name() == lostFoundDir {
 			continue
 		}
 
@@ -692,6 +737,7 @@ func (t *MultiTSDB) Close() {
 	for _, tenant := range t.tenants {
 		tenant.close(KEEP_DATA)
 	}
+	runutil.CloseWithLogOnErr(t.logger, t.dataDir, "mtsdb data dir")
 }
 
 func (t *MultiTSDB) maybeDeleteTenant(tenant *tenant) {
@@ -797,7 +843,13 @@ func (t *MultiTSDB) SyncAllTenants(ctx context.Context) (int, error) {
 }
 
 func (t *MultiTSDB) RemoveLockFilesIfAny() error {
-	fis, err := os.ReadDir(t.dataDir)
+	dir, err := t.dataDir.Open(".")
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+
+	fis, err := dir.ReadDir(-1)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -810,7 +862,10 @@ func (t *MultiTSDB) RemoveLockFilesIfAny() error {
 		if !fi.IsDir() {
 			continue
 		}
-		if err := os.Remove(filepath.Join(t.defaultTenantDataDir(fi.Name()), "lock")); err != nil {
+		if fi.Name() == lostFoundDir {
+			continue
+		}
+		if err := t.dataDir.Remove(path.Join(fi.Name(), "lock")); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
@@ -883,11 +938,13 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	reg = NewUnRegisterer(reg)
+	unreg := NewUnRegisterer(reg)
+	reg = unreg
 
 	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	lset := t.extractTenantsLabels(tenantID, initialLset)
-	dataDir := t.defaultTenantDataDir(tenantID)
+
+	dataDir := path.Join(t.dataDir.Name(), tenantID)
 
 	level.Info(logger).Log("msg", "opening TSDB")
 
@@ -942,6 +999,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	// We don't do scrapes ourselves so this only gives us a performance penalty.
 	opts.IsolationDisabled = true
 
+	// TODO(guidonguido): open creates a new Dir with no check on the path
 	s, err := tsdb.Open(
 		dataDir,
 		logutil.GoKitLogToSlog(logger),
@@ -950,6 +1008,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		nil,
 	)
 	if err != nil {
+		unreg.UnregisterAll()
 		t.removeTenantLocked(tenantID)
 		return err
 	}
@@ -961,9 +1020,17 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 
 	var ship *shipper.Shipper
 	if t.bucket != nil {
+		// shipDataDir must be closed together with tenant
+		shipDataDir, err := os.OpenRoot(dataDir)
+		if err != nil {
+			s.Close()
+			unreg.UnregisterAll()
+			t.removeTenantLocked(tenantID)
+			return err
+		}
 		ship = shipper.New(
 			t.bucket,
-			dataDir,
+			shipDataDir,
 			shipper.WithLogger(logger),
 			shipper.WithRegisterer(reg),
 			shipper.WithSource(metadata.ReceiveSource),
@@ -986,10 +1053,6 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
 	level.Info(logger).Log("msg", "TSDB is now ready")
 	return nil
-}
-
-func (t *MultiTSDB) defaultTenantDataDir(tenantID string) string {
-	return path.Join(t.dataDir, tenantID)
 }
 
 func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
@@ -1214,7 +1277,6 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
-	u.collectors = append(u.collectors, cs...)
 }
 
 // extractTenantsLabels extracts tenant's external labels from hashring configs.

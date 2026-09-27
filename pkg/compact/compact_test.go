@@ -749,6 +749,54 @@ func TestGarbageCollect_FilterRace(t *testing.T) {
 	}
 }
 
+func TestBlocksCleanerCancellationWhileEnqueuing(t *testing.T) {
+	bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+	deletionMarkFilter := block.NewIgnoreDeletionMarkFilter(log.NewNopLogger(), bkt, 0, 1)
+	deletionMarkCount := 2*deleteMarkedBlocksConcurrency + 1
+	metas := make(map[ulid.ULID]*metadata.Meta, deletionMarkCount)
+
+	for i := range deletionMarkCount {
+		id := ulid.MustNew(uint64(i+1), bytes.NewReader(make([]byte, 10)))
+		metas[id] = &metadata.Meta{}
+
+		var buf bytes.Buffer
+		testutil.Ok(t, json.NewEncoder(&buf).Encode(&metadata.DeletionMark{
+			ID:           id,
+			DeletionTime: 0,
+			Version:      1,
+		}))
+		testutil.Ok(t, bkt.Upload(context.Background(), path.Join(id.String(), metadata.DeletionMarkFilename), &buf))
+	}
+
+	synced := promauto.With(nil).NewGaugeVec(prometheus.GaugeOpts{Name: "test_blocks_cleaner_synced"}, []string{"state"})
+	testutil.Ok(t, deletionMarkFilter.Filter(context.Background(), metas, synced, nil))
+
+	cleaner := NewBlocksCleaner(
+		log.NewNopLogger(),
+		bkt,
+		deletionMarkFilter,
+		0,
+		promauto.With(nil).NewCounter(prometheus.CounterOpts{Name: "test_blocks_cleaner_cleaned"}),
+		promauto.With(nil).NewCounter(prometheus.CounterOpts{Name: "test_blocks_cleaner_failures"}),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := cleaner.DeleteMarkedBlocks(ctx)
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		testutil.NotOk(t, err)
+		testutil.Assert(t, errors.Is(err, context.Canceled), "expected context cancellation, got %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("DeleteMarkedBlocks blocked after cancellation")
+	}
+}
+
 func TestCompactExtensions(t *testing.T) {
 	t.Parallel()
 

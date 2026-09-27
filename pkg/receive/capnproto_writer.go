@@ -40,10 +40,10 @@ func NewCapNProtoWriter(logger log.Logger, multiTSDB TenantStorage, opts *CapNPr
 	}
 }
 
-func (r *CapNProtoWriter) Write(ctx context.Context, tenantID string, wreq *writecapnp.Request) error {
-	tLogger := log.With(r.logger, "tenant", tenantID)
+func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) error {
+	tLogger := log.With(r.logger, "tenant", wreq.Tenant)
 
-	s, err := r.multiTSDB.TenantAppendable(tenantID)
+	s, err := r.multiTSDB.TenantAppendable(wreq.Tenant)
 	if err != nil {
 		return errors.Wrap(err, "get tenant appendable")
 	}

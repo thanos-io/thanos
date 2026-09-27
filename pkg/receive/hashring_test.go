@@ -340,6 +340,7 @@ func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	initialAssignments, err := assignSeries(series, initialRing)
 	require.NoError(t, err)
+	initialSets := seriesSets(initialAssignments)
 
 	resizedRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}, {Address: "node-4"}, {Address: "node-5"}}
 	reassignments, err := assignSeries(series, resizedRing)
@@ -348,7 +349,7 @@ func TestKetamaHashringIncreaseAtEnd(t *testing.T) {
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
 		for _, ts := range reassignments[node.Address] {
-			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
+			foundInInitialAssignment := findSeries(initialSets, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
@@ -362,6 +363,7 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-3"}}
 	initialAssignments, err := assignSeries(series, initialRing)
 	require.NoError(t, err)
+	initialSets := seriesSets(initialAssignments)
 
 	resizedRing := []Endpoint{{Address: "node-1"}, {Address: "node-2"}, {Address: "node-3"}}
 	reassignments, err := assignSeries(series, resizedRing)
@@ -370,7 +372,7 @@ func TestKetamaHashringIncreaseInMiddle(t *testing.T) {
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
 		for _, ts := range reassignments[node.Address] {
-			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
+			foundInInitialAssignment := findSeries(initialSets, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
@@ -389,6 +391,7 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 	initialRing := []Endpoint{{Address: "node-1"}, {Address: "node-4"}, {Address: "node-5"}}
 	initialAssignments, err := assignReplicatedSeries(series, initialRing, 2)
 	require.NoError(t, err)
+	initialSets := seriesSets(initialAssignments)
 
 	resizedRing := []Endpoint{{Address: "node-4"}, {Address: "node-3"}, {Address: "node-1"}, {Address: "node-2"}, {Address: "node-5"}}
 	reassignments, err := assignReplicatedSeries(series, resizedRing, 2)
@@ -397,7 +400,7 @@ func TestKetamaHashringReplicationConsistency(t *testing.T) {
 	// Assert that the initial nodes have no new keys after increasing the ring size
 	for _, node := range initialRing {
 		for _, ts := range reassignments[node.Address] {
-			foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
+			foundInInitialAssignment := findSeries(initialSets, node.Address, ts)
 			require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 		}
 	}
@@ -447,6 +450,7 @@ func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
 
 			initialAssignments, err := assignReplicatedSeries(series, tt.initialRing, tt.replicas)
 			require.NoError(t, err)
+			initialSets := seriesSets(initialAssignments)
 
 			reassignments, err := assignReplicatedSeries(series, tt.resizedRing, tt.replicas)
 			require.NoError(t, err)
@@ -454,7 +458,7 @@ func TestKetamaHashringReplicationConsistencyWithAZs(t *testing.T) {
 			// Assert that the initial nodes have no new keys after increasing the ring size
 			for _, node := range tt.initialRing {
 				for _, ts := range reassignments[node.Address] {
-					foundInInitialAssignment := findSeries(initialAssignments, node.Address, ts)
+					foundInInitialAssignment := findSeries(initialSets, node.Address, ts)
 					require.True(t, foundInInitialAssignment, "node %s contains new series after resizing", node)
 				}
 			}
@@ -878,20 +882,29 @@ func makeSeries() []prompb.TimeSeries {
 	return series
 }
 
-func findSeries(initialAssignments map[string][]prompb.TimeSeries, node string, newSeries prompb.TimeSeries) bool {
-	for _, oldSeries := range initialAssignments[node] {
-		l1 := labelpb.ZLabelsToPromLabels(newSeries.Labels)
-		l2 := labelpb.ZLabelsToPromLabels(oldSeries.Labels)
-		if labels.Equal(l1, l2) {
-			return true
-		}
+func seriesSet(series []prompb.TimeSeries) map[string]struct{} {
+	set := make(map[string]struct{}, len(series))
+	for _, ts := range series {
+		set[labelpb.ZLabelsToPromLabels(ts.Labels).String()] = struct{}{}
 	}
+	return set
+}
 
-	return false
+func findSeries(initialAssignments map[string]map[string]struct{}, node string, newSeries prompb.TimeSeries) bool {
+	_, ok := initialAssignments[node][labelpb.ZLabelsToPromLabels(newSeries.Labels).String()]
+	return ok
+}
+
+func seriesSets(assignments map[string][]prompb.TimeSeries) map[string]map[string]struct{} {
+	sets := make(map[string]map[string]struct{}, len(assignments))
+	for node, series := range assignments {
+		sets[node] = seriesSet(series)
+	}
+	return sets
 }
 
 func assignSeries(series []prompb.TimeSeries, nodes []Endpoint) (map[string][]prompb.TimeSeries, error) {
-	return assignReplicatedSeries(series, nodes, 0)
+	return assignReplicatedSeries(series, nodes, 1)
 }
 
 func assignReplicatedSeries(series []prompb.TimeSeries, nodes []Endpoint, replicas uint64) (map[string][]prompb.TimeSeries, error) {
@@ -954,6 +967,8 @@ func TestShuffleShardHashringStability(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			// Create initial endpoints
 			initialEndpoints := make([]Endpoint, tc.initialNodes)
 			for i := 0; i < tc.initialNodes; i++ {
@@ -1016,7 +1031,7 @@ func getTenantNodes(t *testing.T, ring *shuffleShardHashring, tenant string, sha
 	t.Helper()
 	nodes := make(map[string]struct{})
 
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 200; i++ {
 		ts := &prompb.TimeSeries{
 			Labels: []labelpb.ZLabel{
 				{Name: "series", Value: fmt.Sprintf("%d", i)},

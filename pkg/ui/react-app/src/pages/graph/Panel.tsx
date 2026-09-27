@@ -19,6 +19,7 @@ import Select from 'react-select';
 import moment from 'moment-timezone';
 import Checkbox from '../../components/Checkbox';
 import ListTree, { QueryTree } from '../../components/ListTree';
+import FanoutTable from '../../components/FanoutTable';
 import { ExplainTree } from './ExpressionInput';
 import ExpressionInput from './ExpressionInput';
 import GraphControls from './GraphControls';
@@ -104,6 +105,47 @@ export const PanelDefaultOptions: PanelOptions = {
   analyze: false,
   disableAnalyzeCheckbox: false,
   tenant: '',
+};
+
+const queryFrontendCacheCommonSteps = [
+  12 * 60 * 60,
+  6 * 60 * 60,
+  3 * 60 * 60,
+  2 * 60 * 60,
+  60 * 60,
+  30 * 60,
+  15 * 60,
+  10 * 60,
+  5 * 60,
+  2 * 60,
+  60,
+  30,
+  20,
+  15,
+  10,
+  5,
+  1,
+] as const;
+
+export const getQueryResolution = (options: Pick<PanelOptions, 'range' | 'resolution'>, defaultStep: string): number => {
+  if (options.resolution !== null) {
+    return options.resolution;
+  }
+
+  const parsedDefaultStep = parseDuration(defaultStep);
+  const defaultStepSeconds = parsedDefaultStep !== null ? parsedDefaultStep / 1000 : 0;
+  const resolution = Math.max(Math.floor(options.range / 250000), defaultStepSeconds);
+  return roundUpToCommonQueryStep(resolution);
+};
+
+const roundUpToCommonQueryStep = (resolution: number): number => {
+  for (let i = queryFrontendCacheCommonSteps.length - 1; i >= 0; i--) {
+    const step = queryFrontendCacheCommonSteps[i];
+    if (step >= resolution) {
+      return step;
+    }
+  }
+  return queryFrontendCacheCommonSteps[0];
 };
 
 class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
@@ -206,9 +248,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
     const endTime = this.getEndTime().valueOf() / 1000; // TODO: shouldn't valueof only work when it's a moment?
     const startTime = endTime - this.props.options.range / 1000;
-    const resolution =
-      this.props.options.resolution ||
-      Math.max(Math.floor(this.props.options.range / 250000), (parseDuration(this.props.defaultStep) || 0) / 1000);
+    const resolution = getQueryResolution(this.props.options, this.props.defaultStep);
     const params: URLSearchParams = new URLSearchParams({
       query: expr,
       dedup: this.props.options.useDeduplication.toString(),
@@ -433,9 +473,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
     //We need to pass the same parameters as query endpoints, to the explain endpoints.
     const endTime = this.getEndTime().valueOf() / 1000;
     const startTime = endTime - this.props.options.range / 1000;
-    const resolution =
-      this.props.options.resolution ||
-      Math.max(Math.floor(this.props.options.range / 250000), (parseDuration(this.props.defaultStep) || 0) / 1000);
+    const resolution = getQueryResolution(this.props.options, this.props.defaultStep);
     const abortController = new AbortController();
     const params: URLSearchParams = new URLSearchParams({
       query: this.state.exprInputValue,
@@ -647,9 +685,15 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         </Row>
         <Row hidden={!(options.analyze && this.state.analysis)}>
           <Col>
+            <h5>Engine telemetry</h5>
             <Alert color="info" style={{ overflowX: 'auto', whiteSpace: 'nowrap', width: '100%' }}>
               <ListTree id={`analyze-tree-${id}`} node={this.state.analysis} />
             </Alert>
+          </Col>
+        </Row>
+        <Row hidden={!(options.analyze && this.state.analysis)}>
+          <Col>
+            <FanoutTable node={this.state.analysis} />
           </Col>
         </Row>
         <Row hidden={!(this.props.options.engine === 'thanos' && this.state.explainOutput)}>

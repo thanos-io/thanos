@@ -20,6 +20,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/errutil"
 )
 
+const deleteMarkedBlocksConcurrency = 32
+
 // BlocksCleaner is a struct that deletes blocks from bucket which are marked for deletion.
 type BlocksCleaner struct {
 	logger                   log.Logger
@@ -45,8 +47,6 @@ func NewBlocksCleaner(logger log.Logger, bkt objstore.Bucket, ignoreDeletionMark
 // DeleteMarkedBlocks uses ignoreDeletionMarkFilter to gather the blocks that are marked for deletion and deletes those
 // if older than given deleteDelay.
 func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]struct{}, error) {
-	const conc = 32
-
 	level.Info(s.logger).Log("msg", "started cleaning of blocks marked for deletion")
 
 	var (
@@ -55,10 +55,10 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]s
 		deletedBlocks    = make(map[ulid.ULID]struct{}, 0)
 		deletionMarkMap  = s.ignoreDeletionMarkFilter.DeletionMarkBlocks()
 		wg               sync.WaitGroup
-		dm               = make(chan *metadata.DeletionMark, conc)
+		dm               = make(chan *metadata.DeletionMark, deleteMarkedBlocksConcurrency)
 	)
 
-	for range conc {
+	for range deleteMarkedBlocksConcurrency {
 		wg.Go(func() {
 			for deletionMark := range dm {
 				if ctx.Err() != nil {
@@ -82,8 +82,13 @@ func (s *BlocksCleaner) DeleteMarkedBlocks(ctx context.Context) (map[ulid.ULID]s
 		})
 	}
 
+enqueue:
 	for _, deletionMark := range deletionMarkMap {
-		dm <- deletionMark
+		select {
+		case dm <- deletionMark:
+		case <-ctx.Done():
+			break enqueue
+		}
 	}
 	close(dm)
 	wg.Wait()

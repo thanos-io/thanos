@@ -28,7 +28,7 @@ func (f *CuckooMetricNameStoreFilter) Matches(matchers []*labels.Matcher) bool {
 
 	for _, m := range matchers {
 		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
-			return f.filter.Lookup([]byte(m.Value))
+			return f.filter.Lookup(unsafe.Slice(unsafe.StringData(m.Value), len(m.Value)))
 		}
 	}
 

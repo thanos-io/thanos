@@ -202,7 +202,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 	}
 
 	rtConfig := config_util.TLSRoundTripperSettings{
-		Cert: config_util.NewFileSecret(cfg.TLSConfig.CAFile),
+		CA: config_util.NewFileSecret(cfg.TLSConfig.CAFile),
 	}
 	if len(cfg.TLSConfig.CertFile) > 0 {
 		rtConfig.Cert = config_util.NewFileSecret(cfg.TLSConfig.CertFile)

@@ -3,7 +3,7 @@
 | Name                  | Email                     | CNCF Slack               | GitHub                                             | Company             |
 |-----------------------|---------------------------|--------------------------|----------------------------------------------------|---------------------|
 | Bartłomiej Płotka     | bwplotka@gmail.com        | `@bwplotka`              | [@bwplotka](https://github.com/bwplotka)           | Google              |
-| Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Polar Signals       |
+| Frederic Branczyk     | fbranczyk@gmail.com       | `@brancz`                | [@brancz](https://github.com/brancz)               | Dash0               |
 | Giedrius Statkevičius | giedriuswork@gmail.com    | `@Giedrius Statkevičius` | [@GiedriusS](https://github.com/GiedriusS)         | Vinted              |
 | Lucas Servén Marín    | lserven@gmail.com         | `@squat`                 | [@squat](https://github.com/squat)                 | Red Hat             |
 | Prem Saraswat         | prmsrswt@gmail.com        | `@Prem Saraswat`         | [@onprem](https://github.com/onprem)               | Red Hat             |

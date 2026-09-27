@@ -20,6 +20,8 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 )
 
+const tenantLabel = "tenant"
+
 // headSeriesLimit implements headSeriesLimiter interface.
 type headSeriesLimit struct {
 	mtx                    sync.RWMutex
@@ -47,13 +49,13 @@ func NewHeadSeriesLimit(w WriteLimitsConfig, registerer prometheus.Registerer, l
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_head_series_limit",
 				Help: "The configured limit for active (head) series of tenants.",
-			}, []string{"tenant"},
+			}, []string{tenantLabel},
 		),
 		limitedRequests: promauto.With(registerer).NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_head_series_limited_requests_total",
 				Help: "The total number of remote write requests that have been dropped due to active series limiting.",
-			}, []string{"tenant"},
+			}, []string{tenantLabel},
 		),
 		metaMonitoringErr: promauto.With(registerer).NewCounter(
 			prometheus.CounterOpts{
@@ -120,9 +122,9 @@ func (h *headSeriesLimit) QueryMetaMonitoring(ctx context.Context) error {
 	// Construct map of tenant name and current head series.
 	for _, e := range vectorRes {
 		for k, v := range e.Metric {
-			if k == "tenant" {
+			if k == tenantLabel {
 				h.tenantCurrentSeriesMap[string(v)] = float64(e.Value)
-				level.Debug(h.logger).Log("msg", "tenant value queried", "tenant", string(v), "value", e.Value)
+				level.Debug(h.logger).Log("msg", "tenant value queried", tenantLabel, string(v), "value", e.Value)
 			}
 		}
 	}
@@ -162,7 +164,7 @@ func (h *headSeriesLimit) isUnderLimit(tenant string) (bool, error) {
 	}
 
 	if v >= float64(limit) {
-		level.Error(h.logger).Log("msg", "tenant above limit", "tenant", tenant, "currentSeries", v, "limit", limit)
+		level.Error(h.logger).Log("msg", "tenant above limit", tenantLabel, tenant, "currentSeries", v, "limit", limit)
 		h.limitedRequests.WithLabelValues(tenant).Inc()
 		return false, nil
 	}

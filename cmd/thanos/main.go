@@ -25,7 +25,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	versioncollector "github.com/prometheus/client_golang/prometheus/collectors/version"
 	"github.com/prometheus/common/version"
-	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -76,19 +75,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Running in container with limits but with empty/wrong value of GOMAXPROCS env var could lead to throttling by cpu
-	// maxprocs will automate adjustment by using cgroups info about cpu limit if it set as value for runtime.GOMAXPROCS.
-	undo, err := maxprocs.Set(maxprocs.Logger(func(template string, args ...any) {
-		level.Debug(logger).Log("msg", fmt.Sprintf(template, args...))
-	}))
-	defer undo()
-
 	if goMemLimitConf.enableAutoGoMemlimit {
 		level.Debug(logger).Log("msg", fmt.Sprintf("GOMEMLIMIT set to %d bytes configured with ratio equals to %.0f%% of detected memory", limits, goMemLimitConf.memlimitRatio*100))
-	}
-
-	if err != nil {
-		level.Warn(logger).Log("warn", errors.Wrapf(err, "failed to set GOMAXPROCS: %v", err))
 	}
 
 	metrics := prometheus.NewRegistry()

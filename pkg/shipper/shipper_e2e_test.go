@@ -62,7 +62,7 @@ func TestShipper_SyncBlocks_e2e(t *testing.T) {
 		extLset := labels.FromStrings("prometheus", "prom-1")
 		shipper := New(
 			metricsBucket,
-			dir,
+			openTestRoot(t, dir),
 			WithLogger(log.NewLogfmtLogger(os.Stderr)),
 			WithSource(metadata.TestSource),
 			WithHashFunc(metadata.NoneFunc),
@@ -233,7 +233,7 @@ func TestShipper_SyncBlocksWithMigrating_e2e(t *testing.T) {
 
 		shipper := New(
 			bkt,
-			dir,
+			openTestRoot(t, dir),
 			WithLogger(log.NewLogfmtLogger(os.Stderr)),
 			WithSource(metadata.TestSource),
 			WithHashFunc(metadata.NoneFunc),
@@ -386,7 +386,7 @@ func TestShipper_SyncOverlapBlocks_e2e(t *testing.T) {
 	// Here, the allowOutOfOrderUploads flag is set to true, which allows blocks with overlaps to be uploaded.
 	shipper := New(
 		bkt,
-		dir,
+		openTestRoot(t, dir),
 		WithLogger(log.NewLogfmtLogger(os.Stderr)),
 		WithSource(metadata.TestSource),
 		WithHashFunc(metadata.NoneFunc),
