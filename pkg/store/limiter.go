@@ -167,15 +167,26 @@ func newLimitedServer(upstream storepb.Store_SeriesServer, seriesLimiter SeriesL
 }
 
 func (i *limitedServer) Send(response *storepb.SeriesResponse) error {
-	series := response.GetSeries()
-	if series == nil {
+	var seriesCount, chunksCount uint64
+	if series := response.GetSeries(); series != nil {
+		seriesCount = 1
+		chunksCount = uint64(len(series.Chunks))
+	} else if batch := response.GetBatch(); batch != nil {
+		for _, series := range batch.Series {
+			if series == nil {
+				continue
+			}
+			seriesCount++
+			chunksCount += uint64(len(series.Chunks))
+		}
+	} else {
 		return i.Store_SeriesServer.Send(response)
 	}
 
-	if err := i.seriesLimiter.Reserve(1); err != nil {
+	if err := i.seriesLimiter.Reserve(seriesCount); err != nil {
 		return errors.Wrapf(err, "failed to send series")
 	}
-	if err := i.samplesLimiter.Reserve(uint64(len(series.Chunks) * MaxSamplesPerChunk)); err != nil {
+	if err := i.samplesLimiter.Reserve(chunksCount * MaxSamplesPerChunk); err != nil {
 		return errors.Wrapf(err, "failed to send samples")
 	}
 

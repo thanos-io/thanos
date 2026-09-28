@@ -975,5 +975,12 @@ func (c *Client) TSDBStatusInGRPC(ctx context.Context, base *url.URL, limit int,
 	var v struct {
 		Data *statuspb.TSDBStatisticsEntry `json:"data"`
 	}
-	return v.Data, c.get2xxResultWithGRPCErrors(ctx, "/prom_status_tsdb HTTP[client]", &u, &v)
+	if err := c.get2xxResultWithGRPCErrors(ctx, "/prom_status_tsdb HTTP[client]", &u, &v); err != nil {
+		return nil, err
+	}
+
+	if v.Data == nil {
+		return nil, errors.New("empty data field in TSDB status response")
+	}
+	return v.Data, nil
 }

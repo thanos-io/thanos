@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colega/zeropool"
+
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/gogo/protobuf/proto"
@@ -36,6 +38,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/atomic"
@@ -43,6 +46,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/thanos-io/thanos/internal/cortex/util"
 	"github.com/thanos-io/thanos/pkg/api"
 	statusapi "github.com/thanos-io/thanos/pkg/api/status"
 	"github.com/thanos-io/thanos/pkg/logging"
@@ -125,6 +129,8 @@ type Options struct {
 	ReplicationProtocol     ReplicationProtocol
 	OtlpEnableTargetInfo    bool
 	OtlpResourceAttributes  []string
+	RetryAfterBackoff       time.Duration
+	RetryAfterJitter        float64
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -152,6 +158,24 @@ type Handler struct {
 	pendingWriteRequestsCounter atomic.Int32
 
 	Limiter *Limiter
+
+	seriesIDsPool     zeropool.Pool[[]int]
+	timeSeriesPool    zeropool.Pool[[]prompb.TimeSeries]
+	distributeMapPool zeropool.Pool[map[endpointReplica]map[string]trackedSeries]
+	trackedSeries     zeropool.Pool[map[string]trackedSeries]
+	intScratchPool    zeropool.Pool[[]int]
+}
+
+// getIntScratch returns a zeroed []int of length n from intScratchPool.
+// clear is required: reslicing a pooled slice back up exposes stale values.
+func (h *Handler) getIntScratch(n int) []int {
+	s := h.intScratchPool.Get()
+	if cap(s) < n {
+		return make([]int, n)
+	}
+	s = s[:n]
+	clear(s)
+	return s
 }
 
 func NewHandler(logger log.Logger, o *Options) *Handler {
@@ -511,6 +535,243 @@ func newWriteResponse(seriesIDs []int, err error, er endpointReplica) writeRespo
 	}
 }
 
+// retryAfterDuration returns the backoff duration for the Retry-After header,
+// applying jitter when configured. A jitter of 0 returns the plain backoff.
+func (h *Handler) retryAfterDuration() time.Duration {
+	if h.options.RetryAfterJitter <= 0 {
+		return h.options.RetryAfterBackoff
+	}
+	return util.DurationWithJitter(h.options.RetryAfterBackoff, h.options.RetryAfterJitter)
+}
+
+func determineRWVersion(r *http.Request) (int, error) {
+	if r.Header.Get("X-Prometheus-Remote-Write-Version") != "2.0.0" {
+		return 1, nil
+	}
+	ct := r.Header.Get("Content-Type")
+	if ct == "" {
+		return 0, fmt.Errorf("missing Content-Type header")
+	}
+	if ct == "application/x-protobuf;proto=io.prometheus.write.v2.Request" {
+		return 2, nil
+	}
+	if ct == "application/x-protobuf" {
+		return 1, nil
+	}
+	if ct == "application/x-protobuf;proto=prometheus.WriteRequest" {
+		return 1, nil
+	}
+	return 0, fmt.Errorf("required headers Content-Type and/or X-Prometheus-Remote-Write-Version not found")
+}
+
+func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
+	// TODO(GiedriusS): somehow ensure programmatically that all fields are set and we don't miss anything.
+	out := &prompb.WriteRequest{
+		Timeseries: make([]prompb.TimeSeries, 0, len(w.Timeseries)),
+	}
+
+	for _, t := range w.Timeseries {
+		v1Ts := prompb.TimeSeries{}
+
+		v1Ts.Labels = make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2)
+		for i := 0; i+1 < len(t.LabelsRefs); i += 2 {
+			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
+				Name:  w.Symbols[t.LabelsRefs[i]],
+				Value: w.Symbols[t.LabelsRefs[i+1]],
+			})
+		}
+
+		if len(t.Samples) > 0 {
+			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
+			for _, v2s := range t.Samples {
+				v1Ts.Samples = append(v1Ts.Samples, prompb.Sample{
+					Timestamp: v2s.Timestamp,
+					Value:     v2s.Value,
+				})
+			}
+		}
+
+		if len(t.Exemplars) > 0 {
+			v1Ts.Exemplars = make([]prompb.Exemplar, 0, len(t.Exemplars))
+			for _, e := range t.Exemplars {
+				v1Exemplar := prompb.Exemplar{
+					Value:     e.Value,
+					Timestamp: e.Timestamp,
+					Labels:    make([]labelpb.ZLabel, 0, len(e.LabelsRefs)/2),
+				}
+				for i := 0; i+1 < len(e.LabelsRefs); i += 2 {
+					v1Exemplar.Labels = append(v1Exemplar.Labels, labelpb.ZLabel{
+						Name:  w.Symbols[e.LabelsRefs[i]],
+						Value: w.Symbols[e.LabelsRefs[i+1]],
+					})
+				}
+				v1Ts.Exemplars = append(v1Ts.Exemplars, v1Exemplar)
+			}
+		}
+
+		if len(t.Histograms) > 0 {
+			v1Ts.Histograms = make([]prompb.Histogram, 0, len(t.Histograms))
+			for _, h := range t.Histograms {
+				v1Histogram := prompb.Histogram{
+					Sum:            h.Sum,
+					Schema:         h.Schema,
+					ZeroThreshold:  h.ZeroThreshold,
+					NegativeSpans:  translateV2SpansToV1(h.NegativeSpans),
+					NegativeDeltas: h.NegativeDeltas,
+					NegativeCounts: h.NegativeCounts,
+					PositiveSpans:  translateV2SpansToV1(h.PositiveSpans),
+					PositiveDeltas: h.PositiveDeltas,
+					PositiveCounts: h.PositiveCounts,
+					ResetHint:      prompb.Histogram_ResetHint(h.ResetHint),
+					Timestamp:      h.Timestamp,
+					CustomValues:   h.CustomValues,
+				}
+
+				switch c := h.Count.(type) {
+				case *writev2.Histogram_CountInt:
+					v1Histogram.Count = &prompb.Histogram_CountInt{CountInt: c.CountInt}
+				case *writev2.Histogram_CountFloat:
+					v1Histogram.Count = &prompb.Histogram_CountFloat{CountFloat: c.CountFloat}
+				}
+
+				switch zc := h.ZeroCount.(type) {
+				case *writev2.Histogram_ZeroCountInt:
+					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountInt{ZeroCountInt: zc.ZeroCountInt}
+				case *writev2.Histogram_ZeroCountFloat:
+					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: zc.ZeroCountFloat}
+				}
+
+				v1Ts.Histograms = append(v1Ts.Histograms, v1Histogram)
+			}
+		}
+
+		out.Timeseries = append(out.Timeseries, v1Ts)
+	}
+	return out
+}
+
+func translateV2SpansToV1(spans []writev2.BucketSpan) []prompb.BucketSpan {
+	if len(spans) == 0 {
+		return nil
+	}
+	out := make([]prompb.BucketSpan, len(spans))
+	for i, s := range spans {
+		out[i] = prompb.BucketSpan{Offset: s.Offset, Length: s.Length}
+	}
+	return out
+}
+
+func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {
+	var wreq writev2.Request
+	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	translatedReq := translateV2ToV1(wreq)
+	if err := h.handleV1HTTP(ctx, w, r, translatedReq, tLogger, tenantHTTP, requestLimiter); err != nil {
+		return
+	}
+
+	// NOTE(GiedriusS): This part of the spec is still not 100% clear regarding async
+	// writes so just tell Prometheus that we accepted all data.
+	var ts, hs, es int
+
+	for _, i := range wreq.Timeseries {
+		hs += len(i.Histograms)
+		ts += len(i.Samples)
+		es += len(i.Exemplars)
+	}
+	w.Header().Set("X-Prometheus-Remote-Write-Samples-Written", fmt.Sprintf("%d", ts))
+	w.Header().Set("X-Prometheus-Remote-Write-Histograms-Written", fmt.Sprintf("%d", hs))
+	w.Header().Set("X-Prometheus-Remote-Write-Exemplars-Written", fmt.Sprintf("%d", es))
+}
+
+func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
+	var err error
+
+	rep := uint64(0)
+	// If the header is empty, we assume the request is not yet replicated.
+	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
+		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
+			http.Error(w, "could not parse replica header", http.StatusBadRequest)
+			return fmt.Errorf("parsing replica header: %w", err)
+		}
+	}
+
+	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
+	// this would mean lack of forward compatibility for remote write proto.
+	if len(wreq.Timeseries) == 0 {
+		// TODO(yeya24): Handle remote write metadata.
+		if len(wreq.Metadata) > 0 {
+			// TODO(bwplotka): Do we need this error message?
+			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
+			return nil
+		}
+		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
+		return nil
+	}
+
+	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
+		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
+		return fmt.Errorf("too many timeseries")
+	}
+
+	totalSamples := 0
+	for _, timeseries := range wreq.Timeseries {
+		totalSamples += len(timeseries.Samples)
+	}
+	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
+		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
+		return fmt.Errorf("too many samples")
+	}
+
+	// Apply relabeling configs.
+	h.relabel(wreq)
+	if len(wreq.Timeseries) == 0 {
+		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
+		return nil
+	}
+
+	responseStatusCode := http.StatusOK
+	tenantStats, err := h.handleRequest(ctx, rep, []wreqTenantTuple{
+		{
+			tenant: tenantHTTP,
+			wreq:   wreq,
+		},
+	})
+	if err != nil {
+		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
+		// TODO(GiedriusS): support retry-after.
+		switch errors.Cause(err) {
+		case errNotReady:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errUnavailable:
+			responseStatusCode = http.StatusServiceUnavailable
+		case errConflict:
+			responseStatusCode = http.StatusConflict
+		case errBadReplica:
+			responseStatusCode = http.StatusBadRequest
+		case errValidation:
+			responseStatusCode = http.StatusBadRequest
+		default:
+			level.Error(tLogger).Log("err", err, "msg", "internal server error")
+			responseStatusCode = http.StatusInternalServerError
+		}
+		if responseStatusCode == http.StatusServiceUnavailable {
+			w.Header().Add("Retry-After", time.Now().UTC().Add(h.retryAfterDuration()).Format(http.TimeFormat))
+		}
+		http.Error(w, err.Error(), responseStatusCode)
+	}
+
+	for tenant, stats := range tenantStats {
+		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
+		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+	}
+
+	return err
+}
+
 func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	span, ctx := tracing.StartSpan(r.Context(), "receive_http")
@@ -545,6 +806,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Fail request fully if tenant has exceeded set limit.
 	if !under {
+		w.Header().Add("Retry-After", time.Now().UTC().Add(h.retryAfterDuration()).Format(http.TimeFormat))
 		http.Error(w, "tenant is above active series limit", http.StatusTooManyRequests)
 		return
 	}
@@ -579,88 +841,27 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
-	// from the whole request. Ensure that we always copy those when we want to
-	// store them for longer time.
-	var wreq prompb.WriteRequest
-	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+	rwVersion, err := determineRWVersion(r)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	rep := uint64(0)
-	// If the header is empty, we assume the request is not yet replicated.
-	if replicaRaw := r.Header.Get(h.options.ReplicaHeader); replicaRaw != "" {
-		if rep, err = strconv.ParseUint(replicaRaw, 10, 64); err != nil {
-			http.Error(w, "could not parse replica header", http.StatusBadRequest)
+	switch rwVersion {
+	case 1:
+		// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
+		// from the whole request. Ensure that we always copy those when we want to
+		// store them for longer time.
+		var wreq prompb.WriteRequest
+		if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-	}
-
-	// Exit early if the request contained no data. We don't support metadata yet. We also cannot fail here, because
-	// this would mean lack of forward compatibility for remote write proto.
-	if len(wreq.Timeseries) == 0 {
-		// TODO(yeya24): Handle remote write metadata.
-		if len(wreq.Metadata) > 0 {
-			// TODO(bwplotka): Do we need this error message?
-			level.Debug(tLogger).Log("msg", "only metadata from client; metadata ingestion not supported; skipping")
-			return
-		}
-		level.Debug(tLogger).Log("msg", "empty remote write request; client bug or newer remote write protocol used?; skipping")
-		return
-	}
-
-	if !requestLimiter.AllowSeries(tenantHTTP, int64(len(wreq.Timeseries))) {
-		http.Error(w, "too many timeseries", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	totalSamples := 0
-	for _, timeseries := range wreq.Timeseries {
-		totalSamples += len(timeseries.Samples)
-	}
-	if !requestLimiter.AllowSamples(tenantHTTP, int64(totalSamples)) {
-		http.Error(w, "too many samples", http.StatusRequestEntityTooLarge)
-		return
-	}
-
-	// Apply relabeling configs.
-	h.relabel(&wreq)
-	if len(wreq.Timeseries) == 0 {
-		level.Debug(tLogger).Log("msg", "remote write request dropped due to relabeling.")
-		return
-	}
-
-	responseStatusCode := http.StatusOK
-	tenantStats, err := h.handleRequest(ctx, rep, []wreqTenantTuple{
-		{
-			tenant: tenantHTTP,
-			wreq:   &wreq,
-		},
-	})
-	if err != nil {
-		level.Debug(tLogger).Log("msg", "failed to handle request", "err", err.Error())
-		switch errors.Cause(err) {
-		case errNotReady:
-			responseStatusCode = http.StatusServiceUnavailable
-		case errUnavailable:
-			responseStatusCode = http.StatusServiceUnavailable
-		case errConflict:
-			responseStatusCode = http.StatusConflict
-		case errBadReplica:
-			responseStatusCode = http.StatusBadRequest
-		case errValidation:
-			responseStatusCode = http.StatusBadRequest
-		default:
-			level.Error(tLogger).Log("err", err, "msg", "internal server error")
-			responseStatusCode = http.StatusInternalServerError
-		}
-		http.Error(w, err.Error(), responseStatusCode)
-	}
-
-	for tenant, stats := range tenantStats {
-		h.writeTimeseriesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.timeseries))
-		h.writeSamplesTotal.WithLabelValues(strconv.Itoa(responseStatusCode), tenant).Observe(float64(stats.totalSamples))
+		_ = h.handleV1HTTP(ctx, w, r, &wreq, tLogger, tenantHTTP, requestLimiter)
+	case 2:
+		h.handleV2HTTP(ctx, w, r, reqBuf, tLogger, tenantHTTP, requestLimiter)
+	default:
+		panic("unsupported remote_write version")
 	}
 }
 
@@ -818,7 +1019,6 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 		level.Error(requestLogger).Log("msg", "failed to distribute timeseries to replicas", "err", err)
 		return stats, err
 	}
-
 	stats = h.gatherWriteStats(len(params.replicas), writes)
 
 	// Prepare a buffered channel to receive the responses from the local and remote writes. Remote writes will all go
@@ -846,6 +1046,19 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 					level.Debug(requestLogger).Log("msg", "request failed, but not needed to achieve quorum", "err", resp.err)
 				}
 			}
+
+			for _, er := range writes {
+				for _, v := range er {
+					h.seriesIDsPool.Put(v.seriesIDs[:0])
+					h.timeSeriesPool.Put(v.timeSeries[:0])
+				}
+
+				clear(er)
+				h.trackedSeries.Put(er)
+			}
+
+			clear(writes)
+			h.distributeMapPool.Put(writes)
 		}()
 	}()
 
@@ -860,12 +1073,17 @@ func (h *Handler) fanoutForward(ctx context.Context, params remoteWriteParams) (
 	for _, tup := range params.data {
 		numSeries += len(tup.wreq.Timeseries)
 	}
-	successes := make([]int, numSeries)
-	failures := make([]int, numSeries)
+	successes := h.getIntScratch(numSeries)
+	failures := h.getIntScratch(numSeries)
 	// conflictFailures tracks how many replicas returned a permanent conflict for
 	// each series. When conflictFailures[i] >= failureThreshold the series can
 	// never reach quorum regardless of retries.
-	conflictFailures := make([]int, numSeries)
+	conflictFailures := h.getIntScratch(numSeries)
+	defer func() {
+		h.intScratchPool.Put(successes[:0])
+		h.intScratchPool.Put(failures[:0])
+		h.intScratchPool.Put(conflictFailures[:0])
+	}()
 	seriesErrs := newReplicationErrors(successThreshold, numSeries)
 	for {
 		select {
@@ -917,7 +1135,11 @@ func (h *Handler) distributeTimeseriesToReplicas(
 ) (map[endpointReplica]map[string]trackedSeries, error) {
 	h.mtx.RLock()
 	defer h.mtx.RUnlock()
-	writes := make(map[endpointReplica]map[string]trackedSeries)
+	writes := h.distributeMapPool.Get()
+	if writes == nil {
+		writes = make(map[endpointReplica]map[string]trackedSeries)
+	}
+
 	seriesID := -1
 	for _, tup := range data {
 		for _, ts := range tup.wreq.Timeseries {
@@ -952,12 +1174,16 @@ func (h *Handler) distributeTimeseriesToReplicas(
 
 				writeableSeries, ok := writes[endpointReplica]
 				if !ok {
-					writes[endpointReplica] = map[string]trackedSeries{
-						tenant: {
-							seriesIDs:  make([]int, 0),
-							timeSeries: make([]prompb.TimeSeries, 0),
-						},
+					writeableSeries = h.trackedSeries.Get()
+					if writeableSeries == nil {
+						writeableSeries = make(map[string]trackedSeries)
 					}
+
+					writeableSeries[tenant] = trackedSeries{
+						seriesIDs:  h.seriesIDsPool.Get(),
+						timeSeries: h.timeSeriesPool.Get(),
+					}
+					writes[endpointReplica] = writeableSeries
 				}
 				tenantSeries := writeableSeries[tenant]
 
@@ -1804,6 +2030,9 @@ func (p *peerGroup) isPeerUp(addr Endpoint) bool {
 }
 
 func (p *peerGroup) reset() {
+	p.m.Lock()
+	defer p.m.Unlock()
+
 	p.expBackoff.Reset()
 	p.peerStates = make(map[Endpoint]*retryState)
 }

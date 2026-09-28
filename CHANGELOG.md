@@ -12,15 +12,52 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
 - [#8906](https://github.com/thanos-io/thanos/pull/8906) *: Add `--auto-gomemlimit.refresh-interval` flag to periodically refresh GOMEMLIMIT from the detected container or system memory limit, so in-place container memory resizes are picked up. Defaults to `0` (no refresh, previous behavior).
 - [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
 
 ### Fixed
 
+- [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
+- [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
+- [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
+- [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
+- [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
+- [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
+- [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
+- [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
+- [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
+
 ### Changed
 
+- [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
+- [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
+
+## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.3](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 29
+
+Fixes a small bug - like before now Receive on shutdown creates a new block and uploads it.
+
+### Fixed
+
+- [#8948](https://github.com/thanos-io/thanos/pull/8948): receive: Preserve upload on shutdown behaviour
+
+## [v0.42.2](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.1](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+This change fixes a small issue regarding timeouts in the Shipper component in the Receiver - we've accidentally set them too small. Sorry for that!
+
+### Changed
+
+- [#8920](https://github.com/thanos-io/thanos/pull/8920): receive: bump timeouts
 
 ## [v0.42.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 08
 
@@ -2176,5 +2213,3 @@ Initial version to have a stable reference before [gossip protocol removal](docs
 - Bucket commands.
 - Downsampling support for UI.
 - Grafana dashboards for Thanos components.
-
-

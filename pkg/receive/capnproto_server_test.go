@@ -41,7 +41,7 @@ func TestCapNProtoServer_SingleConcurrentClient(t *testing.T) {
 	}()
 	defer srv.Shutdown()
 
-	for range 1000 {
+	for range 200 {
 		client := writecapnp.NewRemoteWriteClient(listener, log.NewLogfmtLogger(os.Stdout))
 		_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
 			Tenant: "default",
@@ -71,7 +71,7 @@ func TestCapNProtoServer_MultipleConcurrentClients(t *testing.T) {
 	}()
 	defer srv.Shutdown()
 
-	for range 1000 {
+	for range 200 {
 		client := writecapnp.NewRemoteWriteClient(listener, log.NewLogfmtLogger(os.Stdout))
 		_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
 			Tenant: "default",

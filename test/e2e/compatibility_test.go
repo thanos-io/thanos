@@ -258,7 +258,7 @@ func TestAlertCompliance(t *testing.T) {
 	})
 
 	t.Run("stateless ruler", func(t *testing.T) {
-		e, err := e2e.NewDockerEnvironment("alert-compat")
+		e, err := e2e.NewDockerEnvironment("alert-stateless")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
 

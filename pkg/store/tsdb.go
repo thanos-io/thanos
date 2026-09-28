@@ -482,6 +482,9 @@ func (s *TSDBStore) LabelValues(ctx context.Context, r *storepb.LabelValuesReque
 		for set.Next() {
 			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
 		}
+		if err := set.Err(); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 		return &storepb.LabelValuesResponse{}, nil
 	}
 

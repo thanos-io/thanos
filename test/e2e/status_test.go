@@ -5,6 +5,7 @@ package e2e_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -89,6 +90,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 				"",
+				e2ethanos.Version1PB,
 				static1.InternalEndpoint("http"),
 			),
 			"", e2ethanos.DefaultPrometheusImage())
@@ -99,6 +101,7 @@ test_metric1{a="4", b="3"} 1`)
 				1,
 				e2ethanos.RemoteWriteEndpoints(r1.InternalEndpoint("remote-write"), r2.InternalEndpoint("remote-write")),
 				"",
+				e2ethanos.Version1PB,
 				static2.InternalEndpoint("http"),
 			), "", e2ethanos.DefaultPrometheusImage())
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1a, prom1b))
@@ -132,7 +135,7 @@ test_metric1{a="4", b="3"} 1`)
 
 			// test_metric1 should be the metric with the highest number of series and
 			// we expect 2*10 because each receiver should report 10 series.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 20); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 20); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -198,7 +201,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (10 from one receiver).
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -239,7 +242,7 @@ test_metric1{a="4", b="3"} 1`)
 	t.Run("multitenancy", func(t *testing.T) {
 		t.Parallel()
 
-		e, err := e2e.NewDockerEnvironment("multitenancy")
+		e, err := e2e.NewDockerEnvironment("status-mt")
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -298,6 +301,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				"http://"+rp1.InternalEndpoint("http")+"/api/v1/receive",
 				"",
+				e2ethanos.Version1PB,
 				static1.InternalEndpoint("http"),
 			),
 			"",
@@ -311,6 +315,7 @@ test_metric1{a="4", b="3"} 1`)
 				0,
 				"http://"+rp2.InternalEndpoint("http")+"/api/v1/receive",
 				"",
+				e2ethanos.Version1PB,
 				static2.InternalEndpoint("http"),
 			),
 			"",
@@ -352,7 +357,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 6 series exposed by static1.
-				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 6); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -411,7 +416,7 @@ test_metric1{a="4", b="3"} 1`)
 
 				// test_metric1 should be the metric with the highest number of series and
 				// we expect the 4 series exposed by static2.
-				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
+				if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 4); err != nil {
 					return errors.Wrap(err, "SeriesCountByMetricName[0]")
 				}
 
@@ -491,10 +496,10 @@ test_metric1{a="4", b="3"} 1`)
 		// prom1 scrapes static1 (6 test_metric1 series + 5 scrape metrics).
 		// prom2 scrapes static2 (4 test_metric1 series + 5 scrape metrics).
 		prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(e, "1",
-			e2ethanos.DefaultPromConfig("prom1", 0, "", "", static1.InternalEndpoint("http")),
+			e2ethanos.DefaultPromConfig("prom1", 0, "", "", e2ethanos.Version1PB, static1.InternalEndpoint("http")),
 			"", e2ethanos.DefaultPrometheusImage(), "")
 		prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(e, "2",
-			e2ethanos.DefaultPromConfig("prom2", 0, "", "", static2.InternalEndpoint("http")),
+			e2ethanos.DefaultPromConfig("prom2", 0, "", "", e2ethanos.Version1PB, static2.InternalEndpoint("http")),
 			"", e2ethanos.DefaultPrometheusImage(), "")
 
 		testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2))
@@ -525,7 +530,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should be the metric with the highest number of series (6 + 4 = 10).
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 10); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 10); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0]")
 			}
 
@@ -548,7 +553,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 6 series from prom1.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 6); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 6); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -570,7 +575,7 @@ test_metric1{a="4", b="3"} 1`)
 			}
 
 			// test_metric1 should have 4 series from prom2.
-			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName[0], 4); err != nil {
+			if err = testMetricStatisticEqual(stats.SeriesCountByMetricName, 4); err != nil {
 				return errors.Wrap(err, "SeriesCountByMetricName[0] with matcher")
 			}
 
@@ -594,7 +599,11 @@ func statisticsContains(stats []statuspb.Statistic, name string, value uint64) e
 }
 
 // testMetricStatisticEqual checks that the given stat matches the (name,value) tuple.
-func testMetricStatisticEqual(stat statuspb.Statistic, value uint64) error {
+func testMetricStatisticEqual(stats []statuspb.Statistic, value uint64) error {
+	if len(stats) == 0 {
+		return fmt.Errorf("no statistics")
+	}
+	stat := stats[0]
 	if stat.Name != "test_metric1" {
 		return errors.Errorf("expecting name test_metric1, got %q", stat.Name)
 	}

@@ -22,6 +22,7 @@ package v1
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"sort"
@@ -1762,6 +1763,10 @@ func (qapi *QueryAPI) tsdbStatus(r *http.Request) (any, []error, *api.ApiError, 
 	}
 
 	if tenant != "" {
+		if stats[tenant] == nil {
+			return nil, nil, &api.ApiError{Typ: api.ErrorInternal, Err: errors.Wrap(fmt.Errorf("%s tenant not found", tenant), "retrieving tsdb statistics")}, func() {}
+		}
+
 		return convertToTSDBSTatus(stats[tenant], limit), warnings.AsErrors(), nil, func() {}
 	}
 

@@ -54,14 +54,14 @@ func TestRulesAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 0, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.LocalPrometheusTarget),
+		e2ethanos.DefaultPromConfig("ha", 1, "", filepath.Join(qBuilder.InternalDir(), promRulesSubDir, "*.yaml"), e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)

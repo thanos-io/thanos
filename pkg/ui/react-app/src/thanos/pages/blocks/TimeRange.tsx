@@ -35,7 +35,7 @@ const TimeRange: FC<TimeRangeProps> = ({ viewMinTime, viewMaxTime, gridMinTime, 
         min={gridMinTime}
         max={gridMaxTime}
         marks={marks}
-        defaultValue={[viewMinTime, viewMaxTime]}
+        value={[viewMinTime, viewMaxTime]}
         onChange={onChange}
       />
       <div className={styles.timeRange}>

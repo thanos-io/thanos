@@ -53,6 +53,7 @@
 package reloader
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -65,7 +66,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -83,9 +83,14 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
+const (
+	maxVarNameLength = 4 * 1024
+)
+
 // Reloader can watch config files and trigger reloads of a Prometheus server.
 // It optionally substitutes environment variables in the configuration.
 // Referenced environment variables must be of the form `$(var)` (not `$var` or `${var}`).
+// "var" name can't be longer than maxVarNameLength (4KB).
 type Reloader struct {
 	logger                        log.Logger
 	cfgFile                       string
@@ -358,40 +363,54 @@ func (r *Reloader) Watch(ctx context.Context) error {
 	}
 }
 
-func (r *Reloader) normalize(inputFile, outputFile string) error {
-	b, err := os.ReadFile(inputFile)
+func (r *Reloader) normalize(inputFile, outputFile string) (err error) {
+	in, err := os.Open(inputFile)
 	if err != nil {
 		return errors.Wrap(err, "read file")
 	}
+	defer runutil.CloseWithLogOnErr(r.logger, in, "close file")
 
-	// Detect and extract gzipped file.
-	if bytes.Equal(b[0:3], firstGzipBytes) {
-		zr, err := gzip.NewReader(bytes.NewReader(b))
+	br := bufio.NewReader(in)
+	var src io.Reader = br
+	if header, err := br.Peek(len(firstGzipBytes)); err == nil && bytes.Equal(header, firstGzipBytes) {
+		zr, err := gzip.NewReader(src)
 		if err != nil {
 			return errors.Wrap(err, "create gzip reader")
 		}
 		defer runutil.CloseWithLogOnErr(r.logger, zr, "gzip reader close")
-
-		b, err = io.ReadAll(zr)
-		if err != nil {
-			return errors.Wrap(err, "read compressed config file")
-		}
-	}
-
-	b, err = r.expandEnv(b)
-	if err != nil {
-		return errors.Wrap(err, "expand environment variables")
+		src = zr
 	}
 
 	tmpFile := outputFile + ".tmp"
 	defer func() {
 		_ = os.Remove(tmpFile)
 	}()
-	if err := os.WriteFile(tmpFile, b, 0644); err != nil {
-		return errors.Wrap(err, "write file")
+
+	out, err := os.OpenFile(tmpFile, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0644)
+	if err != nil {
+		return errors.Wrap(err, "open tmp file")
 	}
+	defer func() {
+		if out != nil {
+			runutil.CloseWithErrCapture(&err, out, "close tmp file")
+		}
+	}()
+
+	bw := bufio.NewWriterSize(out, bufio.MaxScanTokenSize)
+	if err := r.expandEnv(src, bw); err != nil {
+		return err
+	}
+
+	if err := bw.Flush(); err != nil {
+		return errors.Wrap(err, "write tmp file")
+	}
+	if err := out.Close(); err != nil {
+		return errors.Wrap(err, "close tmp file")
+	}
+	out = nil // Avoid double close.
+
 	if err := os.Rename(tmpFile, outputFile); err != nil {
-		return errors.Wrap(err, "rename file")
+		return errors.Wrap(err, "rename tmp file")
 	}
 	return nil
 }
@@ -700,32 +719,95 @@ func RuntimeInfoURLFromBase(u *url.URL) *url.URL {
 	return u.JoinPath("/api/v1/status/runtimeinfo")
 }
 
-var envRe = regexp.MustCompile(`\$\(([a-zA-Z_0-9]+)\)`)
+func isIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+}
 
-func (r *Reloader) expandEnv(b []byte) (replaced []byte, err error) {
-	configEnvVarExpansionErrorsCount := 0
-	replaced = envRe.ReplaceAllFunc(b, func(n []byte) []byte {
-		if err != nil {
-			return nil
+func isValidIdent(b []byte) bool {
+	if len(b) == 0 || len(b) >= maxVarNameLength {
+		return false
+	}
+	for _, c := range b {
+		if !isIdentChar(c) {
+			return false
 		}
-		m := n
-		n = n[2 : len(n)-1]
+	}
+	return true
+}
 
-		v, ok := os.LookupEnv(string(n))
-		if !ok {
-			configEnvVarExpansionErrorsCount++
-			errStr := errors.Errorf("found reference to unset environment variable %q", n)
-			if r.tolerateEnvVarExpansionErrors {
-				level.Warn(r.logger).Log("msg", "expand environment variable", "err", errStr)
-				return m
+// expandEnv expands environment variable from a stream of bytes using $(var) syntax.
+func (r *Reloader) expandEnv(src io.Reader, dst io.Writer) error {
+	var configEnvVarExpansionErrorsCount = 0
+
+	envCache := make(map[string][]byte)
+
+	s := bufio.NewScanner(src)
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		idx := bytes.IndexByte(data, '$')
+		if idx < 0 || (len(data) < 3 && atEOF) {
+			// No $ found, or too short data for the variable.
+			return len(data), data, nil
+		}
+		if idx > 0 {
+			// Pass the prefix to scanner.
+			return idx, data[:idx], nil
+		}
+		// At this point we have a potential variable (data starts with '$').
+		// Ensure it contains valid characters and ends with ).
+		// We are validating chars to reduce risk of hitting reloading errors on accidental substitutions like PromQL regex matching in recording rules.
+		// Historically, we only substituted for variable names matching [a-zA-Z_0-9]+
+		if len(data) < 2 {
+			return 0, nil, nil
+		}
+		if data[1] != '(' {
+			return 1, data[:1], nil
+		}
+		// data starts with "$(". Look for ')'.
+		closeIdx := bytes.IndexByte(data[2:], ')')
+		if closeIdx < 0 {
+			if atEOF {
+				return len(data), data, nil
 			}
-			err = errStr
-			return nil
+			if len(data[2:]) > 0 && !isValidIdent(data[2:]) {
+				// Not a valid variable or too long, ignore.
+				return 1, data[:1], nil
+			}
+			// Read more data.
+			return 0, nil, nil
 		}
-		return []byte(v)
+		varName := data[2 : 2+closeIdx]
+		if !isValidIdent(varName) {
+			return 1, data[:1], nil
+		}
+
+		advance := 2 + closeIdx + 1
+		val, ok := envCache[string(varName)]
+		if !ok {
+			v, found := os.LookupEnv(string(varName))
+			if !found {
+				configEnvVarExpansionErrorsCount++
+				if r.tolerateEnvVarExpansionErrors {
+					level.Warn(r.logger).Log("msg", "found reference to unset environment variable", "var", string(varName))
+					return advance, data[:advance], nil
+				}
+				return 0, nil, errors.Errorf("found reference to unset environment variable %q", string(varName))
+			}
+			val = []byte(v)
+			envCache[string(varName)] = val
+		}
+		return advance, val, nil
 	})
+
+	for s.Scan() {
+		if _, err := dst.Write(s.Bytes()); err != nil {
+			return errors.Wrap(err, "write file")
+		}
+	}
 	r.configEnvVarExpansionErrors.Set(float64(configEnvVarExpansionErrorsCount))
-	return replaced, err
+	return s.Err()
 }
 
 type watcher struct {

@@ -245,7 +245,6 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 				PrometheusResponseExtractor{},
 				nil,
 				nil,
-				nil,
 			)
 			require.NoError(t, err)
 
@@ -267,13 +266,12 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 
 func TestShouldCache(t *testing.T) {
 	maxCacheTime := int64(150 * 1000)
-	c := &resultsCache{logger: log.NewNopLogger(), cacheGenNumberLoader: newMockCacheGenNumberLoader()}
+	c := &resultsCache{logger: log.NewNopLogger()}
 	for _, tc := range []struct {
-		name                   string
-		request                Request
-		input                  Response
-		cacheGenNumberToInject string
-		expected               bool
+		name     string
+		request  Request
+		input    Response
+		expected bool
 	}{
 		// Tests only for cacheControlHeader
 		{
@@ -336,94 +334,6 @@ func TestShouldCache(t *testing.T) {
 				Headers: []*PrometheusResponseHeader{{Name: cacheControlHeader}},
 			}),
 			expected: true,
-		},
-
-		// Tests only for cacheGenNumber header
-		{
-			name:    "cacheGenNumber not set in both header and store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   "meaninglessheader",
-						Values: []string{},
-					},
-				},
-			}),
-			expected: true,
-		},
-		{
-			name:    "cacheGenNumber set in store but not in header",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   "meaninglessheader",
-						Values: []string{},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
-		},
-		{
-			name:    "cacheGenNumber set in header but not in store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1"},
-					},
-				},
-			}),
-			expected: false,
-		},
-		{
-			name:    "cacheGenNumber in header and store are the same",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "1"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               true,
-		},
-		{
-			name:    "inconsistency between cacheGenNumber in header and store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "2"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
-		},
-		{
-			name:    "cacheControl header says not to catch and cacheGenNumbers in store and headers have consistency",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   cacheControlHeader,
-						Values: []string{noStoreValue},
-					},
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "1"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
 		},
 		// @ modifier on vector selectors.
 		{
@@ -578,7 +488,7 @@ func TestShouldCache(t *testing.T) {
 	} {
 		{
 			t.Run(tc.name, func(t *testing.T) {
-				ctx := cache.InjectCacheGenNumber(context.Background(), tc.cacheGenNumberToInject)
+				ctx := context.Background()
 				ret := c.shouldCacheResponse(ctx, tc.request, tc.input, maxCacheTime)
 				require.Equal(t, tc.expected, ret)
 			})
@@ -1103,7 +1013,6 @@ func newTestResultsCache(t *testing.T, c cache.Cache) *resultsCache {
 		PrometheusResponseExtractor{},
 		nil,
 		nil,
-		nil,
 	)
 	require.NoError(t, err)
 	return rm.Wrap(nil).(*resultsCache)
@@ -1123,7 +1032,6 @@ func TestResultsCache(t *testing.T) {
 		mockLimits{},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1171,7 +1079,6 @@ func TestResultsCacheUsesLowerStepCache(t *testing.T) {
 		mockLimits{},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1227,7 +1134,6 @@ func TestResultsCacheFetchesAlternativeKeysInBulk(t *testing.T) {
 		mockLimits{},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1286,7 +1192,6 @@ func TestResultsCacheRecent(t *testing.T) {
 		mockLimits{maxCacheFreshness: 10 * time.Minute},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1349,7 +1254,6 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 				fakeLimits,
 				PrometheusCodec,
 				PrometheusResponseExtractor{},
-				nil,
 				nil,
 				nil,
 			)
@@ -1505,7 +1409,6 @@ func TestResultsCacheShouldCacheFunc(t *testing.T) {
 				mockLimits{maxCacheFreshness: 10 * time.Minute},
 				PrometheusCodec,
 				PrometheusResponseExtractor{},
-				nil,
 				tc.shouldCache,
 				nil,
 			)
@@ -1542,7 +1445,6 @@ func TestNativeHistograms(t *testing.T) {
 		PrometheusResponseExtractor{},
 		nil,
 		nil,
-		nil,
 	)
 	require.NoError(t, err)
 
@@ -1574,17 +1476,6 @@ func TestNativeHistograms(t *testing.T) {
 
 func toMs(t time.Duration) int64 {
 	return int64(t / time.Millisecond)
-}
-
-type mockCacheGenNumberLoader struct {
-}
-
-func newMockCacheGenNumberLoader() CacheGenNumberLoader {
-	return mockCacheGenNumberLoader{}
-}
-
-func (mockCacheGenNumberLoader) GetResultsCacheGenNumber(tenantIDs []string) string {
-	return ""
 }
 
 func genSampleHistogram() SampleHistogram {

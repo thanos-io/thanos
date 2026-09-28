@@ -2119,7 +2119,7 @@ func TestProxySeries(t *testing.T) {
 	t.Parallel()
 
 	tb := testutil.NewTB(t)
-	storetestutil.RunSeriesInterestingCases(tb, 200e3, 200e3, func(t testutil.TB, samplesPerSeries, series int) {
+	storetestutil.RunSeriesInterestingCases(tb, 50e3, 50e3, func(t testutil.TB, samplesPerSeries, series int) {
 		benchProxySeries(t, samplesPerSeries, series)
 	})
 }

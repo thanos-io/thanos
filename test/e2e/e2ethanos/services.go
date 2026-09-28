@@ -14,7 +14,6 @@ import (
 
 	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
-	e2edb "github.com/efficientgo/e2e/db"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/config"
@@ -51,6 +50,15 @@ func wrapWithDefaults(opt e2e.StartOptions) e2e.StartOptions {
 	if opt.WaitReadyBackoff == nil {
 		opt.WaitReadyBackoff = &defaultBackoffConfig
 	}
+	// Coverage data must be written outside the environment's shared dir as that is removed on Close().
+	if dir := os.Getenv("THANOS_E2E_GOCOVERDIR"); dir != "" {
+		_ = os.MkdirAll(dir, 0750)
+		if opt.EnvVars == nil {
+			opt.EnvVars = map[string]string{}
+		}
+		opt.EnvVars["GOCOVERDIR"] = dir
+		opt.Volumes = append(opt.Volumes, dir+":"+dir+":z")
+	}
 	return opt
 }
 
@@ -61,7 +69,7 @@ const (
 
 // DefaultPrometheusImage sets default Prometheus image used in e2e service.
 func DefaultPrometheusImage() string {
-	return "quay.io/prometheus/prometheus:v3.2.1"
+	return "quay.io/prometheus/prometheus:v3.13.1"
 }
 
 // DefaultOtelImage sets default Otel image used in e2e service.
@@ -607,6 +615,7 @@ type ReceiveBuilder struct {
 	nativeHistograms      bool
 	labels                []string
 	tenantSplitLabel      string
+	objStoreConfig        *client.BucketConfig
 }
 
 func NewReceiveBuilder(e e2e.Environment, name string) *ReceiveBuilder {
@@ -685,6 +694,11 @@ func (r *ReceiveBuilder) WithValidationEnabled(limit int, metaMonitoring string,
 
 func (r *ReceiveBuilder) WithNativeHistograms() *ReceiveBuilder {
 	r.nativeHistograms = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithObjStoreConfig(config client.BucketConfig) *ReceiveBuilder {
+	r.objStoreConfig = &config
 	return r
 }
 
@@ -794,6 +808,14 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.nativeHistograms {
 		args["--tsdb.enable-native-histograms"] = ""
+	}
+
+	if r.objStoreConfig != nil {
+		bktConfigBytes, err := yaml.Marshal(r.objStoreConfig)
+		if err != nil {
+			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate objstore config: %v", r.objStoreConfig))}
+		}
+		args["--objstore.config"] = string(bktConfigBytes)
 	}
 
 	return e2eobs.AsObservable(r.f.Init(wrapWithDefaults(e2e.StartOptions{
@@ -1144,13 +1166,11 @@ func NewQueryFrontend(e e2e.Environment, name, downstreamURL string, config quer
 
 	return e2eobs.AsObservable(e.Runnable(fmt.Sprintf("query-frontend-%s", name)).
 		WithPorts(map[string]int{"http": 8080}).
-		Init(e2e.StartOptions{
-			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-			User:             strconv.Itoa(os.Getuid()),
-			WaitReadyBackoff: &defaultBackoffConfig,
-		}), "http")
+		Init(wrapWithDefaults(e2e.StartOptions{
+			Image:     DefaultImage(),
+			Command:   e2e.NewCommand("query-frontend", e2e.BuildArgs(flags)...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		})), "http")
 }
 
 func NewReverseProxy(e e2e.Environment, name, tenantID, target string) *e2eobs.Observable {
@@ -1266,8 +1286,8 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 
 	return s3.Config{
 		Bucket:           bucket,
-		AccessKey:        e2edb.MinioAccessKey,
-		SecretKey:        e2edb.MinioSecretKey,
+		AccessKey:        SeaweedFSAccessKey,
+		SecretKey:        SeaweedFSSecretKey,
 		Endpoint:         endpoint,
 		Insecure:         false,
 		HTTPConfig:       httpDefaultConf,
@@ -1282,11 +1302,16 @@ var QueryUpWithoutInstance = func() string { return "sum(up) without (instance)"
 // wish to enable Prometheus to scrape itself in a test.
 const LocalPrometheusTarget = "localhost:9090"
 
+type ProtobufMessageVersion string
+
+const Version1PB ProtobufMessageVersion = "prometheus.WriteRequest"
+const Version2PB ProtobufMessageVersion = "io.prometheus.write.v2.Request"
+
 // DefaultPromConfig returns Prometheus config that sets Prometheus to:
 // * expose 2 external labels, source and replica.
 // * optionally scrape self. This will produce up == 0 metric which we can assert on.
 // * optionally remote write endpoint to write into.
-func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, scrapeTargets ...string) string {
+func DefaultPromConfig(name string, replica int, remoteWriteEndpoint, ruleFile string, protobufMessage ProtobufMessageVersion, scrapeTargets ...string) string {
 	var targets string
 	if len(scrapeTargets) > 0 {
 		targets = strings.Join(scrapeTargets, ",")
@@ -1326,9 +1351,10 @@ remote_write:`, config)
 %s
 - url: "%s"
   # Don't spam receiver on mistake.
+  protobuf_message: "%s"
   queue_config:
     min_backoff: 2s
-    max_backoff: 10s`, config, url)
+    max_backoff: 10s`, config, url, protobufMessage)
 		}
 	}
 
@@ -1421,12 +1447,10 @@ func NewToolsBucketDownsample(e e2e.Environment, name string, bucketConfig clien
 	})...)
 
 	return e2eobs.AsObservable(f.Init(
-		e2e.StartOptions{
-			Image:            DefaultImage(),
-			Command:          e2e.NewCommand("tools", args...),
-			User:             strconv.Itoa(os.Getuid()),
-			Readiness:        e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
-			WaitReadyBackoff: &defaultBackoffConfig,
-		},
+		wrapWithDefaults(e2e.StartOptions{
+			Image:     DefaultImage(),
+			Command:   e2e.NewCommand("tools", args...),
+			Readiness: e2e.NewHTTPReadinessProbe("http", "/-/ready", 200, 200),
+		}),
 	), "http")
 }

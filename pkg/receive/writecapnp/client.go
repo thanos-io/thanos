@@ -129,10 +129,6 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 			if err := BuildInto(&ttl, d.Tenant, d.Timeseries, builder); err != nil {
 				return err
 			}
-
-			if err := tl.Set(i, ttl); err != nil {
-				return err
-			}
 		}
 
 		if err := marshalSymbols(builder, sym); err != nil {

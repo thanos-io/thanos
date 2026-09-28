@@ -37,7 +37,7 @@ type dedupSeriesSet struct {
 // isCounter deduces whether a counter metric has been passed. There must be
 // a better way to deduce this.
 func isCounter(f string) bool {
-	return f == "increase" || f == "rate" || f == "irate" || f == "resets"
+	return f == "increase" || f == "rate" || f == "irate" || f == "resets" || f == "xincrease" || f == "xrate"
 }
 
 // NewOverlapSplit splits overlapping chunks into separate series entry, so existing algorithm can work as usual.
@@ -492,7 +492,8 @@ func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
 
 	// Advance the iterator if we are before the valid interval.
 	if t < it.mint {
-		if it.Seek(it.mint) == chunkenc.ValNone {
+		valueType = it.Seek(it.mint)
+		if valueType == chunkenc.ValNone {
 			return chunkenc.ValNone
 		}
 		t = it.it.AtT()
