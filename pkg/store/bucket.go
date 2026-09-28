@@ -1596,7 +1596,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		}
 		queryStatsEnabled = reqHints.EnableQueryStats
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -1849,7 +1849,7 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	reqSeriesMatchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
@@ -1866,7 +1866,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -2065,7 +2065,7 @@ func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*la
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	reqSeriesMatchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
@@ -2095,7 +2095,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
