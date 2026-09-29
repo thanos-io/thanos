@@ -13,7 +13,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-func createHistogramChunk(t *testing.T, startTs int64, numSamples int, bucketCount int) *storepb.Chunk {
+func createHistogramChunk(t testing.TB, startTs int64, numSamples int, bucketCount int) *storepb.Chunk {
 	t.Helper()
 
 	c := chunkenc.NewHistogramChunk()

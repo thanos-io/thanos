@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
@@ -482,4 +483,62 @@ func benchmarkGRPCServerBatching(b *testing.B, seriesCount, samplesPerSeries, ba
 		require.Equal(b, len(resps), got)
 	}
 
+}
+
+func BenchmarkQuerySelectHistogram(b *testing.B) {
+	const (
+		numChunks       = 50
+		samplesPerChunk = 120
+		bucketCount     = 160
+	)
+
+	chunks := make([]storepb.AggrChunk, numChunks)
+	for i := 0; i < numChunks; i++ {
+		startTs := int64(i*samplesPerChunk) * 15000
+		chunks[i] = storepb.AggrChunk{
+			Raw: createHistogramChunk(b, startTs, samplesPerChunk, bucketCount),
+		}
+	}
+
+	b.Run("count", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			s := &chunkSeries{
+				chunks: chunks,
+				aggrs:  []storepb.Aggr{storepb.Aggr_COUNT},
+				mint:   math.MinInt64,
+				maxt:   math.MaxInt64,
+			}
+			it := s.Iterator(nil)
+			// Use a reusable FloatHistogram, matching how the PromQL engine
+			// calls AtFloatHistogram with a non-nil argument to enable
+			// bucket slice reuse across samples and chunk transitions.
+			fh := &histogram.FloatHistogram{}
+			for it.Next() != chunkenc.ValNone {
+				testT, fh = it.AtFloatHistogram(fh)
+			}
+			if it.Err() != nil {
+				b.Fatal(it.Err())
+			}
+		}
+	})
+	b.Run("sum", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			s := &chunkSeries{
+				chunks: chunks,
+				aggrs:  []storepb.Aggr{storepb.Aggr_SUM},
+				mint:   math.MinInt64,
+				maxt:   math.MaxInt64,
+			}
+			it := s.Iterator(nil)
+			fh := &histogram.FloatHistogram{}
+			for it.Next() != chunkenc.ValNone {
+				testT, fh = it.AtFloatHistogram(fh)
+			}
+			if it.Err() != nil {
+				b.Fatal(it.Err())
+			}
+		}
+	})
 }
