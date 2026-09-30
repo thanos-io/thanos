@@ -635,3 +635,13 @@ The configuration format is the following:
   grpc_config:
     endpoint_addresses: []
 ```
+
+To send extra headers with every HTTP query, for example a tenant ID, set `http_headers` in `http_config`. Each header takes `values`, `secrets` or `files`, as in Prometheus' `http_headers`; relative `files` paths are resolved from the working directory. The Alertmanager `http_config` accepts it too:
+
+```yaml
+- http_config:
+    http_headers:
+      X-Scope-OrgID:
+        values: [tenant-a]
+  static_configs: ["querier:9090"]
+```

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/core/testutil"
+	config_util "github.com/prometheus/common/config"
 )
 
 func TestNewHTTPClientConfigFromYAML(t *testing.T) {
@@ -77,6 +78,15 @@ func TestNewHTTPClientConfigFromYAML(t *testing.T) {
 					CertFile: "testdata/self-signed-client.crt",
 					KeyFile:  "testdata/invalid.pem",
 				},
+			},
+			err: true,
+		},
+		{
+			desc: "reserved HTTP header",
+			cfg: HTTPClientConfig{
+				HTTPHeaders: config_util.Headers{Headers: map[string]config_util.Header{
+					"Authorization": {Values: []string{"secret"}},
+				}},
 			},
 			err: true,
 		},
@@ -150,6 +160,40 @@ func generateTestLeaf(t *testing.T, caCert *x509.Certificate, caKey *rsa.Private
 	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	return certPEM, keyPEM
+}
+
+func TestNewHTTPClient_HTTPHeaders(t *testing.T) {
+	var got http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		got = r.Header.Clone()
+	}))
+	defer srv.Close()
+
+	tokenFile := filepath.Join(t.TempDir(), "token")
+	testutil.Ok(t, os.WriteFile(tokenFile, []byte("from-file"), 0o600))
+
+	cfgs, err := LoadConfigs([]byte(`
+- http_config:
+    http_headers:
+      X-Scope-OrgID:
+        values: [tenant-a]
+      X-Custom:
+        values: [a, b]
+      X-Token:
+        files: [` + tokenFile + `]
+  static_configs: ["localhost:9090"]
+`))
+	testutil.Ok(t, err)
+	client, err := NewHTTPClient(cfgs[0].HTTPConfig.HTTPClientConfig, "")
+	testutil.Ok(t, err)
+
+	resp, err := client.Get(srv.URL)
+	testutil.Ok(t, err)
+	testutil.Ok(t, resp.Body.Close())
+
+	testutil.Equals(t, []string{"tenant-a"}, got.Values("X-Scope-OrgID"))
+	testutil.Equals(t, []string{"a", "b"}, got.Values("X-Custom"))
+	testutil.Equals(t, []string{"from-file"}, got.Values("X-Token"))
 }
 
 // TestNewHTTPClient_CertRotation checks that a client that specifies a cert, key, and CA
