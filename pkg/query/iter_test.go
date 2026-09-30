@@ -63,12 +63,18 @@ func TestLazyChunkSeriesIteratorHistogramReuse(t *testing.T) {
 	it := newLazyChunkSeriesIterator(chunks)
 
 	var timestamps []int64
-	var histograms []*histogram.Histogram
-
+	fh := &histogram.FloatHistogram{}
+	var i int
 	for it.Next() != chunkenc.ValNone {
-		ts, h := it.AtHistogram(nil)
+		var ts int64
+		ts, fh = it.AtFloatHistogram(fh)
 		timestamps = append(timestamps, ts)
-		histograms = append(histograms, h)
+
+		require.NotNil(t, fh)
+		require.InDelta(t, float64(10+i%samplesPerChunk), fh.Count, 0.001)
+		require.InDelta(t, float64(100+i%samplesPerChunk), fh.Sum, 0.001)
+		require.Equal(t, bucketCount, len(fh.PositiveBuckets))
+		i++
 	}
 	require.NoError(t, it.Err())
 
@@ -77,13 +83,6 @@ func TestLazyChunkSeriesIteratorHistogramReuse(t *testing.T) {
 
 	for i := 1; i < len(timestamps); i++ {
 		require.Greater(t, timestamps[i], timestamps[i-1])
-	}
-
-	for i, h := range histograms {
-		require.NotNil(t, h)
-		require.Equal(t, uint64(10+i%samplesPerChunk), h.Count)
-		require.InDelta(t, float64(100+i%samplesPerChunk), h.Sum, 0.001)
-		require.Equal(t, bucketCount, len(h.PositiveBuckets))
 	}
 
 	boundaryIdx := samplesPerChunk - 1
@@ -171,12 +170,19 @@ func TestChunkSeriesIteratorPreCreated(t *testing.T) {
 	it := newChunkSeriesIterator(its)
 
 	var timestamps []int64
-	var histograms []*histogram.Histogram
+	fh := &histogram.FloatHistogram{}
+	var i int
 
 	for it.Next() != chunkenc.ValNone {
-		ts, h := it.AtHistogram(nil)
+		var ts int64
+		ts, fh = it.AtFloatHistogram(fh)
 		timestamps = append(timestamps, ts)
-		histograms = append(histograms, h)
+
+		require.NotNil(t, fh)
+		require.InDelta(t, float64(10+i%samplesPerChunk), fh.Count, 0.001)
+		require.InDelta(t, float64(100+i%samplesPerChunk), fh.Sum, 0.001)
+		require.Equal(t, bucketCount, len(fh.PositiveBuckets))
+		i++
 	}
 	require.NoError(t, it.Err())
 
@@ -185,12 +191,5 @@ func TestChunkSeriesIteratorPreCreated(t *testing.T) {
 
 	for i := 1; i < len(timestamps); i++ {
 		require.Greater(t, timestamps[i], timestamps[i-1])
-	}
-
-	for i, h := range histograms {
-		require.NotNil(t, h)
-		require.Equal(t, uint64(10+i%samplesPerChunk), h.Count)
-		require.InDelta(t, float64(100+i%samplesPerChunk), h.Sum, 0.001)
-		require.Equal(t, bucketCount, len(h.PositiveBuckets))
 	}
 }
