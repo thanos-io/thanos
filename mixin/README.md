@@ -10,6 +10,8 @@ The content of this project is written in [jsonnet](http://jsonnet.org/). This p
 
 ## Requirements
 
+The default Replicate and Receive latency alerts require classic histogram buckets above their respective 20s and 10s thresholds. Older Thanos versions emit replication buckets only up to 10s and, with the default forwarding timeout, Receive HTTP buckets only up to 5s. Updating the mixin alone does not extend those buckets; upgrade the producers as well. Keep bucket layouts consistent across instances aggregated into one alert, including during rolling upgrades. Custom latency thresholds must remain below the highest finite bucket.
+
 ### jsonnet
 
 The content of this project consists of a set of [jsonnet](http://jsonnet.org/) files making up a library to be consumed.
