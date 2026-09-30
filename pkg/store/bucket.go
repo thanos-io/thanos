@@ -4033,6 +4033,6 @@ func (s *queryStats) toHints() *hintspb.QueryStats {
 }
 
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
-func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Pool[byte], error) {
+func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (*pool.BucketedPool[byte], error) {
 	return pool.NewBucketedPool[byte](chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
 }
