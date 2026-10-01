@@ -645,3 +645,5 @@ To send extra headers with every HTTP query, for example a tenant ID, set `http_
         values: [tenant-a]
   static_configs: ["querier:9090"]
 ```
+
+Note that a header like this applies to every query the Ruler makes, so setting a tenant ID means running one Ruler per tenant. That is only practical for a small number of tenants.
