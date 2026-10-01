@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1401,13 +1402,74 @@ tenant-a:
 		testutil.NotOk(t, err)
 	})
 
-	t.Run("unknown action is rejected", func(t *testing.T) {
+	t.Run("unknown action in global config reports the actual error", func(t *testing.T) {
 		content := []byte(`
 - action: bogus
   source_labels: [__name__]
 `)
 		_, _, err := ParseRelabelConfigWithTenants(content, nil)
 		testutil.NotOk(t, err)
+		testutil.Equals(t, `parsing relabel configuration: unknown relabel action "bogus"`, err.Error())
+	})
+
+	t.Run("invalid regex in global config reports the actual error", func(t *testing.T) {
+		content := []byte(`
+- action: drop
+  source_labels: [__name__]
+  regex: "("
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Assert(t, strings.Contains(err.Error(), "error parsing regexp"), "unexpected error: %v", err)
+	})
+
+	t.Run("unknown action in per-tenant config reports the actual error", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - action: bogus
+    source_labels: [__name__]
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `parsing relabel configuration: unknown relabel action "bogus"`, err.Error())
+	})
+
+	t.Run("default key holds the default configs", func(t *testing.T) {
+		content := []byte(`
+default:
+  - source_labels: [__name__]
+    action: drop
+    regex: "default_drop_.*"
+tenant-a:
+  - source_labels: [__name__]
+    action: keep
+    regex: "tenant_a_keep_.*"
+`)
+		defaultCfgs, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(defaultCfgs))
+		testutil.Equals(t, relabel.Drop, defaultCfgs[0].Action)
+		testutil.Equals(t, 1, len(perTenant))
+		_, ok := perTenant[DefaultTenantRelabelConfigKey]
+		testutil.Assert(t, !ok, "default key must not be returned as a tenant")
+		testutil.Equals(t, relabel.Keep, perTenant["tenant-a"][0].Action)
+	})
+
+	t.Run("invalid default config fails validation", func(t *testing.T) {
+		content := []byte(`
+default:
+  - action: labelmap
+    regex: "(.*)"
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, SelectorSupportedRelabelActions)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `tenant "default": unsupported relabel action: labelmap`, err.Error())
+	})
+
+	t.Run("scalar content is rejected", func(t *testing.T) {
+		_, _, err := ParseRelabelConfigWithTenants([]byte(`foo`), nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "parsing relabel configuration: expected a list of relabel configs or a map of tenant ID to relabel configs", err.Error())
 	})
 
 	t.Run("unsupported per-tenant action is rejected", func(t *testing.T) {

@@ -380,9 +380,13 @@ The configuration is either a list of relabel rules applied to every tenant:
   action: drop
 ```
 
-or a map of tenant ID to relabel rules, in which case rules are only applied to matching tenants and other tenants are left untouched. The tenant of a series is the one it will be stored under, so when `--receive.split-tenant-label-name` is set, the value of that label takes precedence over the tenant of the request:
+or a map of tenant ID to relabel rules. The tenant of a series is the one it will be stored under, so when `--receive.split-tenant-label-name` is set, the value of that label takes precedence over the tenant of the request. The reserved `default` key holds the rules applied to tenants without specific rules. A tenant with specific rules does not get the `default` ones, and a tenant mapped to an empty list is not relabeled. Without a `default` key, tenants without specific rules are not relabeled:
 
 ```yaml
+default:
+  - source_labels: [__name__]
+    regex: "unwanted_metric_.*"
+    action: drop
 tenant-a:
   - source_labels: [__name__]
     regex: "tenant_a_unwanted_.*"
@@ -391,6 +395,7 @@ tenant-b:
   - source_labels: [__name__]
     regex: "tenant_b_wanted_.*"
     action: keep
+tenant-c: []
 ```
 
 ## Quorum

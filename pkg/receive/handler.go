@@ -1489,6 +1489,9 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest, tenant string) {
 // relabelConfigsFor returns the relabel configs of the tenant the series will be
 // stored under, which is the split tenant label when present.
 func (h *Handler) relabelConfigsFor(tenant string, lbls labels.Labels) []*relabel.Config {
+	if len(h.options.TenantRelabelConfigs) == 0 {
+		return h.options.RelabelConfigs
+	}
 	if h.splitTenantLabelName != "" {
 		if splitTenant := lbls.Get(h.splitTenantLabelName); splitTenant != "" {
 			tenant = splitTenant

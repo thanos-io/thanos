@@ -1407,27 +1407,47 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	return relabelConfig, nil
 }
 
+// DefaultTenantRelabelConfigKey is the reserved key of the per-tenant relabel
+// configuration holding the relabel configs of tenants without specific ones.
+const DefaultTenantRelabelConfigKey = "default"
+
 // ParseRelabelConfigWithTenants parses relabel configuration provided either as
 // a single list applied to all tenants or as a map of tenant ID to relabel configs.
+// In the map format, the configs under DefaultTenantRelabelConfigKey are returned
+// as the default configs, applied to tenants without specific configs.
 func ParseRelabelConfigWithTenants(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
-	var global []*relabel.Config
-	if err := yaml.Unmarshal(contentYaml, &global); err == nil {
-		if err := validateRelabelConfig(global, supportedActions); err != nil {
+	// Detect the format first so that errors of one format are not hidden by
+	// a failed attempt at parsing the other one.
+	var probe interface{}
+	if err := yaml.Unmarshal(contentYaml, &probe); err != nil {
+		return nil, nil, errors.Wrap(err, "parsing relabel configuration")
+	}
+
+	switch probe.(type) {
+	case nil:
+		return nil, nil, nil
+	case []interface{}:
+		global, err := ParseRelabelConfig(contentYaml, supportedActions)
+		if err != nil {
 			return nil, nil, err
 		}
 		return global, nil, nil
-	}
-
-	var perTenant map[string][]*relabel.Config
-	if err := yaml.Unmarshal(contentYaml, &perTenant); err != nil {
-		return nil, nil, errors.Wrap(err, "parsing relabel configuration")
-	}
-	for tenant, cfgs := range perTenant {
-		if err := validateRelabelConfig(cfgs, supportedActions); err != nil {
-			return nil, nil, errors.Wrapf(err, "tenant %q", tenant)
+	case map[interface{}]interface{}:
+		var perTenant map[string][]*relabel.Config
+		if err := yaml.Unmarshal(contentYaml, &perTenant); err != nil {
+			return nil, nil, errors.Wrap(err, "parsing relabel configuration")
 		}
+		for tenant, cfgs := range perTenant {
+			if err := validateRelabelConfig(cfgs, supportedActions); err != nil {
+				return nil, nil, errors.Wrapf(err, "tenant %q", tenant)
+			}
+		}
+		defaultCfgs := perTenant[DefaultTenantRelabelConfigKey]
+		delete(perTenant, DefaultTenantRelabelConfigKey)
+		return defaultCfgs, perTenant, nil
+	default:
+		return nil, nil, errors.New("parsing relabel configuration: expected a list of relabel configs or a map of tenant ID to relabel configs")
 	}
-	return nil, perTenant, nil
 }
 
 func validateRelabelConfig(relabelConfig []*relabel.Config, supportedActions map[relabel.Action]struct{}) error {

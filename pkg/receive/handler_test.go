@@ -2063,8 +2063,8 @@ func TestRelabelPerTenant(t *testing.T) {
 		"tenant-empty": {},
 	}
 
-	// Global and per-tenant relabel configs are mutually exclusive: the config
-	// file is parsed either as a list (global) or as a map (per-tenant).
+	// The global configs are either the list format configs or the configs under
+	// the `default` key of the per-tenant map format.
 	for _, tcase := range []struct {
 		name                string
 		tenant              string
@@ -2113,6 +2113,30 @@ func TestRelabelPerTenant(t *testing.T) {
 			tenant:              "tenant-no-config",
 			inputMetricNames:    []string{"any_metric"},
 			expectedMetricNames: []string{"any_metric"},
+		},
+		{
+			name:                "default config applies to tenant without specific config",
+			tenant:              "tenant-b",
+			globalRelabel:       globalRelabelConfigs,
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"tenant_a_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "tenant specific config overrides default config",
+			tenant:              "tenant-a",
+			globalRelabel:       globalRelabelConfigs,
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "tenant_a_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"global_drop_metric", "keep_metric"},
+		},
+		{
+			name:                "tenant with empty config opts out of default config",
+			tenant:              "tenant-empty",
+			globalRelabel:       globalRelabelConfigs,
+			tenantRelabel:       tenantRelabelConfigs,
+			inputMetricNames:    []string{"global_drop_metric", "keep_metric"},
+			expectedMetricNames: []string{"global_drop_metric", "keep_metric"},
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
