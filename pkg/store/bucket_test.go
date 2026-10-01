@@ -227,7 +227,7 @@ func TestBucketFilterExtLabelsMatchers(t *testing.T) {
 			},
 		},
 	}
-	b, _ := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, _ := newBucketBlock(context.Background(), newBucketStoreMetrics(nil, nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	ms := []*labels.Matcher{
 		{Type: labels.MatchNotEqual, Name: "a", Value: "b"},
 	}
@@ -287,7 +287,7 @@ func TestBucketBlock_matchLabels(t *testing.T) {
 		},
 	}
 
-	b, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
+	b, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil, nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, nil, nil, nil, nil)
 	testutil.Ok(t, err)
 
 	cases := []struct {
@@ -1046,7 +1046,7 @@ func TestReadIndexCache_LoadSeries(t *testing.T) {
 	bkt := objstore.NewInMemBucket()
 	ctx := context.Background()
 
-	s := newBucketStoreMetrics(nil)
+	s := newBucketStoreMetrics(nil, nil)
 	b := &bucketBlock{
 		meta: &metadata.Meta{
 			BlockMeta: tsdb.BlockMeta{
@@ -1274,7 +1274,7 @@ func benchmarkExpandedPostings(
 	for _, c := range cases {
 		t.Run(c.name, func(t testutil.TB) {
 			b := &bucketBlock{
-				metrics:           newBucketStoreMetrics(nil),
+				metrics:           newBucketStoreMetrics(nil, nil),
 				indexHeaderReader: r,
 				indexCache:        noopCache{},
 				bkt:               bkt,
@@ -1308,7 +1308,7 @@ func TestExpandedPostingsEmptyPostings(t *testing.T) {
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling, indexheader.NewBinaryReaderMetrics(nil))
 	testutil.Ok(t, err)
 	b := &bucketBlock{
-		metrics:           newBucketStoreMetrics(nil),
+		metrics:           newBucketStoreMetrics(nil, nil),
 		indexHeaderReader: r,
 		indexCache:        noopCache{},
 		bkt:               bkt,
@@ -1346,7 +1346,7 @@ func TestLazyExpandedPostingsEmptyPostings(t *testing.T) {
 	r, err := indexheader.NewBinaryReader(context.Background(), log.NewNopLogger(), bkt, tmpDir, id, DefaultPostingOffsetInMemorySampling, indexheader.NewBinaryReaderMetrics(nil))
 	testutil.Ok(t, err)
 	b := &bucketBlock{
-		metrics:                newBucketStoreMetrics(nil),
+		metrics:                newBucketStoreMetrics(nil, nil),
 		indexHeaderReader:      r,
 		indexCache:             noopCache{},
 		bkt:                    bkt,
@@ -1727,7 +1727,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		b1 = &bucketBlock{
 			indexCache:             indexCache,
-			metrics:                newBucketStoreMetrics(nil),
+			metrics:                newBucketStoreMetrics(nil, nil),
 			bkt:                    bkt,
 			meta:                   meta,
 			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1767,7 +1767,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 
 		b2 = &bucketBlock{
 			indexCache:             indexCache,
-			metrics:                newBucketStoreMetrics(nil),
+			metrics:                newBucketStoreMetrics(nil, nil),
 			bkt:                    bkt,
 			meta:                   meta,
 			partitioner:            NewGapBasedPartitioner(PartitionerMaxGapSize),
@@ -1786,7 +1786,7 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		matcherCache:    matcherCache,
 		indexCache:      indexCache,
 		indexReaderPool: indexheader.NewReaderPool(log.NewNopLogger(), false, 0, indexheader.NewReaderPoolMetrics(nil), indexheader.AlwaysEagerDownloadIndexHeader),
-		metrics:         newBucketStoreMetrics(nil),
+		metrics:         newBucketStoreMetrics(nil, nil),
 		blockSets: map[uint64]*bucketBlockSet{
 			labels.FromStrings("ext1", "1").Hash(): {blocks: [][]*bucketBlock{{b1, b2}}},
 		},
@@ -2779,7 +2779,7 @@ func BenchmarkBucketBlock_readChunkRange(b *testing.B) {
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil, nil), blockMeta, bkt, tmpDir, nil, chunkPool, nil, nil, nil, nil)
 	testutil.Ok(b, err)
 
 	for n := 0; b.Loop(); n++ {
@@ -2866,7 +2866,7 @@ func prepareBucket(b *testing.B, resolutionLevel compact.ResolutionLevel) (*buck
 	testutil.Ok(b, err)
 
 	// Create a bucket block with only the dependencies we need for the benchmark.
-	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
+	blk, err := newBucketBlock(context.Background(), newBucketStoreMetrics(nil, nil), blockMeta, bkt, tmpDir, indexCache, chunkPool, indexHeaderReader, partitioner, nil, nil)
 	testutil.Ok(b, err)
 	return blk, blockMeta
 }
@@ -3608,7 +3608,7 @@ func TestExpandedPostingsRace(t *testing.T) {
 
 		blk, err := newBucketBlock(
 			context.Background(),
-			newBucketStoreMetrics(nil),
+			newBucketStoreMetrics(nil, nil),
 			m,
 			bkt,
 			filepath.Join(tmpDir, ul.String()),

@@ -145,3 +145,8 @@ func (p *BucketedPool[T]) UsedBytes() uint64 {
 
 	return p.usedTotal
 }
+
+// MaxBytes returns the maximum number of bytes that can be in use at once, 0 means unlimited.
+func (p *BucketedPool[T]) MaxBytes() uint64 {
+	return p.maxTotal
+}

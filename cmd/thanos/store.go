@@ -19,7 +19,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	commonmodel "github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"gopkg.in/yaml.v2"
@@ -420,14 +419,6 @@ func runStore(
 	if err != nil {
 		return errors.Wrap(err, "create chunk pool")
 	}
-	promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_bucket_store_chunk_pool_used_bytes",
-		Help: "Number of bytes currently in use from the chunk pool.",
-	}, func() float64 { return float64(chunkPool.UsedBytes()) })
-	promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
-		Name: "thanos_bucket_store_chunk_pool_max_bytes",
-		Help: "Maximum number of bytes the chunk pool allows to be in use, as set by --chunk-pool-size.",
-	}, func() float64 { return float64(conf.chunkPoolSize) })
 
 	options := []store.BucketStoreOption{
 		store.WithLogger(logger),
