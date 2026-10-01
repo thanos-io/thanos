@@ -15,6 +15,10 @@ type Pool[T any] interface {
 	Get(sz int) (*[]T, error)
 	// Put returns a T slice to the right bucket in the pool.
 	Put(b *[]T)
+	// UsedBytes returns the number of bytes currently in use from the pool.
+	UsedBytes() uint64
+	// MaxBytes returns the maximum number of bytes that can be in use at once, 0 means unlimited.
+	MaxBytes() uint64
 }
 
 // NoopPool is pool that always allocated required slice on heap and ignore puts.
@@ -26,6 +30,12 @@ func (p NoopPool[T]) Get(sz int) (*[]T, error) {
 }
 
 func (p NoopPool[T]) Put(*[]T) {}
+
+// UsedBytes always returns 0 as NoopPool does not track usage.
+func (p NoopPool[T]) UsedBytes() uint64 { return 0 }
+
+// MaxBytes always returns 0 as NoopPool is unlimited.
+func (p NoopPool[T]) MaxBytes() uint64 { return 0 }
 
 // BucketedPool is a bucketed pool for variably sized T slices. It can be
 // configured to not allow more than a maximum number of T items being used at a

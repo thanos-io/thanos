@@ -1640,6 +1640,10 @@ func (m fakePool) Get(sz int) (*[]byte, error) {
 
 func (m fakePool) Put(_ *[]byte) {}
 
+func (m fakePool) UsedBytes() uint64 { return 0 }
+
+func (m fakePool) MaxBytes() uint64 { return 0 }
+
 type mockedPool struct {
 	parent  pool.Pool[byte]
 	balance atomic.Uint64
@@ -1660,6 +1664,10 @@ func (m *mockedPool) Put(b *[]byte) {
 	m.balance.Sub(uint64(cap(*b)))
 	m.parent.Put(b)
 }
+
+func (m *mockedPool) UsedBytes() uint64 { return m.parent.UsedBytes() }
+
+func (m *mockedPool) MaxBytes() uint64 { return m.parent.MaxBytes() }
 
 // Regression test against: https://github.com/thanos-io/thanos/issues/2147.
 func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {

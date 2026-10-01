@@ -179,15 +179,15 @@ type bucketStoreMetrics struct {
 func newBucketStoreMetrics(reg prometheus.Registerer, chunkPool pool.Pool[byte]) *bucketStoreMetrics {
 	var m bucketStoreMetrics
 
-	if bp, ok := chunkPool.(*pool.BucketedPool[byte]); ok {
+	if chunkPool != nil {
 		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "thanos_bucket_store_chunk_pool_used_bytes",
 			Help: "Number of bytes currently in use from the chunk pool.",
-		}, func() float64 { return float64(bp.UsedBytes()) })
+		}, func() float64 { return float64(chunkPool.UsedBytes()) })
 		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
 			Name: "thanos_bucket_store_chunk_pool_max_bytes",
 			Help: "Maximum number of bytes the chunk pool allows to be in use, as set by --chunk-pool-size.",
-		}, func() float64 { return float64(bp.MaxBytes()) })
+		}, func() float64 { return float64(chunkPool.MaxBytes()) })
 	}
 
 	m.blockLoads = promauto.With(reg).NewCounter(prometheus.CounterOpts{
@@ -4044,6 +4044,6 @@ func (s *queryStats) toHints() *hintspb.QueryStats {
 }
 
 // NewDefaultChunkBytesPool returns a chunk bytes pool with default settings.
-func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (*pool.BucketedPool[byte], error) {
+func NewDefaultChunkBytesPool(maxChunkPoolBytes uint64) (pool.Pool[byte], error) {
 	return pool.NewBucketedPool[byte](chunkBytesPoolMinSize, chunkBytesPoolMaxSize, 2, maxChunkPoolBytes)
 }
