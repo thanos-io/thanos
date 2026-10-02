@@ -111,3 +111,392 @@ tests:
           description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
           runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
           summary: 'Thanos Rule did not perform any rule evaluations.'
+
+# Classic histogram boundaries match the producers at their default settings.
+- interval: 1m
+  input_series:
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.005",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.01",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.025",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.05",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.25",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="0.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="2.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="10",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="20",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="30",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="60",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-0",le="+Inf",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.005",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.01",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.025",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.05",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.25",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="0.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="2.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="10",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="20",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="30",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="60",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate",instance="slow-1",le="+Inf",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.005",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.01",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.025",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.05",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.25",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="0.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="1",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="2.5",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="5",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="10",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="20",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="30",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="60",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-healthy",instance="healthy",le="+Inf",result="success"}
+    values: 0+100x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.005",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.01",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.025",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.05",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.25",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="0.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="1",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="2.5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="5",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="10",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="20",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="30",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="60",result="success"}
+    values: 0+0x20 stale _x10
+  - series: thanos_replicate_replication_run_duration_seconds_bucket{job="thanos-bucket-replicate-idle",instance="idle",le="+Inf",result="success"}
+    values: 0+0x20 stale _x10
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ThanosBucketReplicateRunLatency
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: ThanosBucketReplicateRunLatency
+    exp_alerts:
+    - exp_labels:
+        job: thanos-bucket-replicate
+        severity: critical
+      exp_annotations:
+        description: Thanos Replicate thanos-bucket-replicate has a 99th percentile latency of 29.9 seconds for the replicate operations.
+        summary: Thanos Replicate has a high latency for replicate operations.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicaterunlatency
+  - eval_time: 20m
+    alertname: ThanosBucketReplicateRunLatency
+    exp_alerts:
+    - exp_labels:
+        job: thanos-bucket-replicate
+        severity: critical
+      exp_annotations:
+        description: Thanos Replicate thanos-bucket-replicate has a 99th percentile latency of 29.9 seconds for the replicate operations.
+        summary: Thanos Replicate has a high latency for replicate operations.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosbucketreplicaterunlatency
+  - eval_time: 30m
+    alertname: ThanosBucketReplicateRunLatency
+    exp_alerts: []
+- interval: 1m
+  input_series:
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.001",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.005",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.01",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.02",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.03",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.04",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.05",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.06",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.07",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.08",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.09",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.25",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="0.75",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="2",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="3",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="4",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="10",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="20",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="30",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-0",le="+Inf",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_count{job="thanos-receive",instance="slow-0",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.001",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.005",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.01",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.02",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.03",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.04",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.05",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.06",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.07",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.08",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.09",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.25",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="0.75",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="2",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="3",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="4",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="10",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="20",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="30",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive",instance="slow-1",le="+Inf",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_count{job="thanos-receive",instance="slow-1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.001",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.005",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.01",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.02",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.03",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.04",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.05",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.06",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.07",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.08",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.09",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.25",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="0.75",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="2",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="3",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="4",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="10",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="20",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="30",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-healthy",instance="healthy",le="+Inf",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_count{job="thanos-receive-healthy",instance="healthy",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+100x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.001",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.005",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.01",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.02",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.03",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.04",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.05",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.06",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.07",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.08",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.09",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.25",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="0.75",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="1",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="2",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="3",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="4",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="5",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="10",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="20",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="30",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_bucket{job="thanos-receive-idle",instance="idle",le="+Inf",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  - series: http_request_duration_seconds_count{job="thanos-receive-idle",instance="idle",handler="receive",code="200",tenant="default-tenant"}
+    values: 0+0x20 stale _x10
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: ThanosReceiveHttpRequestLatencyHigh
+    exp_alerts: []
+  - eval_time: 11m
+    alertname: ThanosReceiveHttpRequestLatencyHigh
+    exp_alerts:
+    - exp_labels:
+        job: thanos-receive
+        severity: critical
+      exp_annotations:
+        description: Thanos Receive thanos-receive has a 99th percentile latency of 19.9 seconds for requests.
+        summary: Thanos Receive has high HTTP requests latency.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivehttprequestlatencyhigh
+  - eval_time: 20m
+    alertname: ThanosReceiveHttpRequestLatencyHigh
+    exp_alerts:
+    - exp_labels:
+        job: thanos-receive
+        severity: critical
+      exp_annotations:
+        description: Thanos Receive thanos-receive has a 99th percentile latency of 19.9 seconds for requests.
+        summary: Thanos Receive has high HTTP requests latency.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivehttprequestlatencyhigh
+  - eval_time: 30m
+    alertname: ThanosReceiveHttpRequestLatencyHigh
+    exp_alerts: []
+- interval: 1m
+  input_series: []
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: ThanosBucketReplicateRunLatency
+    exp_alerts: []
+  - eval_time: 20m
+    alertname: ThanosReceiveHttpRequestLatencyHigh
+    exp_alerts: []
