@@ -719,7 +719,7 @@ func TestQueryStoreMetrics(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -907,7 +907,7 @@ func TestQueryStoreDedup(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-dedup-test"
-	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)
@@ -2150,7 +2150,7 @@ func TestQueryTenancyEnforcement(t *testing.T) {
 	t.Cleanup(cancel)
 
 	bucket := "store-gw-test"
-	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	l := log.NewLogfmtLogger(os.Stdout)

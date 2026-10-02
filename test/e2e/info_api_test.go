@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/objstore"
@@ -38,7 +39,7 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	const bucket = "info-api-test"
-	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 	store := e2ethanos.NewStoreGW(
 		e,
