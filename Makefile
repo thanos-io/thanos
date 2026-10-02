@@ -314,7 +314,6 @@ tarballs-release: $(PROMU)
 .PHONY: test
 test: ## Runs all Thanos Go unit tests against each supported version of Prometheus. This excludes tests in ./test/e2e.
 test: export GOCACHE= $(TMP_GOPATH)/gocache
-test: export THANOS_TEST_MINIO_PATH= $(MINIO)
 test: export THANOS_TEST_PROMETHEUS_PATHS= $(PROMETHEUS)
 test: export THANOS_TEST_ALERTMANAGER_PATH= $(ALERTMANAGER)
 test: check-git install-tool-deps
@@ -388,7 +387,7 @@ quickstart:
 
 .PHONY: install-tool-deps
 install-tool-deps: ## Installs dependencies for integration tests. It installs supported versions of Prometheus and alertmanager to test against in integration tests.
-install-tool-deps: $(ALERTMANAGER) $(MINIO) $(PROMETHEUS)
+install-tool-deps: $(ALERTMANAGER) $(PROMETHEUS)
 	@echo ">>GOBIN=$(GOBIN)"
 
 .PHONY: check-git

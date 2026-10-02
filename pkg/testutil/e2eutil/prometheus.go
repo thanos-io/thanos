@@ -46,12 +46,10 @@ import (
 const (
 	defaultPrometheusVersion   = "v0.54.1"
 	defaultAlertmanagerVersion = "v0.20.0"
-	defaultMinioVersion        = "RELEASE.2022-07-30T05-21-40Z"
 
 	// Space delimited list of versions.
 	promPathsEnvVar       = "THANOS_TEST_PROMETHEUS_PATHS"
 	alertmanagerBinEnvVar = "THANOS_TEST_ALERTMANAGER_PATH"
-	minioBinEnvVar        = "THANOS_TEST_MINIO_PATH"
 
 	// A placeholder for actual Prometheus instance address in the scrape config.
 	PromAddrPlaceHolder = "PROMETHEUS_ADDRESS"
@@ -97,14 +95,6 @@ func AlertmanagerBinary() string {
 	b := os.Getenv(alertmanagerBinEnvVar)
 	if b == "" {
 		return fmt.Sprintf("alertmanager-%s", defaultAlertmanagerVersion)
-	}
-	return b
-}
-
-func MinioBinary() string {
-	b := os.Getenv(minioBinEnvVar)
-	if b == "" {
-		return fmt.Sprintf("minio-%s", defaultMinioVersion)
 	}
 	return b
 }

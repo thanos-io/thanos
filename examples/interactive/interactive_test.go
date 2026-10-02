@@ -147,14 +147,14 @@ func TestReadOnlyThanosSetup(t *testing.T) {
 	//	│ Bucket: bkt2 │ {cluster=us1, replica=0} 10k series [t-2w, t-1w] │
 	//	└──────────────┴──────────────────────────────────────────────────┘
 	//
-	s3Server := e2ethanos.NewSeaweedFS(e, "seaweedfs-1", "")
+	s3Server := e2edb.NewSeaweedFS(e, "seaweedfs-1", "")
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	newBucketConfig := func(bucket, endpoint string) s3.Config {
 		return s3.Config{
 			Bucket:           bucket,
-			AccessKey:        e2ethanos.SeaweedFSAccessKey,
-			SecretKey:        e2ethanos.SeaweedFSSecretKey,
+			AccessKey:        e2edb.S3AccessKey,
+			SecretKey:        e2edb.S3SecretKey,
 			Endpoint:         endpoint,
 			Insecure:         true,
 			BucketLookupType: s3.PathLookup,
