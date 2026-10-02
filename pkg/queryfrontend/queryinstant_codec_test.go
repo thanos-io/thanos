@@ -963,6 +963,115 @@ func TestMergeResponse(t *testing.T) {
 	}
 }
 
+func TestMatrixMergeHistograms(t *testing.T) {
+	labelsA := cortexpb.FromLabelsToLabelAdapters(labels.FromMap(map[string]string{
+		"__name__": "test_metric",
+	}))
+
+	t.Run("non-overlapping histograms are merged", func(t *testing.T) {
+		resps := []*queryrange.PrometheusInstantQueryResponse{
+			{
+				Data: queryrange.PrometheusInstantQueryData{
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Labels: labelsA,
+										Histograms: []queryrange.SampleHistogramPair{
+											{Timestamp: 1},
+											{Timestamp: 2},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Data: queryrange.PrometheusInstantQueryData{
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Labels: labelsA,
+										Histograms: []queryrange.SampleHistogramPair{
+											{Timestamp: 3},
+											{Timestamp: 4},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := matrixMerge(resps)
+		testutil.Equals(t, 1, len(result.SampleStreams))
+		testutil.Equals(t, 4, len(result.SampleStreams[0].Histograms))
+		testutil.Equals(t, int64(1), result.SampleStreams[0].Histograms[0].GetTimestamp())
+		testutil.Equals(t, int64(4), result.SampleStreams[0].Histograms[3].GetTimestamp())
+	})
+
+	t.Run("overlapping histograms are deduplicated", func(t *testing.T) {
+		resps := []*queryrange.PrometheusInstantQueryResponse{
+			{
+				Data: queryrange.PrometheusInstantQueryData{
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Labels: labelsA,
+										Histograms: []queryrange.SampleHistogramPair{
+											{Timestamp: 1},
+											{Timestamp: 2},
+											{Timestamp: 3},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Data: queryrange.PrometheusInstantQueryData{
+					Result: queryrange.PrometheusInstantQueryResult{
+						Result: &queryrange.PrometheusInstantQueryResult_Matrix{
+							Matrix: &queryrange.Matrix{
+								SampleStreams: []*queryrange.SampleStream{
+									{
+										Labels: labelsA,
+										Histograms: []queryrange.SampleHistogramPair{
+											{Timestamp: 3},
+											{Timestamp: 4},
+											{Timestamp: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := matrixMerge(resps)
+		testutil.Equals(t, 1, len(result.SampleStreams))
+		testutil.Equals(t, 5, len(result.SampleStreams[0].Histograms))
+		// Verify no duplicate at timestamp 3.
+		for i := 0; i < len(result.SampleStreams[0].Histograms)-1; i++ {
+			if result.SampleStreams[0].Histograms[i].GetTimestamp() >= result.SampleStreams[0].Histograms[i+1].GetTimestamp() {
+				t.Fatalf("histogram timestamps not strictly increasing at index %d: %d >= %d",
+					i, result.SampleStreams[0].Histograms[i].GetTimestamp(), result.SampleStreams[0].Histograms[i+1].GetTimestamp())
+			}
+		}
+	})
+}
+
 func TestDecodeResponse(t *testing.T) {
 	codec := NewThanosQueryInstantCodec(false)
 	headers := []*queryrange.PrometheusResponseHeader{
