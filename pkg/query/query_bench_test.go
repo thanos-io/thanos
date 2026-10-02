@@ -19,6 +19,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
@@ -161,13 +162,27 @@ func TestQuerySelect(t *testing.T) {
 }
 
 func BenchmarkQuerySelect(b *testing.B) {
-	tb := testutil.NewTB(b)
-	storetestutil.RunSeriesInterestingCases(tb, 10e6, 10e5, func(t testutil.TB, samplesPerSeries, series int) {
-		benchQuerySelect(t, samplesPerSeries, series, true)
-	})
+	for _, tc := range []struct {
+		samples int
+		series  int
+	}{
+		{samples: 1, series: 1000000},
+		{samples: 100, series: 100000},
+		{samples: 10000000, series: 1},
+	} {
+		q, expectedSeries := setupQuerySelect(testutil.NewTB(b), tc.samples, tc.series, true)
+		b.Run(fmt.Sprintf("%dSeriesWith%dSamples", tc.series, tc.samples), func(b *testing.B) {
+			benchSelect(b, q, len(expectedSeries))
+		})
+	}
 }
 
 func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) {
+	q, expectedSeries := setupQuerySelect(t, totalSamples, totalSeries, dedup)
+	testSelect(t, q, expectedSeries)
+}
+
+func setupQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) (*querier, []labels.Labels) {
 	tmpDir := t.TempDir()
 
 	const numOfReplicas = 2
@@ -227,7 +242,7 @@ func benchQuerySelect(t testutil.TB, totalSamples, totalSeries int, dedup bool) 
 		NoopSeriesStatsReporter,
 		1,
 	)
-	testSelect(t, q, expectedSeries)
+	return q, expectedSeries
 }
 
 type mockedStoreServer struct {
@@ -297,6 +312,39 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 			testutil.Ok(t, ss.Err())
 		}
 	})
+}
+
+func benchSelect(b *testing.B, q *querier, expectedSeries int) {
+	ctx := context.Background()
+	b.ResetTimer()
+	for b.Loop() {
+		ss := q.Select(ctx, true, nil, &labels.Matcher{Value: "foo", Name: "bar", Type: labels.MatchEqual})
+		if ss.Err() != nil {
+			b.Fatal(ss.Err())
+		}
+
+		var gotSeriesCount int
+		for ss.Next() {
+			s := ss.At()
+			testLset = s.Labels()
+			gotSeriesCount++
+
+			iter := s.Iterator(nil)
+			for iter.Next() != chunkenc.ValNone {
+				testT, testV = iter.At()
+			}
+			if iter.Err() != nil {
+				b.Fatal(iter.Err())
+			}
+		}
+
+		if gotSeriesCount != expectedSeries {
+			b.Fatalf("expected %d series, got %d", expectedSeries, gotSeriesCount)
+		}
+		if ss.Err() != nil {
+			b.Fatal(ss.Err())
+		}
+	}
 }
 
 // batchingMockedStoreServer batches series responses before sending.
@@ -482,4 +530,62 @@ func benchmarkGRPCServerBatching(b *testing.B, seriesCount, samplesPerSeries, ba
 		require.Equal(b, len(resps), got)
 	}
 
+}
+
+func BenchmarkQuerySelectHistogram(b *testing.B) {
+	const (
+		numChunks       = 50
+		samplesPerChunk = 120
+		bucketCount     = 160
+	)
+
+	chunks := make([]storepb.AggrChunk, numChunks)
+	for i := 0; i < numChunks; i++ {
+		startTs := int64(i*samplesPerChunk) * 15000
+		chunks[i] = storepb.AggrChunk{
+			Raw: createHistogramChunk(b, startTs, samplesPerChunk, bucketCount),
+		}
+	}
+
+	b.Run("count", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			s := &chunkSeries{
+				chunks: chunks,
+				aggrs:  []storepb.Aggr{storepb.Aggr_COUNT},
+				mint:   math.MinInt64,
+				maxt:   math.MaxInt64,
+			}
+			it := s.Iterator(nil)
+			// Use a reusable FloatHistogram, matching how the PromQL engine
+			// calls AtFloatHistogram with a non-nil argument to enable
+			// bucket slice reuse across samples and chunk transitions.
+			fh := &histogram.FloatHistogram{}
+			for it.Next() != chunkenc.ValNone {
+				testT, fh = it.AtFloatHistogram(fh)
+			}
+			if it.Err() != nil {
+				b.Fatal(it.Err())
+			}
+		}
+	})
+	b.Run("sum", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			s := &chunkSeries{
+				chunks: chunks,
+				aggrs:  []storepb.Aggr{storepb.Aggr_SUM},
+				mint:   math.MinInt64,
+				maxt:   math.MaxInt64,
+			}
+			it := s.Iterator(nil)
+			fh := &histogram.FloatHistogram{}
+			for it.Next() != chunkenc.ValNone {
+				testT, fh = it.AtFloatHistogram(fh)
+			}
+			if it.Err() != nil {
+				b.Fatal(it.Err())
+			}
+		}
+	})
 }
