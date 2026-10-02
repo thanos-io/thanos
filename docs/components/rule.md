@@ -635,3 +635,15 @@ The configuration format is the following:
   grpc_config:
     endpoint_addresses: []
 ```
+
+To send extra headers with every HTTP query, for example a tenant ID, set `http_headers` in `http_config`. Each header takes `values`, `secrets` or `files`, as in Prometheus' `http_headers`; relative `files` paths are resolved from the working directory. The Alertmanager `http_config` accepts it too:
+
+```yaml
+- http_config:
+    http_headers:
+      X-Scope-OrgID:
+        values: [tenant-a]
+  static_configs: ["querier:9090"]
+```
+
+Note that a header like this applies to every query the Ruler makes, so setting a tenant ID means running one Ruler per tenant. That is only practical for a small number of tenants.
