@@ -5,8 +5,14 @@ package queryfrontend
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-kit/log"
+	"gopkg.in/yaml.v2"
+
+	"github.com/thanos-io/thanos/pkg/cacheutil"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/internal/cortex/chunk/cache"
@@ -105,6 +111,92 @@ func TestConfig_Validate(t *testing.T) {
 				testutil.Ok(t, err)
 				fmt.Println(err)
 			}
+		})
+	}
+}
+
+// Regression guard: the query-frontend response cache parses strictly while the store
+// caches spell the same setting `ttl` (pkg/store/cache/factory.go). Writing `ttl` here
+// used to abort startup with "field ttl not found in type ...ResponseCacheConfig".
+func TestNewCacheConfig_TTLAlias(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		yaml     string
+		err      string
+		expected time.Duration
+	}{
+		{
+			name:     "redis ttl is accepted as an alias for expiration",
+			yaml:     "type: REDIS\nconfig:\n  addr: localhost:6379\n  ttl: 48h\n",
+			expected: 48 * time.Hour,
+		},
+		{
+			name:     "redis expiration still works",
+			yaml:     "type: REDIS\nconfig:\n  addr: localhost:6379\n  expiration: 12h\n",
+			expected: 12 * time.Hour,
+		},
+		{
+			name: "redis rejects ttl and expiration together",
+			yaml: "type: REDIS\nconfig:\n  addr: localhost:6379\n  ttl: 48h\n  expiration: 12h\n",
+			err:  "must not be set at the same time",
+		},
+		{
+			name:     "memcached ttl is accepted as an alias for expiration",
+			yaml:     "type: MEMCACHED\nconfig:\n  addresses: [localhost:11211]\n  ttl: 48h\n",
+			expected: 48 * time.Hour,
+		},
+		{
+			name: "memcached rejects ttl and expiration together",
+			yaml: "type: MEMCACHED\nconfig:\n  addresses: [localhost:11211]\n  ttl: 48h\n  expiration: 12h\n",
+			err:  "must not be set at the same time",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := NewCacheConfig(log.NewNopLogger(), []byte(tc.yaml))
+			if tc.err != "" {
+				testutil.NotOk(t, err)
+				testutil.Assert(t, strings.Contains(err.Error(), tc.err), "got %q, want it to contain %q", err.Error(), tc.err)
+				return
+			}
+			testutil.Ok(t, err)
+			got := cfg.Redis.Expiration
+			if cfg.Memcache.Expiration != 0 {
+				got = cfg.Memcache.Expiration
+			}
+			testutil.Equals(t, tc.expected, got)
+		})
+	}
+}
+
+// Regression guard: the e2e helpers build the cache config as a Go struct and marshal
+// it, so both `expiration` and `ttl` appear in the YAML with zero values (cfggen forbids
+// omitempty on config fields). A present but zero key must not be read as a conflict, or
+// query-frontend refuses to start.
+func TestNewCacheConfig_MarshalledStructRoundTrip(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		cfg  CacheProviderConfig
+	}{
+		{
+			name: "memcached",
+			cfg: CacheProviderConfig{
+				Type:   MEMCACHED,
+				Config: MemcachedResponseCacheConfig{Memcached: cacheutil.MemcachedClientConfig{Addresses: []string{"memcached:11211"}}},
+			},
+		},
+		{
+			name: "redis",
+			cfg: CacheProviderConfig{
+				Type:   REDIS,
+				Config: RedisResponseCacheConfig{Redis: cacheutil.RedisClientConfig{Addr: "redis:6379"}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := yaml.Marshal(tc.cfg)
+			testutil.Ok(t, err)
+			_, err = NewCacheConfig(log.NewNopLogger(), b)
+			testutil.Ok(t, err)
 		})
 	}
 }
