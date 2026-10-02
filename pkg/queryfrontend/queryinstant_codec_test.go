@@ -6,6 +6,7 @@ package queryfrontend
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/efficientgo/core/testutil"
@@ -1341,11 +1343,142 @@ func TestDecodeResponse(t *testing.T) {
 	}
 }
 
+func TestMergeResponseSortByLabel(t *testing.T) {
+	previous := parser.EnableExperimentalFunctions
+	parser.EnableExperimentalFunctions = true
+	t.Cleanup(func() { parser.EnableExperimentalFunctions = previous })
+
+	sample := func(value float64, labelPairs ...string) *queryrange.Sample {
+		return &queryrange.Sample{
+			Labels:      cortexpb.FromLabelsToLabelAdapters(labels.FromStrings(labelPairs...)),
+			SampleValue: value,
+			Timestamp:   1000,
+		}
+	}
+	histogramSample := func(labelPairs ...string) *queryrange.Sample {
+		s := sample(0, labelPairs...)
+		s.Histogram = &queryrange.SampleHistogram{Count: 1, Sum: 2}
+		return s
+	}
+
+	for _, tc := range []struct {
+		name      string
+		labelArgs string
+		samples   []*queryrange.Sample
+		ascending []int
+	}{
+		{
+			name:      "natural order differs from sample values",
+			labelArgs: `"instance"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node10"),
+				sample(100, "instance", "node2"),
+			},
+			ascending: []int{1, 0},
+		},
+		{
+			name:      "multiple labels",
+			labelArgs: `"instance", "job"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node2", "job", "c"),
+				sample(2, "instance", "node2", "job", "a"),
+				sample(3, "instance", "node10", "job", "b"),
+			},
+			ascending: []int{1, 0, 2},
+		},
+		{
+			name:      "label argument order",
+			labelArgs: `"job", "instance"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node2", "job", "c"),
+				sample(2, "instance", "node2", "job", "a"),
+				sample(3, "instance", "node10", "job", "b"),
+			},
+			ascending: []int{1, 2, 0},
+		},
+		{
+			name:      "missing label falls back to the next argument",
+			labelArgs: `"region", "instance"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node10"),
+				sample(2, "instance", "node1"),
+				sample(3, "instance", "node2"),
+			},
+			ascending: []int{1, 2, 0},
+		},
+		{
+			name:      "full label set tie-breaker is lexicographic",
+			labelArgs: `"instance"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node2", "job", "job2"),
+				sample(100, "instance", "node2", "job", "job10"),
+			},
+			ascending: []int{1, 0},
+		},
+		{
+			name:      "all requested labels missing",
+			labelArgs: `"region"`,
+			samples: []*queryrange.Sample{
+				sample(1, "instance", "node2"),
+				sample(100, "instance", "node10"),
+			},
+			ascending: []int{1, 0},
+		},
+		{
+			name:      "float and histogram samples",
+			labelArgs: `"instance"`,
+			samples: []*queryrange.Sample{
+				histogramSample("instance", "node10"),
+				sample(100, "instance", "node2"),
+				histogramSample("instance", "node1"),
+			},
+			ascending: []int{2, 1, 0},
+		},
+	} {
+		for _, function := range []string{"sort_by_label", "sort_by_label_desc"} {
+			t.Run(tc.name+"/"+function, func(t *testing.T) {
+				req := &ThanosQueryInstantRequest{
+					Query: fmt.Sprintf("%s(sum by (instance, job) (up), %s)", function, tc.labelArgs),
+				}
+				var responses []queryrange.Response
+				for _, s := range tc.samples {
+					responses = append(responses, &queryrange.PrometheusInstantQueryResponse{
+						Status: queryrange.StatusSuccess,
+						Data: queryrange.PrometheusInstantQueryData{
+							ResultType: model.ValVector.String(),
+							Result: queryrange.PrometheusInstantQueryResult{
+								Result: &queryrange.PrometheusInstantQueryResult_Vector{
+									Vector: &queryrange.Vector{Samples: []*queryrange.Sample{s}},
+								},
+							},
+						},
+					})
+				}
+				resp, err := NewThanosQueryInstantCodec(false).MergeResponse(req, responses...)
+				testutil.Ok(t, err)
+				want := make([]*queryrange.Sample, len(tc.ascending))
+				for i, index := range tc.ascending {
+					if function == "sort_by_label_desc" {
+						i = len(want) - 1 - i
+					}
+					want[i] = tc.samples[index]
+				}
+				testutil.Equals(t, want, resp.(*queryrange.PrometheusInstantQueryResponse).Data.Result.GetVector().Samples)
+			})
+		}
+	}
+}
+
 func Test_sortPlanForQuery(t *testing.T) {
+	previous := parser.EnableExperimentalFunctions
+	parser.EnableExperimentalFunctions = true
+	t.Cleanup(func() { parser.EnableExperimentalFunctions = previous })
+
 	tc := []struct {
-		query        string
-		expectedPlan sortPlan
-		err          bool
+		query          string
+		expectedPlan   sortOrder
+		expectedLabels []string
+		err            bool
 	}{
 		{
 			query:        "invalid(10, up)",
@@ -1392,6 +1525,40 @@ func Test_sortPlanForQuery(t *testing.T) {
 			expectedPlan: sortByLabels,
 			err:          false,
 		},
+		{
+			query:          `sort_by_label(up, "instance")`,
+			expectedPlan:   sortByLabelValuesAsc,
+			expectedLabels: []string{"instance"},
+		},
+		{
+			query:          `sort_by_label(up, (("instance")))`,
+			expectedPlan:   sortByLabelValuesAsc,
+			expectedLabels: []string{"instance"},
+		},
+		{
+			query:          `sort_by_label_desc(up, "job", "instance")`,
+			expectedPlan:   sortByLabelValuesDesc,
+			expectedLabels: []string{"job", "instance"},
+		},
+		{
+			query:          `sort_by_label(up, "instance") + 1`,
+			expectedPlan:   sortByLabelValuesAsc,
+			expectedLabels: []string{"instance"},
+		},
+		{
+			query:          `1 + sort_by_label_desc(up, "instance")`,
+			expectedPlan:   sortByLabelValuesDesc,
+			expectedLabels: []string{"instance"},
+		},
+		{
+			query:        `sort(sort_by_label(up, "instance"))`,
+			expectedPlan: sortByValuesAsc,
+		},
+		{
+			query:          `sort_by_label(sort_desc(up), "instance")`,
+			expectedPlan:   sortByLabelValuesAsc,
+			expectedLabels: []string{"instance"},
+		},
 	}
 
 	for _, tc := range tc {
@@ -1401,7 +1568,8 @@ func Test_sortPlanForQuery(t *testing.T) {
 				testutil.NotOk(t, err)
 			} else {
 				testutil.Ok(t, err)
-				testutil.Equals(t, tc.expectedPlan, p)
+				testutil.Equals(t, tc.expectedPlan, p.order)
+				testutil.Equals(t, tc.expectedLabels, p.labels)
 			}
 		})
 	}

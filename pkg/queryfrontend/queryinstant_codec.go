@@ -14,9 +14,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/facette/natsort"
 	"github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
@@ -329,7 +331,7 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 		return result, nil
 	}
 
-	if sortPlan == mergeOnly {
+	if sortPlan.order == mergeOnly {
 		for _, k := range metrics {
 			result.Samples = append(result.Samples, output[k])
 		}
@@ -351,11 +353,30 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 
 	sort.Slice(samples, func(i, j int) bool {
 		// Order is determined by vector
-		switch sortPlan {
+		switch sortPlan.order {
 		case sortByValuesAsc:
 			return samples[i].s.SampleValue < samples[j].s.SampleValue
 		case sortByValuesDesc:
 			return samples[i].s.SampleValue > samples[j].s.SampleValue
+		case sortByLabelValuesAsc, sortByLabelValuesDesc:
+			lhs := cortexpb.FromLabelAdaptersToLabels(samples[i].s.Labels)
+			rhs := cortexpb.FromLabelAdaptersToLabels(samples[j].s.Labels)
+			for _, label := range sortPlan.labels {
+				lv, rv := lhs.Get(label), rhs.Get(label)
+				if lv == rv {
+					continue
+				}
+				less := natsort.Compare(lv, rv)
+				if sortPlan.order == sortByLabelValuesDesc {
+					return !less
+				}
+				return less
+			}
+			// Match Prometheus's full label set tie-breaker, including its direction.
+			if sortPlan.order == sortByLabelValuesDesc {
+				return labels.Compare(lhs, rhs) > 0
+			}
+			return labels.Compare(lhs, rhs) < 0
 		}
 		return samples[i].metric < samples[j].metric
 	})
@@ -366,63 +387,77 @@ func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQu
 	return result, nil
 }
 
-type sortPlan int
+type sortPlan struct {
+	order  sortOrder
+	labels []string
+}
+
+type sortOrder int
 
 const (
-	mergeOnly        sortPlan = 0
-	sortByValuesAsc  sortPlan = 1
-	sortByValuesDesc sortPlan = 2
-	sortByLabels     sortPlan = 3
+	mergeOnly sortOrder = iota
+	sortByValuesAsc
+	sortByValuesDesc
+	sortByLabels
+	sortByLabelValuesAsc
+	sortByLabelValuesDesc
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
 	expr, err := extpromql.ParseExpr(q)
 	if err != nil {
-		return 0, err
+		return sortPlan{}, err
 	}
 	// Check if the root expression is topk, bottomk, limitk or limit_ratio
 	if aggr, ok := expr.(*parser.AggregateExpr); ok {
 		if aggr.Op == parser.TOPK || aggr.Op == parser.BOTTOMK || aggr.Op == parser.LIMITK || aggr.Op == parser.LIMIT_RATIO {
-			return mergeOnly, nil
+			return sortPlan{order: mergeOnly}, nil
 		}
 	}
-	checkForSort := func(expr parser.Expr) (sortAsc, sortDesc bool) {
+	checkForSort := func(expr parser.Expr) (sortPlan, bool) {
 		if n, ok := expr.(*parser.Call); ok {
 			if n.Func != nil {
-				if n.Func.Name == "sort" || n.Func.Name == "sort_by_label" {
-					sortAsc = true
-				}
-				if n.Func.Name == "sort_desc" || n.Func.Name == "sort_by_label_desc" {
-					sortDesc = true
+				switch n.Func.Name {
+				case "sort":
+					return sortPlan{order: sortByValuesAsc}, true
+				case "sort_desc":
+					return sortPlan{order: sortByValuesDesc}, true
+				case "sort_by_label", "sort_by_label_desc":
+					plan := sortPlan{order: sortByLabelValuesAsc}
+					if n.Func.Name == "sort_by_label_desc" {
+						plan.order = sortByLabelValuesDesc
+					}
+					for _, arg := range n.Args[1:] {
+						for {
+							paren, ok := arg.(*parser.ParenExpr)
+							if !ok {
+								break
+							}
+							arg = paren.Expr
+						}
+						plan.labels = append(plan.labels, arg.(*parser.StringLiteral).Val)
+					}
+					return plan, true
 				}
 			}
 		}
-		return sortAsc, sortDesc
+		return sortPlan{}, false
 	}
 	// Check the root expression for sort
-	if sortAsc, sortDesc := checkForSort(expr); sortAsc || sortDesc {
-		if sortAsc {
-			return sortByValuesAsc, nil
-		}
-		return sortByValuesDesc, nil
+	if plan, ok := checkForSort(expr); ok {
+		return plan, nil
 	}
 
 	// If the root expression is a binary expression, check the LHS and RHS for sort
 	if bin, ok := expr.(*parser.BinaryExpr); ok {
-		if sortAsc, sortDesc := checkForSort(bin.LHS); sortAsc || sortDesc {
-			if sortAsc {
-				return sortByValuesAsc, nil
-			}
-			return sortByValuesDesc, nil
+		if plan, ok := checkForSort(bin.LHS); ok {
+			return plan, nil
 		}
-		if sortAsc, sortDesc := checkForSort(bin.RHS); sortAsc || sortDesc {
-			if sortAsc {
-				return sortByValuesAsc, nil
-			}
-			return sortByValuesDesc, nil
+		if plan, ok := checkForSort(bin.RHS); ok {
+			return plan, nil
 		}
 	}
-	return sortByLabels, nil
+	return sortPlan{order: sortByLabels}, nil
 }
 
 func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange.Matrix {
