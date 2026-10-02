@@ -95,7 +95,12 @@ func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnect
 		return nil, 0, err
 	}
 
-	result, release := r.writer.Write(ctx, func(params Writer_write_Params) error {
+	// capnp serializes calls on the same client, including building params.
+	// A separate reference per call lets concurrent writes build in parallel.
+	writer := r.writer.AddRef()
+	defer writer.Release()
+
+	result, release := writer.Write(ctx, func(params Writer_write_Params) error {
 		wr, err := params.NewWr()
 		if err != nil {
 			return err
