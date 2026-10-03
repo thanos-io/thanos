@@ -450,6 +450,7 @@ func runRule(
 			nil,
 			conf.query.dnsSDResolver,
 			conf.query.dnsSDInterval,
+			false,
 			5*time.Minute,
 			5*time.Second,
 			conf.evalInterval,

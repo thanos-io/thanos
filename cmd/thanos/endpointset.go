@@ -296,6 +296,7 @@ func setupEndpointSet(
 	legacyStrictEndpointGroups []string,
 	dnsSDResolver string,
 	dnsSDInterval time.Duration,
+	waitForInitialResolution bool,
 	unhealthyTimeout time.Duration,
 	endpointTimeout time.Duration,
 	queryTimeout time.Duration,
@@ -368,33 +369,6 @@ func setupEndpointSet(
 	}
 	legacyFileSDCache := cache.New()
 
-	// Perform initial DNS resolution before starting periodic updates.
-	// This ensures that DNS providers have addresses when the first endpoint update runs.
-	{
-		resolveCtx, resolveCancel := context.WithTimeout(context.Background(), dnsSDInterval)
-		defer resolveCancel()
-
-		level.Info(logger).Log("msg", "performing initial DNS resolution for endpoints")
-
-		endpointConfig := configProvider.config()
-		addresses := make([]string, 0, len(endpointConfig.Endpoints))
-		for _, ecfg := range endpointConfig.Endpoints {
-			// Only resolve non-group dynamic endpoints here.
-			// Group endpoints are resolved by the gRPC resolver in its Build() method.
-			if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
-				addresses = append(addresses, addr)
-			}
-		}
-		// Note: legacyFileSDCache will be empty at this point since file SD hasn't started yet
-		if len(addresses) > 0 {
-			if err := dnsEndpointProvider.Resolve(resolveCtx, addresses, true); err != nil {
-				level.Error(logger).Log("msg", "initial DNS resolution failed", "err", err)
-			}
-		}
-
-		level.Info(logger).Log("msg", "initial DNS resolution completed")
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	if fileSD != nil {
@@ -426,22 +400,50 @@ func setupEndpointSet(
 		})
 	}
 
+	addressesToResolve := func() []string {
+		endpointConfig := configProvider.config()
+		addresses := make([]string, 0, len(endpointConfig.Endpoints))
+		for _, ecfg := range endpointConfig.Endpoints {
+			// Only resolve non-group dynamic endpoints here.
+			// Group endpoints are resolved by the gRPC resolver in its Build() method.
+			if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
+				addresses = append(addresses, addr)
+			}
+		}
+		return append(addresses, legacyFileSDCache.Addresses()...)
+	}
+
+	// Perform initial DNS resolution before starting periodic updates.
+	// This ensures that DNS providers have addresses when the first endpoint update runs.
+	// resolved is closed once the initial resolution succeeds.
+	resolved := make(chan struct{})
 	{
 		g.Add(func() error {
+			level.Info(logger).Log("msg", "performing initial DNS resolution for endpoints")
+			if err := runutil.Retry(2*time.Second, ctx.Done(), func() error {
+				addresses := addressesToResolve()
+				if len(addresses) == 0 {
+					return nil
+				}
+				resolveCtx, resolveCancel := context.WithTimeout(ctx, dnsSDInterval)
+				defer resolveCancel()
+
+				if err := dnsEndpointProvider.Resolve(resolveCtx, addresses, true); err != nil {
+					level.Warn(logger).Log("msg", "initial DNS resolution failed, retrying", "err", err)
+					return err
+				}
+				return nil
+			}); err != nil {
+				return errors.Wrapf(err, "initial DNS resolution")
+			}
+			level.Info(logger).Log("msg", "initial DNS resolution completed")
+			close(resolved)
+
 			return runutil.Repeat(dnsSDInterval, ctx.Done(), func() error {
 				ctxUpdateIter, cancelUpdateIter := context.WithTimeout(ctx, dnsSDInterval)
 				defer cancelUpdateIter()
 
-				endpointConfig := configProvider.config()
-
-				addresses := make([]string, 0, len(endpointConfig.Endpoints))
-				for _, ecfg := range endpointConfig.Endpoints {
-					if addr := ecfg.Address; dns.IsDynamicNode(addr) && !ecfg.Group {
-						addresses = append(addresses, addr)
-					}
-				}
-				addresses = append(addresses, legacyFileSDCache.Addresses()...)
-				if err := dnsEndpointProvider.Resolve(ctxUpdateIter, addresses, true); err != nil {
+				if err := dnsEndpointProvider.Resolve(ctxUpdateIter, addressesToResolve(), true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for endpoints", "err", err)
 				}
 				return nil
@@ -551,6 +553,18 @@ func setupEndpointSet(
 	}, unhealthyTimeout, endpointTimeout, queryTimeout, queryConnMetricLabels...)
 
 	g.Add(func() error {
+		// Without waitForInitialResolution the first update runs after dnsSDInterval at the
+		// latest, with the addresses that resolved so far.
+		var proceed <-chan time.Time
+		if !waitForInitialResolution {
+			proceed = time.After(dnsSDInterval)
+		}
+		select {
+		case <-resolved:
+		case <-proceed:
+		case <-ctx.Done():
+			return nil
+		}
 		return runutil.Repeat(endpointTimeout, ctx.Done(), func() error {
 			ctxIter, cancelIter := context.WithTimeout(ctx, endpointTimeout)
 			defer cancelIter()
