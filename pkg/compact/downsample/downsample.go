@@ -350,6 +350,15 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
+	if fh.UsesCustomBuckets() != histogram.IsCustomBucketsSchema(h.schema) {
+		// A series can switch between a classic exponential schema and
+		// native histograms with custom buckets over its lifetime (e.g.
+		// after enabling NHCB). The two resolutions are incompatible - a
+		// custom buckets histogram cannot be reduced to, or from, an
+		// exponential schema - so skip this sample instead of aggregating
+		// it, rather than crashing the whole compaction.
+		return
+	}
 	if fh.Schema < h.schema {
 		panic("schema must be greater or equal to aggregator schema")
 	}
@@ -429,10 +438,28 @@ func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 
 func minSchema(samples []sample) int32 {
 	schema := int32(math.MaxInt32)
+	sawAny, sawClassic := false, false
 	for _, s := range samples {
-		if s.fh != nil && !value.IsStaleNaN(s.fh.Sum) && s.fh.Schema < schema {
+		if s.fh == nil || value.IsStaleNaN(s.fh.Sum) {
+			continue
+		}
+		sawAny = true
+		// Custom buckets use a sentinel schema far below any classic
+		// exponential schema. Skip it here so a single sample using custom
+		// buckets doesn't force the whole batch down to a resolution that
+		// none of the classic histograms can be reduced to; add() drops any
+		// sample it can't reconcile with the chosen schema.
+		if s.fh.UsesCustomBuckets() {
+			continue
+		}
+		sawClassic = true
+		if s.fh.Schema < schema {
 			schema = s.fh.Schema
 		}
+	}
+	if sawAny && !sawClassic {
+		// Every sample in the batch uses custom buckets.
+		return histogram.CustomBucketsSchema
 	}
 	return schema
 }
