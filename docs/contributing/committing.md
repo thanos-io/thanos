@@ -2,7 +2,7 @@
 
 ## Prefer & run short tests
 
-Ideally, each test should be parallel i.e. not use any any shared state and run as fast as possible.
+Ideally, each test should be parallel i.e. not use any shared state and run as fast as possible.
 
 Consider using `synctest` to make the tests not timing dependent. If it is still not possible then please add this clause to your tests to skip them if `-short` is passed:
 
