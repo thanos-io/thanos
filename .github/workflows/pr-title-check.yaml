@@ -1,0 +1,37 @@
+name: Verify PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+jobs:
+  verify-title:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v2
+
+      - name: Verify PR Title
+        id: verify
+        run: |
+          PREFIXES="query|compactor|query-frontend|receiver|rule|sidecar|store|tools|\\.\*"
+
+          IFS=',' read -ra PREFIX_ARRAY <<< "${PREFIXES}"
+          VALID=0
+
+          for PREFIX in "${PREFIX_ARRAY[@]}"; do
+            PREFIX="${PREFIX}:"
+            if [[ "${{ github.event.pull_request.title }}" =~ ^(${PREFIXES}):.* ]]; then
+              VALID=1
+              break
+            fi
+          done
+
+          if [[ $VALID -eq 0 ]]; then
+            echo "PR title does not follow the required format: 'prefix: description'"
+            echo "::error::PR title must start with one or more of the following prefixes: query:, compactor:, query-frontend:, receiver:, rule:, sidecar:, store:, tools:, .*:"
+            exit 1
+          else
+            echo "PR title is valid."
+          fi
