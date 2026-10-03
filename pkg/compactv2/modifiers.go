@@ -290,6 +290,10 @@ func (p *delSeriesIterator) AtT() int64 {
 	return t
 }
 
+func (p *delSeriesIterator) AtST() int64 {
+	panic("not implemented")
+}
+
 func (p *delSeriesIterator) Err() error {
 	if err := p.delGenericSeriesIterator.Err(); err != nil {
 		return err
@@ -337,11 +341,11 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 	t, v := p.currDelIter.At()
 	p.curr.MinTime = t
-	app.Append(t, v)
+	app.Append(0, t, v)
 
 	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
-		app.Append(t, v)
+		app.Append(0, t, v)
 	}
 	if err := p.currDelIter.Err(); err != nil {
 		p.err = errors.Wrap(err, "iterate chunk while re-encoding")

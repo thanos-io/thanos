@@ -439,6 +439,10 @@ func (it *dedupSeriesIterator) AtT() int64 {
 	return t
 }
 
+func (it *dedupSeriesIterator) AtST() int64 {
+	panic("not implemented")
+}
+
 func (it *dedupSeriesIterator) Err() error {
 	if it.a.Err() != nil {
 		return it.a.Err()
@@ -481,6 +485,9 @@ func (it *boundedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) 
 
 func (it *boundedSeriesIterator) AtT() int64 {
 	return it.it.AtT()
+}
+func (it *boundedSeriesIterator) AtST() int64 {
+	panic("not implemented")
 }
 
 func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
