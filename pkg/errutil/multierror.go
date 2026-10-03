@@ -6,6 +6,7 @@ package errutil
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -14,6 +15,26 @@ import (
 // The MultiError type implements the error interface, and contains the
 // Errors used to construct it.
 type MultiError []error
+
+// NewMulti returns a MultiError seeded with the given errors (nil ones are skipped).
+// Replacement for the removed github.com/prometheus/prometheus/tsdb/errors.NewMulti.
+func NewMulti(errs ...error) MultiError {
+	m := MultiError{}
+	for _, err := range errs {
+		m.Add(err)
+	}
+	return m
+}
+
+// CloseAll closes all given closers, collecting any errors into a MultiError.
+// Replacement for the removed github.com/prometheus/prometheus/tsdb/errors.CloseAll.
+func CloseAll(cs []io.Closer) error {
+	errs := MultiError{}
+	for _, c := range cs {
+		errs.Add(c.Close())
+	}
+	return errs.Err()
+}
 
 // Add adds the error to the error list if it is not nil.
 func (es *MultiError) Add(err error) {
