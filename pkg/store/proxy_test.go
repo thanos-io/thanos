@@ -2096,7 +2096,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		testutil.Ok(t, err)
 
 		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+			a.Append(0, smpl.t, smpl.v)
 		}
 
 		ch := storepb.AggrChunk{

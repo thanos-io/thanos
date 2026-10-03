@@ -27,15 +27,18 @@ import (
 )
 
 type sample struct {
-	t int64
-	f float64
-	h *histogram.Histogram
+	st int64
+	t  int64
+	f  float64
+	h  *histogram.Histogram
 }
 
 func (s sample) T() int64 {
 	return s.t
 }
-
+func (s sample) ST() int64 {
+	panic("not implemented")
+}
 func (s sample) F() float64 {
 	return s.f
 }
@@ -130,6 +133,10 @@ func (s *mockedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (i
 
 func (s *mockedSeriesIterator) AtT() int64 {
 	return s.samples[s.cur].t
+}
+
+func (s *mockedSeriesIterator) AtST() int64 {
+	panic("not implemented")
 }
 
 func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
