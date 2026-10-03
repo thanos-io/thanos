@@ -1471,13 +1471,13 @@ func (h *Handler) relabel(wreq *prompb.WriteRequest) {
 		return
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
+	b := labels.NewBuilder(labels.EmptyLabels())
 	for _, ts := range wreq.Timeseries {
-		var keep bool
-		lbls, keep := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
-		if !keep {
+		b.Reset(labelpb.ZLabelsToPromLabels(ts.Labels))
+		if !relabel.ProcessBuilder(b, h.options.RelabelConfigs...) {
 			continue
 		}
-		ts.Labels = labelpb.ZLabelsFromPromLabels(lbls)
+		ts.Labels = labelpb.ZLabelsFromPromLabels(b.Labels())
 		timeSeries = append(timeSeries, ts)
 	}
 	wreq.Timeseries = timeSeries
