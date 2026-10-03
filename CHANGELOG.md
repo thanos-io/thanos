@@ -19,6 +19,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#9056](https://github.com/thanos-io/thanos/pull/9056): *: Add `http_headers` to the HTTP client config, so Rule can send custom headers to query and Alertmanager endpoints (also available in Sidecar and Receive).
 
 ### Fixed
+- [#8684](https://github.com/thanos-io/thanos/pull/8684): Fix: EncodeAggrChunk created corrupt block if the last chunk is empty
 
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
