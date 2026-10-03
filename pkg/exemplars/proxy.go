@@ -235,7 +235,7 @@ func matchesExternalLabels(ms []*labels.Matcher, externalLabels labels.Labels) (
 		extValue := externalLabels.Get(tm.Name)
 		if extValue == "" {
 			// Agnostic to external labels.
-			ms = append(ms[:i], ms[i:]...)
+			ms = append(ms[:i], ms[i+1:]...)
 			newMatchers = append(newMatchers, tm)
 			continue
 		}
