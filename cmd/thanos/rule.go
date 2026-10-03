@@ -604,10 +604,12 @@ func runRule(
 			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
+		var experimentalFunctionsEnabled bool
 		if len(conf.EnableFeatures) > 0 {
 			for _, feature := range conf.EnableFeatures {
 				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
+					experimentalFunctionsEnabled = true
+					extpromql.EnableExperimentalFunctions()
 					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 				}
 			}
@@ -651,6 +653,8 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
+			// Per-instance parser config replaces the removed global parser.EnableExperimentalFunctions.
+			Parser: parser.NewParser(parser.Options{EnableExperimentalFunctions: experimentalFunctionsEnabled}),
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval

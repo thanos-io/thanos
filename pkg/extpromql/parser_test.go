@@ -48,7 +48,7 @@ func TestParseMetricSelector(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			//lint:ignore faillint Testing against prometheus parser.
-			want, err := parser.ParseMetricSelector(tc.input)
+			want, err := parser.NewParser(parser.Options{}).ParseMetricSelector(tc.input)
 			if err != nil {
 				t.Fatalf("Prometheus ParseMetricSelector failed: %v", err)
 			}

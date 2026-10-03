@@ -15,14 +15,18 @@ import (
 	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
+// enableExperimentalFunctions gates parsing of experimental PromQL functions.
+// Replaces the removed global parser.EnableExperimentalFunctions flag (prometheus v0.311.0).
+var enableExperimentalFunctions bool
+
+// EnableExperimentalFunctions enables parsing of experimental PromQL functions.
+func EnableExperimentalFunctions() { enableExperimentalFunctions = true }
+
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	maps.Copy(allFuncs, parser.Functions)
-	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	// Register xrate/xincrease/xdelta globally; WithFunctions was removed in prometheus v0.311.0.
+	maps.Copy(parser.Functions, parse.XFunctions)
+	return parser.NewParser(parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions}).ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of
