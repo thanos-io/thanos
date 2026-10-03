@@ -16,6 +16,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/component"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
 	"github.com/thanos-io/thanos/pkg/query"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
 type Query struct {
@@ -30,9 +31,9 @@ type Query struct {
 	now     func() model.Time
 }
 
-func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string, tenantHeader string, defaultTenant string, enforceTenancy bool) *Query {
+func NewQueryUI(logger log.Logger, endpointSet *query.EndpointSet, externalPrefix, prefixHeader, alertQueryURL string, tenantHeader string, defaultTenant string, enforceTenancy tenancy.EnforcementMode) *Query {
 	displayTenantBox := "none"
-	if enforceTenancy {
+	if enforceTenancy != tenancy.EnforcementModeOff {
 		displayTenantBox = "inline-block"
 	}
 	tmplVariables := map[string]string{
