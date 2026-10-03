@@ -20,37 +20,37 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcUnarySelector, thanos.sidecar.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcUnarySelector, thanos.sidecar.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcUnarySelector, thanos.sidecar.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcServerSelector, thanos.sidecar.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors') +
+          g.timeseriesPanel('Errors') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcServerSelector, thanos.sidecar.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcServerSelector, thanos.sidecar.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('Last Updated')
         .addPanel(
-          g.panel('Successful Upload', 'Shows the relative time of last successful upload to the object-store bucket.') +
+          g.timeseriesPanel('Successful Upload', 'Shows the relative time of last successful upload to the object-store bucket.') +
           g.tablePanel(
             ['time() - max by (%s) (thanos_objstore_bucket_last_successful_upload_time{%s})' % [utils.joinLabels([thanos.sidecar.dashboard.dimensions, 'bucket']), thanos.sidecar.dashboard.selector]],
             {
@@ -66,7 +66,7 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('Bucket Operations')
         .addPanel(
-          g.panel('Rate') +
+          g.timeseriesPanel('Rate') +
           g.queryPanel(
             'sum by (%s) (rate(thanos_objstore_bucket_operations_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.sidecar.dashboard.dimensions, 'operation']), thanos.sidecar.dashboard.selector],
             '{{job}} {{operation}}'
@@ -74,7 +74,7 @@ local utils = import '../lib/utils.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Errors') +
+          g.timeseriesPanel('Errors') +
           g.qpsErrTotalPanel(
             'thanos_objstore_bucket_operation_failures_total{%s}' % thanos.sidecar.dashboard.selector,
             'thanos_objstore_bucket_operations_total{%s}' % thanos.sidecar.dashboard.selector,
@@ -82,7 +82,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Duration') +
+          g.timeseriesPanel('Duration') +
           g.latencyPanel('thanos_objstore_bucket_operation_duration_seconds', thanos.sidecar.dashboard.selector, thanos.sidecar.dashboard.dimensions)
         )
       )
@@ -93,12 +93,12 @@ local utils = import '../lib/utils.libsonnet';
     __overviewRows__+:: if thanos.sidecar == null then [] else [
       g.row('Sidecar')
       .addPanel(
-        g.panel('gRPC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+        g.timeseriesPanel('gRPC (Unary) Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
         g.grpcRequestsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.sidecar.title)
       )
       .addPanel(
-        g.panel('gRPC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+        g.timeseriesPanel('gRPC (Unary) Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
         g.grpcErrorsPanel('grpc_server_handled_total', utils.joinLabels([thanos.dashboard.overview.selector, 'grpc_type="unary"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.sidecar.title)
       )
