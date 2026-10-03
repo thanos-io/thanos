@@ -194,6 +194,13 @@ func MarkForDeletion(ctx context.Context, logger log.Logger, bkt objstore.Bucket
 	return nil
 }
 
+// DeleteDirectoryMarkers controls whether Delete also removes the explicit
+// directory marker objects that some S3-compatible object storages (e.g. seaweedfs, HCP)
+// create alongside block contents. It is exposed as a package variable, set once at
+// startup from a CLI flag, so it can be disabled on backends where the extra delete
+// calls are unnecessary or undesired.
+var DeleteDirectoryMarkers = true
+
 // Delete removes directory that is meant to be block directory.
 // NOTE: Always prefer this method for deleting blocks.
 //   - We have to delete block's files in the certain order (meta.json first and deletion-mark.json last)
@@ -242,14 +249,16 @@ func Delete(ctx context.Context, logger log.Logger, bkt objstore.Bucket, id ulid
 
 	// Some object storages represent directories as explicit empty objects.
 	// We try to delete the directory marker objects themselves after all their contents are removed.
-	directoryMarkerPaths := []string{
-		path.Join(id.String(), ChunksDirname) + objstore.DirDelim,
-		id.String() + objstore.DirDelim,
-	}
+	if DeleteDirectoryMarkers {
+		directoryMarkerPaths := []string{
+			path.Join(id.String(), ChunksDirname) + objstore.DirDelim,
+			id.String() + objstore.DirDelim,
+		}
 
-	for _, p := range directoryMarkerPaths {
-		if err := bkt.Delete(ctx, p); err != nil && !bkt.IsObjNotFoundErr(err) {
-			level.Debug(logger).Log("msg", "failed to delete directory marker object", "dir", p, "err", err)
+		for _, p := range directoryMarkerPaths {
+			if err := bkt.Delete(ctx, p); err != nil && !bkt.IsObjNotFoundErr(err) {
+				level.Debug(logger).Log("msg", "failed to delete directory marker object", "dir", p, "err", err)
+			}
 		}
 	}
 
