@@ -109,7 +109,7 @@ func (s *chunkSeries) Labels() labels.Labels {
 	return s.lset
 }
 
-func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
+func (s *chunkSeries) Iterator(it chunkenc.Iterator) chunkenc.Iterator {
 	var sit chunkenc.Iterator
 	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
@@ -144,7 +144,7 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 		default:
 			return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 		}
-		return dedup.NewBoundedSeriesIterator(sit, s.mint, s.maxt)
+		return dedup.NewBoundedSeriesIterator(it, sit, s.mint, s.maxt)
 	}
 
 	if len(s.aggrs) != 2 {
@@ -167,7 +167,7 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	default:
 		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 	}
-	return dedup.NewBoundedSeriesIterator(sit, s.mint, s.maxt)
+	return dedup.NewBoundedSeriesIterator(it, sit, s.mint, s.maxt)
 }
 
 func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
