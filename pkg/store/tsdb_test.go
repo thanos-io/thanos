@@ -237,7 +237,7 @@ func (s *cancelOnFirstSeriesSet) Next() bool {
 	return true
 }
 
-// TestTSDBStore_SeriesStopsOnCancel checks that a cancelled request stops reading the TSDB even though
+// TestTSDBStore_SeriesStopsOnCancel checks that a canceled request stops reading the TSDB even though
 // the resorting server buffers the whole response and never fails Send before Flush.
 func TestTSDBStore_SeriesStopsOnCancel(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
