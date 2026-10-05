@@ -76,6 +76,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	// Query range tripperware flags.
 	cmd.Flag("query-range.align-range-with-step", "Mutate incoming queries to align their start and end with their step for better cache-ability. Note: Grafana dashboards do that by default.").
 		Default("true").BoolVar(&cfg.AlignRangeWithStep)
+	cmd.Flag("query-range.align-range-with-step-timezone", "Time zone used when aligning query ranges whose step is a whole number of days. Uses an IANA time zone name.").
+		Default("UTC").StringVar(&cfg.AlignRangeWithStepTimezone)
 
 	cmd.Flag("query-range.request-downsampled", "Make additional query for downsampled data in case of empty or incomplete response to range request.").
 		Default("true").BoolVar(&cfg.RequestDownsampled)
