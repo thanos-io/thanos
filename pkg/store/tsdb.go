@@ -37,6 +37,8 @@ const (
 	RemoteReadFrameLimit      = 1048576
 	cuckooStoreFilterCapacity = 1000000
 	storeFilterUpdateInterval = 15 * time.Second
+	// seriesContextCheckInterval is how often (in series) TSDBStore.Series checks for request cancellation.
+	seriesContextCheckInterval = 128
 )
 
 type TSDBReader interface {
@@ -312,7 +314,15 @@ func (s *TSDBStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Store_Ser
 	finalExtLset := rmLabels(s.extLsetAsLabelSets[0].Copy(), extLsetToRemove)
 
 	// Stream at most one series per frame; series may be split over multiple frames according to maxBytesInFrame.
-	for set.Next() {
+	ctx := srv.Context()
+	for i := 0; set.Next(); i++ {
+		// srv may buffer everything until Flush (resortingServer), in which case Send never fails
+		// and the request would keep reading index and chunks after the caller has gone away.
+		if i%seriesContextCheckInterval == 0 {
+			if err := ctx.Err(); err != nil {
+				return status.FromContextError(err).Err()
+			}
+		}
 		series := set.At()
 
 		completeLabelset := labelpb.ExtendSortedLabels(rmLabels(series.Labels(), extLsetToRemove), finalExtLset)
