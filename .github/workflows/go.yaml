@@ -34,7 +34,7 @@ jobs:
       - name: Install Go.
         uses: cloudx-io/setup-go@v1
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - name: Install bingo modules
         run: make install-tool-deps
@@ -63,7 +63,7 @@ jobs:
       - name: Install Go
         uses: cloudx-io/setup-go@v1
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -90,7 +90,7 @@ jobs:
     - name: Install Go
       uses: cloudx-io/setup-go@v1
       with:
-        go-version: 1.26.x
+        go-version: 1.27.x
 
     - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
       with:
@@ -117,7 +117,7 @@ jobs:
       - name: Install Go
         uses: cloudx-io/setup-go@v1
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -187,7 +187,7 @@ jobs:
       - name: Install Go.
         uses: cloudx-io/setup-go@v1
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -230,7 +230,7 @@ jobs:
       - name: Install Go.
         uses: cloudx-io/setup-go@v1
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - name: Download coverage data
         uses: actions/download-artifact@v4
