@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
           go-version: 1.27.x
 
@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
           go-version: 1.27.x
 
@@ -88,7 +88,7 @@ jobs:
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
     - name: Install Go
-      uses: cloudx-io/setup-go@v1
+      uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
       with:
         go-version: 1.27.x
 
@@ -115,7 +115,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
           go-version: 1.27.x
 
@@ -185,7 +185,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
           go-version: 1.27.x
 
@@ -228,7 +228,7 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
           go-version: 1.27.x
 
