@@ -14,11 +14,14 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/util/annotations"
 	"google.golang.org/grpc"
 
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/promql-engine/query"
 	"github.com/thanos-io/thanos/pkg/api/query/querypb"
+	"github.com/thanos-io/thanos/pkg/extannotations"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -60,6 +63,82 @@ func TestRemoteEngine_Warnings(t *testing.T) {
 		testutil.Ok(t, res.Err)
 		testutil.Equals(t, 1, len(res.Warnings))
 	})
+}
+
+// Regression test for https://github.com/thanos-io/thanos/issues/9062.
+func TestRemoteEngine_PromQLAnnotations(t *testing.T) {
+	t.Parallel()
+
+	var (
+		start = time.Unix(0, 0)
+		end   = time.Unix(120, 0)
+		step  = 30 * time.Second
+	)
+	qryExpr, err := extpromql.ParseExpr("up")
+	testutil.Ok(t, err)
+
+	plan, err := logicalplan.NewFromAST(qryExpr, &query.Options{
+		Start: time.Now(),
+		End:   time.Now().Add(2 * time.Hour),
+	}, logicalplan.PlanOptions{})
+	testutil.Ok(t, err)
+
+	for _, tc := range []struct {
+		name       string
+		warning    string
+		annotation error
+	}{
+		{
+			name:       "info",
+			warning:    `PromQL info: metric might not be a counter, name does not end in _total/_sum/_count/_bucket: "some_gauge"`,
+			annotation: annotations.PromQLInfo,
+		},
+		{
+			name:       "warning",
+			warning:    `PromQL warning: encountered a mix of histograms and floats for metric name "some_metric"`,
+			annotation: annotations.PromQLWarning,
+		},
+		{
+			name:    "store warning",
+			warning: "fetch series: store unavailable",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			client := NewClient(&warnClient{warning: tc.warning}, "testclient", nil)
+			engine := NewRemoteEngine(log.NewNopLogger(), client, Opts{
+				Timeout: 1 * time.Second,
+			})
+
+			check := func(t *testing.T, res *promql.Result) {
+				testutil.Ok(t, res.Err)
+				warns := res.Warnings.AsErrors()
+				testutil.Equals(t, 1, len(warns))
+
+				if tc.annotation == nil {
+					testutil.Equals(t, "remote query warning (testclient): "+tc.warning, warns[0].Error())
+					testutil.Assert(t, !extannotations.IsPromQLAnnotation(warns[0].Error()), "store warning recognized as a PromQL annotation")
+					return
+				}
+				testutil.Equals(t, tc.warning, warns[0].Error())
+				testutil.Assert(t, errors.Is(warns[0], tc.annotation), "expected %v to wrap %v", warns[0], tc.annotation)
+				testutil.Assert(t, extannotations.IsPromQLAnnotation(warns[0].Error()), "PromQL annotation not recognized: %v", warns[0])
+			}
+
+			t.Run("instant_query", func(t *testing.T) {
+				qry, err := engine.NewInstantQuery(context.Background(), nil, plan.Root(), start)
+				testutil.Ok(t, err)
+				check(t, qry.Exec(context.Background()))
+			})
+
+			t.Run("range_query", func(t *testing.T) {
+				qry, err := engine.NewRangeQuery(context.Background(), nil, plan.Root(), start, end, step)
+				testutil.Ok(t, err)
+				check(t, qry.Exec(context.Background()))
+			})
+		})
+	}
 }
 
 func TestRemoteEngine_PartialResponse(t *testing.T) {
@@ -277,18 +356,28 @@ func zLabelSetFromStrings(ss ...string) labelpb.ZLabelSet {
 
 type warnClient struct {
 	querypb.QueryClient
+	// warning is the warning sent by the remote engine; "warning" if empty.
+	warning string
+}
+
+func (m warnClient) warn() error {
+	if m.warning == "" {
+		return errors.New("warning")
+	}
+	return errors.New(m.warning)
 }
 
 func (m warnClient) Query(ctx context.Context, in *querypb.QueryRequest, opts ...grpc.CallOption) (querypb.Query_QueryClient, error) {
-	return &queryWarnClient{}, nil
+	return &queryWarnClient{warning: m.warn()}, nil
 }
 
 func (m warnClient) QueryRange(ctx context.Context, in *querypb.QueryRangeRequest, opts ...grpc.CallOption) (querypb.Query_QueryRangeClient, error) {
-	return &queryRangeWarnClient{}, nil
+	return &queryRangeWarnClient{warning: m.warn()}, nil
 }
 
 type queryRangeWarnClient struct {
 	querypb.Query_QueryRangeClient
+	warning  error
 	warnSent bool
 }
 
@@ -297,11 +386,12 @@ func (m *queryRangeWarnClient) Recv() (*querypb.QueryRangeResponse, error) {
 		return nil, io.EOF
 	}
 	m.warnSent = true
-	return querypb.NewQueryRangeWarningsResponse(errors.New("warning")), nil
+	return querypb.NewQueryRangeWarningsResponse(m.warning), nil
 }
 
 type queryWarnClient struct {
 	querypb.Query_QueryClient
+	warning  error
 	warnSent bool
 }
 
@@ -310,7 +400,7 @@ func (m *queryWarnClient) Recv() (*querypb.QueryResponse, error) {
 		return nil, io.EOF
 	}
 	m.warnSent = true
-	return querypb.NewQueryWarningsResponse(errors.New("warning")), nil
+	return querypb.NewQueryWarningsResponse(m.warning), nil
 }
 
 type errClient struct {

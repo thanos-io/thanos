@@ -377,7 +377,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 			}
 
 			if warn := msg.GetWarnings(); warn != "" {
-				warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
+				warnings.Add(remoteWarning(r.remoteAddr, warn))
 				continue
 			}
 			if s := msg.GetStats(); s != nil {
@@ -456,7 +456,7 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 		}
 
 		if warn := msg.GetWarnings(); warn != "" {
-			warnings.Add(errors.Errorf("remote query warning (%s): %s", r.remoteAddr, warn))
+			warnings.Add(remoteWarning(r.remoteAddr, warn))
 			continue
 		}
 		if s := msg.GetStats(); s != nil {
@@ -519,6 +519,21 @@ func (r *remoteQuery) Exec(ctx context.Context) *promql.Result {
 	r.samplesStats.TotalSamples = qryStats.SamplesTotal
 
 	return &promql.Result{Value: result, Warnings: warnings}
+}
+
+// remoteWarning converts a warning received from a remote engine into an error.
+// PromQL annotations keep their original text and are wrapped around the
+// matching annotations error, so that they are still recognized as PromQL
+// annotations and not as store warnings; see
+// https://github.com/thanos-io/thanos/issues/9062. Other warnings are prefixed
+// with the address of the remote engine.
+func remoteWarning(remoteAddr, warn string) error {
+	for _, anno := range []error{annotations.PromQLInfo, annotations.PromQLWarning} {
+		if rest, ok := strings.CutPrefix(warn, anno.Error()); ok {
+			return fmt.Errorf("%w%s", anno, rest)
+		}
+	}
+	return errors.Errorf("remote query warning (%s): %s", remoteAddr, warn)
 }
 
 func (r *remoteQuery) Close() { r.Cancel() }
