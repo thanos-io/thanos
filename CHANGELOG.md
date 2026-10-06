@@ -30,6 +30,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#9054](https://github.com/thanos-io/thanos/pull/9054): Store: Count batched series responses in `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested`.
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
 - [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
+- [#8873](https://github.com/thanos-io/thanos/pull/8873): Rule: Log PromQL info annotations (e.g. "metric might not be a counter") at debug level instead of warn, to avoid log spam on every rule evaluation.
 
 ### Changed
 
