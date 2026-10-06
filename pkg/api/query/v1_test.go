@@ -24,6 +24,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
@@ -63,6 +64,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
@@ -1782,7 +1784,7 @@ func TestRulesHandler(t *testing.T) {
 				},
 			},
 		},
-	}, false)
+	}, false, RulesTenancy{})
 
 	type test struct {
 		params   map[string]string
@@ -2034,4 +2036,78 @@ func (s sample) Type() chunkenc.ValueType {
 func (s sample) Copy() chunks.Sample {
 	c := sample{t: s.t, f: s.f}
 	return c
+}
+
+type recordingRulesClient struct {
+	requests []*rulespb.RulesRequest
+}
+
+func (c *recordingRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (*rulespb.RuleGroups, annotations.Annotations, error) {
+	c.requests = append(c.requests, req)
+	return &rulespb.RuleGroups{}, nil, nil
+}
+
+func TestRulesAndAlertsHandlersEnforceTenancy(t *testing.T) {
+	enforced := RulesTenancy{
+		TenantHeader:    tenancy.DefaultTenantHeader,
+		DefaultTenant:   tenancy.DefaultTenant,
+		TenantCertField: "",
+		EnforceTenancy:  true,
+		TenantLabel:     "tenant",
+	}
+
+	for _, tc := range []struct {
+		name      string
+		tenancy   RulesTenancy
+		path      string
+		header    string
+		wantMatch []string
+	}{
+		{
+			name:      "rules restrict to the requesting tenant when no selector is given",
+			tenancy:   enforced,
+			path:      "/api/v1/rules",
+			header:    "tenant-a",
+			wantMatch: []string{`{tenant="tenant-a"}`},
+		},
+		{
+			name:      "rules add the tenant matcher to the given selector",
+			tenancy:   enforced,
+			path:      "/api/v1/rules?match[]={job=\"api\"}",
+			header:    "tenant-a",
+			wantMatch: []string{`{job="api",tenant="tenant-a"}`},
+		},
+		{
+			name:      "alerts restrict to the requesting tenant",
+			tenancy:   enforced,
+			path:      "/api/v1/alerts",
+			header:    "tenant-b",
+			wantMatch: []string{`{tenant="tenant-b"}`},
+		},
+		{
+			name:      "rules keep the request unchanged when tenancy is not enforced",
+			tenancy:   RulesTenancy{TenantHeader: tenancy.DefaultTenantHeader, DefaultTenant: tenancy.DefaultTenant, TenantLabel: "tenant"},
+			path:      "/api/v1/rules?match[]={job=\"api\"}",
+			header:    "tenant-a",
+			wantMatch: []string{`{job="api"}`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &recordingRulesClient{}
+			var handler func(*http.Request) (any, []error, *baseAPI.ApiError, func())
+			if strings.HasPrefix(tc.path, "/api/v1/alerts") {
+				handler = NewAlertsHandler(client, false, tc.tenancy)
+			} else {
+				handler = NewRulesHandler(client, false, tc.tenancy)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set(tenancy.DefaultTenantHeader, tc.header)
+			_, _, apiErr, _ := handler(req)
+			testutil.Assert(t, apiErr == nil, "unexpected error: %v", apiErr)
+
+			testutil.Equals(t, 1, len(client.requests))
+			testutil.Equals(t, tc.wantMatch, client.requests[0].MatcherString)
+		})
+	}
 }
