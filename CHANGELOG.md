@@ -20,7 +20,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#9062](https://github.com/thanos-io/thanos/issues/9062): Query/Rule: Keep PromQL info and warning annotations from remote engines recognizable, so Rule using the gRPC Query API no longer counts them as store warnings in `thanos_rule_evaluation_with_warnings_total`, and they no longer disable response caching in distributed mode.
+- [#9068](https://github.com/thanos-io/thanos/pull/9068): Query/Rule: Keep PromQL info and warning annotations from remote engines recognizable, so Rule using the gRPC Query API no longer counts them as store warnings in `thanos_rule_evaluation_with_warnings_total`, and they no longer disable response caching in distributed mode.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
 - [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
