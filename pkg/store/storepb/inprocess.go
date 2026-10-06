@@ -31,8 +31,6 @@ func newInProcessServer(ctx context.Context, yield func(*SeriesResponse, error) 
 
 func (s *inProcessServer) Send(resp *SeriesResponse) error {
 	if !s.yield(resp, nil) {
-		// The client stopped pulling (error, CloseSend or abandoned request). Surface it to the
-		// producer so it stops reading instead of iterating the whole series set for nobody.
 		if s.ctx.Err() != nil {
 			return s.ctx.Err()
 		}
