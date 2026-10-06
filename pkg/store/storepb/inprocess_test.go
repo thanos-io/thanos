@@ -53,7 +53,6 @@ func (t *testStoreServer) LabelValues(_ context.Context, r *LabelValuesRequest) 
 	return t.labelValues, t.err
 }
 
-// countingStoreServer sends series until Send fails and records how far it got.
 type countingStoreServer struct {
 	testStoreServer
 	sent    int
@@ -82,8 +81,6 @@ func TestServerAsClient_SendFailsAfterStop(t *testing.T) {
 	testutil.Ok(t, err)
 	testutil.Ok(t, client.CloseSend())
 
-	// The producer must observe the stop instead of streaming the remaining series into the void.
-	// The first Send is still suspended in yield when CloseSend stops the iterator, so it fails too.
 	testutil.Equals(t, 0, s.sent)
 	testutil.Equals(t, io.EOF, s.sendErr)
 }

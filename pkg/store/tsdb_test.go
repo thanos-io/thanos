@@ -196,8 +196,6 @@ func TestTSDBStore_Series(t *testing.T) {
 	}
 }
 
-// cancelOnFirstSeriesDB cancels the request context as soon as the first series is read and
-// counts how many series TSDBStore pulled afterwards.
 type cancelOnFirstSeriesDB struct {
 	TSDBReader
 	cancel context.CancelFunc
@@ -237,8 +235,6 @@ func (s *cancelOnFirstSeriesSet) Next() bool {
 	return true
 }
 
-// TestTSDBStore_SeriesStopsOnCancel checks that a canceled request stops reading the TSDB even though
-// the resorting server buffers the whole response and never fails Send before Flush.
 func TestTSDBStore_SeriesStopsOnCancel(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 
