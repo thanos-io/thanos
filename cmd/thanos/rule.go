@@ -653,8 +653,7 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
-			// Per-instance parser config replaces the removed global parser.EnableExperimentalFunctions.
-			Parser: parser.NewParser(parser.Options{EnableExperimentalFunctions: experimentalFunctionsEnabled}),
+			Parser:                 parser.NewParser(parser.Options{EnableExperimentalFunctions: experimentalFunctionsEnabled}),
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
