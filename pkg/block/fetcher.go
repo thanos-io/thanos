@@ -1401,19 +1401,68 @@ func ParseRelabelConfig(contentYaml []byte, supportedActions map[relabel.Action]
 	if err := yaml.Unmarshal(contentYaml, &relabelConfig); err != nil {
 		return nil, errors.Wrap(err, "parsing relabel configuration")
 	}
-	for _, cfg := range relabelConfig {
-		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
-			return nil, errors.Wrap(err, "validate relabel config")
-		}
+	if err := validateRelabelConfig(relabelConfig, supportedActions); err != nil {
+		return nil, err
+	}
+	return relabelConfig, nil
+}
+
+// DefaultTenantRelabelConfigKey is the reserved key of the per-tenant relabel
+// configuration holding the relabel configs of tenants without specific ones.
+const DefaultTenantRelabelConfigKey = "default"
+
+// ParseRelabelConfigWithTenants parses relabel configuration provided either as
+// a single list applied to all tenants or as a map of tenant ID to relabel configs.
+// In the map format, the configs under DefaultTenantRelabelConfigKey are returned
+// as the default configs, applied to tenants without specific configs.
+func ParseRelabelConfigWithTenants(contentYaml []byte, supportedActions map[relabel.Action]struct{}) ([]*relabel.Config, map[string][]*relabel.Config, error) {
+	// Detect the format first so that errors of one format are not hidden by
+	// a failed attempt at parsing the other one.
+	var probe interface{}
+	if err := yaml.Unmarshal(contentYaml, &probe); err != nil {
+		return nil, nil, errors.Wrap(err, "parsing relabel configuration")
 	}
 
-	if supportedActions != nil {
-		for _, cfg := range relabelConfig {
+	switch probe.(type) {
+	case nil:
+		return nil, nil, nil
+	case []interface{}:
+		global, err := ParseRelabelConfig(contentYaml, supportedActions)
+		if err != nil {
+			return nil, nil, err
+		}
+		return global, nil, nil
+	case map[interface{}]interface{}:
+		var perTenant map[string][]*relabel.Config
+		if err := yaml.Unmarshal(contentYaml, &perTenant); err != nil {
+			return nil, nil, errors.Wrap(err, "parsing relabel configuration")
+		}
+		for tenant, cfgs := range perTenant {
+			if err := validateRelabelConfig(cfgs, supportedActions); err != nil {
+				return nil, nil, errors.Wrapf(err, "tenant %q", tenant)
+			}
+		}
+		defaultCfgs := perTenant[DefaultTenantRelabelConfigKey]
+		delete(perTenant, DefaultTenantRelabelConfigKey)
+		return defaultCfgs, perTenant, nil
+	default:
+		return nil, nil, errors.New("parsing relabel configuration: expected a list of relabel configs or a map of tenant ID to relabel configs")
+	}
+}
+
+func validateRelabelConfig(relabelConfig []*relabel.Config, supportedActions map[relabel.Action]struct{}) error {
+	for i, cfg := range relabelConfig {
+		if cfg == nil {
+			return errors.Errorf("relabel config at index %d is empty", i)
+		}
+		if err := cfg.Validate(prommodel.UTF8Validation); err != nil {
+			return errors.Wrap(err, "validate relabel config")
+		}
+		if supportedActions != nil {
 			if _, ok := supportedActions[cfg.Action]; !ok {
-				return nil, errors.Errorf("unsupported relabel action: %v", cfg.Action)
+				return errors.Errorf("unsupported relabel action: %v", cfg.Action)
 			}
 		}
 	}
-
-	return relabelConfig, nil
+	return nil
 }

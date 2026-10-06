@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
+	prommodel "github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/objtesting"
@@ -1286,6 +1289,205 @@ func Test_ParseRelabelConfig(t *testing.T) {
     `), SelectorSupportedRelabelActions)
 	testutil.NotOk(t, err)
 	testutil.Equals(t, "unsupported relabel action: labelmap", err.Error())
+
+	_, err = ParseRelabelConfig([]byte(`
+    - action: drop
+      regex: "A"
+    -
+    `), nil)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, "relabel config at index 1 is empty", err.Error())
+}
+
+func Test_ParseRelabelConfigWithTenants(t *testing.T) {
+	t.Run("empty content returns no config", func(t *testing.T) {
+		global, perTenant, err := ParseRelabelConfigWithTenants(nil, nil)
+		testutil.Ok(t, err)
+		testutil.Assert(t, global == nil, "expected nil global config")
+		testutil.Assert(t, perTenant == nil, "expected nil per-tenant config")
+
+		global, perTenant, err = ParseRelabelConfigWithTenants([]byte(""), nil)
+		testutil.Ok(t, err)
+		testutil.Assert(t, global == nil, "expected nil global config")
+		testutil.Assert(t, perTenant == nil, "expected nil per-tenant config")
+	})
+
+	t.Run("global list format", func(t *testing.T) {
+		content := []byte(`
+- source_labels: [__name__]
+  action: drop
+  regex: "global_drop_.*"
+`)
+		global, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Assert(t, perTenant == nil, "expected nil per-tenant config for global format")
+		testutil.Equals(t, 1, len(global))
+		testutil.Equals(t, relabel.Drop, global[0].Action)
+		testutil.Equals(t, prommodel.LabelNames{"__name__"}, global[0].SourceLabels)
+	})
+
+	t.Run("per-tenant map format", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - source_labels: [__name__]
+    action: drop
+    regex: "tenant_a_drop_.*"
+tenant-b:
+  - source_labels: [__name__]
+    action: keep
+    regex: "tenant_b_keep_.*"
+`)
+		global, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Assert(t, global == nil, "expected nil global config for per-tenant format")
+		testutil.Equals(t, 2, len(perTenant))
+		testutil.Equals(t, 1, len(perTenant["tenant-a"]))
+		testutil.Equals(t, relabel.Drop, perTenant["tenant-a"][0].Action)
+		testutil.Equals(t, relabel.Keep, perTenant["tenant-b"][0].Action)
+	})
+
+	t.Run("per-tenant empty list is allowed", func(t *testing.T) {
+		content := []byte(`
+tenant-a: []
+tenant-b:
+`)
+		_, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, len(perTenant))
+		testutil.Equals(t, 0, len(perTenant["tenant-a"]))
+		testutil.Equals(t, 0, len(perTenant["tenant-b"]))
+	})
+
+	t.Run("empty global entry is rejected", func(t *testing.T) {
+		content := []byte(`
+- source_labels: [__name__]
+  action: drop
+  regex: "a"
+-
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "relabel config at index 1 is empty", err.Error())
+	})
+
+	t.Run("empty per-tenant entry is rejected", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - null
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `tenant "tenant-a": relabel config at index 0 is empty`, err.Error())
+	})
+
+	t.Run("invalid global config fails validation", func(t *testing.T) {
+		// hashmod with no modulus is invalid.
+		content := []byte(`
+- action: hashmod
+  source_labels: [__name__]
+  target_label: shard
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("invalid per-tenant config fails validation", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - action: hashmod
+    source_labels: [__name__]
+    target_label: shard
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+	})
+
+	t.Run("unknown action in global config reports the actual error", func(t *testing.T) {
+		content := []byte(`
+- action: bogus
+  source_labels: [__name__]
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `parsing relabel configuration: unknown relabel action "bogus"`, err.Error())
+	})
+
+	t.Run("invalid regex in global config reports the actual error", func(t *testing.T) {
+		content := []byte(`
+- action: drop
+  source_labels: [__name__]
+  regex: "("
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Assert(t, strings.Contains(err.Error(), "error parsing regexp"), "unexpected error: %v", err)
+	})
+
+	t.Run("unknown action in per-tenant config reports the actual error", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - action: bogus
+    source_labels: [__name__]
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `parsing relabel configuration: unknown relabel action "bogus"`, err.Error())
+	})
+
+	t.Run("default key holds the default configs", func(t *testing.T) {
+		content := []byte(`
+default:
+  - source_labels: [__name__]
+    action: drop
+    regex: "default_drop_.*"
+tenant-a:
+  - source_labels: [__name__]
+    action: keep
+    regex: "tenant_a_keep_.*"
+`)
+		defaultCfgs, perTenant, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(defaultCfgs))
+		testutil.Equals(t, relabel.Drop, defaultCfgs[0].Action)
+		testutil.Equals(t, 1, len(perTenant))
+		_, ok := perTenant[DefaultTenantRelabelConfigKey]
+		testutil.Assert(t, !ok, "default key must not be returned as a tenant")
+		testutil.Equals(t, relabel.Keep, perTenant["tenant-a"][0].Action)
+	})
+
+	t.Run("invalid default config fails validation", func(t *testing.T) {
+		content := []byte(`
+default:
+  - action: labelmap
+    regex: "(.*)"
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, SelectorSupportedRelabelActions)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `tenant "default": unsupported relabel action: labelmap`, err.Error())
+	})
+
+	t.Run("scalar content is rejected", func(t *testing.T) {
+		_, _, err := ParseRelabelConfigWithTenants([]byte(`foo`), nil)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, "parsing relabel configuration: expected a list of relabel configs or a map of tenant ID to relabel configs", err.Error())
+	})
+
+	t.Run("unsupported per-tenant action is rejected", func(t *testing.T) {
+		content := []byte(`
+tenant-a:
+  - action: labelmap
+    regex: "(.*)"
+`)
+		_, _, err := ParseRelabelConfigWithTenants(content, SelectorSupportedRelabelActions)
+		testutil.NotOk(t, err)
+		testutil.Equals(t, `tenant "tenant-a": unsupported relabel action: labelmap`, err.Error())
+	})
+
+	t.Run("malformed yaml is rejected", func(t *testing.T) {
+		content := []byte(`::: not valid yaml :::`)
+		_, _, err := ParseRelabelConfigWithTenants(content, nil)
+		testutil.NotOk(t, err)
+	})
 }
 
 func TestDeletionMarkFilter_HoldsOntoMarks(t *testing.T) {
