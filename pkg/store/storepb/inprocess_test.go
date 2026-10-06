@@ -53,6 +53,38 @@ func (t *testStoreServer) LabelValues(_ context.Context, r *LabelValuesRequest) 
 	return t.labelValues, t.err
 }
 
+type countingStoreServer struct {
+	testStoreServer
+	sent    int
+	sendErr error
+}
+
+func (c *countingStoreServer) Series(_ *SeriesRequest, server Store_SeriesServer) error {
+	for range 1000 {
+		if err := server.Send(NewSeriesResponse(&Series{Labels: []labelpb.ZLabel{{Name: "a", Value: "b"}}})); err != nil {
+			c.sendErr = err
+			return err
+		}
+		c.sent++
+	}
+	return nil
+}
+
+func TestServerAsClient_SendFailsAfterStop(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+
+	s := &countingStoreServer{}
+	client, err := ServerAsClient(s, atomic.Bool{}).Series(context.Background(), &SeriesRequest{})
+	testutil.Ok(t, err)
+
+	_, err = client.Recv()
+	testutil.Ok(t, err)
+	testutil.Ok(t, client.CloseSend())
+
+	testutil.Equals(t, 0, s.sent)
+	testutil.Equals(t, io.EOF, s.sendErr)
+}
+
 func TestServerAsClient(t *testing.T) {
 	defer custom.TolerantVerifyLeak(t)
 

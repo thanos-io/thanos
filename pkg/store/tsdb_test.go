@@ -15,7 +15,10 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/efficientgo/core/testutil"
 
@@ -191,6 +194,78 @@ func TestTSDBStore_Series(t *testing.T) {
 			return
 		}
 	}
+}
+
+type cancelOnFirstSeriesDB struct {
+	TSDBReader
+	cancel context.CancelFunc
+	pulled int
+}
+
+func (db *cancelOnFirstSeriesDB) ChunkQuerier(mint, maxt int64) (storage.ChunkQuerier, error) {
+	q, err := db.TSDBReader.ChunkQuerier(mint, maxt)
+	if err != nil {
+		return nil, err
+	}
+	return &cancelOnFirstSeriesQuerier{ChunkQuerier: q, db: db}, nil
+}
+
+type cancelOnFirstSeriesQuerier struct {
+	storage.ChunkQuerier
+	db *cancelOnFirstSeriesDB
+}
+
+func (q *cancelOnFirstSeriesQuerier) Select(ctx context.Context, sortSeries bool, hints *storage.SelectHints, ms ...*labels.Matcher) storage.ChunkSeriesSet {
+	return &cancelOnFirstSeriesSet{ChunkSeriesSet: q.ChunkQuerier.Select(ctx, sortSeries, hints, ms...), db: q.db}
+}
+
+type cancelOnFirstSeriesSet struct {
+	storage.ChunkSeriesSet
+	db *cancelOnFirstSeriesDB
+}
+
+func (s *cancelOnFirstSeriesSet) Next() bool {
+	if !s.ChunkSeriesSet.Next() {
+		return false
+	}
+	s.db.pulled++
+	if s.db.pulled == 1 {
+		s.db.cancel()
+	}
+	return true
+}
+
+func TestTSDBStore_SeriesStopsOnCancel(t *testing.T) {
+	defer custom.TolerantVerifyLeak(t)
+
+	db, err := e2eutil.NewTSDB()
+	defer func() { testutil.Ok(t, db.Close()) }()
+	testutil.Ok(t, err)
+
+	const numSeries = 10 * seriesContextCheckInterval
+	app := db.Appender(context.Background())
+	for i := range numSeries {
+		_, err := app.Append(0, labels.FromStrings("__name__", "up", "i", fmt.Sprintf("%05d", i)), 1, 1)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cancelDB := &cancelOnFirstSeriesDB{TSDBReader: db, cancel: cancel}
+	tsdbStore := NewTSDBStore(nil, cancelDB, component.Receive, labels.FromStrings("replica", "a"))
+
+	srv := storetestutil.NewSeriesServer(ctx)
+	err = tsdbStore.Series(&storepb.SeriesRequest{
+		MinTime:  0,
+		MaxTime:  10,
+		Matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "up"}},
+	}, srv)
+
+	testutil.NotOk(t, err)
+	testutil.Equals(t, codes.Canceled, status.Code(err))
+	testutil.Assert(t, cancelDB.pulled <= seriesContextCheckInterval+1, "read %d of %d series after cancellation", cancelDB.pulled, numSeries)
+	testutil.Equals(t, 0, len(srv.SeriesSet))
 }
 
 type delegatorServer struct {
