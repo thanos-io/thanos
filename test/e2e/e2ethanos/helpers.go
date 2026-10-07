@@ -4,7 +4,6 @@
 package e2ethanos
 
 import (
-	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os/exec"
@@ -40,7 +39,8 @@ func singleJoiningSlash(a, b string) string {
 // but it performs a url path rewrite.
 func NewSingleHostReverseProxy(target *url.URL, externalPrefix string) *httputil.ReverseProxy {
 	targetQuery := target.RawQuery
-	director := func(req *http.Request) {
+	rewrite := func(pr *httputil.ProxyRequest) {
+		req := pr.Out
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.URL.Path = singleJoiningSlash(target.Path, strings.TrimPrefix(req.URL.Path, "/"+externalPrefix))
@@ -50,6 +50,7 @@ func NewSingleHostReverseProxy(target *url.URL, externalPrefix string) *httputil
 		} else {
 			req.URL.RawQuery = targetQuery + "&" + req.URL.RawQuery
 		}
+		pr.SetXForwarded()
 	}
-	return &httputil.ReverseProxy{Director: director}
+	return &httputil.ReverseProxy{Rewrite: rewrite}
 }

@@ -131,8 +131,8 @@ type TenantStats struct {
 
 // TSDBStatus has information of cardinality statistics from postings.
 type TSDBStatus struct {
-	Tenant        string `json:"tenant"`
-	v1.TSDBStatus `json:","`
+	Tenant string `json:"tenant"`
+	v1.TSDBStatus
 }
 
 // SetCORS enables cross-site script calls.
