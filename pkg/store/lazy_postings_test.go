@@ -764,7 +764,7 @@ func TestOptimizePostingsFetchByDownloadedBytes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			headerReader := &mockIndexHeaderReader{postings: tc.inputPostings, err: tc.inputError}
 			registry := prometheus.NewRegistry()
-			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
+			block, err := newBucketBlock(ctx, newBucketStoreMetrics(registry, nil), meta, bkt, path.Join(dir, blockID.String()), nil, nil, headerReader, nil, nil, nil)
 			testutil.Ok(t, err)
 			ir := newBucketIndexReader(block, logger)
 			dummyCounter := promauto.With(registry).NewCounter(prometheus.CounterOpts{Name: "test"})

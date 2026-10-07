@@ -20,7 +20,7 @@ require (
 	github.com/cristalhq/hedgedhttp v0.9.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/efficientgo/core v1.0.0-rc.3
-	github.com/efficientgo/e2e v0.14.1-0.20260204162810-8c75b1e33ef9
+	github.com/efficientgo/e2e v0.14.1-0.20260927140226-a3483d56ac4b
 	github.com/efficientgo/tools/extkingpin v0.0.0-20230505153745-6b7392939a60
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0

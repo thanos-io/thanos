@@ -21,6 +21,7 @@ import (
 	"github.com/cortexproject/promqlsmith"
 	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/efficientgo/e2e/monitoring/matchers"
 	e2eobs "github.com/efficientgo/e2e/observable"
@@ -58,7 +59,7 @@ func TestStoreGateway(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-test"
-	s3Server := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -405,7 +406,7 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-no-cache-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	s1 := e2ethanos.NewStoreGW(
@@ -629,7 +630,7 @@ func TestStoreGatewayMemcachedCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-memcached-cache-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -732,7 +733,7 @@ func TestStoreGatewayGroupCache(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-groupcache-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	groupcacheConfig := `type: GROUPCACHE
@@ -865,7 +866,7 @@ config:
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-test-bytes-limit"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	store1 := e2ethanos.NewStoreGW(
@@ -1023,7 +1024,7 @@ func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-memcached-index-cache-expanded-postings-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	memcached := e2ethanos.NewMemcached(e, "1")
@@ -1128,7 +1129,7 @@ func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "store-gateway-lazy-expanded-postings-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create 2 store gateways, one with lazy expanded postings enabled and another one disabled.
@@ -1285,7 +1286,7 @@ func TestStoreGatewayLazyExpandedPostingsPromQLSmithFuzz(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	const bucket = "fuzz-store-gateway-lazy-expanded-postings-test"
-	m := e2ethanos.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2ethanos.WithSeaweedFSTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create 2 store gateways, one with lazy expanded postings enabled and another one disabled.
