@@ -2946,3 +2946,51 @@ func TestHistogramAggregatorSkipsIncompatibleSchema(t *testing.T) {
 	})
 	require.Equal(t, 2, agg.processedSamples(), "the custom buckets sample should have been skipped, not aggregated")
 }
+
+func nhcbWithBoundsForTest(bounds []float64) *histogram.FloatHistogram {
+	h := customBucketsHistogramForTest()
+	h.CustomValues = bounds
+	return h
+}
+
+func TestDownsampleRawCountedNHCBBounds(t *testing.T) {
+	const windowSize = ResLevel1
+	boundsA := []float64{1, 2, 3}
+	boundsB := []float64{1, 2, 4}
+
+	t.Run("windows with the same bounds are aggregated and nothing is left out", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize + 60000, fh: nhcbWithBoundsForTest(boundsA)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 0, skipped)
+		testutil.Assert(t, len(chks) == 1, "expected one chunk, got %d", len(chks))
+	})
+
+	t.Run("a window that mixes bounds is left out and the others are kept", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize + 60000, fh: nhcbWithBoundsForTest(boundsB)},
+			{t: 2 * windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 2*windowSize + 60000, fh: nhcbWithBoundsForTest(boundsA)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 1, skipped)
+		testutil.Assert(t, len(chks) == 1, "expected one chunk, got %d", len(chks))
+	})
+
+	t.Run("a batch whose windows are all left out produces no chunk", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsB)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 1, skipped)
+		testutil.Equals(t, 0, len(chks))
+	})
+}

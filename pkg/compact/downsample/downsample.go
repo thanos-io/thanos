@@ -22,6 +22,7 @@ import (
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/value"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/chunks"
@@ -176,7 +177,7 @@ func Downsample(
 
 			for _, c := range chks {
 				if cutNewChunk(c.Chunk.Encoding(), prevEnc) {
-					resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+					resChunks = append(resChunks, downsampleRawLogged(logger, all, resolution, postings.At())...)
 					all = all[:0]
 					prevEnc = c.Chunk.Encoding()
 				}
@@ -187,7 +188,7 @@ func Downsample(
 					return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 				}
 			}
-			resChunks = append(resChunks, DownsampleRaw(all, resolution)...)
+			resChunks = append(resChunks, downsampleRawLogged(logger, all, resolution, postings.At())...)
 			if err := streamedBlockWriter.WriteSeries(lset, resChunks); err != nil {
 				return id, errors.Wrapf(err, "downsample raw data, series: %d", postings.At())
 			}
@@ -216,7 +217,7 @@ func Downsample(
 					if err := expandChunkIterator(c.Chunk.Iterator(reuseIt), c.Chunk.Encoding(), &all); err != nil {
 						return id, errors.Wrapf(err, "expand chunk %d, series %d", c.Ref, postings.At())
 					}
-					aggrDataChunks := DownsampleRaw(all, ResLevel1)
+					aggrDataChunks := downsampleRawLogged(logger, all, ResLevel1, postings.At())
 					for _, cn := range aggrDataChunks {
 						_, ok = cn.Chunk.(*AggrChunk)
 						if !ok {
@@ -319,12 +320,15 @@ func targetChunkCount(mint, maxt, inRes, outRes int64, count int) (x int) {
 }
 
 type histogramAggregator struct {
-	total    int                       // Total histograms processed.
-	count    int                       // Histograms in current window.
-	sum      *histogram.FloatHistogram // Value sum of current window (for gauge histograms).
-	counter  *histogram.FloatHistogram // Total counter state since beginning (for counter histograms).
-	previous *histogram.FloatHistogram // Previously added value.
-	schema   int32                     // Smallest schema in the batch that's being aggregated.
+	total     int                       // Total histograms processed.
+	count     int                       // Histograms in current window.
+	sum       *histogram.FloatHistogram // Value sum of current window (for gauge histograms).
+	counter   *histogram.FloatHistogram // Total counter state since beginning (for counter histograms).
+	previous  *histogram.FloatHistogram // Previously added value.
+	schema    int32                     // Smallest schema in the batch that's being aggregated.
+	bounds    []float64                 // Custom bucket bounds of the batch, taken from its first custom buckets sample.
+	hasBounds bool
+	mixed     bool // The current window has a sample that cannot be aggregated with the others.
 }
 
 func newHistogramAggregator(schema int32) *histogramAggregator {
@@ -336,6 +340,11 @@ func newHistogramAggregator(schema int32) *histogramAggregator {
 func (h *histogramAggregator) reset() {
 	h.count = 0
 	h.sum = nil
+	h.mixed = false
+}
+
+func (h *histogramAggregator) isMixed() bool {
+	return h.mixed
 }
 
 func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
@@ -350,14 +359,23 @@ func mustHistogramOp(_ *histogram.FloatHistogram, _, _ bool, err error) {
 
 func (h *histogramAggregator) add(s sample) {
 	fh := s.fh
+	// A series can switch between a classic exponential schema and native
+	// histograms with custom buckets over its lifetime (e.g. after enabling
+	// NHCB). The two cannot be aggregated together, so the window is left out.
 	if fh.UsesCustomBuckets() != histogram.IsCustomBucketsSchema(h.schema) {
-		// A series can switch between a classic exponential schema and
-		// native histograms with custom buckets over its lifetime (e.g.
-		// after enabling NHCB). The two resolutions are incompatible - a
-		// custom buckets histogram cannot be reduced to, or from, an
-		// exponential schema - so skip this sample instead of aggregating
-		// it, rather than crashing the whole compaction.
+		h.mixed = true
 		return
+	}
+	// Custom buckets with different bounds cannot be summed without changing
+	// the bucket layout, which would silently lose precision, so the window is
+	// left out instead.
+	if fh.UsesCustomBuckets() {
+		if !h.hasBounds {
+			h.bounds, h.hasBounds = fh.CustomValues, true
+		} else if !histogram.CustomBucketBoundsMatch(h.bounds, fh.CustomValues) {
+			h.mixed = true
+			return
+		}
 	}
 	if fh.Schema < h.schema {
 		panic("schema must be greater or equal to aggregator schema")
@@ -417,6 +435,10 @@ func (f *floatAggregator) processedSamples() int {
 	return f.total
 }
 
+func (f *floatAggregator) isMixed() bool {
+	return false
+}
+
 func newHistogramAggrChunkBuilder(isGaugeSamples bool) *aggrChunkBuilder {
 	b := &aggrChunkBuilder{
 		mint:           math.MaxInt64,
@@ -474,19 +496,31 @@ func downsampleFloatBatch(batch []sample, resolution int64) chunks.Meta {
 	return ab.encode()
 }
 
-func downsampleHistogramBatch(batch []sample, resolution int64) chunks.Meta {
+// downsampleHistogramBatch also returns how many windows were left out because
+// they mix histograms that cannot be aggregated together.
+func downsampleHistogramBatch(batch []sample, resolution int64) (chunks.Meta, int) {
 	// We need to know the smallest schema in advanced otherwise we might end
 	// up with a non appendable histogram if histogram.schema < chunk.schema.
 	schema := minSchema(batch)
 	ab := newHistogramAggrChunkBuilder(isGaugeSamples(batch))
-	downsampleBatch(batch, resolution, newHistogramAggregator(schema), ab.addHistogram)
-	return ab.encode()
+	skipped := 0
+	downsampleBatch(batch, resolution, newHistogramAggregator(schema), func(t int64, a sampleAggregator) {
+		if a.isMixed() {
+			skipped++
+			return
+		}
+		ab.addHistogram(t, a)
+	})
+	return ab.encode(), skipped
 }
 
 type sampleAggregator interface {
 	reset()
 	add(s sample)
 	processedSamples() int
+	// isMixed reports whether the current window has samples that could not be
+	// aggregated together, so the window must not be emitted.
+	isMixed() bool
 }
 
 func (b *aggrChunkBuilder) addHistogram(t int64, a sampleAggregator) {
@@ -657,10 +691,27 @@ func (b *aggrChunkBuilder) encode() chunks.Meta {
 	}
 }
 
+// downsampleRawLogged downsamples raw samples of one series and warns about
+// windows that had to be left out.
+func downsampleRawLogged(logger log.Logger, data []sample, resolution int64, series storage.SeriesRef) []chunks.Meta {
+	chks, skipped := DownsampleRawCounted(data, resolution)
+	if skipped > 0 {
+		level.Warn(logger).Log("msg", "left out downsampled windows of histograms that cannot be aggregated together", "windows", skipped, "resolution", resolution, "series", series)
+	}
+	return chks
+}
+
 // DownsampleRaw create a series of aggregation chunks for the given sample data.
 func DownsampleRaw(data []sample, resolution int64) []chunks.Meta {
+	chks, _ := DownsampleRawCounted(data, resolution)
+	return chks
+}
+
+// DownsampleRawCounted is DownsampleRaw that also returns how many windows of
+// histograms were left out because they could not be aggregated together.
+func DownsampleRawCounted(data []sample, resolution int64) ([]chunks.Meta, int) {
 	if len(data) == 0 {
-		return nil
+		return nil, 0
 	}
 
 	mint, maxt := data[0].t, data[len(data)-1].t
@@ -672,12 +723,16 @@ func DownsampleRaw(data []sample, resolution int64) []chunks.Meta {
 	// First sample determines the type of the samples, since we process
 	// one chunk and all samples of one chunk have the same type.
 	if data[0].fh != nil {
-		downsampleRawLoop(data, resolution, numChunks, &chks, downsampleHistogramBatch)
-	} else {
-		downsampleRawLoop(data, resolution, numChunks, &chks, downsampleFloatBatch)
+		skipped := 0
+		downsampleRawLoop(data, resolution, numChunks, &chks, func(batch []sample, res int64) chunks.Meta {
+			chk, n := downsampleHistogramBatch(batch, res)
+			skipped += n
+			return chk
+		})
+		return chks, skipped
 	}
-
-	return chks
+	downsampleRawLoop(data, resolution, numChunks, &chks, downsampleFloatBatch)
+	return chks, 0
 }
 
 func downsampleRawLoop(
@@ -716,7 +771,12 @@ func downsampleRawLoop(
 			continue
 		}
 
-		*chks = append(*chks, downsampleBatchFn(batch, resolution))
+		chk := downsampleBatchFn(batch, resolution)
+		// A batch whose windows were all left out has no samples to store.
+		if chk.MinTime > chk.MaxTime {
+			continue
+		}
+		*chks = append(*chks, chk)
 	}
 }
 
@@ -869,8 +929,8 @@ func downsampleBatch(data []sample, resolution int64, aggr sampleAggregator, add
 		}
 		aggr.add(s)
 	}
-	// Add the last sample if any samples were processed.
-	if aggr.processedSamples() > 0 {
+	// Add the last window if any of its samples were processed or it was left out.
+	if aggr.processedSamples() > 0 || aggr.isMixed() {
 		// Add the last sample.
 		add(nextT, aggr)
 	}
