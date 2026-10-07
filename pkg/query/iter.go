@@ -133,7 +133,7 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 		case storepb.Aggr_COUNTER:
 			its := make([]chunkenc.Iterator, 0, len(s.chunks))
 			for _, c := range s.chunks {
-				its = append(its, getFirstIterator(getFirstChunk(c.Counter, c.Raw)))
+				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
 			// TODO(bwplotka): This breaks resets function. See https://github.com/thanos-io/thanos/issues/3644
 			sit = downsample.NewApplyCounterResetsIterator(its...)
