@@ -5,6 +5,7 @@ package rules
 
 import (
 	"context"
+	"fmt"
 	"path"
 	"path/filepath"
 	"slices"
@@ -263,8 +264,8 @@ func TestDedupRules(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 			},
 			want: []*rulespb.Rule{
-				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 			},
 		},
 		{
@@ -276,8 +277,8 @@ func TestDedupRules(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 			},
 			want: []*rulespb.Rule{
-				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewAlertingRule(&rulespb.Alert{Name: "a1"}),
 			},
 		},
 		{
@@ -351,6 +352,12 @@ func TestDedupRules(t *testing.T) {
 					}}}),
 			},
 			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name:  "a1",
+					Query: "up",
+					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "a", Value: "1"},
+					}}}),
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:  "a1",
 					Query: "up",
@@ -359,12 +366,6 @@ func TestDedupRules(t *testing.T) {
 					}}}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{
 					Name: "a1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "a", Value: "1"},
-					}}}),
-				rulespb.NewRecordingRule(&rulespb.RecordingRule{
-					Name:  "a1",
-					Query: "up",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "a", Value: "1"},
 					}}}),
 			},
@@ -412,6 +413,10 @@ func TestDedupRules(t *testing.T) {
 					}}}),
 			},
 			want: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1", Query: "up", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "a", Value: "1"},
+					}}}),
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:            "a1",
 					Query:           "up",
@@ -419,19 +424,15 @@ func TestDedupRules(t *testing.T) {
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "a", Value: "1"},
 					}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{
+					Name: "a1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
+						{Name: "a", Value: "1"},
+					}}}),
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name:            "a1",
 					Query:           "up",
 					DurationSeconds: 2.0,
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "a", Value: "1"},
-					}}}),
-				rulespb.NewRecordingRule(&rulespb.RecordingRule{
-					Name: "a1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "a", Value: "1"},
-					}}}),
-				rulespb.NewRecordingRule(&rulespb.RecordingRule{
-					Name: "a1", Query: "up", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 						{Name: "a", Value: "1"},
 					}}}),
 			},
@@ -516,10 +517,10 @@ func TestDedupRules(t *testing.T) {
 				}}}),
 			},
 			want: []*rulespb.Rule{
-				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "1"},
 				}}}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1", Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "a", Value: "2"},
 				}}}),
@@ -529,14 +530,6 @@ func TestDedupRules(t *testing.T) {
 		{
 			name: "youngest recording rule",
 			rules: []*rulespb.Rule{
-				rulespb.NewRecordingRule(&rulespb.RecordingRule{
-					Name:  "a1",
-					Query: "up",
-					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "replica", Value: "2"},
-					}},
-					LastEvaluation: time.Unix(0, 0),
-				}),
 				rulespb.NewRecordingRule(&rulespb.RecordingRule{
 					Name:  "a1",
 					Query: "up",
@@ -685,14 +678,14 @@ func TestDedupRules(t *testing.T) {
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name: "a1",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "severity", Value: "critical"},
+						{Name: "severity", Value: "warning"},
 					}},
 					LastEvaluation: time.Unix(1, 0),
 				}),
 				rulespb.NewAlertingRule(&rulespb.Alert{
 					Name: "a1",
 					Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
-						{Name: "severity", Value: "warning"},
+						{Name: "severity", Value: "critical"},
 					}},
 					LastEvaluation: time.Unix(1, 0),
 				}),
@@ -924,6 +917,14 @@ func TestDedupGroups(t *testing.T) {
 			want: []*rulespb.RuleGroup{
 				{
 					Name: "a",
+					File: "foo.yaml",
+					Rules: []*rulespb.Rule{
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+					},
+				},
+				{
+					Name: "a",
 					Rules: []*rulespb.Rule{
 						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
 						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
@@ -942,14 +943,6 @@ func TestDedupGroups(t *testing.T) {
 				{
 					Name: "a",
 					File: "bar.yaml",
-					Rules: []*rulespb.Rule{
-						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
-						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
-					},
-				},
-				{
-					Name: "a",
-					File: "foo.yaml",
 					Rules: []*rulespb.Rule{
 						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
 						rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
@@ -1699,5 +1692,84 @@ func TestFilterRules(t *testing.T) {
 			groups = filterRulesByNamesAndFile(groups, tc.ruleNameFilter, tc.ruleGroupFilter, tc.fileFilter)
 			testutil.Equals(t, tc.want, groups)
 		})
+	}
+}
+
+func generateTestCases() []*rulespb.RuleGroup {
+	testCases := make([]*rulespb.RuleGroup, 0)
+
+	for i := 0; i < 100; i++ {
+		group := &rulespb.RuleGroup{
+			Name: "a",
+			File: "bar.yaml",
+			Rules: []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a1"}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "a2"}),
+			},
+		}
+
+		if i%2 == 0 {
+			group.Name = "b"
+			group.Rules = []*rulespb.Rule{
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b1"}),
+				rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "b2"}),
+			}
+		} else if i%3 == 0 {
+			group.Name = "c"
+			group.Rules = nil
+		}
+		testCases = append(testCases, group)
+	}
+
+	return testCases
+}
+
+func BenchmarkDedupGroups(b *testing.B) {
+	testCases := generateTestCases()
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		groups := make([]*rulespb.RuleGroup, len(testCases))
+		copy(groups, testCases)
+		b.StartTimer()
+		_ = dedupGroups(groups)
+	}
+}
+
+func generateRules() []*rulespb.Rule {
+	rules := make([]*rulespb.Rule, 0)
+
+	for i := 0; i < 100; i++ {
+		rule := rulespb.NewRecordingRule(&rulespb.RecordingRule{
+			Name: fmt.Sprintf("a%d", i+1),
+			Labels: labelpb.ZLabelSet{
+				Labels: []labelpb.ZLabel{
+					{Name: "a" + fmt.Sprintf("%d", i+1), Value: "1"},
+					{Name: "replica", Value: fmt.Sprintf("%d", i+1)},
+				},
+			},
+		})
+
+		rules = append(rules, rule)
+	}
+	return rules
+}
+
+func BenchmarkDedupRules(b *testing.B) {
+	rules := generateRules()
+	replicaLabels := map[string]struct{}{
+		"replica": {},
+	}
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		rulesCopy := make([]*rulespb.Rule, len(rules))
+		copy(rulesCopy, rules)
+		b.StartTimer()
+		_ = dedupRules(rulesCopy, replicaLabels)
 	}
 }
