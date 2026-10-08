@@ -105,10 +105,10 @@ func formatErrorChain(err error) string {
 	var buf strings.Builder
 	for err != nil {
 		if e, ok := err.(*base); ok {
-			buf.WriteString(fmt.Sprintf("%s\n%v", e.info, e.stack))
+			fmt.Fprintf(&buf, "%s\n%v", e.info, e.stack)
 			err = e.err
 		} else {
-			buf.WriteString(fmt.Sprintf("%s\n", err.Error()))
+			fmt.Fprintf(&buf, "%s\n", err.Error())
 			err = nil
 		}
 	}

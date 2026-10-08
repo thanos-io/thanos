@@ -63,7 +63,7 @@ ARCH ?= $(shell uname -m)
 
 # Tools.
 PROTOC            ?= $(GOBIN)/protoc-$(PROTOC_VERSION)
-PROTOC_VERSION    ?= 3.20.1
+PROTOC_VERSION    ?= 36.2
 GIT               ?= $(shell which git)
 PNPM              ?= pnpm
 

@@ -32,9 +32,9 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - name: Install bingo modules
         run: make install-tool-deps
@@ -61,9 +61,9 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -88,9 +88,9 @@ jobs:
       uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
     - name: Install Go
-      uses: cloudx-io/setup-go@v1
+      uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
       with:
-        go-version: 1.26.x
+        go-version: 1.27.x
 
     - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
       with:
@@ -115,9 +115,9 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -185,9 +185,9 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
         with:
@@ -228,9 +228,9 @@ jobs:
         uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
 
       - name: Install Go.
-        uses: cloudx-io/setup-go@v1
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
         with:
-          go-version: 1.26.x
+          go-version: 1.27.x
 
       - name: Download coverage data
         uses: actions/download-artifact@v4
