@@ -591,7 +591,7 @@ Flags:
       --receive.grpc-compression=snappy
                                  Compression algorithm to use for gRPC requests
                                  to other receivers. Must be one of: snappy,
-                                 none
+                                 zstd, none
       --receive.replication-factor=1
                                  How many times to replicate incoming write
                                  requests.

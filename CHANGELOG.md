@@ -17,6 +17,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
 - [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
 - [#9056](https://github.com/thanos-io/thanos/pull/9056): *: Add `http_headers` to the HTTP client config, so Rule can send custom headers to query and Alertmanager endpoints (also available in Sidecar and Receive).
+- [#9010](https://github.com/thanos-io/thanos/pull/9010): Receive: Add `zstd` as a supported `--receive.grpc-compression` algorithm for replication requests between receivers.
 
 ### Fixed
 
