@@ -4,11 +4,13 @@
 package downsample
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-kit/log"
@@ -2993,4 +2995,30 @@ func TestDownsampleRawCountedNHCBBounds(t *testing.T) {
 		testutil.Equals(t, 1, skipped)
 		testutil.Equals(t, 0, len(chks))
 	})
+}
+
+func TestFloatAggregatorIsNeverMixed(t *testing.T) {
+	testutil.Equals(t, false, (&floatAggregator{}).isMixed())
+}
+
+func TestDownsampleRawCountedEmptyInput(t *testing.T) {
+	chks, skipped := DownsampleRawCounted(nil, ResLevel1)
+	testutil.Equals(t, 0, len(chks))
+	testutil.Equals(t, 0, skipped)
+}
+
+func TestDownsampleRawLoggedWarnsOnSkippedWindows(t *testing.T) {
+	const windowSize = ResLevel1
+	data := []sample{
+		{t: 0, fh: classicHistogramForTest(3)},
+		{t: windowSize, fh: customBucketsHistogramForTest()},
+	}
+
+	var buf bytes.Buffer
+	logger := log.NewLogfmtLogger(&buf)
+	chks := downsampleRawLogged(logger, data, windowSize, 42)
+
+	testutil.Assert(t, len(chks) > 0, "expected at least one chunk")
+	testutil.Assert(t, strings.Contains(buf.String(), "left out downsampled windows"), "expected a warning about left out windows, got: %s", buf.String())
+	testutil.Assert(t, strings.Contains(buf.String(), "windows=1"), "expected the warning to report one skipped window, got: %s", buf.String())
 }
