@@ -151,7 +151,6 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	case s.aggrs[0] == storepb.Aggr_SUM && s.aggrs[1] == storepb.Aggr_COUNT,
 		s.aggrs[0] == storepb.Aggr_COUNT && s.aggrs[1] == storepb.Aggr_SUM:
 
-		// Check if all chunks have raw data.
 		allRaw := true
 		for _, c := range s.chunks {
 			if c.Raw == nil {
@@ -234,7 +233,6 @@ func (errSeriesIterator) At() (int64, float64)          { return 0, 0 }
 func (errSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	return 0, nil
 }
-
 func (errSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return 0, nil
 }

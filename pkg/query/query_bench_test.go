@@ -315,13 +315,10 @@ func testSelect(t testutil.TB, q *querier, expectedSeries []labels.Labels) {
 }
 
 func benchSelect(b *testing.B, q *querier, expectedSeries int) {
-	ctx := context.Background()
-	b.ResetTimer()
+	ctx := b.Context()
 	for b.Loop() {
 		ss := q.Select(ctx, true, nil, &labels.Matcher{Value: "foo", Name: "bar", Type: labels.MatchEqual})
-		if ss.Err() != nil {
-			b.Fatal(ss.Err())
-		}
+		require.NoError(b, ss.Err())
 
 		var gotSeriesCount int
 		for ss.Next() {
@@ -333,17 +330,11 @@ func benchSelect(b *testing.B, q *querier, expectedSeries int) {
 			for iter.Next() != chunkenc.ValNone {
 				testT, testV = iter.At()
 			}
-			if iter.Err() != nil {
-				b.Fatal(iter.Err())
-			}
+			require.NoError(b, iter.Err())
 		}
 
-		if gotSeriesCount != expectedSeries {
-			b.Fatalf("expected %d series, got %d", expectedSeries, gotSeriesCount)
-		}
-		if ss.Err() != nil {
-			b.Fatal(ss.Err())
-		}
+		require.Equal(b, expectedSeries, gotSeriesCount)
+		require.NoError(b, ss.Err())
 	}
 }
 
@@ -564,9 +555,7 @@ func BenchmarkQuerySelectHistogram(b *testing.B) {
 			for it.Next() != chunkenc.ValNone {
 				testT, fh = it.AtFloatHistogram(fh)
 			}
-			if it.Err() != nil {
-				b.Fatal(it.Err())
-			}
+			require.NoError(b, it.Err())
 		}
 	})
 	b.Run("sum", func(b *testing.B) {
@@ -583,9 +572,7 @@ func BenchmarkQuerySelectHistogram(b *testing.B) {
 			for it.Next() != chunkenc.ValNone {
 				testT, fh = it.AtFloatHistogram(fh)
 			}
-			if it.Err() != nil {
-				b.Fatal(it.Err())
-			}
+			require.NoError(b, it.Err())
 		}
 	})
 }
