@@ -2047,6 +2047,53 @@ func (c *recordingRulesClient) Rules(_ context.Context, req *rulespb.RulesReques
 	return &rulespb.RuleGroups{}, nil, nil
 }
 
+func TestRulesAndAlertsHandlersReturnErrors(t *testing.T) {
+	enforced := RulesTenancy{
+		TenantHeader:   tenancy.DefaultTenantHeader,
+		DefaultTenant:  tenancy.DefaultTenant,
+		EnforceTenancy: true,
+		TenantLabel:    "tenant",
+	}
+
+	for _, tc := range []struct {
+		name   string
+		path   string
+		header string
+	}{
+		{
+			name:   "alerts reject an invalid tenant header",
+			path:   "/api/v1/alerts",
+			header: "a/b",
+		},
+		{
+			name:   "rules reject an invalid tenant header",
+			path:   "/api/v1/rules",
+			header: "a/b",
+		},
+		{
+			name:   "rules reject a malformed selector",
+			path:   "/api/v1/rules?match[]=" + url.QueryEscape("{invalid"),
+			header: "tenant-a",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := &recordingRulesClient{}
+			var handler func(*http.Request) (any, []error, *baseAPI.ApiError, func())
+			if strings.HasPrefix(tc.path, "/api/v1/alerts") {
+				handler = NewAlertsHandler(client, false, enforced)
+			} else {
+				handler = NewRulesHandler(client, false, enforced)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set(tenancy.DefaultTenantHeader, tc.header)
+			_, _, apiErr, _ := handler(req)
+			testutil.Assert(t, apiErr != nil, "expected an error")
+			testutil.Equals(t, 0, len(client.requests))
+		})
+	}
+}
+
 func TestRulesAndAlertsHandlersEnforceTenancy(t *testing.T) {
 	enforced := RulesTenancy{
 		TenantHeader:    tenancy.DefaultTenantHeader,
