@@ -336,6 +336,7 @@ type tenant struct {
 	maxBlockDuration int64
 
 	lastSuccessfulHeadCompaction atomic.Int64
+	compactC                     chan struct{}
 }
 
 // shouldBeMarkedInactive checks if the tenant should be marked as inactive / read-only.
@@ -405,6 +406,12 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 	return err
 }
 
+// getCompactionThreshold returns a threshold for the head compaction.
+// The threshold for the head's oldest sample timestamp is set to 1.5 times the maxBlockDuration.
+func (t *tenant) getCompactionThreshold() int64 {
+	return int64(1.5 * float64(t.maxBlockDuration))
+}
+
 const compactionDelayPercentBlockLength = 10
 
 // lostFoundDir is the directory name that ext4 (and some other filesystems)
@@ -423,6 +430,16 @@ func (t *tenant) generateCompactionDelay() time.Duration {
 	return time.Duration(rand.Int63n((t.maxBlockDuration*compactionDelayPercentBlockLength)/100)) * time.Millisecond
 }
 
+// isHeadCompactable returns whether the head has a compactable range.
+// Wall-clock time determines whether the head is old enough to compact,
+// ensuring tenants that stopped receiving samples still get flushed.
+// The head's data span (MaxTime - MinTime) determines how many blocks
+// to produce, compacting until the span drops below the threshold.
+func (t *tenant) isHeadCompactable(head *tsdb.Head) bool {
+	mint := head.MinTime()
+	return mint >= 0 && time.Since(time.UnixMilli(mint)).Milliseconds() > t.getCompactionThreshold()
+}
+
 func (t *tenant) startPeriodicHeadCompaction() {
 	var interval = time.Duration(t.maxBlockDuration) * time.Millisecond
 
@@ -432,17 +449,8 @@ func (t *tenant) startPeriodicHeadCompaction() {
 			return fmt.Errorf("no DB found")
 		}
 		head := db.Head()
-		if head.MinTime() < 0 {
-			return nil
-		}
 
-		// Wall-clock time determines whether the head is old enough to compact,
-		// ensuring tenants that stopped receiving samples still get flushed.
-		// The head's data span (MaxTime - MinTime) determines how many blocks
-		// to produce, compacting until the span drops below the threshold.
-		compactionThreshold := int64(1.5 * float64(t.maxBlockDuration))
-		sinceOldestSampleMs := time.Since(time.UnixMilli(head.MinTime())).Milliseconds()
-		if sinceOldestSampleMs <= compactionThreshold {
+		if !t.isHeadCompactable(head) {
 			return nil
 		}
 
@@ -459,7 +467,7 @@ func (t *tenant) startPeriodicHeadCompaction() {
 			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
 
 			head = db.Head()
-			if head.MaxTime()-head.MinTime() <= compactionThreshold {
+			if head.MaxTime()-head.MinTime() <= t.getCompactionThreshold() {
 				break
 			}
 		}
@@ -482,14 +490,24 @@ func (t *tenant) startPeriodicHeadCompaction() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
+		// Note(guidonguido): compaction notifications are disabled after an error to avoid
+		// repeatedly triggering failed compactions and error logs.
+		compactC := t.compactC
 		for {
 			select {
 			case <-ticker.C:
 				level.Info(t.logger).Log("msg", "running periodic head compaction")
 				if err := doIter(); err != nil {
+					compactC = nil
 					level.Error(t.logger).Log("msg", "periodic head compaction failed", "err", err)
+				} else {
+					compactC = t.compactC
 				}
-
+			case <-compactC:
+				if err := doIter(); err != nil {
+					compactC = nil
+					level.Error(t.logger).Log("msg", "notified head compaction failed", "err", err)
+				}
 			case <-t.doneC:
 				return
 			}
@@ -566,6 +584,7 @@ func newTenant(l log.Logger, retentionDuration, maxBlockDuration int64, name str
 		doneC:             make(chan struct{}),
 		tenantName:        name,
 		maxBlockDuration:  maxBlockDuration,
+		compactC:          make(chan struct{}),
 	}
 }
 
@@ -607,6 +626,15 @@ func (t *tenant) close(cd closeDelete) {
 
 func (t *tenant) readyStorage() *ReadyStorage {
 	return t.readyS
+}
+
+// Appender returns a new Appender against the tenant storage.
+func (t *tenant) Appender(ctx context.Context) (storage.Appender, error) {
+	app, err := t.readyStorage().Appender(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return tenantAppender{Appender: app, tenant: t}, nil
 }
 
 func (t *tenant) client() store.Client {
@@ -1076,7 +1104,7 @@ func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tenant.readyStorage(), nil
+	return tenant, nil
 }
 
 func (t *MultiTSDB) SetHashringConfig(cfg []HashringConfig) error {
@@ -1212,6 +1240,39 @@ func (a adapter) Appender(ctx context.Context) (storage.Appender, error) {
 // Close closes the storage and all its underlying resources.
 func (a adapter) Close() error {
 	return a.db.Close()
+}
+
+// tanantAppender wraps the ReadyStorage appender and triggers compactions on commit
+// if necessary.
+type tenantAppender struct {
+	storage.Appender
+	tenant *tenant
+}
+
+var _ storage.GetRef = tenantAppender{}
+
+func (a tenantAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
+	if getRef, ok := a.Appender.(storage.GetRef); ok {
+		return getRef.GetRef(lset, hash)
+	}
+	return 0, labels.EmptyLabels()
+}
+
+// Decorate the behavior of the Prometheus DB Commit adding a notification
+// for the Receive's custom compactor.
+func (a tenantAppender) Commit() error {
+	if err := a.Appender.Commit(); err != nil {
+		return err
+	}
+
+	t := a.tenant
+	if db := t.readyS.Get(); db != nil && t.isHeadCompactable(db.Head()) {
+		select {
+		case t.compactC <- struct{}{}:
+		default:
+		}
+	}
+	return nil
 }
 
 // UnRegisterer is a Prometheus registerer that
