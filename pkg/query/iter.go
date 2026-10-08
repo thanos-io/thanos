@@ -111,31 +111,27 @@ func (s *chunkSeries) Labels() labels.Labels {
 
 func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	var sit chunkenc.Iterator
-	its := make([]chunkenc.Iterator, 0, len(s.chunks))
 
 	if len(s.aggrs) == 1 {
 		switch s.aggrs[0] {
 		case storepb.Aggr_COUNT:
-			for _, c := range s.chunks {
-				its = append(its, getFirstIterator(c.Count, c.Raw))
-			}
-			sit = newChunkSeriesIterator(its)
+			sit = newLazyChunkSeriesIterator(extractChunks(s.chunks, func(c storepb.AggrChunk) *storepb.Chunk {
+				return getFirstChunk(c.Count, c.Raw)
+			}))
 		case storepb.Aggr_SUM:
-			for _, c := range s.chunks {
-				its = append(its, getFirstIterator(c.Sum, c.Raw))
-			}
-			sit = newChunkSeriesIterator(its)
+			sit = newLazyChunkSeriesIterator(extractChunks(s.chunks, func(c storepb.AggrChunk) *storepb.Chunk {
+				return getFirstChunk(c.Sum, c.Raw)
+			}))
 		case storepb.Aggr_MIN:
-			for _, c := range s.chunks {
-				its = append(its, getFirstIterator(c.Min, c.Raw))
-			}
-			sit = newChunkSeriesIterator(its)
+			sit = newLazyChunkSeriesIterator(extractChunks(s.chunks, func(c storepb.AggrChunk) *storepb.Chunk {
+				return getFirstChunk(c.Min, c.Raw)
+			}))
 		case storepb.Aggr_MAX:
-			for _, c := range s.chunks {
-				its = append(its, getFirstIterator(c.Max, c.Raw))
-			}
-			sit = newChunkSeriesIterator(its)
+			sit = newLazyChunkSeriesIterator(extractChunks(s.chunks, func(c storepb.AggrChunk) *storepb.Chunk {
+				return getFirstChunk(c.Max, c.Raw)
+			}))
 		case storepb.Aggr_COUNTER:
+			its := make([]chunkenc.Iterator, 0, len(s.chunks))
 			for _, c := range s.chunks {
 				its = append(its, getFirstIterator(c.Counter, c.Raw))
 			}
@@ -155,19 +151,50 @@ func (s *chunkSeries) Iterator(_ chunkenc.Iterator) chunkenc.Iterator {
 	case s.aggrs[0] == storepb.Aggr_SUM && s.aggrs[1] == storepb.Aggr_COUNT,
 		s.aggrs[0] == storepb.Aggr_COUNT && s.aggrs[1] == storepb.Aggr_SUM:
 
+		allRaw := true
 		for _, c := range s.chunks {
-			if c.Raw != nil {
-				its = append(its, getFirstIterator(c.Raw))
-			} else {
-				sum, cnt := getFirstIterator(c.Sum), getFirstIterator(c.Count)
-				its = append(its, downsample.NewAverageChunkIterator(cnt, sum))
+			if c.Raw == nil {
+				allRaw = false
+				break
 			}
 		}
-		sit = newChunkSeriesIterator(its)
+		if allRaw {
+			sit = newLazyChunkSeriesIterator(extractChunks(s.chunks, func(c storepb.AggrChunk) *storepb.Chunk {
+				return c.Raw
+			}))
+		} else {
+			its := make([]chunkenc.Iterator, 0, len(s.chunks))
+			for _, c := range s.chunks {
+				if c.Raw != nil {
+					its = append(its, getFirstIterator(c.Raw))
+				} else {
+					sum, cnt := getFirstIterator(c.Sum), getFirstIterator(c.Count)
+					its = append(its, downsample.NewAverageChunkIterator(cnt, sum))
+				}
+			}
+			sit = newChunkSeriesIterator(its)
+		}
 	default:
 		return errSeriesIterator{err: errors.Errorf("unexpected result aggregate type %v", s.aggrs)}
 	}
 	return dedup.NewBoundedSeriesIterator(sit, s.mint, s.maxt)
+}
+
+func extractChunks(aggrChunks []storepb.AggrChunk, pick func(storepb.AggrChunk) *storepb.Chunk) []*storepb.Chunk {
+	chunks := make([]*storepb.Chunk, len(aggrChunks))
+	for i, c := range aggrChunks {
+		chunks[i] = pick(c)
+	}
+	return chunks
+}
+
+func getFirstChunk(cs ...*storepb.Chunk) *storepb.Chunk {
+	for _, c := range cs {
+		if c != nil {
+			return c
+		}
+	}
+	return nil
 }
 
 func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
@@ -283,6 +310,79 @@ func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
 
 func (it *chunkSeriesIterator) Err() error {
 	return it.cur.Err()
+}
+
+// lazyChunkSeriesIterator creates chunk iterators lazily with reuse across chunks.
+type lazyChunkSeriesIterator struct {
+	chunks []*storepb.Chunk
+	i      int
+	cur    chunkenc.Iterator
+
+	lastVal chunkenc.ValueType
+}
+
+func newLazyChunkSeriesIterator(chunks []*storepb.Chunk) chunkenc.Iterator {
+	if len(chunks) == 0 {
+		return errSeriesIterator{err: errors.New("got empty chunks")}
+	}
+	it := &lazyChunkSeriesIterator{chunks: chunks}
+	it.reset(chunks[0])
+	return it
+}
+
+func (it *lazyChunkSeriesIterator) reset(c *storepb.Chunk) {
+	if c == nil {
+		it.cur = errSeriesIterator{errors.New("nil chunk")}
+		return
+	}
+	chk, err := chunkenc.FromData(chunkEncoding(c.Type), c.Data)
+	if err != nil {
+		it.cur = errSeriesIterator{err}
+		return
+	}
+	it.cur = chk.Iterator(it.cur)
+}
+
+func (it *lazyChunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
+	for {
+		ct := it.AtT()
+		if ct >= t {
+			return it.lastVal
+		}
+		it.lastVal = it.Next()
+		if it.lastVal == chunkenc.ValNone {
+			return chunkenc.ValNone
+		}
+	}
+}
+
+func (it *lazyChunkSeriesIterator) At() (int64, float64) { return it.cur.At() }
+func (it *lazyChunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	return it.cur.AtHistogram(h)
+}
+
+func (it *lazyChunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	return it.cur.AtFloatHistogram(fh)
+}
+func (it *lazyChunkSeriesIterator) AtT() int64 { return it.cur.AtT() }
+func (it *lazyChunkSeriesIterator) Err() error { return it.cur.Err() }
+
+func (it *lazyChunkSeriesIterator) Next() chunkenc.ValueType {
+	lastT := it.AtT()
+
+	if valueType := it.cur.Next(); valueType != chunkenc.ValNone {
+		it.lastVal = valueType
+		return valueType
+	}
+	if it.Err() != nil {
+		return chunkenc.ValNone
+	}
+	if it.i >= len(it.chunks)-1 {
+		return chunkenc.ValNone
+	}
+	it.i++
+	it.reset(it.chunks[it.i])
+	return it.Seek(lastT + 1)
 }
 
 type lazySeriesSet struct {
