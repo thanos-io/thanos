@@ -2,8 +2,6 @@ local utils = import '../lib/utils.libsonnet';
 {
   local thanos = self,
   local grafanaDashboards = super.grafanaDashboards,
-  local grafana = import 'grafonnet/grafana.libsonnet',
-  local template = grafana.template,
 
   dashboard:: {
     prefix: 'Thanos / ',
@@ -45,25 +43,13 @@ local utils = import '../lib/utils.libsonnet';
           else variable
           for variable in super.list
         ] + [
-          template.interval(
-            'interval',
-            '5m,10m,30m,1h,6h,12h,auto',
-            label='interval',
-            current='5m',
-          ),
+          utils.intervalVariable('interval', '5m,10m,30m,1h,6h,12h,auto', '5m'),
         ],
       },
     } {
       templating+: {
         list+: [
-          template.new(
-            level,
-            '$datasource',
-            'label_values(%s, %s)' % [thanos.targetGroups[level], level],
-            label=level,
-            refresh=1,
-            sort=2,
-          )
+          utils.queryVariable(level, 'label_values(%s, %s)' % [thanos.targetGroups[level], level])
           for level in std.objectFields(thanos.targetGroups)
         ],
       },
@@ -72,17 +58,7 @@ local utils = import '../lib/utils.libsonnet';
         local name = 'job',
         local selector = std.join(', ', thanos.dashboard.selector + [thanos[component].selector]),
         list+: [
-          template.new(
-            name,
-            '$datasource',
-            'label_values(up{%s}, %s)' % [selector, name],
-            label=name,
-            refresh=1,
-            sort=2,
-            current='all',
-            allValues=null,
-            includeAll=true
-          ),
+          utils.queryVariable(name, 'label_values(up{%s}, %s)' % [selector, name], current='all'),
         ],
       },
     } else {}
