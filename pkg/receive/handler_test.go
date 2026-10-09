@@ -1977,7 +1977,7 @@ func TestRelabel(t *testing.T) {
 // TestRelabelWithUnsetValidationScheme verifies that relabel configs
 // unmarshalled from YAML (which leaves NameValidationScheme as
 // UnsetValidation) work correctly after Validate() is called.
-// This is a regression test for a panic in relabel.Process() when
+// This is a regression test for a panic in relabel.ProcessBuilder() when
 // NameValidationScheme is 0 (UnsetValidation).
 func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 	t.Parallel()
@@ -1996,7 +1996,7 @@ func TestRelabelWithUnsetValidationScheme(t *testing.T) {
 	}
 
 	// This is what cmd/thanos/receive.go now does after YAML unmarshal.
-	// Without this call, relabel.Process() panics on UnsetValidation.
+	// Without this call, relabel.ProcessBuilder() panics on UnsetValidation.
 	for _, cfg := range cfgs {
 		testutil.Ok(t, cfg.Validate(model.LegacyValidation))
 	}

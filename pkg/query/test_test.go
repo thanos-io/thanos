@@ -301,7 +301,7 @@ func ParseLoad(lines []string, i int) (int, *loadCmd, error) {
 			i--
 			break
 		}
-		metric, vals, err := parser.ParseSeriesDesc(defLine)
+		metric, vals, err := parser.NewParser(parser.Options{}).ParseSeriesDesc(defLine)
 		if err != nil {
 			if perr, ok := err.(*parser.ParseErr); ok {
 				perr.LineOffset = i
@@ -361,7 +361,7 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 			cmd.expect(0, parser.SequenceValue{Value: f})
 			break
 		}
-		metric, vals, err := parser.ParseSeriesDesc(defLine)
+		metric, vals, err := parser.NewParser(parser.Options{}).ParseSeriesDesc(defLine)
 		if err != nil {
 			if perr, ok := err.(*parser.ParseErr); ok {
 				perr.LineOffset = i
