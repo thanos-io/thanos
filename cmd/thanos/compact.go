@@ -175,6 +175,8 @@ func runCompact(
 	conf compactConfig,
 	flagsMap map[string]string,
 ) (rerr error) {
+	block.DeleteDirectoryMarkers = !conf.skipDeleteDirectoryMarkers
+
 	deleteDelay := time.Duration(conf.deleteDelay)
 	compactMetrics := newCompactMetrics(reg, deleteDelay)
 	downsampleMetrics := newDownsampleMetrics(reg)
@@ -737,6 +739,7 @@ type compactConfig struct {
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
 	disableAdminOperations                         bool
+	skipDeleteDirectoryMarkers                     bool
 }
 
 func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
@@ -805,6 +808,10 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 		"Note that deleting blocks immediately can cause query failures, if store gateway still has the block loaded, "+
 		"or compactor is ignoring the deletion because it's compacting the block at the same time.").
 		Default("48h").SetValue(&cc.deleteDelay)
+
+	cmd.Flag("compact.skip-delete-directory-markers", "Disable removal of explicit directory marker objects (e.g. \"<block>/\", \"<block>/chunks/\") when deleting a block. "+
+		"Some S3-compatible object storages (e.g. seaweedfs, HCP) create these markers alongside block contents; most backends don't need this and can safely leave it disabled.").
+		Hidden().Default("false").BoolVar(&cc.skipDeleteDirectoryMarkers)
 
 	cmd.Flag("compact.enable-vertical-compaction", "Experimental. When set to true, compactor will allow overlaps and perform **irreversible** vertical compaction. See https://thanos.io/tip/components/compact.md/#vertical-compactions to read more. "+
 		"Please note that by default this uses a NAIVE algorithm for merging. If you need a different deduplication algorithm (e.g one that works well with Prometheus replicas), please set it via --deduplication.func."+
