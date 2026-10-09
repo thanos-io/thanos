@@ -2614,3 +2614,182 @@ func TestProxyStore_SeriesBatchFlush(t *testing.T) {
 		testutil.Equals(t, expectedLabels[i], lset.Get("a"))
 	}
 }
+
+func TestProxyStore_SeriesLimitWithWarnings(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		title              string
+		storeAPIs          []Client
+		req                *storepb.SeriesRequest
+		expectedSeriesLen  int
+		expectedWarningLen int
+	}{
+		{
+			title: "limit without warnings",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+							storeSeriesResponse(t, labels.FromStrings("a", "3")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      2,
+			},
+			expectedSeriesLen:  2,
+			expectedWarningLen: 0,
+		},
+		{
+			title: "warnings do not consume limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+							storeSeriesResponse(t, labels.FromStrings("a", "3")),
+							storepb.NewWarnSeriesResponse(errors.New("partial warning")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("store warning")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      3,
+			},
+			expectedSeriesLen:  3,
+			expectedWarningLen: 2,
+		},
+		{
+			title: "warnings only from failed store do not reduce limit",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storepb.NewWarnSeriesResponse(errors.New("warning 1")),
+							storepb.NewWarnSeriesResponse(errors.New("warning 2")),
+							storepb.NewWarnSeriesResponse(errors.New("warning 3")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      2,
+			},
+			expectedSeriesLen:  2,
+			expectedWarningLen: 3,
+		},
+		{
+			title: "zero limit returns all series and warnings",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      0,
+			},
+			expectedSeriesLen:  2,
+			expectedWarningLen: 1,
+		},
+		{
+			title: "limit equal to available series",
+			storeAPIs: []Client{
+				&storetestutil.TestClient{
+					StoreClient: &mockedStoreAPI{
+						RespSeries: []*storepb.SeriesResponse{
+							storeSeriesResponse(t, labels.FromStrings("a", "1")),
+							storeSeriesResponse(t, labels.FromStrings("a", "2")),
+							storepb.NewWarnSeriesResponse(errors.New("warning")),
+						},
+					},
+					MinTime: 1,
+					MaxTime: 300,
+				},
+			},
+			req: &storepb.SeriesRequest{
+				MinTime:    1,
+				MaxTime:    300,
+				Matchers:   []storepb.LabelMatcher{{Name: "a", Value: ".*", Type: storepb.LabelMatcher_RE}},
+				SkipChunks: true,
+				Limit:      2,
+			},
+			expectedSeriesLen:  2,
+			expectedWarningLen: 1,
+		},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			for _, strategy := range []RetrievalStrategy{EagerRetrieval, LazyRetrieval} {
+				t.Run(string(strategy), func(t *testing.T) {
+					q := NewProxyStore(nil,
+						nil,
+						func() []Client { return tc.storeAPIs },
+						component.Query,
+						labels.EmptyLabels(),
+						5*time.Second, strategy,
+					)
+
+					s := newStoreSeriesServer(context.Background())
+					err := q.Series(tc.req, s)
+					testutil.Ok(t, err)
+
+					testutil.Equals(t, tc.expectedSeriesLen, len(s.SeriesSet), "unexpected number of series")
+					testutil.Equals(t, tc.expectedWarningLen, len(s.Warnings), "unexpected number of warnings")
+				})
+			}
+		})
+	}
+}
