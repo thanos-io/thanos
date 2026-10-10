@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/go-kit/log"
@@ -100,42 +101,48 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	meta, err := metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
 	testutil.Ok(t, err)
 
-	metrics := NewReaderPoolMetrics(nil)
-	pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, metrics, AlwaysEagerDownloadIndexHeader)
-	defer pool.Close()
+	// The pool and the reader belong inside the bubble: the idle bookkeeping
+	// and the pool's reaper goroutine both read the bubble's fake clock.
+	synctest.Test(t, func(t *testing.T) {
+		metrics := NewReaderPoolMetrics(nil)
+		pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, metrics, AlwaysEagerDownloadIndexHeader)
+		defer pool.Close()
 
-	r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, meta)
-	testutil.Ok(t, err)
-	defer func() { testutil.Ok(t, r.Close()) }()
+		r, err := pool.NewBinaryReader(ctx, log.NewNopLogger(), bkt, tmpDir, blockID, 3, meta)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, r.Close()) }()
 
-	// Ensure it can read data.
-	labelNames, err := r.LabelNames()
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string{"a"}, labelNames)
-	testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
-	testutil.Equals(t, float64(0), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
+		// Ensure it can read data.
+		labelNames, err := r.LabelNames()
+		testutil.Ok(t, err)
+		testutil.Equals(t, []string{"a"}, labelNames)
+		testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
+		testutil.Equals(t, float64(0), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
 
-	// Wait enough time before checking it.
-	time.Sleep(idleTimeout * 2)
+		// Advance past the idle timeout so the reaper, which checks every
+		// idleTimeout/10, sees the reader as idle.
+		time.Sleep(2 * idleTimeout)
+		synctest.Wait()
 
-	// We expect the reader has been closed, but not released from the pool.
-	testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
-	testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
-	testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
+		// We expect the reader has been closed, but not released from the pool.
+		testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
+		testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
+		testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
 
-	// Ensure it can still read data (will be re-opened).
-	labelNames, err = r.LabelNames()
-	testutil.Ok(t, err)
-	testutil.Equals(t, []string{"a"}, labelNames)
-	testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
-	testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
-	testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
+		// Ensure it can still read data (will be re-opened).
+		labelNames, err = r.LabelNames()
+		testutil.Ok(t, err)
+		testutil.Equals(t, []string{"a"}, labelNames)
+		testutil.Assert(t, pool.isTracking(r.(*LazyBinaryReader)))
+		testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
+		testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
 
-	// We expect an explicit call to Close() to close the reader and release it from the pool too.
-	testutil.Ok(t, r.Close())
-	testutil.Assert(t, !pool.isTracking(r.(*LazyBinaryReader)))
-	testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
-	testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
+		// We expect an explicit call to Close() to close the reader and release it from the pool too.
+		testutil.Ok(t, r.Close())
+		testutil.Assert(t, !pool.isTracking(r.(*LazyBinaryReader)))
+		testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
+		testutil.Equals(t, float64(2), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
+	})
 }
 
 func TestReaderPool_MultipleReaders(t *testing.T) {
