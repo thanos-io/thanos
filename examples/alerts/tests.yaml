@@ -111,3 +111,49 @@ tests:
           description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
           runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
           summary: 'Thanos Rule did not perform any rule evaluations.'
+- interval: 1m
+  input_series:
+  - series: 'up{job="thanos-receive", instance="thanos-receive-0"}'
+    values: '1x420'
+  - series: 'up{job="thanos-receive", instance="thanos-receive-1"}'
+    values: '1x420'
+  - series: 'thanos_shipper_uploads_total{job="thanos-receive", instance="thanos-receive-0"}'
+    values: '0x420'
+  - series: 'thanos_shipper_uploads_total{job="thanos-receive", instance="thanos-receive-1"}'
+    values: '0x420'
+  # receive-0 has been running for a day, receive-1 starts with the test.
+  - series: 'process_start_time_seconds{job="thanos-receive", instance="thanos-receive-0"}'
+    values: '-86400x420'
+  - series: 'process_start_time_seconds{job="thanos-receive", instance="thanos-receive-1"}'
+    values: '0x420'
+  alert_rule_test:
+  - eval_time: 300m
+    alertname: ThanosReceiveNoUpload
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-receive
+        instance: thanos-receive-0
+      exp_annotations:
+        description: 'Thanos Receive thanos-receive-0 has not uploaded latest data to object storage.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivenoupload'
+        summary: 'Thanos Receive has not uploaded latest data to object storage.'
+  - eval_time: 400m
+    alertname: ThanosReceiveNoUpload
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: thanos-receive
+        instance: thanos-receive-0
+      exp_annotations:
+        description: 'Thanos Receive thanos-receive-0 has not uploaded latest data to object storage.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivenoupload'
+        summary: 'Thanos Receive has not uploaded latest data to object storage.'
+    - exp_labels:
+        severity: critical
+        job: thanos-receive
+        instance: thanos-receive-1
+      exp_annotations:
+        description: 'Thanos Receive thanos-receive-1 has not uploaded latest data to object storage.'
+        runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosreceivenoupload'
+        summary: 'Thanos Receive has not uploaded latest data to object storage.'

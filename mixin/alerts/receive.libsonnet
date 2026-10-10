@@ -139,6 +139,8 @@
               (up{%(selector)s} - 1)
               + on (%(dimensions)s, instance) # filters to only alert on current instance last 3h
               (sum by (%(dimensions)s, instance) (increase(thanos_shipper_uploads_total{%(selector)s}[3h])) == 0)
+              and on (%(dimensions)s, instance) # a fresh instance ships its first block only after ~3h
+              (time() - process_start_time_seconds{%(selector)s} > 3 * 3600)
             ||| % thanos.receive,
             'for': '3h',
             labels: {
