@@ -333,6 +333,11 @@ type tenant struct {
 
 	tenantName string
 
+	// onDisk is set when the tenant's data directory already existed when the
+	// tenant was registered. Opening such a TSDB replays its WAL, which can take
+	// minutes, so writes must not wait for it.
+	onDisk bool
+
 	maxBlockDuration int64
 
 	lastSuccessfulHeadCompaction atomic.Int64
@@ -383,7 +388,23 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 }
 
 func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
-	_, err, _ := m.initSingleFlight.Do(tenantID, func() (any, error) {
+	_, err, _ := m.initSingleFlight.Do(tenantID, m.initTSDBFunc(tenantID, t))
+	return err
+}
+
+// initTSDBInBackground starts initializing the tenant's TSDB, or joins an
+// initialization that is already in flight, without waiting for it to finish.
+func (m *MultiTSDB) initTSDBInBackground(tenantID string, t *tenant) {
+	if t.readyS.Get() != nil {
+		return
+	}
+	// The result channel is buffered, so it is safe to drop it. Errors are
+	// logged by initTSDBFunc.
+	_ = m.initSingleFlight.DoChan(tenantID, m.initTSDBFunc(tenantID, t))
+}
+
+func (m *MultiTSDB) initTSDBFunc(tenantID string, t *tenant) func() (any, error) {
+	return func() (any, error) {
 		if t.readyS.Get() != nil {
 			return nil, nil
 		}
@@ -391,6 +412,7 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 
 		err := m.startTSDB(logger, tenantID, t)
 		if err != nil {
+			level.Error(logger).Log("msg", "failed to start TSDB", "err", err)
 			return nil, err
 		}
 
@@ -400,9 +422,7 @@ func (m *MultiTSDB) initTSDBIfNeeded(tenantID string, t *tenant) error {
 		}
 
 		return nil, nil
-	})
-
-	return err
+	}
 }
 
 const compactionDelayPercentBlockLength = 10
@@ -673,7 +693,7 @@ func (t *MultiTSDB) Open() error {
 		}
 
 		g.Go(func() error {
-			_, err := t.getOrLoadTenant(f.Name())
+			_, err := t.getOrLoadTenant(f.Name(), true)
 			return err
 		})
 	}
@@ -1055,24 +1075,37 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	return nil
 }
 
-func (t *MultiTSDB) getOrLoadTenant(tenantID string) (*tenant, error) {
+// getOrLoadTenant returns the tenant, registering it if needed, and makes sure
+// its TSDB is initialized. If waitForReplay is false and the tenant already has
+// data on disk, it does not wait for the TSDB to open (which replays the WAL) and
+// returns the tenant while its storage may still be not ready.
+func (t *MultiTSDB) getOrLoadTenant(tenantID string, waitForReplay bool) (*tenant, error) {
 	t.mtx.Lock()
 	tenant, exist := t.tenants[tenantID]
 	if exist {
 		tenant.readOnly.CompareAndSwap(true, false)
-		t.mtx.Unlock()
-		return tenant, t.initTSDBIfNeeded(tenantID, tenant)
+	} else {
+		tenant = newTenant(t.logger, t.tsdbOpts.RetentionDuration, t.tsdbOpts.MaxBlockDuration, tenantID)
+		_, err := t.dataDir.Stat(tenantID)
+		tenant.onDisk = err == nil
+		t.addTenantUnlocked(tenantID, tenant)
 	}
-
-	tenant = newTenant(t.logger, t.tsdbOpts.RetentionDuration, t.tsdbOpts.MaxBlockDuration, tenantID)
-	t.addTenantUnlocked(tenantID, tenant)
 	t.mtx.Unlock()
 
+	if !waitForReplay && tenant.onDisk {
+		t.initTSDBInBackground(tenantID, tenant)
+		return tenant, nil
+	}
 	return tenant, t.initTSDBIfNeeded(tenantID, tenant)
 }
 
+// TenantAppendable returns the storage for the given tenant. Creating a TSDB for
+// a new tenant is fast, so it waits for that. For a tenant that already has data
+// on disk and whose TSDB is still opening, it returns immediately; Appender then
+// returns ErrNotReady so that the write fails fast with a retryable error instead
+// of blocking for the whole WAL replay.
 func (t *MultiTSDB) TenantAppendable(tenantID string) (Appendable, error) {
-	tenant, err := t.getOrLoadTenant(tenantID)
+	tenant, err := t.getOrLoadTenant(tenantID, false)
 	if err != nil {
 		return nil, err
 	}
@@ -1111,8 +1144,10 @@ func (t *MultiTSDB) SetHashringConfig(cfg []HashringConfig) error {
 	return nil
 }
 
-// ErrNotReady is returned if the underlying storage is not ready yet.
-var ErrNotReady = errors.New("TSDB not ready")
+// ErrNotReady is returned if the underlying storage is not ready yet. It is the
+// same error as Prometheus's tsdb.ErrNotReady so that writers and the handler
+// recognize it and map it to a retryable Unavailable status.
+var ErrNotReady = tsdb.ErrNotReady
 
 // ReadyStorage implements the Storage interface while allowing to set the actual
 // storage at a later point in time.

@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9067](https://github.com/thanos-io/thanos/pull/9067): Receive: Fail writes fast with a retryable `Unavailable` error while an existing tenant's TSDB is replaying its WAL, instead of blocking until the replay finishes.
 - [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
 - [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
