@@ -180,10 +180,19 @@ func newQueryRangeTripperware(
 
 	// step align middleware.
 	if config.AlignRangeWithStep {
+		location := time.UTC
+		if config.AlignRangeWithStepTimezone != "" {
+			var err error
+			location, err = time.LoadLocation(config.AlignRangeWithStepTimezone)
+			if err != nil {
+				return nil, errors.Wrapf(err, "load query range alignment timezone %q", config.AlignRangeWithStepTimezone)
+			}
+		}
+
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			queryrange.InstrumentMiddleware("step_align", m),
-			queryrange.StepAlignMiddleware,
+			queryrange.NewStepAlignMiddleware(location),
 		)
 	}
 

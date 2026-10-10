@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#6547](https://github.com/thanos-io/thanos/issues/6547) Query Frontend: Add timezone-aware step alignment for daily query ranges.
 - [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
 - [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.

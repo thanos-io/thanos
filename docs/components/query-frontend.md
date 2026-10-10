@@ -239,6 +239,10 @@ Flags:
                                Mutate incoming queries to align their start and
                                end with their step for better cache-ability.
                                Note: Grafana dashboards do that by default.
+      --query-range.align-range-with-step-timezone="UTC"
+                               Time zone used when aligning query ranges whose
+                               step is a whole number of days. Uses an IANA time
+                               zone name.
       --[no-]query-range.request-downsampled
                                Make additional query for downsampled data in
                                case of empty or incomplete response to range
