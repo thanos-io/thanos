@@ -48,7 +48,7 @@ var (
 	prom2Data  = func() string { a, _ := filepath.Abs(filepath.Join(data, "prom2")); return a }()
 )
 
-func exec(cmd string, args ...string) error {
+func exec(cmd string, args ...string) error { //nolint:unparam // Other callers sit after t.Skip in TestReadOnlyThanosSetup.
 	if o, err := execlib.Command(cmd, args...).CombinedOutput(); err != nil {
 		return errors.Wrap(err, string(o))
 	}

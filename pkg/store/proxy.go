@@ -389,16 +389,21 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		respHeap = NewResponseDeduplicator(respHeap)
 	}
 
-	i := 0
+	seriesSent := 0
 	for respHeap.Next() {
-		i++
-		if r.Limit > 0 && i > int(r.Limit) {
-			break
-		}
 		resp := respHeap.At()
 
 		if resp.GetWarning() != "" && (r.PartialResponseDisabled || r.PartialResponseStrategy == storepb.PartialResponseStrategy_ABORT) {
 			return status.Error(codes.Aborted, resp.GetWarning())
+		}
+
+		if resp.GetSeries() != nil {
+			seriesSent++
+		} else if batch := resp.GetBatch(); batch != nil {
+			seriesSent += len(batch.Series)
+		}
+		if r.Limit > 0 && seriesSent > int(r.Limit) {
+			break
 		}
 
 		if err := srv.Send(resp); err != nil {

@@ -18,6 +18,10 @@ linters:
         - fmt.Fprint
     goconst:
       min-occurrences: 5
+      ignore-tests: true
+      exclude-types:
+        - Call
+        - CompositeLit
     misspell:
       locale: US
   exclusions:

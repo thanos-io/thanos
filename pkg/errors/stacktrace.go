@@ -44,7 +44,7 @@ func (s stacktrace) String() string {
 		frame, more := cf.Next()
 		// used formatting scheme <`>`space><function name><tab><filepath><:><line><newline> for example:
 		// > testing.tRunner	/home/go/go1.17.8/src/testing/testing.go:1259
-		buf.WriteString(fmt.Sprintf("> %s\t%s:%d\n", frame.Func.Name(), frame.File, frame.Line))
+		fmt.Fprintf(&buf, "> %s\t%s:%d\n", frame.Func.Name(), frame.File, frame.Line)
 		if !more {
 			break
 		}

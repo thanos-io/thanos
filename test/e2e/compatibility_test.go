@@ -53,7 +53,7 @@ func TestPromQLComplianceWithShardingQueryFrontend(t *testing.T) {
 	testPromQLCompliance(t, true, store.EagerRetrieval)
 }
 
-func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) {
+func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) { //nolint:unparam // Used after t.Skip below.
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
