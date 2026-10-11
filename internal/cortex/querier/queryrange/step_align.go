@@ -12,6 +12,10 @@ import (
 // improved the cacheability of the query results.
 var StepAlignMiddleware = NewStepAlignMiddleware(time.UTC)
 
+type stepAlignmentRequest interface {
+	GetStepAlignmentLocation() *time.Location
+}
+
 // NewStepAlignMiddleware returns middleware that aligns query ranges to their
 // step. For steps that are a whole number of days, alignment is relative to
 // midnight in location.
@@ -38,6 +42,9 @@ func (s stepAlign) Do(ctx context.Context, r Request) (Response, error) {
 	offset := int64(0)
 	if step%(24*time.Hour.Milliseconds()) == 0 {
 		location := s.location
+		if req, ok := r.(stepAlignmentRequest); ok && req.GetStepAlignmentLocation() != nil {
+			location = req.GetStepAlignmentLocation()
+		}
 		if location == nil {
 			location = time.UTC
 		}

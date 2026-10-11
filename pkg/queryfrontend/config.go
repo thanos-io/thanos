@@ -231,15 +231,14 @@ type QueryRangeConfig struct {
 	ResultsCacheConfig *queryrange.ResultsCacheConfig
 	CachePathOrContent extflag.PathOrContent
 
-	AlignRangeWithStep         bool
-	AlignRangeWithStepTimezone string
-	RequestDownsampled         bool
-	SplitQueriesByInterval     time.Duration
-	MinQuerySplitInterval      time.Duration
-	MaxQuerySplitInterval      time.Duration
-	HorizontalShards           int64
-	MaxRetries                 int
-	Limits                     *cortexvalidation.Limits
+	AlignRangeWithStep     bool
+	RequestDownsampled     bool
+	SplitQueriesByInterval time.Duration
+	MinQuerySplitInterval  time.Duration
+	MaxQuerySplitInterval  time.Duration
+	HorizontalShards       int64
+	MaxRetries             int
+	Limits                 *cortexvalidation.Limits
 }
 
 // LabelsConfig holds the config for labels tripperware.
