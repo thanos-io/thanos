@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8140](https://github.com/thanos-io/thanos/issues/8140): Query: Restrict `/api/v1/rules` and `/api/v1/alerts` to the requesting tenant when tenancy is enforced, instead of returning the rules of all tenants.
 - [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
 - [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
