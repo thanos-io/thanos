@@ -259,6 +259,26 @@ func TestSplitQuery(t *testing.T) {
 	}
 }
 
+func TestSplitQueryPreservesStepAlignmentLocation(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+
+	input := &ThanosQueryRangeRequest{
+		Start:                 0,
+		End:                   2 * 24 * 60 * 60 * seconds,
+		Step:                  24 * 60 * 60 * seconds,
+		Query:                 "up",
+		StepAlignmentLocation: location,
+	}
+
+	requests, err := splitQuery(input, day)
+	require.NoError(t, err)
+	require.Len(t, requests, 2)
+	for _, request := range requests {
+		require.Equal(t, "Asia/Shanghai", request.(*ThanosQueryRangeRequest).StepAlignmentLocation.String())
+	}
+}
+
 func TestSplitQuery_PromQLErrorReturnsJson(t *testing.T) {
 	input := &ThanosQueryRangeRequest{
 		Start: 2 * 3600 * seconds,
