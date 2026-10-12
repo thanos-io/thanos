@@ -23,6 +23,9 @@ validators:
   # Slack workspace archive links require a logged-in session, so mdox gets a 403.
   - regex: 'cloud-native\.slack\.com'
     type: 'ignore'
+  # YouTube rate-limits automated link validation from GitHub Actions.
+  - regex: 'youtube\.com'
+    type: 'ignore'
   # 301 errors even when curl-ed.
   - regex: 'envoyproxy\.io'
     type: 'ignore'
@@ -70,4 +73,3 @@ validators:
   # Frequent DNS/timeout issues from CI.
   - regex: 'db\.cs\.cmu\.edu'
     type: 'ignore'
-
