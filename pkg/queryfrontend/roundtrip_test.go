@@ -569,7 +569,7 @@ func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 		Config{
 			NumShards: 2,
 			QueryRangeConfig: QueryRangeConfig{
-				Limits:                 defaultLimits,
+				Limits:                 testLimitsForCacheSharding(),
 				ResultsCacheConfig:     cacheConf,
 				SplitQueriesByInterval: day,
 			},
@@ -589,34 +589,9 @@ func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 		res      *http.Response
 		attempts int
 	)
-	// Depending on the timing of operations, the PromQLShardingMiddleware
-	// middleware needs between 3 and 4 calls before returning successfully.
-	//
-	// Knowing that the downstream server is configured to fail the first 3
-	// requests, the timeline can one of the 2 cases below.
-	//
-	// "Best" case scenarios (3 attempts):
-	// 1. the middleware issues 2 concurrent requests that both fail.
-	// 2. the middleware issues 2 concurrent requests. One fails, the other
-	// succeeds and is stored in the cache.
-	// 3. the middleware issues 1 request for the remaining shard that succeeds
-	// and is stored in the cache.
-	// Or
-	// 1. the middleware issues 1 request that fails before it could
-	// initiate the second request
-	// 2. the middleware issues 2 concurrent requests that both fail.
-	// 3. the middleware issues 2 concurrent requests that both succeed and are
-	// stored in the cache.
-	// Note that in the last case, 1. and 2. may happen in the reverse order.
-	//
-	// "Worst" case scenario (4 attempts):
-	// 1. the middleware issues 1 request that fails before it could
-	// initiate the second request
-	// 2. the middleware issues 1 request that fails before it could
-	// initiate the second request
-	// 3. the middleware issues 1 request that fails before it could
-	// initiate the second request
-	// 4. the middleware issues 2 concurrent requests that both succeed.
+	// Limit this test to one downstream request at a time so the failure
+	// sequence and cache population are deterministic. The middleware still
+	// creates and merges both vertical shard requests.
 	for range 4 {
 		attempts++
 		ctx := user.InjectOrgID(context.Background(), "1")
@@ -644,6 +619,12 @@ func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 	testutil.Ok(t, rtErr)
 	testutil.Equals(t, http.StatusOK, res.StatusCode)
 	testutil.Equals(t, n, count.Load())
+}
+
+func testLimitsForCacheSharding() *cortexvalidation.Limits {
+	limits := *defaultLimits
+	limits.MaxQueryParallelism = 1
+	return &limits
 }
 
 // TestRoundTripLabelsCacheMiddleware tests the cache middleware for labels requests.
