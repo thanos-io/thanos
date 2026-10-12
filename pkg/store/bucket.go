@@ -2074,6 +2074,34 @@ func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*la
 	return result, true
 }
 
+// matchersOnlyOnLabel returns true if there is at least one matcher and every matcher is on the given label.
+func matchersOnlyOnLabel(ms []*labels.Matcher, name string) bool {
+	if len(ms) == 0 {
+		return false
+	}
+	for _, m := range ms {
+		if m.Name != name {
+			return false
+		}
+	}
+	return true
+}
+
+// filterValuesByMatchers returns the values that match all matchers in a new slice.
+func filterValuesByMatchers(values []string, ms []*labels.Matcher) []string {
+	res := make([]string, 0, len(values))
+outer:
+	for _, v := range values {
+		for _, m := range ms {
+			if !m.Matches(v) {
+				continue outer
+			}
+		}
+		res = append(res, v)
+	}
+	return res
+}
+
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
 	reqSeriesMatchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
@@ -2135,6 +2163,11 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			continue
 		}
 
+		// When every matcher is on the requested label, its values come from the index header,
+		// filtered by those matchers. Like the no-matcher case, this returns values from the whole
+		// block, not only from series with chunks in [req.Start, req.End].
+		valueOnlyMatchers := matchersOnlyOnLabel(reqSeriesMatchersNoExtLabels, req.Label)
+
 		// If we have series matchers and the Label is not an external one, add <labelName> != "" matcher
 		// to only select series that have given label name.
 		// We don't need such matcher if matchers already contain __name__=="something" matcher.
@@ -2159,11 +2192,14 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			defer runutil.CloseWithLogOnErr(blockLogger, indexr, "label values")
 
 			var result []string
-			if len(reqSeriesMatchersNoExtLabels) == 0 {
+			if len(reqSeriesMatchersNoExtLabels) == 0 || valueOnlyMatchers {
 				// Do it via index reader to have pending reader registered correctly.
 				res, err := indexr.block.indexHeaderReader.LabelValues(req.Label)
 				if err != nil {
 					return errors.Wrapf(err, "index header label values for block %s", b.meta.ULID)
+				}
+				if valueOnlyMatchers {
+					res = filterValuesByMatchers(res, reqSeriesMatchersNoExtLabels)
 				}
 
 				// Add the external label value as well.
