@@ -1782,7 +1782,7 @@ func TestRulesHandler(t *testing.T) {
 				},
 			},
 		},
-	}, false)
+	}, false, "", "", "", false)
 
 	type test struct {
 		params   map[string]string
