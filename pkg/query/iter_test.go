@@ -39,7 +39,7 @@ func createHistogramChunk(t testing.TB, startTs int64, numSamples int, bucketCou
 			PositiveBuckets: posBuckets,
 		}
 
-		_, _, app, err = app.AppendHistogram(nil, ts, h, true)
+		_, _, app, err = app.AppendHistogram(nil, 0, ts, h, true)
 		require.NoError(t, err)
 	}
 
@@ -122,14 +122,14 @@ func TestLazyChunkSeriesIteratorFloatChunks(t *testing.T) {
 	app, err := c.Appender()
 	require.NoError(t, err)
 	for i := 0; i < 5; i++ {
-		app.Append(int64(i)*15000, float64(i)*1.5)
+		app.Append(0, int64(i)*15000, float64(i)*1.5)
 	}
 
 	c2 := chunkenc.NewXORChunk()
 	app2, err := c2.Appender()
 	require.NoError(t, err)
 	for i := 5; i < 10; i++ {
-		app2.Append(int64(i)*15000, float64(i)*1.5)
+		app2.Append(0, int64(i)*15000, float64(i)*1.5)
 	}
 
 	chunks := []*storepb.Chunk{

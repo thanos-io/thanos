@@ -291,7 +291,7 @@ func (p *delSeriesIterator) AtT() int64 {
 }
 
 func (p *delSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (p *delSeriesIterator) Err() error {

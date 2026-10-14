@@ -1209,7 +1209,7 @@ func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
 }
 
 func (it *ApplyCounterResetsSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (it *ApplyCounterResetsSeriesIterator) Seek(x int64) chunkenc.ValueType {
@@ -1311,7 +1311,7 @@ func (it *AverageChunkIterator) AtT() int64 {
 }
 
 func (it *AverageChunkIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (it *AverageChunkIterator) Err() error {

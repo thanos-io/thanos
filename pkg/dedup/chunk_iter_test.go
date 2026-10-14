@@ -335,7 +335,7 @@ func (h histoSample) T() int64 {
 }
 
 func (h histoSample) ST() int64 {
-	panic("not implemented")
+	return h.st
 }
 
 func (h histoSample) F() float64 {

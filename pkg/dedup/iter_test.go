@@ -37,7 +37,7 @@ func (s sample) T() int64 {
 	return s.t
 }
 func (s sample) ST() int64 {
-	panic("not implemented")
+	return s.st
 }
 func (s sample) F() float64 {
 	return s.f
@@ -136,7 +136,7 @@ func (s *mockedSeriesIterator) AtT() int64 {
 }
 
 func (s *mockedSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return s.samples[s.cur].st
 }
 
 func (s *mockedSeriesIterator) Next() chunkenc.ValueType {

@@ -63,5 +63,5 @@ func (it *HistogramIterator) AtT() int64 {
 }
 
 func (it *HistogramIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }

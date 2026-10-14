@@ -2102,7 +2102,7 @@ func (s testSample) T() int64 {
 }
 
 func (s testSample) ST() int64 {
-	panic("not implemented")
+	return s.st
 }
 
 func (s testSample) F() float64 {
@@ -2168,7 +2168,7 @@ func (it *sampleIterator) AtT() int64 {
 }
 
 func (it *sampleIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 // memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface

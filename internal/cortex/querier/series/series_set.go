@@ -138,7 +138,7 @@ func (c *concreteSeriesIterator) AtT() int64 {
 }
 
 func (c *concreteSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (c *concreteSeriesIterator) Next() chunkenc.ValueType {
@@ -190,7 +190,7 @@ func (errIterator) AtT() int64 {
 }
 
 func (errIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (e errIterator) Err() error {
@@ -273,7 +273,7 @@ func (d DeletedSeriesIterator) AtT() int64 {
 }
 
 func (d DeletedSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return d.itr.AtST()
 }
 
 func (d DeletedSeriesIterator) Next() chunkenc.ValueType {

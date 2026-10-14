@@ -440,7 +440,7 @@ func (it *dedupSeriesIterator) AtT() int64 {
 }
 
 func (it *dedupSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return 0
 }
 
 func (it *dedupSeriesIterator) Err() error {
@@ -487,7 +487,7 @@ func (it *boundedSeriesIterator) AtT() int64 {
 	return it.it.AtT()
 }
 func (it *boundedSeriesIterator) AtST() int64 {
-	panic("not implemented")
+	return it.it.AtST()
 }
 
 func (it *boundedSeriesIterator) Next() chunkenc.ValueType {
