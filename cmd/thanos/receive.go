@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
@@ -339,11 +340,16 @@ func runReceive(
 
 	level.Debug(logger).Log("msg", "setting up HTTP server")
 	{
+		router := route.New()
+		webHandler.RegisterStatus(router)
+
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(*conf.httpBindAddr),
 			httpserver.WithGracePeriod(time.Duration(*conf.httpGracePeriod)),
 			httpserver.WithTLSConfig(*conf.httpTLSConfig),
 		)
+		srv.Handle("/", router)
+
 		g.Add(func() error {
 			statusProber.Healthy()
 			return srv.ListenAndServe()

@@ -75,6 +75,8 @@ const (
 	// Labels for metrics.
 	labelSuccess = "success"
 	labelError   = "error"
+	// statusAPIDeprecationWarning is logged once when the TSDB status API is accessed on the remote-write address.
+	statusAPIDeprecationWarning = "Accessing the TSDB status API on the remote-write address is deprecated; use the HTTP address (--http-address) instead."
 )
 
 type ReplicationProtocol string
@@ -141,6 +143,9 @@ type Handler struct {
 	options              *Options
 	splitTenantLabelName string
 	httpSrv              *http.Server
+	ins                  extpromhttp.InstrumentationMiddleware
+
+	statsDeprecationOnce sync.Once
 
 	mtx          sync.RWMutex
 	hashring     Hashring
@@ -299,6 +304,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			buckets,
 		)
 	}
+	h.ins = ins
 
 	readyf := h.testReady
 	instrf := func(name string, next func(w http.ResponseWriter, r *http.Request)) http.HandlerFunc {
@@ -335,8 +341,9 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 	)
 
 	statusAPI := statusapi.New(statusapi.Options{
-		GetStats: h.getStats,
-		Registry: h.options.Registry,
+		GetStats:              h.getStatsDeprecated,
+		Registry:              h.options.Registry,
+		TSDBStatusHandlerName: "tsdb_status_deprecated",
 	})
 	statusAPI.Register(h.router, o.Tracer, logger, ins, logging.NewHTTPServerMiddleware(logger))
 
@@ -443,6 +450,22 @@ func getStatsLimitParameter(r *http.Request) (int, error) {
 		return 0, fmt.Errorf("'%s' parameter is larger than %d", LimitStatsQueryParam, math.MaxInt)
 	}
 	return int(statsLimit), nil
+}
+
+// RegisterStatus registers the TSDB status API on the provided router.
+func (h *Handler) RegisterStatus(r *route.Router) {
+	statusAPI := statusapi.New(statusapi.Options{
+		GetStats: h.getStats,
+		Registry: h.options.Registry,
+	})
+	statusAPI.Register(r, h.options.Tracer, h.logger, h.ins, logging.NewHTTPServerMiddleware(h.logger))
+}
+
+func (h *Handler) getStatsDeprecated(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError) {
+	h.statsDeprecationOnce.Do(func() {
+		level.Warn(h.logger).Log("msg", statusAPIDeprecationWarning)
+	})
+	return h.getStats(r, statsByLabelName)
 }
 
 func (h *Handler) getStats(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError) {

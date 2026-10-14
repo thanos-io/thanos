@@ -33,9 +33,11 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/snappy"
 	"github.com/jpillora/backoff"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
@@ -2532,5 +2534,76 @@ func TestRetryAfterHeaderOnQuorumUnavailable(t *testing.T) {
 
 			require.Equalf(t, time.Now().UTC().Add(backoff).Format(http.TimeFormat), rec.Header().Get("Retry-After"), "handler %d", i)
 		}
+	})
+}
+
+func TestHandlerTSDBStatusAPI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	reg := prometheus.NewRegistry()
+	m := NewMultiTSDB(
+		openTestRoot(t, dir),
+		log.NewNopLogger(),
+		reg,
+		&tsdb.Options{
+			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+			RetentionDuration: (6 * time.Hour).Milliseconds(),
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+	t.Cleanup(m.Close)
+	require.NoError(t, m.Flush())
+	require.NoError(t, m.Open())
+	require.NoError(t, appendSample(m, tenancy.DefaultTenant, time.Now()))
+
+	var logBuf bytes.Buffer
+	logger := log.NewLogfmtLogger(&logBuf)
+
+	h := NewHandler(logger, &Options{
+		Writer:            NewWriter(log.NewNopLogger(), m, &WriterOptions{}),
+		Registry:          reg,
+		Tracer:            &opentracing.NoopTracer{},
+		TenantHeader:      tenancy.DefaultTenantHeader,
+		DefaultTenantID:   tenancy.DefaultTenant,
+		ReplicaHeader:     DefaultReplicaHeader,
+		ReplicationFactor: 1,
+		ForwardTimeout:    5 * time.Second,
+		TSDBStats:         m,
+	})
+	t.Cleanup(h.Close)
+	h.Hashring(SingleNodeHashring("localhost:10901"))
+
+	statusRouter := route.New()
+	h.RegisterStatus(statusRouter)
+
+	t.Run("http server router serves status without deprecation warning", func(t *testing.T) {
+		logBuf.Reset()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/status/tsdb", nil)
+		rec := httptest.NewRecorder()
+		statusRouter.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		require.Contains(t, rec.Body.String(), `"status":"success"`)
+		require.NotContains(t, logBuf.String(), statusAPIDeprecationWarning)
+	})
+
+	t.Run("remote-write router serves status with one-time deprecation warning", func(t *testing.T) {
+		logBuf.Reset()
+		for range 3 {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/status/tsdb", nil)
+			rec := httptest.NewRecorder()
+			h.router.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Contains(t, rec.Body.String(), `"status":"success"`)
+		}
+		require.Equal(t, 1, strings.Count(logBuf.String(), statusAPIDeprecationWarning))
 	})
 }
