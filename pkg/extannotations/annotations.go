@@ -13,3 +13,10 @@ func IsPromQLAnnotation(s string) bool {
 	// We cannot use "errors.Is(w, annotations.PromQLInfo)" here because of gRPC so we use a string as argument
 	return strings.HasPrefix(s, annotations.PromQLInfo.Error()) || strings.HasPrefix(s, annotations.PromQLWarning.Error())
 }
+
+// IsPromQLInfoAnnotation returns true if the given annotation is a PromQL info
+// annotation (e.g. "metric might not be a counter"), as opposed to a PromQL warning.
+func IsPromQLInfoAnnotation(s string) bool {
+	// We cannot use "errors.Is(w, annotations.PromQLInfo)" here because of gRPC so we use a string as argument
+	return strings.HasPrefix(s, annotations.PromQLInfo.Error())
+}
