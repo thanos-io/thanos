@@ -1163,7 +1163,7 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	logger := log.NewNopLogger()
 	ctx := context.Background()
 
-	appendTestData(t, h.Appender(ctx), series)
+	appendTestData(t, h.AppenderV2(ctx), series)
 
 	dir := filepath.Join(tmpDir, "tmp")
 	testutil.Ok(t, os.MkdirAll(dir, os.ModePerm))
@@ -1186,9 +1186,9 @@ func uploadTestBlock(t testing.TB, tmpDir string, bkt objstore.Bucket, series in
 	return id
 }
 
-func appendTestData(t testing.TB, app storage.Appender, series int) {
+func appendTestData(t testing.TB, app storage.AppenderV2, series int) {
 	addSeries := func(l labels.Labels) {
-		_, err := app.Append(0, l, 0, 0)
+		_, err := app.Append(0, l, 0, 0, 0, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 
@@ -1715,13 +1715,13 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender(context.Background())
+		app := h.AppenderV2(context.Background())
 
 		for i := range numSeries {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "1", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
-			_, err := app.Append(0, lbls, ts, 0)
+			_, err := app.Append(0, lbls, 0, ts, 0, nil, nil, storage.AOptions{})
 			testutil.Ok(t, err)
 		}
 		testutil.Ok(t, app.Commit())
@@ -1755,13 +1755,13 @@ func TestBucketSeries_OneBlock_InMemIndexCacheSegfault(t *testing.T) {
 		testutil.Ok(t, err)
 		defer func() { testutil.Ok(t, h.Close()) }()
 
-		app := h.Appender(context.Background())
+		app := h.AppenderV2(context.Background())
 
 		for i := range numSeries {
 			ts := int64(i)
 			lbls := labels.FromStrings("foo", "bar", "b", "2", "i", fmt.Sprintf("%07d%s", ts, storetestutil.LabelLongSuffix))
 
-			_, err := app.Append(0, lbls, ts, 0)
+			_, err := app.Append(0, lbls, 0, ts, 0, nil, nil, storage.AOptions{})
 			testutil.Ok(t, err)
 		}
 		testutil.Ok(t, app.Commit())
@@ -2062,8 +2062,8 @@ func TestSeries_BlockWithMultipleChunks(t *testing.T) {
 	for ts := range int64(10000) {
 		// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
 		// (except the last one, which could be smaller).
-		app := h.Appender(context.Background())
-		_, err := app.Append(0, series, ts, float64(ts))
+		app := h.AppenderV2(context.Background())
+		_, err := app.Append(0, series, 0, ts, float64(ts), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 		testutil.Ok(t, app.Commit())
 	}
@@ -2316,8 +2316,8 @@ func uploadSeriesToBucket(t *testing.T, bkt *filesystem.Bucket, replica string, 
 		for ts := range int64(100) {
 			// Appending a single sample is very unoptimised, but guarantees each chunk is always MaxSamplesPerChunk
 			// (except the last one, which could be smaller).
-			app := h.Appender(context.Background())
-			_, err := app.Append(0, s, ts, float64(ts))
+			app := h.AppenderV2(context.Background())
+			_, err := app.Append(0, s, 0, ts, float64(ts), nil, nil, storage.AOptions{})
 			testutil.Ok(t, err)
 			testutil.Ok(t, app.Commit())
 		}
@@ -2376,13 +2376,13 @@ func createBlockWithOneSeriesWithStep(t testutil.TB, dir string, lbls labels.Lab
 	testutil.Ok(t, err)
 	defer func() { testutil.Ok(t, h.Close()) }()
 
-	app := h.Appender(context.Background())
+	app := h.AppenderV2(context.Background())
 
 	ts := int64(blockIndex * totalSamples)
-	ref, err := app.Append(0, lbls, ts, random.Float64())
+	ref, err := app.Append(0, lbls, 0, ts, random.Float64(), nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	for i := 1; i < totalSamples; i++ {
-		_, err := app.Append(ref, labels.EmptyLabels(), ts+step*int64(i), random.Float64())
+		_, err := app.Append(ref, labels.EmptyLabels(), 0, ts+step*int64(i), random.Float64(), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 	testutil.Ok(t, app.Commit())
@@ -2633,9 +2633,9 @@ func TestSeries_ChunksHaveHashRepresentation(t *testing.T) {
 	defer func() { testutil.Ok(t, h.Close()) }()
 
 	series := labels.FromStrings("__name__", "test")
-	app := h.Appender(context.Background())
+	app := h.AppenderV2(context.Background())
 	for ts := range int64(10_000) {
-		_, err := app.Append(0, series, ts, float64(ts))
+		_, err := app.Append(0, series, 0, ts, float64(ts), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 	testutil.Ok(t, app.Commit())
@@ -3713,14 +3713,14 @@ func TestBucketStoreDedupOnBlockSeriesSet(t *testing.T) {
 		testutil.Ok(t, err)
 		t.Cleanup(func() { testutil.Ok(t, h.Close()) })
 
-		app := h.Appender(context.Background())
-		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "1"), 0, 1)
+		app := h.AppenderV2(context.Background())
+		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "1"), 0, 0, 1, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
-		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "2"), 0, 1)
+		_, err = app.Append(0, labels.FromStrings("replica", "a", "z", "2"), 0, 0, 1, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
-		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "1"), 0, 1)
+		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "1"), 0, 0, 1, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
-		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "2"), 0, 1)
+		_, err = app.Append(0, labels.FromStrings("replica", "b", "z", "2"), 0, 0, 1, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 		testutil.Ok(t, app.Commit())
 
@@ -3931,18 +3931,18 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
 
-	app := h.Appender(context.Background())
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "1"), 0, 1)
+	app := h.AppenderV2(context.Background())
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "1"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "2"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "2"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "3"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "3"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "4"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "4"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "5"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "5"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "6"), 0, 1)
+	_, err = app.Append(0, labels.FromStrings("a", "1", "z", "6"), 0, 0, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	testutil.Ok(t, app.Commit())
 

@@ -39,7 +39,6 @@ import (
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
@@ -73,7 +72,7 @@ func (t *fakeTenantAppendable) TenantAppendable(_ string) (Appendable, error) {
 }
 
 type fakeAppendable struct {
-	appender    storage.Appender
+	appender    storage.AppenderV2
 	appenderErr func() error
 }
 
@@ -83,7 +82,7 @@ func nilErrFn() error {
 	return nil
 }
 
-func (f *fakeAppendable) Appender(_ context.Context) (storage.Appender, error) {
+func (f *fakeAppendable) Appender(_ context.Context) (storage.AppenderV2, error) {
 	errf := f.appenderErr
 	if errf == nil {
 		errf = nilErrFn
@@ -100,7 +99,8 @@ type fakeAppender struct {
 	rollbackErr func() error
 }
 
-var _ storage.Appender = &fakeAppender{}
+var _ storage.AppenderV2 = &fakeAppender{}
+var _ storage.ExemplarAppenderV2 = &fakeAppender{}
 var _ storage.GetRef = &fakeAppender{}
 
 func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppender { //nolint:unparam
@@ -122,12 +122,6 @@ func newFakeAppender(appendErr, commitErr, rollbackErr func() error) *fakeAppend
 	}
 }
 
-func (f *fakeAppender) SetOptions(opts *storage.AppendOptions) {}
-
-func (f *fakeAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, prometheusMetadata.Metadata) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
 func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	f.Lock()
 	defer f.Unlock()
@@ -137,7 +131,10 @@ func (f *fakeAppender) Get(l labels.Labels) []prompb.Sample {
 	return res
 }
 
-func (f *fakeAppender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+func (f *fakeAppender) Append(ref storage.SeriesRef, l labels.Labels, st, t int64, v float64, h *histogram.Histogram, fh *histogram.FloatHistogram, opts storage.AOptions) (storage.SeriesRef, error) {
+	if h != nil || fh != nil {
+		panic("not implemented")
+	}
 	f.Lock()
 	defer f.Unlock()
 	if ref == 0 {
@@ -147,32 +144,14 @@ func (f *fakeAppender) Append(ref storage.SeriesRef, l labels.Labels, t int64, v
 	return ref, f.appendErr()
 }
 
-func (f *fakeAppender) AppendExemplar(ref storage.SeriesRef, l labels.Labels, e exemplar.Exemplar) (storage.SeriesRef, error) {
+func (f *fakeAppender) AppendExemplars(ref storage.SeriesRef, l labels.Labels, exemplars []exemplar.Exemplar) (storage.SeriesRef, error) {
 	f.Lock()
 	defer f.Unlock()
 	if ref == 0 {
 		ref = storage.SeriesRef(l.Hash())
 	}
-	f.exemplars[ref] = append(f.exemplars[ref], e)
+	f.exemplars[ref] = append(f.exemplars[ref], exemplars...)
 	return ref, f.appendErr()
-}
-
-// TODO(rabenhorst): Needs to be implement for native histogram support.
-func (f *fakeAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	panic("not implemented")
-}
-
-// TODO(sungjin1212): Needs to be implement for native histogram support.
-func (f *fakeAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	panic("not implemented")
-}
-
-func (f *fakeAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	panic("not implemented")
-}
-
-func (f *fakeAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
-	panic("not implemented")
 }
 
 func (f *fakeAppender) GetRef(l labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
@@ -185,10 +164,6 @@ func (f *fakeAppender) Commit() error {
 
 func (f *fakeAppender) Rollback() error {
 	return f.rollbackErr()
-}
-
-func (f *fakeAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
-	panic("not implemented")
 }
 
 type fakePeersGroup struct {
@@ -1295,26 +1270,26 @@ type tsOverrideAppendable struct {
 	interval int64
 }
 
-func (a *tsOverrideAppendable) Appender(ctx context.Context) (storage.Appender, error) {
+func (a *tsOverrideAppendable) Appender(ctx context.Context) (storage.AppenderV2, error) {
 	ret, err := a.Appendable.Appender(ctx)
-	return &tsOverrideAppender{Appender: ret, interval: a.interval}, err
+	return &tsOverrideAppender{AppenderV2: ret, interval: a.interval}, err
 }
 
 type tsOverrideAppender struct {
-	storage.Appender
+	storage.AppenderV2
 
 	interval int64
 }
 
 var cnt int64
 
-func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, _ int64, v float64) (storage.SeriesRef, error) {
+func (a *tsOverrideAppender) Append(ref storage.SeriesRef, l labels.Labels, st, _ int64, v float64, h *histogram.Histogram, fh *histogram.FloatHistogram, opts storage.AOptions) (storage.SeriesRef, error) {
 	cnt += a.interval
-	return a.Appender.Append(ref, l, cnt, v)
+	return a.AppenderV2.Append(ref, l, st, cnt, v, h, fh, opts)
 }
 
 func (a *tsOverrideAppender) GetRef(lset labels.Labels, hash uint64) (storage.SeriesRef, labels.Labels) {
-	return a.Appender.(storage.GetRef).GetRef(lset, hash)
+	return a.AppenderV2.(storage.GetRef).GetRef(lset, hash)
 }
 
 // serializeSeriesWithOneSample returns marshaled and compressed remote write requests like it would

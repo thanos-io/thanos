@@ -95,7 +95,7 @@ func TestDiffVarintCodec(t *testing.T) {
 		testutil.Ok(t, h.Close())
 	}()
 
-	appendTestData(t, h.Appender(context.Background()), 1e5)
+	appendTestData(t, h.AppenderV2(context.Background()), 1e5)
 
 	idx, err := h.Index()
 	testutil.Ok(t, err)

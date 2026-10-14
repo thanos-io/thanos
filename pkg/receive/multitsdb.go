@@ -1171,7 +1171,7 @@ func (s *ReadyStorage) ExemplarQuerier(ctx context.Context) (storage.ExemplarQue
 }
 
 // Appender implements the Storage interface.
-func (s *ReadyStorage) Appender(ctx context.Context) (storage.Appender, error) {
+func (s *ReadyStorage) Appender(ctx context.Context) (storage.AppenderV2, error) {
 	if x := s.get(); x != nil {
 		return x.Appender(ctx)
 	}
@@ -1205,8 +1205,8 @@ func (a adapter) ExemplarQuerier(ctx context.Context) (storage.ExemplarQuerier, 
 }
 
 // Appender returns a new appender against the storage.
-func (a adapter) Appender(ctx context.Context) (storage.Appender, error) {
-	return a.db.Appender(ctx), nil
+func (a adapter) Appender(ctx context.Context) (storage.AppenderV2, error) {
+	return a.db.AppenderV2(ctx), nil
 }
 
 // Close closes the storage and all its underlying resources.

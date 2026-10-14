@@ -180,10 +180,10 @@ func TestQueryEndpoints(t *testing.T) {
 	defer func() { testutil.Ok(t, db.Close()) }()
 	testutil.Ok(t, err)
 
-	app := db.Appender(context.Background())
+	app := db.AppenderV2(context.Background())
 	for _, lbl := range lbls {
 		for i := range int64(10) {
-			_, err := app.Append(0, lbl, i*60000, float64(i))
+			_, err := app.Append(0, lbl, 0, i*60000, float64(i), nil, nil, storage.AOptions{})
 			testutil.Ok(t, err)
 		}
 	}
@@ -730,11 +730,11 @@ func TestMetadataEndpoints(t *testing.T) {
 	var (
 		apiLookbackDelta = 2 * time.Hour
 		start            = time.Now().Add(-apiLookbackDelta).Unix() * 1000
-		app              = db.Appender(context.Background())
+		app              = db.AppenderV2(context.Background())
 	)
 	for _, lbl := range recent {
 		for i := range int64(10) {
-			_, err := app.Append(0, lbl, start+(i*60_000), float64(i)) // ms
+			_, err := app.Append(0, lbl, 0, start+(i*60_000), float64(i), nil, nil, storage.AOptions{}) // ms
 			testutil.Ok(t, err)
 		}
 	}
@@ -2016,7 +2016,7 @@ func (s sample) T() int64 {
 }
 
 func (s sample) ST() int64 {
-	panic("not implemented")
+	return s.st
 }
 
 func (s sample) F() float64 {

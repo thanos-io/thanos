@@ -76,7 +76,7 @@ type seriesCallCase struct {
 	expectErr      error
 }
 
-type startStoreFn func(t *testing.T, extLset labels.Labels, append func(app storage.Appender)) storepb.StoreServer
+type startStoreFn func(t *testing.T, extLset labels.Labels, append func(app storage.AppenderV2)) storepb.StoreServer
 
 // testStoreAPIsAcceptance tests StoreAPI from closed box perspective.
 func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
@@ -86,7 +86,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 	extLset := labels.FromStrings("region", "eu-west")
 	for _, tc := range []struct {
 		desc             string
-		appendFn         func(app storage.Appender)
+		appendFn         func(app storage.AppenderV2)
 		labelNameCalls   []labelNameCallCase
 		labelValuesCalls []labelValuesCallCase
 		seriesCalls      []seriesCallCase
@@ -104,8 +104,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "{foo=foovalue1} 1",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), timestamp.FromTime(now), 1)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -119,10 +119,10 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "{foo=foovalue2} 1 and {foo=foovalue2} 1",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), timestamp.FromTime(now), 1)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("foo", "foovalue2"), timestamp.FromTime(now), 1)
+				_, err = app.Append(0, labels.FromStrings("foo", "foovalue2"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -135,12 +135,12 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "{foo=foovalue1, bar=barvalue1} 1 and {foo=foovalue2} 1 and {foo=foovalue2} 1",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), timestamp.FromTime(now), 1)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("foo", "foovalue1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("foo", "foovalue2"), timestamp.FromTime(now), 1)
+				_, err = app.Append(0, labels.FromStrings("foo", "foovalue2"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("foo", "foovalue1", "bar", "barvalue1"), timestamp.FromTime(now), 1)
+				_, err = app.Append(0, labels.FromStrings("foo", "foovalue1", "bar", "barvalue1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -246,8 +246,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "conflicting internal and external labels when skipping chunks",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("foo", "bar", "region", "somewhere"), 0, 0)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("foo", "bar", "region", "somewhere"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -267,10 +267,10 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "series matcher on other labels when requesting external labels",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar", "job", "C"), 0, 0)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar", "job", "C"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("__name__", "up", "foo", "baz", "job", "C"), 0, 0)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "foo", "baz", "job", "C"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 
 				testutil.Ok(t, app.Commit())
@@ -291,16 +291,16 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		{
 			// Testcases taken from https://github.com/prometheus/prometheus/blob/95e705612c1d557f1681bd081a841b78f93ee158/tsdb/querier_test.go#L1898
 			desc: "matching behavior",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("n", "1"), 0, 0)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("n", "1"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("n", "1", "i", "a"), 0, 0)
+				_, err = app.Append(0, labels.FromStrings("n", "1", "i", "a"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("n", "1", "i", "b"), 0, 0)
+				_, err = app.Append(0, labels.FromStrings("n", "1", "i", "b"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("n", "2"), 0, 0)
+				_, err = app.Append(0, labels.FromStrings("n", "2"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("n", "2.5"), 0, 0)
+				_, err = app.Append(0, labels.FromStrings("n", "2.5"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 
 				testutil.Ok(t, app.Commit())
@@ -719,8 +719,8 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "label values and names with non-equal matchers on external labels",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar"), 0, 0)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "foo", "bar"), 0, 0, 0, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -747,12 +747,12 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		},
 		{
 			desc: "label_values(kube_pod_info{}, pod) don't fetch postings for pod!=''",
-			appendFn: func(app storage.Appender) {
-				_, err := app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-1"), timestamp.FromTime(now), 1)
+			appendFn: func(app storage.AppenderV2) {
+				_, err := app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-2"), timestamp.FromTime(now), 1)
+				_, err = app.Append(0, labels.FromStrings("__name__", "up", "pod", "pod-2"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
-				_, err = app.Append(0, labels.FromStrings("__name__", "kube_pod_info", "pod", "pod-1"), timestamp.FromTime(now), 1)
+				_, err = app.Append(0, labels.FromStrings("__name__", "kube_pod_info", "pod", "pod-1"), 0, timestamp.FromTime(now), 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 				testutil.Ok(t, app.Commit())
 			},
@@ -789,7 +789,7 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 		t.Run(tc.desc, func(t *testing.T) {
 			appendFn := tc.appendFn
 			if appendFn == nil {
-				appendFn = func(storage.Appender) {}
+				appendFn = func(storage.AppenderV2) {}
 			}
 			store := startStore(t, extLset, appendFn)
 
@@ -877,13 +877,13 @@ func testStoreAPIsSeriesSplitSamplesIntoChunksWithMaxSizeOf120(t *testing.T, sta
 		offset := int64(2*math.MaxUint16 + 5)
 
 		extLset := labels.FromStrings("region", "eu-west")
-		appendFn := func(app storage.Appender) {
+		appendFn := func(app storage.AppenderV2) {
 			var (
 				ref storage.SeriesRef
 				err error
 			)
 			for i := range offset {
-				ref, err = app.Append(ref, labels.FromStrings("a", "b"), baseT+i, 1)
+				ref, err = app.Append(ref, labels.FromStrings("a", "b"), 0, baseT+i, 1, nil, nil, storage.AOptions{})
 				testutil.Ok(t, err)
 			}
 			testutil.Ok(t, app.Commit())
@@ -935,8 +935,8 @@ func TestBucketStore_Acceptance(t *testing.T) {
 
 	ctx := context.Background()
 
-	startStore := func(lazyExpandedPostings bool) func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		return func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(lazyExpandedPostings bool) func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
+		return func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
 			tmpDir := tt.TempDir()
 			bktDir := filepath.Join(tmpDir, "bkt")
 			auxDir := filepath.Join(tmpDir, "aux")
@@ -957,7 +957,7 @@ func TestBucketStore_Acceptance(t *testing.T) {
 			tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
 			logger := log.NewNopLogger()
 
-			appendFn(h.Appender(context.Background()))
+			appendFn(h.AppenderV2(context.Background()))
 
 			if h.NumSeries() == 0 {
 				tt.Skip("Bucket Store cannot handle empty HEAD")
@@ -1033,7 +1033,7 @@ func TestPrometheusStore_Acceptance(t *testing.T) {
 
 	t.Parallel()
 
-	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
 		p, err := e2eutil.NewPrometheus()
 		testutil.Ok(tt, err)
 		tt.Cleanup(func() { testutil.Ok(tt, p.Stop()) })
@@ -1071,11 +1071,11 @@ func TestTSDBStore_Acceptance(t *testing.T) {
 
 	t.Parallel()
 
-	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
 		db, err := e2eutil.NewTSDB()
 		testutil.Ok(tt, err)
 		tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-		appendFn(db.Appender(context.Background()))
+		appendFn(db.AppenderV2(context.Background()))
 
 		return NewTSDBStore(nil, db, component.Rule, extLset)
 	}
@@ -1089,8 +1089,8 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 
 	ctx := context.Background()
 
-	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		startNestedStore := func(tt *testing.T, appendFn func(app storage.Appender), extLsets ...labels.Labels) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, appendFn func(app storage.AppenderV2), extLsets ...labels.Labels) storepb.StoreServer {
 			tmpDir := tt.TempDir()
 			bktDir := filepath.Join(tmpDir, "bkt")
 			auxDir := filepath.Join(tmpDir, "aux")
@@ -1111,7 +1111,7 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 			tt.Cleanup(func() { testutil.Ok(tt, h.Close()) })
 			logger := log.NewNopLogger()
 
-			appendFn(h.Appender(context.Background()))
+			appendFn(h.AppenderV2(context.Background()))
 
 			if h.NumSeries() == 0 {
 				tt.Skip("Bucket Store cannot handle empty HEAD")
@@ -1190,8 +1190,8 @@ func TestProxyStoreWithTSDBSelector_Acceptance(t *testing.T) {
 		return NewProxyStore(nil, nil, func() []Client { return clients }, component.Query, labels.EmptyLabels(), 0*time.Second, RetrievalStrategy(EagerRetrieval), WithTSDBSelector(NewTSDBSelector(relabelCfgs)))
 	}
 
-	client := startStore(t, labels.EmptyLabels(), func(app storage.Appender) {
-		_, err := app.Append(0, labels.FromStrings("a", "b"), 0, 0)
+	client := startStore(t, labels.EmptyLabels(), func(app storage.AppenderV2) {
+		_, err := app.Append(0, labels.FromStrings("a", "b"), 0, 0, 0, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 		testutil.Ok(t, app.Commit())
 	})
@@ -1227,12 +1227,12 @@ func TestProxyStoreWithReplicas_Acceptance(t *testing.T) {
 
 	t.Parallel()
 
-	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
 			db, err := e2eutil.NewTSDB()
 			testutil.Ok(tt, err)
 			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-			appendFn(db.Appender(context.Background()))
+			appendFn(db.AppenderV2(context.Background()))
 
 			return NewTSDBStore(nil, db, component.Rule, extLset)
 
@@ -1266,12 +1266,12 @@ func TestTSDBSelectorFilteringBehavior(t *testing.T) {
 
 	t.Parallel()
 
-	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
-		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.Appender)) storepb.StoreServer {
+	startStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
+		startNestedStore := func(tt *testing.T, extLset labels.Labels, appendFn func(app storage.AppenderV2)) storepb.StoreServer {
 			db, err := e2eutil.NewTSDB()
 			testutil.Ok(tt, err)
 			tt.Cleanup(func() { testutil.Ok(tt, db.Close()) })
-			appendFn(db.Appender(context.Background()))
+			appendFn(db.AppenderV2(context.Background()))
 
 			return NewTSDBStore(nil, db, component.Rule, extLset)
 		}

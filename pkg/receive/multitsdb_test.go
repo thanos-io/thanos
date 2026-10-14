@@ -76,25 +76,23 @@ func TestMultiTSDB(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		var a storage.Appender
+		var a storage.AppenderV2
 		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 			a, err = app.Appender(context.Background())
 			return err
 		}))
 
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 2.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 1, 2.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 1, Ts: 1, HasTs: true}},
+		})
 		testutil.Ok(t, err)
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 3.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 2, 3.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 2.1212, Ts: 2, HasTs: true}},
+		})
 		testutil.Ok(t, err)
-		ref, err := a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 4.41241)
-		testutil.Ok(t, err)
-
-		// Test exemplars.
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 1, Ts: 1, HasTs: true})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 2.1212, Ts: 2, HasTs: true})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 3.1313, Ts: 3, HasTs: true})
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 3, 4.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 3.1313, Ts: 3, HasTs: true}},
+		})
 		testutil.Ok(t, err)
 		testutil.Ok(t, a.Commit())
 
@@ -117,18 +115,17 @@ func TestMultiTSDB(t *testing.T) {
 			return err
 		}))
 
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 1, 20.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 1, 20.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 11, Ts: 1, HasTs: true, Labels: labels.FromStrings("traceID", "abc")}},
+		})
 		testutil.Ok(t, err)
-		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 2, 30.41241)
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 2, 30.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 22.1212, Ts: 2, HasTs: true, Labels: labels.FromStrings("traceID", "def")}},
+		})
 		testutil.Ok(t, err)
-		ref, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 3, 40.41241)
-		testutil.Ok(t, err)
-
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 11, Ts: 1, HasTs: true, Labels: labels.FromStrings("traceID", "abc")})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 22.1212, Ts: 2, HasTs: true, Labels: labels.FromStrings("traceID", "def")})
-		testutil.Ok(t, err)
-		_, err = a.AppendExemplar(ref, labels.FromStrings("a", "1", "b", "2"), exemplar.Exemplar{Value: 33.1313, Ts: 3, HasTs: true, Labels: labels.FromStrings("traceID", "ghi")})
+		_, err = a.Append(0, labels.FromStrings("a", "1", "b", "2"), 0, 3, 40.41241, nil, nil, storage.AOptions{
+			Exemplars: []exemplar.Exemplar{{Value: 33.1313, Ts: 3, HasTs: true, Labels: labels.FromStrings("traceID", "ghi")}},
+		})
 		testutil.Ok(t, err)
 		testutil.Ok(t, a.Commit())
 
@@ -987,7 +984,7 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 		return err
 	}
 
-	var a storage.Appender
+	var a storage.AppenderV2
 	if err := runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		a, err = app.Appender(ctx)
 		return err
@@ -995,7 +992,7 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 		return err
 	}
 
-	_, err = a.Append(0, lbls, timestamp.UnixMilli(), 10)
+	_, err = a.Append(0, lbls, 0, timestamp.UnixMilli(), 10, nil, nil, storage.AOptions{})
 	if err != nil {
 		return err
 	}
@@ -1053,7 +1050,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	var a storage.Appender
+	var a storage.AppenderV2
 	testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		a, err = app.Appender(context.Background())
 		return err
@@ -1064,7 +1061,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; b.Loop(); i++ {
-		_, _ = a.Append(0, l, int64(i), float64(i))
+		_, _ = a.Append(0, l, 0, int64(i), float64(i), nil, nil, storage.AOptions{})
 	}
 }
 

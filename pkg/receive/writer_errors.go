@@ -100,6 +100,14 @@ func (a *writeErrorTracker) addExemplarError(err error, exLogger log.Logger) {
 		return
 	}
 
+	var pErr *storage.AppendPartialError
+	if errors.As(err, &pErr) {
+		for _, eErr := range pErr.ExemplarErrors {
+			a.addExemplarError(eErr, exLogger)
+		}
+		return
+	}
+
 	switch {
 	case errors.Is(err, storage.ErrOutOfOrderExemplar):
 		a.numExemplarsOutOfOrder++

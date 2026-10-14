@@ -125,6 +125,7 @@ func (t *test) reset() {
 		MaxSamples:               10000,
 		Timeout:                  100 * time.Second,
 		NoStepSubqueryIntervalFn: func(int64) int64 { return durationMilliseconds(1 * time.Minute) },
+		Parser:                   parser.NewParser(parser.Options{EnableExperimentalFunctions: true}),
 	}
 	t.rootEngine = promql.NewEngine(opts)
 
@@ -218,7 +219,7 @@ func (t *test) exec(tc any, createQueryableFn func([]*testStore) storage.Queryab
 			t.stores = append(t.stores, newTestStore(t.TB, newStoreCmd(nil, math.MinInt64, math.MaxInt64)))
 		}
 
-		app := t.stores[len(t.stores)-1].storage.Appender(t.ctx)
+		app := t.stores[len(t.stores)-1].storage.AppenderV2(t.ctx)
 		if err := cmd.Append(app); err != nil {
 			_ = app.Rollback()
 			return err
@@ -430,12 +431,12 @@ func (cmd *loadCmd) set(m labels.Labels, vals ...parser.SequenceValue) {
 }
 
 // Append the defined time series to the storage.
-func (cmd *loadCmd) Append(a storage.Appender) error {
+func (cmd *loadCmd) Append(a storage.AppenderV2) error {
 	for h, smpls := range cmd.defs {
 		m := cmd.metrics[h]
 
 		for _, s := range smpls {
-			if _, err := a.Append(0, m, s.T, s.F); err != nil {
+			if _, err := a.Append(0, m, 0, s.T, s.F, nil, nil, storage.AOptions{}); err != nil {
 				return err
 			}
 		}
@@ -561,7 +562,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 }
 
 func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryable storage.Queryable) error {
-	q, err := queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0), ev.expr, ev.start)
+	q, err := queryEngine.NewInstantQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0, nil), ev.expr, ev.start)
 	if err != nil {
 		return err
 	}
@@ -585,7 +586,7 @@ func (ev *evalCmd) Eval(ctx context.Context, queryEngine *promql.Engine, queryab
 
 	// Check query returns same result in range mode,
 	// by checking against the middle step.
-	q, err = queryEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0), ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
+	q, err = queryEngine.NewRangeQuery(ctx, queryable, promql.NewPrometheusQueryOpts(false, 0, nil), ev.expr, ev.start.Add(-time.Minute), ev.start.Add(time.Minute), time.Minute)
 	if err != nil {
 		return err
 	}

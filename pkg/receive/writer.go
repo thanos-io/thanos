@@ -21,23 +21,23 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
-// Appendable returns an Appender.
+// Appendable returns an AppenderV2.
 type Appendable interface {
-	Appender(ctx context.Context) (storage.Appender, error)
+	Appender(ctx context.Context) (storage.AppenderV2, error)
 }
 
 type TenantStorage interface {
 	TenantAppendable(string) (Appendable, error)
 }
 
-// Wraps storage.Appender to add validation and logging.
+// Wraps storage.AppenderV2 to add validation and logging.
 type ReceiveAppender struct {
 	tLogger        log.Logger
 	tooFarInFuture int64 // Unit: nanoseconds
-	storage.Appender
+	storage.AppenderV2
 }
 
-func (ra *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t int64, v float64) (storage.SeriesRef, error) {
+func (ra *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, st, t int64, v float64, h *histogram.Histogram, fh *histogram.FloatHistogram, opts storage.AOptions) (storage.SeriesRef, error) {
 	if ra.tooFarInFuture > 0 {
 		tooFar := model.Now().Add(time.Duration(ra.tooFarInFuture))
 		if tooFar.Before(model.Time(t)) {
@@ -47,7 +47,11 @@ func (ra *ReceiveAppender) Append(ref storage.SeriesRef, lset labels.Labels, t i
 			return 0, storage.ErrOutOfBounds
 		}
 	}
-	return ra.Appender.Append(ref, lset, t, v)
+	return ra.AppenderV2.Append(ref, lset, st, t, v, h, fh, opts)
+}
+
+func (ra *ReceiveAppender) AppendExemplars(ref storage.SeriesRef, l labels.Labels, exemplars []exemplar.Exemplar) (storage.SeriesRef, error) {
+	return ra.AppenderV2.(storage.ExemplarAppenderV2).AppendExemplars(ref, l, exemplars)
 }
 
 type WriterOptions struct {
@@ -94,8 +98,9 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 	app = &ReceiveAppender{
 		tLogger:        tLogger,
 		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
-		Appender:       app,
+		AppenderV2:     app,
 	}
+	exApp := app.(storage.ExemplarAppenderV2)
 
 	for _, t := range wreq {
 		// Check if time series labels are valid. If not, skip the time series
@@ -123,7 +128,7 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range t.Samples {
-			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
+			ref, err = app.Append(ref, lset, 0, s.Timestamp, s.Value, nil, nil, storage.AOptions{})
 			errorTracker.addSampleError(err, tLogger, lset, s.Timestamp, s.Value)
 		}
 
@@ -139,11 +144,11 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 				h = prompb.HistogramProtoToHistogram(hp)
 			}
 
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, h, fh)
+			ref, err = app.Append(ref, lset, 0, hp.Timestamp, 0, h, fh, storage.AOptions{})
 			errorTracker.addHistogramError(err, tLogger, lset, hp.Timestamp)
 		}
 
-		// Current implementation of app.AppendExemplar doesn't create a new series, so it must be already present.
+		// Current implementation of app.AppendExemplars doesn't create a new series, so it must be already present.
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(t.Exemplars) > 0 {
 			for _, ex := range t.Exemplars {
@@ -151,12 +156,12 @@ func (r *Writer) Write(ctx context.Context, tenantID string, wreq []prompb.TimeS
 				exLset := labelpb.ZLabelsToPromLabels(ex.Labels)
 				exLogger := log.With(tLogger, "exemplarLset", exLset, "exemplar", ex.String())
 
-				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
+				if _, err = exApp.AppendExemplars(ref, lset, []exemplar.Exemplar{{
 					Labels: exLset,
 					Value:  ex.Value,
 					Ts:     ex.Timestamp,
 					HasTs:  true,
-				}); err != nil {
+				}}); err != nil {
 					errorTracker.addExemplarError(err, exLogger)
 				}
 			}

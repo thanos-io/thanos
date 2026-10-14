@@ -44,10 +44,10 @@ func TestTSDBStore_Series_ChunkChecksum(t *testing.T) {
 
 	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
 
-	appender := db.Appender(context.Background())
+	appender := db.AppenderV2(context.Background())
 
 	for i := 1; i <= 3; i++ {
-		_, err = appender.Append(0, labels.FromStrings("a", "1"), int64(i), float64(i))
+		_, err = appender.Append(0, labels.FromStrings("a", "1"), 0, int64(i), float64(i), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 	err = appender.Commit()
@@ -83,10 +83,10 @@ func TestTSDBStore_Series(t *testing.T) {
 
 	tsdbStore := NewTSDBStore(nil, db, component.Rule, labels.FromStrings("region", "eu-west"))
 
-	appender := db.Appender(context.Background())
+	appender := db.AppenderV2(context.Background())
 
 	for i := 1; i <= 3; i++ {
-		_, err = appender.Append(0, labels.FromStrings("a", "1"), int64(i), float64(i))
+		_, err = appender.Append(0, labels.FromStrings("a", "1"), 0, int64(i), float64(i), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 	err = appender.Commit()
@@ -243,9 +243,9 @@ func TestTSDBStore_SeriesStopsOnCancel(t *testing.T) {
 	testutil.Ok(t, err)
 
 	const numSeries = 10 * seriesContextCheckInterval
-	app := db.Appender(context.Background())
+	app := db.AppenderV2(context.Background())
 	for i := range numSeries {
-		_, err := app.Append(0, labels.FromStrings("__name__", "up", "i", fmt.Sprintf("%05d", i)), 1, 1)
+		_, err := app.Append(0, labels.FromStrings("__name__", "up", "i", fmt.Sprintf("%05d", i)), 0, 1, 1, nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 	testutil.Ok(t, app.Commit())

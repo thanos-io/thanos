@@ -350,11 +350,11 @@ func (p *Prometheus) cleanup() error {
 // Appender returns a new appender to populate the Prometheus instance with data.
 // All appenders must be closed before Start is called and no new ones must be opened
 // afterwards.
-func (p *Prometheus) Appender() storage.Appender {
+func (p *Prometheus) Appender() storage.AppenderV2 {
 	if p.running {
 		panic("Appender must not be called after start")
 	}
-	return p.db.Appender(context.Background())
+	return p.db.AppenderV2(context.Background())
 }
 
 // CreateEmptyBlock produces empty block like it was the case before fix: https://github.com/prometheus/tsdb/pull/374.
@@ -569,7 +569,7 @@ func createBlock(
 			t := mint
 
 			for range numSamples {
-				app := h.Appender(ctx)
+				app := h.AppenderV2(ctx)
 
 				for _, lset := range batch {
 					var err error
@@ -579,12 +579,12 @@ func createBlock(
 					switch sampleType {
 					case chunkenc.ValFloat:
 						randMutex.Lock()
-						_, err = app.Append(0, lset, t, r.Float64())
+						_, err = app.Append(0, lset, 0, t, r.Float64(), nil, nil, storage.AOptions{})
 						randMutex.Unlock()
 					case chunkenc.ValHistogram:
-						_, err = app.AppendHistogram(0, lset, t, &histogramSample, nil)
+						_, err = app.Append(0, lset, 0, t, 0, &histogramSample, nil, storage.AOptions{})
 					case chunkenc.ValFloatHistogram:
-						_, err = app.AppendHistogram(0, lset, t, nil, &floatHistogramSample)
+						_, err = app.Append(0, lset, 0, t, 0, nil, &floatHistogramSample, storage.AOptions{})
 					}
 
 					if err != nil {
@@ -743,16 +743,16 @@ func CreateBlockWithChurn(
 		}
 	}()
 
-	app := h.Appender(ctx)
+	app := h.AppenderV2(ctx)
 	for i := range series {
 
 		var ref storage.SeriesRef
 		start := RandRange(rnd, mint, maxt)
 		for j := range numSamples {
 			if ref == 0 {
-				ref, err = app.Append(0, series[i], start, float64(i+j))
+				ref, err = app.Append(0, series[i], 0, start, float64(i+j), nil, nil, storage.AOptions{})
 			} else {
-				ref, err = app.Append(ref, series[i], start, float64(i+j))
+				ref, err = app.Append(ref, series[i], 0, start, float64(i+j), nil, nil, storage.AOptions{})
 			}
 			if err != nil {
 				if rerr := app.Rollback(); rerr != nil {

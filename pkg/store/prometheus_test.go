@@ -18,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
@@ -52,11 +53,11 @@ func testPrometheusStoreSeriesE2e(t *testing.T, prefix string) {
 	// region is an external label; by adding it as an internal label too we also trigger
 	// the resorting code paths
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), 0, baseT+100, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), 0, baseT+200, 2, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "local"), 0, baseT+300, 3, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -180,13 +181,13 @@ func TestPrometheusStore_SeriesLabels_e2e(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b", "b", "d"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "b", "d"), 0, baseT+100, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "c", "b", "d", "job", "test"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "c", "b", "d", "job", "test"), 0, baseT+200, 2, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "d", "b", "d", "job", "test"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "d", "b", "d", "job", "test"), 0, baseT+300, 3, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("b", "d", "job", "test"), baseT+400, 4)
+	_, err = a.Append(0, labels.FromStrings("b", "d", "job", "test"), 0, baseT+400, 4, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -352,11 +353,11 @@ func TestPrometheusStore_Series_MatchExternalLabel(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), 0, baseT+100, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), 0, baseT+200, 2, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b", "region", "eu-west"), 0, baseT+300, 3, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 
@@ -414,11 +415,11 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 	baseT := timestamp.FromTime(time.Now()) / 1000 * 1000
 
 	a := p.Appender()
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+100, 1)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, baseT+100, 1, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+200, 2)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, baseT+200, 2, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
-	_, err = a.Append(0, labels.FromStrings("a", "b"), baseT+300, 3)
+	_, err = a.Append(0, labels.FromStrings("a", "b"), 0, baseT+300, 3, nil, nil, storage.AOptions{})
 	testutil.Ok(t, err)
 	testutil.Ok(t, a.Commit())
 

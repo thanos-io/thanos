@@ -63,8 +63,9 @@ func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) e
 	app = &ReceiveAppender{
 		tLogger:        tLogger,
 		tooFarInFuture: r.opts.TooFarInFutureTimeWindow,
-		Appender:       app,
+		AppenderV2:     app,
 	}
+	exApp := app.(storage.ExemplarAppenderV2)
 
 	var (
 		series  writecapnp.Series
@@ -99,16 +100,16 @@ func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) e
 
 		// Append as many valid samples as possible, but keep track of the errors.
 		for _, s := range series.Samples {
-			ref, err = app.Append(ref, lset, s.Timestamp, s.Value)
+			ref, err = app.Append(ref, lset, 0, s.Timestamp, s.Value, nil, nil, storage.AOptions{})
 			errorTracker.addSampleError(err, tLogger, lset, s.Timestamp, s.Value)
 		}
 
 		for _, hp := range series.Histograms {
-			ref, err = app.AppendHistogram(ref, lset, hp.Timestamp, hp.Histogram, hp.FloatHistogram)
+			ref, err = app.Append(ref, lset, 0, hp.Timestamp, 0, hp.Histogram, hp.FloatHistogram, storage.AOptions{})
 			errorTracker.addHistogramError(err, tLogger, lset, hp.Timestamp)
 		}
 
-		// Current implementation of app.AppendExemplar doesn't create a new series, so it must be already present.
+		// Current implementation of app.AppendExemplars doesn't create a new series, so it must be already present.
 		// We drop the exemplars in case the series doesn't exist.
 		if ref != 0 && len(series.Exemplars) > 0 {
 			for _, ex := range series.Exemplars {
@@ -129,12 +130,12 @@ func (r *CapNProtoWriter) Write(ctx context.Context, wreq *writecapnp.Request) e
 					errorTracker.addLabelsError(err, exlset, exLogger)
 					continue
 				}
-				if _, err = app.AppendExemplar(ref, lset, exemplar.Exemplar{
+				if _, err = exApp.AppendExemplars(ref, lset, []exemplar.Exemplar{{
 					Labels: copiedLabels,
 					Value:  ex.Value,
 					Ts:     ex.Ts,
 					HasTs:  true,
-				}); err != nil {
+				}}); err != nil {
 					errorTracker.addExemplarError(err, exLogger)
 				}
 			}

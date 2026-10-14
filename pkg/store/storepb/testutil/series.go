@@ -115,7 +115,7 @@ func CreateHeadWithSeries(t testing.TB, j int, opts HeadGenOptions) (*tsdb.Head,
 	h, err := tsdb.NewHead(nil, nil, w, nil, headOpts, nil)
 	testutil.Ok(t, err)
 
-	app := h.Appender(context.Background())
+	app := h.AppenderV2(context.Background())
 	for i := 0; i < opts.Series; i++ {
 		tsLabel := j*opts.Series*opts.SamplesPerSeries + i*opts.SamplesPerSeries
 		switch opts.SampleType {
@@ -184,22 +184,26 @@ func ReadSeriesFromBlock(t testing.TB, h tsdb.BlockReader, extLabels labels.Labe
 	return expected
 }
 
-func appendFloatSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
+func appendFloatSamples(t testing.TB, app storage.AppenderV2, tsLabel int, opts HeadGenOptions) {
 	ref, err := app.Append(
 		0,
 		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
+		0,
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
 		opts.Random.Float64(),
+		nil,
+		nil,
+		storage.AOptions{},
 	)
 	testutil.Ok(t, err)
 
 	for is := 1; is < opts.SamplesPerSeries; is++ {
-		_, err := app.Append(ref, labels.EmptyLabels(), int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64())
+		_, err := app.Append(ref, labels.EmptyLabels(), 0, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), opts.Random.Float64(), nil, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 }
 
-func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
+func appendHistogramSamples(t testing.TB, app storage.AppenderV2, tsLabel int, opts HeadGenOptions) {
 	sample := &histogram.Histogram{
 		Schema:        0,
 		Count:         20,
@@ -213,22 +217,25 @@ func appendHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opt
 		NegativeBuckets: []int64{1, 2, -2, 1, -1},
 	}
 
-	ref, err := app.AppendHistogram(
+	ref, err := app.Append(
 		0,
 		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
+		0,
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
+		0,
 		sample,
 		nil,
+		storage.AOptions{},
 	)
 	testutil.Ok(t, err)
 
 	for is := 1; is < opts.SamplesPerSeries; is++ {
-		_, err := app.AppendHistogram(ref, labels.EmptyLabels(), int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), sample, nil)
+		_, err := app.Append(ref, labels.EmptyLabels(), 0, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), 0, sample, nil, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 }
 
-func appendFloatHistogramSamples(t testing.TB, app storage.Appender, tsLabel int, opts HeadGenOptions) {
+func appendFloatHistogramSamples(t testing.TB, app storage.AppenderV2, tsLabel int, opts HeadGenOptions) {
 	sample := &histogram.FloatHistogram{
 		ZeroThreshold: 0.01,
 		ZeroCount:     5.5,
@@ -246,17 +253,20 @@ func appendFloatHistogramSamples(t testing.TB, app storage.Appender, tsLabel int
 		NegativeBuckets: []float64{1.5, 0.5, 2.5, 3},
 	}
 
-	ref, err := app.AppendHistogram(
+	ref, err := app.Append(
 		0,
 		labels.FromStrings("foo", "bar", "i", fmt.Sprintf("%07d%s", tsLabel, LabelLongSuffix), "j", fmt.Sprintf("%v", tsLabel)),
+		0,
 		int64(tsLabel)*opts.ScrapeInterval.Milliseconds(),
+		0,
 		nil,
 		sample,
+		storage.AOptions{},
 	)
 	testutil.Ok(t, err)
 
 	for is := 1; is < opts.SamplesPerSeries; is++ {
-		_, err := app.AppendHistogram(ref, labels.EmptyLabels(), int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), nil, sample)
+		_, err := app.Append(ref, labels.EmptyLabels(), 0, int64(tsLabel+is)*opts.ScrapeInterval.Milliseconds(), 0, nil, sample, storage.AOptions{})
 		testutil.Ok(t, err)
 	}
 }
