@@ -710,5 +710,10 @@ Flags:
                                  Fraction of the backoff duration to use as
                                  random jitter for the Retry-After header (e.g.
                                  0.5 = ±50%).
+      --tsdb.block-reload-interval=0s
+                                 Interval at which to check for new or removed
+                                 blocks in storage. This includes head-chunk
+                                 memory-mapping. Default leaves the interval to
+                                 TSDB's default.
 
 ```
