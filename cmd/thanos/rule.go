@@ -157,6 +157,24 @@ func parseRemoteWriteConfig(content []byte, externalLabels labels.Labels) (*conf
 	}, nil
 }
 
+func reloadRemoteWriteConfig(logger log.Logger, reloader *remoteWriteConfigReloader, reloadMsg chan error) {
+	err := reloader.reload()
+	if err != nil {
+		level.Error(logger).Log("msg", "reload remote write config by webhandler failed", "err", err)
+	}
+	reloadMsg <- err
+}
+
+func remoteWriteReloadHandler(remoteWriteReloadWebhandler chan chan error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reloadMsg := make(chan error)
+		remoteWriteReloadWebhandler <- reloadMsg
+		if err := <-reloadMsg; err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
 type Expression struct {
 	Expr string
 }
@@ -769,11 +787,7 @@ func runRule(
 					}
 					reloadMsg <- err
 				case reloadMsg := <-remoteWriteReloadWebhandler:
-					err := rwReloader.reload()
-					if err != nil {
-						level.Error(logger).Log("msg", "reload remote write config by webhandler failed", "err", err)
-					}
-					reloadMsg <- err
+					reloadRemoteWriteConfig(logger, rwReloader, reloadMsg)
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -898,13 +912,7 @@ func runRule(
 			}
 		})
 		if remoteWriteReloadWebhandler != nil {
-			router.Post("/-/reload-remote-write", func(w http.ResponseWriter, r *http.Request) {
-				reloadMsg := make(chan error)
-				remoteWriteReloadWebhandler <- reloadMsg
-				if err := <-reloadMsg; err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
-				}
-			})
+			router.Post("/-/reload-remote-write", remoteWriteReloadHandler(remoteWriteReloadWebhandler))
 		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)

@@ -5,6 +5,8 @@ package main
 
 import (
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
@@ -32,7 +34,9 @@ func TestRemoteWriteConfigReloader(t *testing.T) {
 		externalLabels: labels.FromStrings("cluster", "test"),
 	}
 
-	testutil.Ok(t, reloader.reload())
+	reloadMsg := make(chan error)
+	go reloadRemoteWriteConfig(log.NewNopLogger(), reloader, reloadMsg)
+	testutil.Ok(t, <-reloadMsg)
 	if appliedConfig == nil {
 		t.Fatal("expected remote write config to be applied")
 	}
@@ -43,6 +47,39 @@ func TestRemoteWriteConfigReloader(t *testing.T) {
 	configContent = []byte("remote_write:\n- url: http://example.org/api/v1/write\n")
 	testutil.Ok(t, reloader.reload())
 	testutil.Equals(t, "http://example.org/api/v1/write", appliedConfig.RemoteWriteConfigs[0].URL.String())
+}
+
+func TestRemoteWriteReloadHandler(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		reloadErr      error
+		expectedStatus int
+	}{
+		"success": {
+			expectedStatus: http.StatusOK,
+		},
+		"error": {
+			reloadErr:      errors.New("reload failed"),
+			expectedStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			reloadWebhandler := make(chan chan error)
+			go func() {
+				reloadMsg := <-reloadWebhandler
+				reloadMsg <- tt.reloadErr
+			}()
+
+			req := httptest.NewRequest(http.MethodPost, "/-/reload-remote-write", nil)
+			resp := httptest.NewRecorder()
+			remoteWriteReloadHandler(reloadWebhandler).ServeHTTP(resp, req)
+
+			testutil.Equals(t, tt.expectedStatus, resp.Code)
+		})
+	}
 }
 
 func TestRemoteWriteConfigReloaderErrors(t *testing.T) {
@@ -79,7 +116,9 @@ func TestRemoteWriteConfigReloaderErrors(t *testing.T) {
 				applyConfig:    tt.applyConfig,
 				externalLabels: labels.EmptyLabels(),
 			}
-			testutil.NotOk(t, reloader.reload())
+			reloadMsg := make(chan error)
+			go reloadRemoteWriteConfig(log.NewNopLogger(), reloader, reloadMsg)
+			testutil.NotOk(t, <-reloadMsg)
 		})
 	}
 }
