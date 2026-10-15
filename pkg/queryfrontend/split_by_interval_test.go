@@ -276,6 +276,31 @@ func TestSplitQuery_PromQLErrorReturnsJson(t *testing.T) {
 	require.True(t, json.Valid(resp.Body), "error message is not valid JSON: %s", resp.Body)
 }
 
+func TestSplitQuery_MetadataRequestWithEqualStartAndEnd(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		input    queryrange.Request
+		expected queryrange.Request
+	}{
+		{
+			name:     "labels",
+			input:    &ThanosLabelsRequest{Start: 60 * 60 * seconds, End: 60 * 60 * seconds, Path: "/api/v1/labels"},
+			expected: &ThanosLabelsRequest{Start: 60 * 60 * seconds, End: 60 * 60 * seconds, Path: "/api/v1/labels", SplitInterval: day},
+		},
+		{
+			name:     "series",
+			input:    &ThanosSeriesRequest{Start: 60 * 60 * seconds, End: 60 * 60 * seconds, Path: "/api/v1/series"},
+			expected: &ThanosSeriesRequest{Start: 60 * 60 * seconds, End: 60 * 60 * seconds, Path: "/api/v1/series", SplitInterval: day},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			queries, err := splitQuery(tc.input, day)
+			require.NoError(t, err)
+			require.Equal(t, []queryrange.Request{tc.expected}, queries)
+		})
+	}
+}
+
 func TestSplitQuery_PrometheusRequest(t *testing.T) {
 	input := &queryrange.PrometheusRequest{
 		Start: 2 * 3600 * seconds,

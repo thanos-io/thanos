@@ -21,6 +21,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9089](https://github.com/thanos-io/thanos/pull/9089): Query-Frontend: Return labels and series for requests with equal start and end time instead of an empty result when `--labels.split-interval` is set.
 - [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
 - [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
