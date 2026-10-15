@@ -748,3 +748,23 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 		})
 	}
 }
+
+func TestSeriesRequestWithMatchers(t *testing.T) {
+	a := LabelMatcher{Type: LabelMatcher_EQ, Name: "a", Value: "1"}
+	b := LabelMatcher{Type: LabelMatcher_EQ, Name: "b", Value: "2"}
+	c := LabelMatcher{Type: LabelMatcher_EQ, Name: "c", Value: "3"}
+
+	matchers := make([]LabelMatcher, 1, 2)
+	matchers[0] = a
+	req := &SeriesRequest{MinTime: 1, MaxTime: 2, Matchers: matchers}
+
+	r1 := req.WithMatchers(b)
+	r2 := req.WithMatchers(c)
+
+	testutil.Equals(t, []LabelMatcher{a}, req.Matchers)
+	testutil.Equals(t, []LabelMatcher{a, b}, r1.Matchers)
+	testutil.Equals(t, []LabelMatcher{a, c}, r2.Matchers)
+	testutil.Equals(t, req.MinTime, r1.MinTime)
+	testutil.Equals(t, req.MaxTime, r1.MaxTime)
+	testutil.Assert(t, req.WithMatchers() != req, "expected a copy")
+}

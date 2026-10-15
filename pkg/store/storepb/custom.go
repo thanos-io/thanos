@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -562,6 +563,35 @@ func (c *SeriesStatsCounter) Count(series *Series) {
 
 func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
+}
+
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
+func (m *SeriesRequest) WithMatchers(ms ...LabelMatcher) *SeriesRequest {
+	r := *m
+	r.Matchers = withMatchers(m.Matchers, ms)
+	return &r
+}
+
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
+func (m *LabelNamesRequest) WithMatchers(ms ...LabelMatcher) *LabelNamesRequest {
+	r := *m
+	r.Matchers = withMatchers(m.Matchers, ms)
+	return &r
+}
+
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
+func (m *LabelValuesRequest) WithMatchers(ms ...LabelMatcher) *LabelValuesRequest {
+	r := *m
+	r.Matchers = withMatchers(m.Matchers, ms)
+	return &r
+}
+
+// withMatchers never appends into the backing array of matchers, which may be shared.
+func withMatchers(matchers, ms []LabelMatcher) []LabelMatcher {
+	if len(ms) == 0 {
+		return matchers
+	}
+	return slices.Concat(matchers, ms)
 }
 
 func (m *LabelMatcher) MatcherType() (labels.MatchType, error) {
