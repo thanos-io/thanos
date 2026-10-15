@@ -4,14 +4,85 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/config"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/util/annotations"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
 )
+
+func TestRemoteWriteConfigReloader(t *testing.T) {
+	t.Parallel()
+
+	configContent := []byte("remote_write:\n- url: http://example.com/api/v1/write\n")
+	var appliedConfig *config.Config
+	reloader := &remoteWriteConfigReloader{
+		loadConfig: func() ([]byte, error) {
+			return configContent, nil
+		},
+		applyConfig: func(cfg *config.Config) error {
+			appliedConfig = cfg
+			return nil
+		},
+		externalLabels: labels.FromStrings("cluster", "test"),
+	}
+
+	testutil.Ok(t, reloader.reload())
+	if appliedConfig == nil {
+		t.Fatal("expected remote write config to be applied")
+	}
+	testutil.Equals(t, 1, len(appliedConfig.RemoteWriteConfigs))
+	testutil.Equals(t, "http://example.com/api/v1/write", appliedConfig.RemoteWriteConfigs[0].URL.String())
+	testutil.Equals(t, labels.FromStrings("cluster", "test"), appliedConfig.GlobalConfig.ExternalLabels)
+
+	configContent = []byte("remote_write:\n- url: http://example.org/api/v1/write\n")
+	testutil.Ok(t, reloader.reload())
+	testutil.Equals(t, "http://example.org/api/v1/write", appliedConfig.RemoteWriteConfigs[0].URL.String())
+}
+
+func TestRemoteWriteConfigReloaderErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		loadConfig  func() ([]byte, error)
+		applyConfig func(*config.Config) error
+	}{
+		"load config": {
+			loadConfig: func() ([]byte, error) {
+				return nil, errors.New("read failed")
+			},
+		},
+		"parse config": {
+			loadConfig: func() ([]byte, error) {
+				return []byte("invalid: ["), nil
+			},
+		},
+		"apply config": {
+			loadConfig: func() ([]byte, error) {
+				return []byte("remote_write:\n- url: http://example.com/api/v1/write\n"), nil
+			},
+			applyConfig: func(*config.Config) error {
+				return errors.New("apply failed")
+			},
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			reloader := &remoteWriteConfigReloader{
+				loadConfig:     tt.loadConfig,
+				applyConfig:    tt.applyConfig,
+				externalLabels: labels.EmptyLabels(),
+			}
+			testutil.NotOk(t, reloader.reload())
+		})
+	}
+}
 
 func Test_parseFlagLabels(t *testing.T) {
 	var tData = []struct {

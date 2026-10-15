@@ -121,6 +121,42 @@ type ruleConfig struct {
 	tsdbEnableNativeHistograms bool
 }
 
+type remoteWriteConfigReloader struct {
+	loadConfig     func() ([]byte, error)
+	applyConfig    func(*config.Config) error
+	externalLabels labels.Labels
+}
+
+func (r *remoteWriteConfigReloader) reload() error {
+	content, err := r.loadConfig()
+	if err != nil {
+		return errors.Wrap(err, "load remote write config")
+	}
+
+	cfg, err := parseRemoteWriteConfig(content, r.externalLabels)
+	if err != nil {
+		return err
+	}
+
+	return r.applyConfig(cfg)
+}
+
+func parseRemoteWriteConfig(content []byte, externalLabels labels.Labels) (*config.Config, error) {
+	var rwCfg struct {
+		RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
+	}
+	if err := yaml.Unmarshal(content, &rwCfg); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse remote write config %v", string(content))
+	}
+
+	return &config.Config{
+		GlobalConfig: config.GlobalConfig{
+			ExternalLabels: labelsTSDBToProm(externalLabels),
+		},
+		RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
+	}, nil
+}
+
 type Expression struct {
 	Expr string
 }
@@ -478,27 +514,25 @@ func runRule(
 		return err
 	}
 
+	var rwReloader *remoteWriteConfigReloader
 	if len(rwCfgYAML) > 0 {
-		var rwCfg struct {
-			RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
-		}
-		if err := yaml.Unmarshal(rwCfgYAML, &rwCfg); err != nil {
-			return errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
-		}
-
 		slogger := logutil.GoKitLogToSlog(logger)
 		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
 		// TODO: add type and unit labels support?
 		remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
 			return 0, nil
 		}, conf.dataDir, 1*time.Minute, &readyScrapeManager{}, false)
-		if err := remoteStore.ApplyConfig(&config.Config{
-			GlobalConfig: config.GlobalConfig{
-				ExternalLabels: labelsTSDBToProm(conf.lset),
-			},
-			RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
-		}); err != nil {
+		rwCfg, err := parseRemoteWriteConfig(rwCfgYAML, conf.lset)
+		if err != nil {
+			return err
+		}
+		if err := remoteStore.ApplyConfig(rwCfg); err != nil {
 			return errors.Wrap(err, "applying config to remote storage")
+		}
+		rwReloader = &remoteWriteConfigReloader{
+			loadConfig:     conf.rwConfig.Content,
+			applyConfig:    remoteStore.ApplyConfig,
+			externalLabels: conf.lset,
 		}
 
 		agentDB, err = agent.Open(slogger, reg, remoteStore, conf.dataDir, agentOpts)
@@ -710,6 +744,10 @@ func runRule(
 
 	// Handle reload and termination interrupts.
 	reloadWebhandler := make(chan chan error)
+	var remoteWriteReloadWebhandler chan chan error
+	if rwReloader != nil {
+		remoteWriteReloadWebhandler = make(chan chan error)
+	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -728,6 +766,12 @@ func runRule(
 					err := reloadRules(logger, conf.ruleFiles, ruleMgr, conf.evalInterval, metrics)
 					if err != nil {
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
+					}
+					reloadMsg <- err
+				case reloadMsg := <-remoteWriteReloadWebhandler:
+					err := rwReloader.reload()
+					if err != nil {
+						level.Error(logger).Log("msg", "reload remote write config by webhandler failed", "err", err)
 					}
 					reloadMsg <- err
 				case <-ctx.Done():
@@ -853,6 +897,15 @@ func runRule(
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
+		if remoteWriteReloadWebhandler != nil {
+			router.Post("/-/reload-remote-write", func(w http.ResponseWriter, r *http.Request) {
+				reloadMsg := make(chan error)
+				remoteWriteReloadWebhandler <- reloadMsg
+				if err := <-reloadMsg; err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			})
+		}
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
