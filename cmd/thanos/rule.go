@@ -175,6 +175,19 @@ func remoteWriteReloadHandler(remoteWriteReloadWebhandler chan chan error) http.
 	}
 }
 
+func newRemoteWriteReloadWebhandler(reloader *remoteWriteConfigReloader) chan chan error {
+	if reloader == nil {
+		return nil
+	}
+	return make(chan chan error)
+}
+
+func registerRemoteWriteReloadHandler(router *route.Router, reloadWebhandler chan chan error) {
+	if reloadWebhandler != nil {
+		router.Post("/-/reload-remote-write", remoteWriteReloadHandler(reloadWebhandler))
+	}
+}
+
 type Expression struct {
 	Expr string
 }
@@ -762,10 +775,7 @@ func runRule(
 
 	// Handle reload and termination interrupts.
 	reloadWebhandler := make(chan chan error)
-	var remoteWriteReloadWebhandler chan chan error
-	if rwReloader != nil {
-		remoteWriteReloadWebhandler = make(chan chan error)
-	}
+	remoteWriteReloadWebhandler := newRemoteWriteReloadWebhandler(rwReloader)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -911,9 +921,7 @@ func runRule(
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
-		if remoteWriteReloadWebhandler != nil {
-			router.Post("/-/reload-remote-write", remoteWriteReloadHandler(remoteWriteReloadWebhandler))
-		}
+		registerRemoteWriteReloadHandler(router, remoteWriteReloadWebhandler)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 

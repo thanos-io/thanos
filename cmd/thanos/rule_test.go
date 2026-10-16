@@ -7,14 +7,25 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/efficientgo/core/testutil"
+	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
+	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/util/annotations"
 
+	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extpromql"
 )
 
@@ -80,6 +91,88 @@ func TestRemoteWriteReloadHandler(t *testing.T) {
 			testutil.Equals(t, tt.expectedStatus, resp.Code)
 		})
 	}
+}
+
+func TestRemoteWriteReloadRegistration(t *testing.T) {
+	t.Parallel()
+
+	t.Run("without remote write", func(t *testing.T) {
+		router := route.New()
+		registerRemoteWriteReloadHandler(router, newRemoteWriteReloadWebhandler(nil))
+
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/-/reload-remote-write", nil)
+		router.ServeHTTP(resp, req)
+
+		testutil.Equals(t, http.StatusNotFound, resp.Code)
+	})
+
+	t.Run("with remote write", func(t *testing.T) {
+		reloadWebhandler := newRemoteWriteReloadWebhandler(&remoteWriteConfigReloader{})
+		router := route.New()
+		registerRemoteWriteReloadHandler(router, reloadWebhandler)
+
+		go func() {
+			reloadMsg := <-reloadWebhandler
+			reloadMsg <- nil
+		}()
+
+		resp := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/-/reload-remote-write", nil)
+		router.ServeHTTP(resp, req)
+
+		testutil.Equals(t, http.StatusOK, resp.Code)
+	})
+}
+
+func TestRunRuleRemoteWriteReloadSetup(t *testing.T) {
+	t.Parallel()
+
+	app := extkingpin.NewApp(kingpin.New("test", "test"))
+	conf := ruleConfig{
+		http: httpConfig{bindAddress: "127.0.0.1:0"},
+		grpc: grpcConfig{bindAddress: "127.0.0.1:0"},
+		alertmgr: alertMgrConfig{
+			alertSourceTemplate: func() *string {
+				template := "/graph?g0.expr={{.Expr}}"
+				return &template
+			}(),
+		},
+		alertQueryURL:     &url.URL{},
+		rwConfig:          extflag.RegisterPathOrContent(app, "remote-write.config", "test"),
+		objStoreConfig:    extkingpin.RegisterCommonObjStoreFlags(app, "", false),
+		dataDir:           t.TempDir(),
+		evalInterval:      time.Second,
+		resendDelay:       time.Minute,
+		outageTolerance:   time.Hour,
+		forGracePeriod:    time.Minute,
+		ruleQueueCapacity: 100,
+	}
+
+	var g run.Group
+	g.Add(func() error { return errors.New("stop test") }, func(error) {})
+	err := runRule(
+		&g,
+		log.NewNopLogger(),
+		prometheus.NewRegistry(),
+		opentracing.NoopTracer{},
+		component.Rule,
+		conf,
+		make(chan struct{}),
+		nil,
+		nil,
+		nil,
+		nil,
+		&tsdb.Options{
+			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
+			RetentionDuration: int64(48 * time.Hour / time.Millisecond),
+			NoLockfile:        true,
+		},
+		nil,
+	)
+	testutil.Ok(t, err)
+	testutil.NotOk(t, g.Run())
 }
 
 func TestRemoteWriteConfigReloaderErrors(t *testing.T) {
