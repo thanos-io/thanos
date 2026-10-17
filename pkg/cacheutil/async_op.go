@@ -44,6 +44,7 @@ func (p *AsyncOperationProcessor) Stop() {
 
 	// Wait until all workers have terminated.
 	p.workers.Wait()
+	close(p.asyncQueue)
 }
 
 func (p *AsyncOperationProcessor) asyncQueueProcessLoop() {
@@ -74,4 +75,10 @@ func (p *AsyncOperationProcessor) EnqueueAsync(op func()) error {
 	default:
 		return ErrAsyncBufferFull
 	}
+}
+
+// AsyncQueue exposes the async channel to caller directly. This is useful in unit test
+// to drain the queue to make sure deterministic results.
+func (p *AsyncOperationProcessor) AsyncQueue() <-chan func() {
+	return p.asyncQueue
 }
