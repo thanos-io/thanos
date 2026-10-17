@@ -266,6 +266,7 @@ type aggrChunkIterator struct {
 	iters        [5]chunkenc.Iterator
 	curr         chunks.Meta
 	countChkIter chunks.Iterator
+	reuseIter    chunkenc.Iterator
 
 	err error
 }
@@ -301,7 +302,7 @@ func (a *aggrChunkIterator) Next() bool {
 
 	chks[downsample.AggrCount] = countChk.Chunk
 	for i := downsample.AggrSum; i <= downsample.AggrCounter; i++ {
-		chk, err = a.toChunk(i, mint, maxt)
+		chk, a.reuseIter, err = a.toChunk(a.reuseIter, i, mint, maxt)
 		if err != nil {
 			a.err = err
 			return false
@@ -327,17 +328,17 @@ func (a *aggrChunkIterator) Err() error {
 	return a.err
 }
 
-func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int64) (*chunks.Meta, error) {
+func (a *aggrChunkIterator) toChunk(it chunkenc.Iterator, at downsample.AggrType, minTime, maxTime int64) (*chunks.Meta, chunkenc.Iterator, error) {
 	if a.iters[at] == nil {
-		return nil, nil
+		return nil, it, nil
 	}
 	c := chunkenc.NewXORChunk()
 	appender, err := c.Appender()
 	if err != nil {
-		return nil, err
+		return nil, it, err
 	}
 
-	it := NewBoundedSeriesIterator(a.iters[at], minTime, maxTime)
+	it = NewBoundedSeriesIterator(it, a.iters[at], minTime, maxTime)
 
 	var (
 		lastT int64
@@ -348,12 +349,12 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 		appender.Append(lastT, lastV)
 	}
 	if err := it.Err(); err != nil {
-		return nil, err
+		return nil, it, err
 	}
 
 	// No sample in the required time range.
 	if lastT == 0 && lastV == 0 {
-		return nil, nil
+		return nil, it, nil
 	}
 
 	// Encode last sample for AggrCounter.
@@ -365,5 +366,5 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 		MinTime: minTime,
 		MaxTime: maxTime,
 		Chunk:   c,
-	}, nil
+	}, it, nil
 }
