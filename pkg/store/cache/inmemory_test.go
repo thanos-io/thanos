@@ -138,8 +138,8 @@ func TestInMemoryIndexCache_UpdateItem(t *testing.T) {
 			set: func(id storage.SeriesRef, b []byte) { cache.StorePostings(uid(id), lbl, b, tenancy.DefaultTenant) },
 			get: func(id storage.SeriesRef) ([]byte, bool) {
 				hits, _ := cache.FetchMultiPostings(ctx, uid(id), []labels.Label{lbl}, tenancy.DefaultTenant)
-				b, ok := hits[lbl]
-
+				b := hits[0]
+				ok := (b != nil)
 				return b, ok
 			},
 		},
@@ -251,14 +251,14 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	id := ulid.MustNew(0, nil)
 	lbls := labels.Label{Name: "test", Value: "123"}
 	ctx := context.Background()
-	emptyPostingsHits := map[labels.Label][]byte{}
-	emptyPostingsMisses := []labels.Label(nil)
+	emptyPostingsHits := [][]byte{nil}
+	emptyPostingsMisses := []uint64(nil)
 	emptySeriesHits := map[storage.SeriesRef][]byte{}
 	emptySeriesMisses := []storage.SeriesRef(nil)
 
 	pHits, pMisses := cache.FetchMultiPostings(ctx, id, []labels.Label{lbls}, tenancy.DefaultTenant)
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
-	testutil.Equals(t, []labels.Label{lbls}, pMisses)
+	testutil.Equals(t, []uint64{0}, pMisses)
 
 	// Add sliceHeaderSize + 2 bytes.
 	cache.StorePostings(id, lbls, []byte{42, 33}, tenancy.DefaultTenant)
@@ -275,16 +275,16 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(0), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls}, tenancy.DefaultTenant)
-	testutil.Equals(t, map[labels.Label][]byte{lbls: {42, 33}}, pHits, "key exists")
+	testutil.Equals(t, [][]byte{{42, 33}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, ulid.MustNew(1, nil), []labels.Label{lbls}, tenancy.DefaultTenant)
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
-	testutil.Equals(t, []labels.Label{lbls}, pMisses)
+	testutil.Equals(t, []uint64{0}, pMisses)
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{{Name: "test", Value: "124"}}, tenancy.DefaultTenant)
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
-	testutil.Equals(t, []labels.Label{{Name: "test", Value: "124"}}, pMisses)
+	testutil.Equals(t, []uint64{0}, pMisses)
 
 	// Add sliceHeaderSize + 3 more bytes.
 	cache.StoreSeries(id, 1234, []byte{222, 223, 224}, tenancy.DefaultTenant)
@@ -328,14 +328,14 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	// Evicted.
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls}, tenancy.DefaultTenant)
 	testutil.Equals(t, emptyPostingsHits, pHits, "no such key")
-	testutil.Equals(t, []labels.Label{lbls}, pMisses)
+	testutil.Equals(t, []uint64{0}, pMisses)
 
 	sHits, sMisses = cache.FetchMultiSeries(ctx, id, []storage.SeriesRef{1234}, tenancy.DefaultTenant)
 	testutil.Equals(t, emptySeriesHits, sHits, "no such key")
 	testutil.Equals(t, []storage.SeriesRef{1234}, sMisses)
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls2}, tenancy.DefaultTenant)
-	testutil.Equals(t, map[labels.Label][]byte{lbls2: v}, pHits)
+	testutil.Equals(t, [][]byte{v}, pHits)
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// Add same item again.
@@ -354,7 +354,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls2}, tenancy.DefaultTenant)
-	testutil.Equals(t, map[labels.Label][]byte{lbls2: v}, pHits)
+	testutil.Equals(t, [][]byte{v}, pHits)
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// Add too big item.
@@ -406,7 +406,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls3}, tenancy.DefaultTenant)
-	testutil.Equals(t, map[labels.Label][]byte{lbls3: {}}, pHits, "key exists")
+	testutil.Equals(t, [][]byte{{}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// nil works and still allocates empty slice.
@@ -426,7 +426,7 @@ func TestInMemoryIndexCache_Eviction_WithMetrics(t *testing.T) {
 	testutil.Equals(t, float64(1), promtest.ToFloat64(cache.evicted.WithLabelValues(CacheTypeSeries)))
 
 	pHits, pMisses = cache.FetchMultiPostings(ctx, id, []labels.Label{lbls4}, tenancy.DefaultTenant)
-	testutil.Equals(t, map[labels.Label][]byte{lbls4: {}}, pHits, "key exists")
+	testutil.Equals(t, [][]byte{{}}, pHits, "key exists")
 	testutil.Equals(t, emptyPostingsMisses, pMisses)
 
 	// Other metrics.
