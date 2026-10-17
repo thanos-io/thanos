@@ -30,7 +30,7 @@ const (
 // RemoteIndexCache is a memcached-based index cache.
 type RemoteIndexCache struct {
 	logger    log.Logger
-	memcached cacheutil.RemoteCacheClient
+	memcached cacheutil.ReadThroughRemoteCache
 
 	compressionScheme string
 
@@ -44,7 +44,7 @@ type RemoteIndexCache struct {
 }
 
 // NewRemoteIndexCache makes a new RemoteIndexCache.
-func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.RemoteCacheClient, commonMetrics *CommonMetrics, reg prometheus.Registerer, ttl time.Duration) (*RemoteIndexCache, error) {
+func NewRemoteIndexCache(logger log.Logger, cacheClient cacheutil.ReadThroughRemoteCache, commonMetrics *CommonMetrics, reg prometheus.Registerer, ttl time.Duration) (*RemoteIndexCache, error) {
 	c := &RemoteIndexCache{
 		ttl:               ttl,
 		logger:            logger,
@@ -218,6 +218,6 @@ func (c *RemoteIndexCache) FetchMultiSeries(ctx context.Context, blockID ulid.UL
 }
 
 // NewMemcachedIndexCache is alias NewRemoteIndexCache for compatible.
-func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.RemoteCacheClient, reg prometheus.Registerer) (*RemoteIndexCache, error) {
+func NewMemcachedIndexCache(logger log.Logger, memcached cacheutil.ReadThroughRemoteCache, reg prometheus.Registerer) (*RemoteIndexCache, error) {
 	return NewRemoteIndexCache(logger, memcached, nil, reg, memcachedDefaultTTL)
 }

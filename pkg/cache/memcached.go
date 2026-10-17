@@ -18,7 +18,7 @@ import (
 // MemcachedCache is a memcached-based cache.
 type MemcachedCache struct {
 	logger    log.Logger
-	memcached cacheutil.RemoteCacheClient
+	memcached cacheutil.ReadThroughRemoteCache
 	name      string
 
 	// Metrics.
@@ -27,7 +27,7 @@ type MemcachedCache struct {
 }
 
 // NewMemcachedCache makes a new MemcachedCache.
-func NewMemcachedCache(name string, logger log.Logger, memcached cacheutil.RemoteCacheClient, reg prometheus.Registerer) *MemcachedCache {
+func NewMemcachedCache(name string, logger log.Logger, memcached cacheutil.ReadThroughRemoteCache, reg prometheus.Registerer) *MemcachedCache {
 	c := &MemcachedCache{
 		logger:    logger,
 		memcached: memcached,

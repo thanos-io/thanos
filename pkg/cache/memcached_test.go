@@ -94,6 +94,19 @@ type mockedMemcachedClient struct {
 	getMultiErr error
 }
 
+// GrabKeys implements cacheutil.ReadThroughRemoteCache.
+func (c *mockedMemcachedClient) GrabKeys(ctx context.Context, keys []string) map[string][]byte {
+	result := make(map[string][]byte)
+
+	for _, key := range keys {
+		if value, ok := c.GetMulti(ctx, []string{key})[key]; ok {
+			result[key] = value
+		}
+	}
+
+	return result
+}
+
 // newMockedMemcachedClient returns a mocked memcached client.
 func newMockedMemcachedClient(getMultiErr error) *mockedMemcachedClient {
 	return &mockedMemcachedClient{

@@ -60,13 +60,13 @@ func NewIndexCache(logger log.Logger, confContentYaml []byte, reg prometheus.Reg
 	case string(INMEMORY):
 		cache, err = NewInMemoryIndexCache(logger, cacheMetrics, reg, backendConfig)
 	case string(MEMCACHED):
-		var memcached cacheutil.RemoteCacheClient
+		var memcached cacheutil.ReadThroughRemoteCache
 		memcached, err = cacheutil.NewMemcachedClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
 			cache, err = NewRemoteIndexCache(logger, memcached, cacheMetrics, reg, cacheConfig.TTL)
 		}
 	case string(REDIS):
-		var redisCache cacheutil.RemoteCacheClient
+		var redisCache cacheutil.ReadThroughRemoteCache
 		redisCache, err = cacheutil.NewRedisClient(logger, "index-cache", backendConfig, reg)
 		if err == nil {
 			cache, err = NewRemoteIndexCache(logger, redisCache, cacheMetrics, reg, cacheConfig.TTL)
