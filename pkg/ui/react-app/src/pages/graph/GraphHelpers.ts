@@ -140,7 +140,8 @@ export const getOptions = (stacked: boolean, useLocalTime: boolean): jquery.flot
 };
 
 export const normalizeData = ({ queryParams, data }: GraphProps): GraphSeries[] => {
-  const { startTime, endTime, resolution } = queryParams!;
+  // use default values
+  const { startTime = 0, endTime = 0, resolution = 0 } = queryParams || {};
   return data.result.map(({ values, histograms, metric }, index) => {
     // Insert nulls for all missing steps.
     const data = [];
