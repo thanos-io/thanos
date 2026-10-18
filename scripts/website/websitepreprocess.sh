@@ -22,7 +22,24 @@ git remote add origin https://github.com/thanos-io/thanos.git
 git remote -v
 git fetch origin
 
-RELEASE_BRANCHES=$(git branch --all | $GREP -P "remotes/origin/${RELEASE_FILTER_RE}" | egrep --invert-match '(:?HEAD|main)$' | sort -V)
+# Keep the original Git ref, but correct the historical branch-name typo for
+# documentation paths and sorting.
+documentation_version() {
+  local branchName=${1##*/}
+  # Remove this exception before publishing an actual 41.0 release.
+  if [[ ${branchName} == "release-41.0" ]]; then
+    echo "v0.41"
+  else
+    echo "${branchName/release-/v}"
+  fi
+}
+
+RELEASE_BRANCHES=$(
+  git branch --all | $GREP -P "remotes/origin/${RELEASE_FILTER_RE}" | egrep --invert-match '(:?HEAD|main)$' |
+    while read -r branchRef; do
+      printf '%s\t%s\n' "$(documentation_version "${branchRef}")" "${branchRef}"
+    done | sort -k1,1V | cut -f2
+)
 echo ">> chosen $(echo ${RELEASE_BRANCHES}) releases to deploy docs from"
 
 # preprocess tip separately
@@ -40,9 +57,8 @@ WEIGHT_VALUE=0
 
 for branchRef in ${RELEASE_BRANCHES}; do
   WEIGHT_VALUE=$((WEIGHT_VALUE + 1))
-  branchName=${branchRef##*/}
   # Exported for use in .mdox.prev-release.yaml
-  export tags=${branchName/release-/v}
+  export tags=$(documentation_version "${branchRef}")
   echo ">> cloning docs for versioning ${tags}"
   mkdir -p "${OUTPUT_CONTENT_DIR}/${tags}-git-docs"
   git archive --format=tar "refs/${branchRef}" | $TAR -C${OUTPUT_CONTENT_DIR}/${tags}-git-docs -x "docs/" --strip-components=1
