@@ -351,7 +351,7 @@ func (s *ProxyStore) Series(originalRequest *storepb.SeriesRequest, seriesSrv st
 		var reporter statsReporter
 
 		if tracker != nil && opIDOK {
-			_, storeAddr := storeInfo(st)
+			storeAddr, _ := st.Addr()
 			reporter = func(rs RespSetStats) {
 				tracker.AddStore(opID, fanout.StoreFanout{
 					EndpointAddr:   storeAddr,
@@ -602,15 +602,6 @@ func (s *ProxyStore) LabelValues(ctx context.Context, originalRequest *storepb.L
 		Values:   vals,
 		Warnings: warnings,
 	}, nil
-}
-
-func storeInfo(st Client) (storeID string, storeAddr string) {
-	storeAddr, _ = st.Addr()
-	storeID = labelpb.PromLabelSetsToString(st.LabelSets())
-	if storeID == "" {
-		storeID = "Store Gateway"
-	}
-	return storeID, storeAddr
 }
 
 // storesForTSDBSelector returns stores that match the TSDBSelector filtering criteria.
