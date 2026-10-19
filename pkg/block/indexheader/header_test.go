@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/encoding"
 	"github.com/prometheus/prometheus/tsdb/fileutil"
@@ -116,10 +117,17 @@ func TestReaders(t *testing.T) {
 				_, err := WriteBinary(ctx, bkt, id, fn, dummyHistogram)
 				testutil.Ok(t, err)
 
-				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, NewBinaryReaderMetrics(nil))
+				metrics := NewBinaryReaderMetrics(nil)
+				br, err := NewBinaryReader(ctx, log.NewNopLogger(), nil, tmpDir, id, 3, metrics)
 				testutil.Ok(t, err)
 
 				defer func() { testutil.Ok(t, br.Close()) }()
+
+				for _, phase := range []string{"open", "symbols", "postings_table", "name_symbols"} {
+					m := &dto.Metric{}
+					testutil.Ok(t, metrics.loadPhaseDuration.WithLabelValues(phase).(prometheus.Metric).Write(m))
+					testutil.Equals(t, uint64(1), m.GetHistogram().GetSampleCount())
+				}
 
 				if id == id1 {
 					testutil.Equals(t, 1, br.version)

@@ -68,8 +68,9 @@ func newCRC32() hash.Hash32 {
 
 // BinaryReaderMetrics holds metrics tracked by BinaryReader.
 type BinaryReaderMetrics struct {
-	downloadDuration prometheus.Histogram
-	loadDuration     prometheus.Histogram
+	downloadDuration  prometheus.Histogram
+	loadDuration      prometheus.Histogram
+	loadPhaseDuration *prometheus.HistogramVec
 }
 
 // NewBinaryReaderMetrics makes new BinaryReaderMetrics.
@@ -89,6 +90,13 @@ func NewBinaryReaderMetrics(reg prometheus.Registerer) *BinaryReaderMetrics {
 			NativeHistogramMaxBucketNumber: 256,
 			NativeHistogramBucketFactor:    1.1,
 		}),
+		loadPhaseDuration: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+			Name:                           "indexheader_load_phase_duration_seconds",
+			Help:                           "Duration of each phase of the index-header loading in seconds.",
+			Buckets:                        []float64{0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 15, 30, 60, 90, 120, 300},
+			NativeHistogramMaxBucketNumber: 256,
+			NativeHistogramBucketFactor:    1.1,
+		}, []string{"phase"}),
 	}
 }
 
@@ -611,10 +619,12 @@ func newMemoryBinaryReader(buf []byte, postingOffsetsInMemSampling int, metrics 
 }
 
 func newFileBinaryReader(path string, postingOffsetsInMemSampling int, metrics *BinaryReaderMetrics) (bw *BinaryReader, err error) {
+	openStart := time.Now()
 	f, err := fileutil.OpenMmapFile(path)
 	if err != nil {
 		return nil, err
 	}
+	metrics.loadPhaseDuration.WithLabelValues("open").Observe(time.Since(openStart).Seconds())
 	defer func() {
 		if err != nil {
 			runutil.CloseWithErrCapture(&err, f, "index header close")
@@ -688,11 +698,14 @@ func (r *BinaryReader) init() (err error) {
 	}
 
 	// TODO(bwplotka): Consider contributing to Prometheus to allow specifying custom number for symbolsFactor.
+	phaseStart := time.Now()
 	r.symbols, err = index.NewSymbols(r.b, r.indexVersion, int(r.toc.Symbols))
 	if err != nil {
 		return errors.Wrap(err, "read symbols")
 	}
+	r.metrics.loadPhaseDuration.WithLabelValues("symbols").Observe(time.Since(phaseStart).Seconds())
 
+	phaseStart = time.Now()
 	var lastName, lastValue []byte
 	if r.indexVersion == index.FormatV1 {
 		// Earlier V1 formats don't have a sorted postings offset table, so
@@ -775,6 +788,9 @@ func (r *BinaryReader) init() (err error) {
 		}
 	}
 
+	r.metrics.loadPhaseDuration.WithLabelValues("postings_table").Observe(time.Since(phaseStart).Seconds())
+
+	phaseStart = time.Now()
 	r.nameSymbols = make(map[uint32]string, len(r.postings))
 	for k := range r.postings {
 		if k == "" {
@@ -786,6 +802,7 @@ func (r *BinaryReader) init() (err error) {
 		}
 		r.nameSymbols[off] = k
 	}
+	r.metrics.loadPhaseDuration.WithLabelValues("name_symbols").Observe(time.Since(phaseStart).Seconds())
 
 	r.dec = &index.Decoder{LookupSymbol: r.LookupSymbol}
 
