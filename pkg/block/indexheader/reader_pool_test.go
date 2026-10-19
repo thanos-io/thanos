@@ -101,8 +101,6 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 	meta, err := metadata.ReadFromDir(filepath.Join(tmpDir, blockID.String()))
 	testutil.Ok(t, err)
 
-	// The pool and the reader belong inside the bubble: the idle bookkeeping
-	// and the pool's reaper goroutine both read the bubble's fake clock.
 	synctest.Test(t, func(t *testing.T) {
 		metrics := NewReaderPoolMetrics(nil)
 		pool := NewReaderPool(log.NewNopLogger(), true, idleTimeout, metrics, AlwaysEagerDownloadIndexHeader)
@@ -119,8 +117,6 @@ func TestReaderPool_ShouldCloseIdleLazyReaders(t *testing.T) {
 		testutil.Equals(t, float64(1), promtestutil.ToFloat64(metrics.lazyReader.loadCount))
 		testutil.Equals(t, float64(0), promtestutil.ToFloat64(metrics.lazyReader.unloadCount))
 
-		// Advance past the idle timeout so the reaper, which checks every
-		// idleTimeout/10, sees the reader as idle.
 		time.Sleep(2 * idleTimeout)
 		synctest.Wait()
 
