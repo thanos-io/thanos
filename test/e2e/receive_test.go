@@ -1213,82 +1213,85 @@ func TestReceiveExtractsTenant(t *testing.T) {
 }
 
 func TestReceiveCpnp(t *testing.T) {
-	e, err := e2e.NewDockerEnvironment("receive-cpnp")
-	testutil.Ok(t, err)
-	t.Cleanup(e2ethanos.CleanScenario(t, e))
+	for _, compression := range []string{"none", "zstd"} {
+		t.Run(compression, func(t *testing.T) {
+			e, err := e2e.NewDockerEnvironment("rcv-cpnp-" + compression)
+			testutil.Ok(t, err)
+			t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(i))
+			i := e2ethanos.NewReceiveBuilder(e, "ingestor").WithIngestionEnabled().WithExemplarsInMemStorage(100).Init()
+			testutil.Ok(t, e2e.StartAndWaitReady(i))
 
-	h := receive.HashringConfig{
-		TenantMatcherType: "glob",
-		Tenants: []string{
-			"default*",
-		},
-		Endpoints: []receive.Endpoint{
-			{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
-		},
-	}
+			h := receive.HashringConfig{
+				TenantMatcherType: "glob",
+				Tenants: []string{
+					"default*",
+				},
+				Endpoints: []receive.Endpoint{
+					{Address: i.InternalEndpoint("grpc"), CapNProtoAddress: i.InternalEndpoint("capnp")},
+				},
+			}
 
-	r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithRouting(1, h).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(r))
+			r := e2ethanos.NewReceiveBuilder(e, "router").UseCapnpReplication().WithCapnpCompression(compression).WithRouting(1, h).Init()
+			testutil.Ok(t, e2e.StartAndWaitReady(r))
 
-	ts := time.Now()
+			ts := time.Now()
 
-	require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
-		return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
-			Timeseries: []prompb.TimeSeries{
-				{
-					Exemplars: []prompb.Exemplar{
+			require.NoError(t, runutil.RetryWithLog(logkit.NewLogfmtLogger(os.Stdout), 1*time.Second, make(<-chan struct{}), func() error {
+				return storeWriteRequest(context.Background(), "http://"+r.Endpoint("remote-write")+"/api/v1/receive", &prompb.WriteRequest{
+					Timeseries: []prompb.TimeSeries{
 						{
-							Labels: []prompb.Label{
-								{Name: "receive", Value: "receive-ingestor"},
+							Exemplars: []prompb.Exemplar{
+								{
+									Labels: []prompb.Label{
+										{Name: "receive", Value: "receive-ingestor"},
+									},
+									Value:     1.2345,
+									Timestamp: timestamp.FromTime(ts),
+								},
 							},
-							Value:     1.2345,
-							Timestamp: timestamp.FromTime(ts),
+							Labels: []prompb.Label{
+								{Name: model.MetricNameLabel, Value: "myself"},
+							},
+							Samples: []prompb.Sample{
+								{Value: 1, Timestamp: timestamp.FromTime(ts)},
+							},
 						},
 					},
-					Labels: []prompb.Label{
-						{Name: model.MetricNameLabel, Value: "myself"},
+				})
+			}))
+
+			testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
+
+			q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
+			testutil.Ok(t, e2e.StartAndWaitReady(q))
+
+			v := instantQuery(t, context.Background(), q.Endpoint("http"), func() string { return "myself" }, func() time.Time { return ts }, promclient.QueryOptions{
+				Deduplicate: false,
+			}, 1)
+
+			v[0].Timestamp = 0
+
+			require.Equal(t, model.Vector{
+				{
+					Metric: model.Metric{
+						model.MetricNameLabel: "myself",
+						"receive":             "receive-ingestor",
+						"tenant_id":           "default-tenant",
 					},
-					Samples: []prompb.Sample{
-						{Value: 1, Timestamp: timestamp.FromTime(ts)},
-					},
+					Value: 1,
 				},
-			},
+			}, v)
+
+			// Verify fix for https://github.com/thanos-io/thanos/issues/8224
+			queryExemplars(
+				t, context.Background(), q.Endpoint("http"), "myself", timestamp.FromTime(ts), timestamp.FromTime(ts), func(data []*exemplarspb.ExemplarData) error {
+					require.Equal(t, "receive", data[0].Exemplars[0].Labels.Labels[0].Name)
+					return nil
+				},
+			)
 		})
-	}))
-
-	testutil.Ok(t, i.WaitSumMetricsWithOptions(e2emon.Equals(0), []string{"prometheus_tsdb_blocks_loaded"}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "tenant", "default-tenant")), e2emon.WaitMissingMetrics()))
-
-	q := e2ethanos.NewQuerierBuilder(e, "1", i.InternalEndpoint("grpc")).Init()
-	testutil.Ok(t, e2e.StartAndWaitReady(q))
-
-	v := instantQuery(t, context.Background(), q.Endpoint("http"), func() string { return "myself" }, func() time.Time { return ts }, promclient.QueryOptions{
-		Deduplicate: false,
-	}, 1)
-
-	v[0].Timestamp = 0
-
-	require.Equal(t, model.Vector{
-		{
-			Metric: model.Metric{
-				model.MetricNameLabel: "myself",
-				"receive":             "receive-ingestor",
-				"tenant_id":           "default-tenant",
-			},
-			Value: 1,
-		},
-	}, v)
-
-	// Verify fix for https://github.com/thanos-io/thanos/issues/8224
-	queryExemplars(
-		t, context.Background(), q.Endpoint("http"), "myself", timestamp.FromTime(ts), timestamp.FromTime(ts), func(data []*exemplarspb.ExemplarData) error {
-			require.Equal(t, "receive", data[0].Exemplars[0].Labels.Labels[0].Name)
-			return nil
-		},
-	)
-
+	}
 }
 
 func TestReceiveCpnpDelayed(t *testing.T) {

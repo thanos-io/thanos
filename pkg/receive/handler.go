@@ -127,6 +127,7 @@ type Options struct {
 	Limiter                 *Limiter
 	AsyncForwardWorkerCount uint
 	ReplicationProtocol     ReplicationProtocol
+	CapNProtoCompression    writecapnp.Compression
 	OtlpEnableTargetInfo    bool
 	OtlpResourceAttributes  []string
 	RetryAfterBackoff       time.Duration
@@ -222,6 +223,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			o.Writer,
 			o.MaxArtificialDelay,
 			o.ReplicationProtocol,
+			o.CapNProtoCompression,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
 		Limiter:      o.Limiter,
@@ -1783,6 +1785,7 @@ func newPeerGroup(
 	writer *Writer,
 	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
+	capnprotoCompression writecapnp.Compression,
 	dialOpts ...grpc.DialOption,
 ) *peerGroup {
 	return &peerGroup{
@@ -1797,6 +1800,7 @@ func newPeerGroup(
 		maxArtificialDelay:       maxArtificialDelay,
 		asyncForwardWorkersCount: asyncForwardWorkersCount,
 		replicationProtocol:      replicationProtocol,
+		capnprotoCompression:     capnprotoCompression,
 		localEndpoint:            localEndpoint,
 		writer:                   writer,
 	}
@@ -1879,6 +1883,7 @@ type peerGroup struct {
 	forwardDelay             *prometheus.HistogramVec
 	asyncForwardWorkersCount uint
 	replicationProtocol      ReplicationProtocol
+	capnprotoCompression     writecapnp.Compression
 	maxArtificialDelay       time.Duration
 	localEndpoint            string
 	writer                   *Writer
@@ -1972,7 +1977,7 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 	} else {
 		switch p.replicationProtocol {
 		case CapNProtoReplication:
-			client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger)
+			client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger, writecapnp.WithCompression(p.capnprotoCompression))
 
 		case ProtobufReplication:
 			conn, err := p.dialer(endpoint.Address, p.dialOpts...)

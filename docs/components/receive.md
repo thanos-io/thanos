@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1348,1358p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1350,1360p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -599,6 +599,10 @@ Flags:
                                  The protocol to use for replicating
                                  remote-write requests. One of protobuf,
                                  capnproto
+      --receive.capnproto-compression=none
+                                 Compression of replicated Cap'n Proto messages
+                                 sent by this receiver. Receivers accept both.
+                                 One of none, zstd
       --receive.capnproto-address="0.0.0.0:19391"
                                  Address for the Cap'n Proto server.
       --receive.grpc-service-config=<content>
