@@ -1156,8 +1156,8 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
 
 	rc.tsdbBlockReloadInterval = extkingpin.ModelDuration(cmd.Flag("tsdb.block-reload-interval",
-		"Interval at which to check for new or removed blocks in storage. This includes head-chunk memory-mapping. Default leaves the interval to TSDB's default.",
-	).Default("0s"))
+		"Interval at which to check for new or removed blocks in storage. This includes head-chunk memory-mapping.",
+	).Default("1m"))
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.
