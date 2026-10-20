@@ -464,7 +464,7 @@ func (it *histogramResetDetector) Next() chunkenc.ValueType {
 	if it.lastValType == chunkenc.ValNone {
 		return chunkenc.ValNone
 	}
-	it.lastT = it.Iterator.AtT()
+	it.lastT = it.AtT()
 	return it.lastValType
 }
 
