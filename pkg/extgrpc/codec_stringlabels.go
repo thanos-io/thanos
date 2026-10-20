@@ -7,7 +7,9 @@ package extgrpc
 
 import "google.golang.org/grpc/mem"
 
+var materializePool = mem.DefaultBufferPool()
+
 func materializeForUnmarshal(data mem.BufferSlice) ([]byte, func()) {
-	buf := data.MaterializeToBuffer(mem.DefaultBufferPool())
+	buf := data.MaterializeToBuffer(materializePool)
 	return buf.ReadOnlyData(), buf.Free
 }

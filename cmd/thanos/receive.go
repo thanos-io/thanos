@@ -462,7 +462,7 @@ func runReceive(
 			),
 		)
 
-		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe,
+		srvOpts := []grpcserver.Option{
 			grpcserver.WithServer(store.RegisterStoreServer(rw, logger)),
 			grpcserver.WithServer(store.RegisterWritableStoreServer(rw)),
 			grpcserver.WithServer(exemplars.RegisterExemplarsServer(exemplars.NewMultiTSDB(dbs.TSDBExemplars))),
@@ -472,7 +472,14 @@ func runReceive(
 			grpcserver.WithGracePeriod(conf.grpcConfig.gracePeriod),
 			grpcserver.WithMaxConnAge(conf.grpcConfig.maxConnectionAge),
 			grpcserver.WithTLSConfig(tlsCfg),
-		)
+		}
+		// Ingestors write synchronously and copy what they keep; routers forward after replying.
+		if receiveMode == receive.IngestorOnly {
+			for _, o := range extgrpc.RetainingServerOptions(&storepb.WriteRequest{}) {
+				srvOpts = append(srvOpts, grpcserver.WithGRPCServerOption(o))
+			}
+		}
+		srv := grpcserver.New(logger, receive.NewUnRegisterer(reg), tracer, grpcLogOpts, logFilterMethods, comp, grpcProbe, srvOpts...)
 
 		g.Add(
 			func() error {
