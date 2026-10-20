@@ -38,6 +38,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#9078](https://github.com/thanos-io/thanos/pull/9078): UI: Render the query trace ID as a regular text node in the query stats, instead of injecting the rendered string into the DOM with `dangerouslySetInnerHTML`.
 - [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
