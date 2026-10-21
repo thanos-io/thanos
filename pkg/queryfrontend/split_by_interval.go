@@ -95,11 +95,15 @@ func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Requ
 			}
 		}
 	case SplitRequest:
-		dur := int64(interval / time.Millisecond)
-		for start := r.GetStart(); start < r.GetEnd(); start = start + dur {
-			end := min(start+dur, r.GetEnd())
+		if start := r.GetStart(); start == r.GetEnd() {
+			reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, start))
+		} else {
+			dur := int64(interval / time.Millisecond)
+			for ; start < r.GetEnd(); start = start + dur {
+				end := min(start+dur, r.GetEnd())
 
-			reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, end))
+				reqs = append(reqs, tr.WithSplitInterval(interval).WithStartEnd(start, end))
+			}
 		}
 	default:
 		return nil, httpgrpc.Errorf(http.StatusBadRequest, `{"status": "error", "error": "request type %T not supported"}`, r)
