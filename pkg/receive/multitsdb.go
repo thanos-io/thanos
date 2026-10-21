@@ -337,6 +337,7 @@ type tenant struct {
 
 	lastSuccessfulHeadCompaction atomic.Int64
 	compactC                     chan struct{}
+	compactionDelay              time.Duration
 }
 
 // shouldBeMarkedInactive checks if the tenant should be marked as inactive / read-only.
@@ -437,7 +438,8 @@ func (t *tenant) generateCompactionDelay() time.Duration {
 // to produce, compacting until the span drops below the threshold.
 func (t *tenant) isHeadCompactable(head *tsdb.Head) bool {
 	mint := head.MinTime()
-	return mint >= 0 && time.Since(time.UnixMilli(mint)).Milliseconds() > t.getCompactionThreshold()
+	return mint >= 0 && time.Since(time.UnixMilli(mint)).Milliseconds() >
+		t.getCompactionThreshold()+t.compactionDelay.Milliseconds()
 }
 
 func (t *tenant) startPeriodicHeadCompaction() {
@@ -478,11 +480,10 @@ func (t *tenant) startPeriodicHeadCompaction() {
 		return nil
 	}
 
-	compactionDelay := t.generateCompactionDelay()
 	go func() {
-		level.Info(t.logger).Log("msg", "starting periodic head compaction", "initial_delay", compactionDelay.String(), "interval", interval.String())
+		level.Info(t.logger).Log("msg", "starting periodic head compaction", "compaction_delay", t.compactionDelay.String(), "interval", interval.String())
 		select {
-		case <-time.After(compactionDelay):
+		case <-time.After(t.compactionDelay):
 		case <-t.doneC:
 			return
 		}
@@ -576,7 +577,7 @@ func (t *tenant) blocksToDelete(blocks []*tsdb.Block) map[ulid.ULID]struct{} {
 }
 
 func newTenant(l log.Logger, retentionDuration, maxBlockDuration int64, name string) *tenant {
-	return &tenant{
+	t := &tenant{
 		readyS:            &ReadyStorage{},
 		mtx:               &sync.RWMutex{},
 		retentionDuration: retentionDuration,
@@ -586,6 +587,9 @@ func newTenant(l log.Logger, retentionDuration, maxBlockDuration int64, name str
 		maxBlockDuration:  maxBlockDuration,
 		compactC:          make(chan struct{}),
 	}
+	t.compactionDelay = t.generateCompactionDelay()
+
+	return t
 }
 
 type closeDelete int
