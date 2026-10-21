@@ -1038,7 +1038,6 @@ func (s *mockedSeriesIterator) At() (t int64, v float64) {
 	return sample.t, sample.v
 }
 
-// TODO(rabenhorst): Needs to be implemented for native histogram support.
 func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogram) {
 	sample := s.samples[s.cur]
 	return sample.t, sample.h
