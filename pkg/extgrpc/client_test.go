@@ -5,11 +5,15 @@ package extgrpc
 
 import (
 	"testing"
+	"testing/synctest"
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 )
 
@@ -120,4 +124,26 @@ func TestNonPoolingCodecMarshal(t *testing.T) {
 
 	_, err := c.Marshal(i)
 	require.NoError(t, err)
+}
+
+func TestEndpointGroupGRPCOptsDefaultRetryPolicy(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cc, err := grpc.NewClient("passthrough:///127.0.0.1:1", append(EndpointGroupGRPCOpts(""), grpc.WithTransportCredentials(insecure.NewCredentials()))...)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = cc.Close() })
+		cc.Connect()
+
+		// NOTE(GiedriusS): The default service config is applied asynchronously once the channel leaves idle.
+		const method = "/thanos.Store/Series"
+
+		synctest.Wait()
+
+		require.NotNil(t, cc.GetMethodConfig(method).RetryPolicy)
+
+		rp := cc.GetMethodConfig(method).RetryPolicy
+		require.Equal(t, 5, rp.MaxAttempts)
+		require.True(t, rp.RetryableStatusCodes[codes.Unavailable])
+
+	})
+
 }

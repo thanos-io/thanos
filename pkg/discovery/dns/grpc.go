@@ -13,6 +13,8 @@ import (
 	grpcresolver "google.golang.org/grpc/resolver"
 )
 
+const resolveNowMinInterval = 200 * time.Millisecond
+
 var (
 	_ grpcresolver.Builder  = &builder{}
 	_ grpcresolver.Resolver = &resolver{}
@@ -45,6 +47,7 @@ func (b *builder) Build(t grpcresolver.Target, cc grpcresolver.ClientConn, _ grp
 		cancel:              cancel,
 		cc:                  cc,
 		interval:            b.resolveInterval,
+		resolveNowCh:        make(chan struct{}, 1),
 		logger:              b.logger,
 		injectTestAddresses: b.injectTestAddresses,
 	}
@@ -64,11 +67,12 @@ func (b *builder) Build(t grpcresolver.Target, cc grpcresolver.ClientConn, _ grp
 type resolver struct {
 	provider *Provider
 
-	target   string
-	ctx      context.Context
-	cancel   context.CancelFunc
-	cc       grpcresolver.ClientConn
-	interval time.Duration
+	target       string
+	ctx          context.Context
+	cancel       context.CancelFunc
+	cc           grpcresolver.ClientConn
+	interval     time.Duration
+	resolveNowCh chan struct{}
 
 	wg                  sync.WaitGroup
 	logger              log.Logger
@@ -80,7 +84,12 @@ func (r *resolver) Close() {
 	r.wg.Wait()
 }
 
-func (r *resolver) ResolveNow(_ grpcresolver.ResolveNowOptions) {}
+func (r *resolver) ResolveNow(_ grpcresolver.ResolveNowOptions) {
+	select {
+	case r.resolveNowCh <- struct{}{}:
+	default:
+	}
+}
 
 func (r *resolver) resolve() error {
 	ctx, cancel := context.WithTimeout(r.ctx, r.interval)
@@ -117,14 +126,29 @@ func (r *resolver) updateResolver() error {
 
 func (r *resolver) run() {
 	defer r.wg.Done()
+
+	ticker := time.NewTicker(r.interval)
+	defer ticker.Stop()
+
+	lastResolve := time.Now()
 	for {
 		select {
 		case <-r.ctx.Done():
 			return
-		case <-time.After(r.interval):
-			if err := r.updateResolver(); err != nil {
-				level.Error(r.logger).Log("msg", "failed to update state for gRPC resolver", "err", err)
+		case <-ticker.C:
+		case <-r.resolveNowCh:
+			if wait := resolveNowMinInterval - time.Since(lastResolve); wait > 0 {
+				select {
+				case <-r.ctx.Done():
+					return
+				case <-time.After(wait):
+				}
 			}
+			level.Debug(r.logger).Log("msg", "gRPC endpoint re-resolution requested", "target", r.target)
 		}
+		if err := r.updateResolver(); err != nil {
+			level.Error(r.logger).Log("msg", "failed to update state for gRPC resolver", "err", err)
+		}
+		lastResolve = time.Now()
 	}
 }
