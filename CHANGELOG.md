@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
 - [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
 - [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
@@ -34,6 +35,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#9054](https://github.com/thanos-io/thanos/pull/9054): Store: Count batched series responses in `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested`.
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
 - [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
+- [#9087](https://github.com/thanos-io/thanos/pull/9087): Query: Delete `storeInfo()` and instead use `st.Addr()` where it was used.
 
 ### Changed
 
