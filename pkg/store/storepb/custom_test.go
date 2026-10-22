@@ -766,5 +766,5 @@ func TestSeriesRequestWithMatchers(t *testing.T) {
 	testutil.Equals(t, []LabelMatcher{a, c}, r2.Matchers)
 	testutil.Equals(t, req.MinTime, r1.MinTime)
 	testutil.Equals(t, req.MaxTime, r1.MaxTime)
-	testutil.Assert(t, req.WithMatchers() != req, "expected a copy")
+	testutil.Assert(t, req.WithMatchers() == req, "expected no copy without matchers")
 }

@@ -565,33 +565,37 @@ func (m *SeriesRequest) ToPromQL() string {
 	return m.QueryHints.toPromQL(m.Matchers)
 }
 
-// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers,
+// or the request itself if ms is empty.
 func (m *SeriesRequest) WithMatchers(ms ...LabelMatcher) *SeriesRequest {
-	r := *m
-	r.Matchers = withMatchers(m.Matchers, ms)
-	return &r
-}
-
-// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
-func (m *LabelNamesRequest) WithMatchers(ms ...LabelMatcher) *LabelNamesRequest {
-	r := *m
-	r.Matchers = withMatchers(m.Matchers, ms)
-	return &r
-}
-
-// WithMatchers returns a shallow copy of the request with ms appended to its matchers.
-func (m *LabelValuesRequest) WithMatchers(ms ...LabelMatcher) *LabelValuesRequest {
-	r := *m
-	r.Matchers = withMatchers(m.Matchers, ms)
-	return &r
-}
-
-// withMatchers never appends into the backing array of matchers, which may be shared.
-func withMatchers(matchers, ms []LabelMatcher) []LabelMatcher {
 	if len(ms) == 0 {
-		return matchers
+		return m
 	}
-	return slices.Concat(matchers, ms)
+	r := *m
+	r.Matchers = slices.Concat(m.Matchers, ms)
+	return &r
+}
+
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers,
+// or the request itself if ms is empty.
+func (m *LabelNamesRequest) WithMatchers(ms ...LabelMatcher) *LabelNamesRequest {
+	if len(ms) == 0 {
+		return m
+	}
+	r := *m
+	r.Matchers = slices.Concat(m.Matchers, ms)
+	return &r
+}
+
+// WithMatchers returns a shallow copy of the request with ms appended to its matchers,
+// or the request itself if ms is empty.
+func (m *LabelValuesRequest) WithMatchers(ms ...LabelMatcher) *LabelValuesRequest {
+	if len(ms) == 0 {
+		return m
+	}
+	r := *m
+	r.Matchers = slices.Concat(m.Matchers, ms)
+	return &r
 }
 
 func (m *LabelMatcher) MatcherType() (labels.MatchType, error) {
