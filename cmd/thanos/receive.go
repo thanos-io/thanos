@@ -93,6 +93,7 @@ func registerReceive(app *extkingpin.App) {
 			MaxBlockDuration:               int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration:              int64(time.Duration(*conf.retention) / time.Millisecond),
 			OutOfOrderTimeWindow:           int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
+			BlockReloadInterval:            time.Duration(*conf.tsdbBlockReloadInterval),
 			MaxBytes:                       int64(conf.tsdbMaxBytes),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
@@ -923,6 +924,7 @@ type receiveConfig struct {
 	tsdbMaxBlockDuration         *model.Duration
 	tsdbTooFarInFutureTimeWindow *model.Duration
 	tsdbOutOfOrderTimeWindow     *model.Duration
+	tsdbBlockReloadInterval      *model.Duration
 	tsdbOutOfOrderCapMax         int64
 	tsdbAllowOverlappingBlocks   bool
 	tsdbMaxExemplars             int64
@@ -1152,6 +1154,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive.retry-after-backoff", "Backoff duration for the Retry-After header returned on 429 (active-series-limiting exceeded) and 503 (quorum unavailable) responses.").Default("5s"))
 
 	cmd.Flag("receive.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
+
+	rc.tsdbBlockReloadInterval = extkingpin.ModelDuration(cmd.Flag("tsdb.block-reload-interval",
+		"Interval at which to check for new or removed blocks in storage. This includes head-chunk memory-mapping.",
+	).Default("1m").Hidden())
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

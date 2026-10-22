@@ -46,6 +46,16 @@ func TestMatchersForLabelSets(t *testing.T) {
 			},
 		},
 		{
+			name: "label values with regex metacharacters",
+			labelSets: []labels.Labels{
+				labels.FromStrings("a", "team.a"),
+				labels.FromStrings("a", "a+b"),
+			},
+			want: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_RE, Name: "a", Value: `a\+b|team\.a`},
+			},
+		},
+		{
 			name: "multiple labels with different label name",
 			labelSets: []labels.Labels{
 				labels.FromStrings("a", "1", "b", "2"),
