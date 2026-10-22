@@ -5,7 +5,6 @@ package rules
 
 import (
 	"context"
-	"sort"
 	"sync"
 	"text/template"
 	"text/template/parse"
@@ -200,39 +199,39 @@ func dedupRules(rules []*rulespb.Rule, replicaLabels map[string]struct{}) []*rul
 		removeReplicaLabels(r, replicaLabels)
 	}
 
-	// Sort rules globally.
-	sort.Slice(rules, func(i, j int) bool {
-		return rules[i].Compare(rules[j]) < 0
-	})
+	seenRules := make(map[string]*rulespb.Rule)
+	uniqueRules := []*rulespb.Rule{}
 
-	// Remove rules based on synthesized deduplication labels.
-	i := 0
-	for j := 1; j < len(rules); j++ {
-		if rules[i].Compare(rules[j]) != 0 {
-			// Effectively retain rules[j] in the resulting slice.
-			i++
-			rules[i] = rules[j]
-			continue
-		}
+	for _, r := range rules {
+		rkey := r.RuleKey()
+		if existingRule, ok := seenRules[rkey]; ok {
+			// Check the type of the existing rule and the current rule
+			existingRecording := existingRule.GetRecording()
+			existingAlert := existingRule.GetAlert()
+			currentRecording := r.GetRecording()
+			currentAlert := r.GetAlert()
 
-		// If rules are the same, ordering is still determined depending on type.
-		switch {
-		case rules[i].GetRecording() != nil && rules[j].GetRecording() != nil:
-			if rules[i].GetRecording().Compare(rules[j].GetRecording()) <= 0 {
-				continue
+			if existingRecording != nil && currentRecording != nil {
+				if existingRecording.Compare(currentRecording) > 0 {
+					// If the current rule has a newer evaluation time, update the existing rule
+					existingRecording.LastEvaluation = r.GetLastEvaluation()
+					continue
+				}
 			}
-		case rules[i].GetAlert() != nil && rules[j].GetAlert() != nil:
-			if rules[i].GetAlert().Compare(rules[j].GetAlert()) <= 0 {
-				continue
+			if existingAlert != nil && currentAlert != nil {
+				if existingAlert.Compare(currentAlert) > 0 {
+					existingAlert.State = currentAlert.State
+					existingAlert.LastEvaluation = r.GetLastEvaluation()
+					continue
+				}
 			}
-		default:
-			continue
+		} else {
+			seenRules[rkey] = r
+			uniqueRules = append(uniqueRules, r)
 		}
-
-		// Swap if we found a younger recording rule or a younger firing alerting rule.
-		rules[i] = rules[j]
 	}
-	return rules[:i+1]
+
+	return uniqueRules
 }
 
 func removeReplicaLabels(r *rulespb.Rule, replicaLabels map[string]struct{}) {
@@ -248,19 +247,20 @@ func dedupGroups(groups []*rulespb.RuleGroup) []*rulespb.RuleGroup {
 		return nil
 	}
 
-	// Sort groups such that they appear next to each other.
-	sort.Slice(groups, func(i, j int) bool { return groups[i].Compare(groups[j]) < 0 })
+	seenGroups := make(map[string]*rulespb.RuleGroup)
+	uniqueGroups := []*rulespb.RuleGroup{}
 
-	i := 0
-	for _, g := range groups[1:] {
-		if g.Compare(groups[i]) == 0 {
-			groups[i].Rules = append(groups[i].Rules, g.Rules...)
+	for _, g := range groups {
+		if existingGroup, ok := seenGroups[g.Key()]; ok {
+			// Append the rules of the current group to the existing group
+			existingGroup.Rules = append(existingGroup.Rules, g.Rules...)
 		} else {
-			i++
-			groups[i] = g
+			// Add the group to the uniqueGroups slice and mark it as seen
+			uniqueGroups = append(uniqueGroups, g)
+			seenGroups[g.Key()] = g
 		}
 	}
-	return groups[:i+1]
+	return uniqueGroups
 }
 
 type rulesServer struct {
