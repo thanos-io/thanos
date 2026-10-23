@@ -1622,7 +1622,7 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	app, err := raw.Appender()
 	testutil.Ok(t, err)
 
-	app.Append(1587690005794, 42.5)
+	app.Append(0, 1587690005794, 42.5)
 
 	ser.chunks = append(ser.chunks, encodeTestAggrSeries(aggr), chunks.Meta{
 		MinTime: math.MaxInt64,
@@ -1717,14 +1717,14 @@ func chunksToSeriesIteratable(t *testing.T, inRaw [][]sample, inAggr []map[AggrT
 
 			for _, s := range samples {
 				if s.fh != nil {
-					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), 0, s.t, s.fh, false)
 					require.NoError(t, err)
 					if c != nil {
 						chk = c
 					}
 					continue
 				}
-				app.Append(s.t, s.v)
+				app.Append(0, s.t, s.v)
 			}
 			ser.chunks = append(ser.chunks, chunks.Meta{
 				MinTime: samples[0].t,
@@ -1768,10 +1768,10 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 					b.maxt = s.t
 				}
 				if at == AggrCount {
-					b.apps[at].Append(s.t, s.v)
+					b.apps[at].Append(0, s.t, s.v)
 				} else {
 					app := b.apps[at].(*chunkenc.FloatHistogramAppender)
-					_, _, _, err := app.AppendFloatHistogram(app, s.t, s.fh, false)
+					_, _, _, err := app.AppendFloatHistogram(app, 0, s.t, s.fh, false)
 					if err != nil {
 						panic(err)
 					}
@@ -1790,7 +1790,7 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 				if s.t > b.maxt {
 					b.maxt = s.t
 				}
-				b.apps[at].Append(s.t, s.v)
+				b.apps[at].Append(0, s.t, s.v)
 			}
 		}
 		return b.encode()
@@ -2074,12 +2074,12 @@ func TestSamplesFromTSDBSamples(t *testing.T) {
 		},
 		{
 			name:     "one sample",
-			input:    []chunks.Sample{testSample{1, 1}},
+			input:    []chunks.Sample{testSample{0, 1, 1}},
 			expected: []sample{{t: 1, v: 1}},
 		},
 		{
 			name:     "multiple samples",
-			input:    []chunks.Sample{testSample{1, 1}, testSample{2, 2}, testSample{3, 3}, testSample{4, 4}, testSample{5, 5}},
+			input:    []chunks.Sample{testSample{0, 1, 1}, testSample{0, 2, 2}, testSample{0, 3, 3}, testSample{0, 4, 4}, testSample{0, 5, 5}},
 			expected: []sample{{t: 1, v: 1}, {t: 2, v: 2}, {t: 3, v: 3}, {t: 4, v: 4}, {t: 5, v: 5}},
 		},
 	} {
@@ -2092,12 +2092,17 @@ func TestSamplesFromTSDBSamples(t *testing.T) {
 
 // testSample implements chunks.Sample interface.
 type testSample struct {
-	t int64
-	f float64
+	st int64
+	t  int64
+	f  float64
 }
 
 func (s testSample) T() int64 {
 	return s.t
+}
+
+func (s testSample) ST() int64 {
+	panic("not implemented")
 }
 
 func (s testSample) F() float64 {
@@ -2160,6 +2165,10 @@ func (it *sampleIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *h
 
 func (it *sampleIterator) AtT() int64 {
 	return it.l[it.i].t
+}
+
+func (it *sampleIterator) AtST() int64 {
+	panic("not implemented")
 }
 
 // memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface
@@ -2716,7 +2725,7 @@ func chunksFromHistogramSamples(t *testing.T, samples []sample) []chunks.Meta {
 			chk, app = newHistogramChunk(t)
 			mint = s.t
 		}
-		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), 0, s.t, s.fh, false)
 		if err != nil {
 			panic(err)
 		}

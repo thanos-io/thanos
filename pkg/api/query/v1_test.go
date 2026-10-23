@@ -2006,12 +2006,17 @@ func (c mockedRulesClient) Rules(_ context.Context, req *rulespb.RulesRequest) (
 }
 
 type sample struct {
-	t int64
-	f float64
+	st int64
+	t  int64
+	f  float64
 }
 
 func (s sample) T() int64 {
 	return s.t
+}
+
+func (s sample) ST() int64 {
+	panic("not implemented")
 }
 
 func (s sample) F() float64 {
