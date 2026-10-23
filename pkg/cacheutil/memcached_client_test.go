@@ -100,6 +100,25 @@ func TestMemcachedClientConfig_validate(t *testing.T) {
 			},
 			expected: errCircuitBreakerFailurePercentInvalid,
 		},
+		"should fail on tls_enabled with only a client certificate": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				TLSEnabled:                true,
+				TLSConfig:                 TLSConfig{CertFile: "cert.pem"},
+			},
+			expected: errMemcachedTLSKeyAndCertRequired,
+		},
+		"should pass on tls_enabled without a client certificate": {
+			config: MemcachedClientConfig{
+				Addresses:                 []string{"127.0.0.1:11211"},
+				MaxAsyncConcurrency:       1,
+				DNSProviderUpdateInterval: time.Second,
+				TLSEnabled:                true,
+			},
+			expected: nil,
+		},
 	}
 
 	for testName, testData := range tests {
@@ -169,6 +188,33 @@ dns_provider_update_interval: 1s
 	testutil.Equals(t, 1, cache.config.MaxGetMultiConcurrency)
 	testutil.Equals(t, 1, cache.config.MaxGetMultiBatchSize)
 	testutil.Equals(t, model.Bytes(1024*1024), cache.config.MaxItemSize)
+
+	// Should instance a memcached client that dials over TLS.
+	conf = []byte(`
+addresses:
+  - 127.0.0.1:11211
+tls_enabled: true
+tls_config:
+  insecure_skip_verify: true
+`)
+	cache, err = NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.Ok(t, err)
+	defer cache.Stop()
+
+	testutil.Equals(t, true, cache.config.TLSEnabled)
+	testutil.Equals(t, true, cache.config.TLSConfig.InsecureSkipVerify)
+
+	// Should return error when the TLS CA certificate cannot be loaded.
+	conf = []byte(`
+addresses:
+  - 127.0.0.1:11211
+tls_enabled: true
+tls_config:
+  ca_file: /does/not/exist.pem
+`)
+	cache, err = NewMemcachedClient(log.NewNopLogger(), "test", conf, nil)
+	testutil.NotOk(t, err)
+	testutil.Equals(t, (*memcachedClient)(nil), cache)
 }
 
 func TestMemcachedClient_SetAsync(t *testing.T) {
