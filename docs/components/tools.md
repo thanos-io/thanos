@@ -34,6 +34,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                            The ratio of reserved GOMEMLIMIT memory to the
                            detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                           Interval at which the detected maximum container
+                           or system memory is refreshed and GOMEMLIMIT
+                           is reapplied if it has changed. Useful when the
+                           container memory limit can be resized in place.
+                           0 disables refreshing.
 
 Subcommands:
 tools bucket verify [<flags>]
@@ -165,6 +171,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                            The ratio of reserved GOMEMLIMIT memory to the
                            detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                           Interval at which the detected maximum container
+                           or system memory is refreshed and GOMEMLIMIT
+                           is reapplied if it has changed. Useful when the
+                           container memory limit can be resized in place.
+                           0 disables refreshing.
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object
                            store configuration. See format details:
@@ -274,6 +286,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                 The ratio of reserved GOMEMLIMIT memory to the
                                 detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                                Interval at which the detected maximum container
+                                or system memory is refreshed and GOMEMLIMIT
+                                is reapplied if it has changed. Useful when the
+                                container memory limit can be resized in place.
+                                0 disables refreshing.
       --objstore.config-file=<file-path>
                                 Path to YAML file that contains object
                                 store configuration. See format details:
@@ -400,6 +418,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                            The ratio of reserved GOMEMLIMIT memory to the
                            detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                           Interval at which the detected maximum container
+                           or system memory is refreshed and GOMEMLIMIT
+                           is reapplied if it has changed. Useful when the
+                           container memory limit can be resized in place.
+                           0 disables refreshing.
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object
                            store configuration. See format details:
@@ -486,6 +510,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                              The ratio of reserved GOMEMLIMIT memory to the
                              detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                             Interval at which the detected maximum container
+                             or system memory is refreshed and GOMEMLIMIT
+                             is reapplied if it has changed. Useful when the
+                             container memory limit can be resized in place.
+                             0 disables refreshing.
       --objstore.config-file=<file-path>
                              Path to YAML file that contains object
                              store configuration. See format details:
@@ -570,6 +600,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                              The ratio of reserved GOMEMLIMIT memory to the
                              detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                             Interval at which the detected maximum container
+                             or system memory is refreshed and GOMEMLIMIT
+                             is reapplied if it has changed. Useful when the
+                             container memory limit can be resized in place.
+                             0 disables refreshing.
       --objstore.config-file=<file-path>
                              Path to YAML file that contains object
                              store configuration. See format details:
@@ -635,6 +671,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                               The ratio of reserved GOMEMLIMIT memory to the
                               detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                              Interval at which the detected maximum container
+                              or system memory is refreshed and GOMEMLIMIT
+                              is reapplied if it has changed. Useful when the
+                              container memory limit can be resized in place.
+                              0 disables refreshing.
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object
                               store configuration. See format details:
@@ -770,6 +812,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                               The ratio of reserved GOMEMLIMIT memory to the
                               detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                              Interval at which the detected maximum container
+                              or system memory is refreshed and GOMEMLIMIT
+                              is reapplied if it has changed. Useful when the
+                              container memory limit can be resized in place.
+                              0 disables refreshing.
       --objstore.config-file=<file-path>
                               Path to YAML file that contains object
                               store configuration. See format details:
@@ -878,6 +926,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                            The ratio of reserved GOMEMLIMIT memory to the
                            detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                           Interval at which the detected maximum container
+                           or system memory is refreshed and GOMEMLIMIT
+                           is reapplied if it has changed. Useful when the
+                           container memory limit can be resized in place.
+                           0 disables refreshing.
       --objstore.config-file=<file-path>
                            Path to YAML file that contains object
                            store configuration. See format details:
@@ -961,6 +1015,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                             The ratio of reserved GOMEMLIMIT memory to the
                             detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                            Interval at which the detected maximum container
+                            or system memory is refreshed and GOMEMLIMIT
+                            is reapplied if it has changed. Useful when the
+                            container memory limit can be resized in place.
+                            0 disables refreshing.
       --objstore.config-file=<file-path>
                             Path to YAML file that contains object
                             store configuration. See format details:
@@ -1042,6 +1102,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                The ratio of reserved GOMEMLIMIT memory to the
                                detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                               Interval at which the detected maximum container
+                               or system memory is refreshed and GOMEMLIMIT
+                               is reapplied if it has changed. Useful when the
+                               container memory limit can be resized in place.
+                               0 disables refreshing.
       --objstore.config-file=<file-path>
                                Path to YAML file that contains object
                                store configuration. See format details:
@@ -1109,6 +1175,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                            The ratio of reserved GOMEMLIMIT memory to the
                            detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                           Interval at which the detected maximum container
+                           or system memory is refreshed and GOMEMLIMIT
+                           is reapplied if it has changed. Useful when the
+                           container memory limit can be resized in place.
+                           0 disables refreshing.
       --rules=RULES ...    The rule files glob to check (repeated).
 
 ```
