@@ -20,7 +20,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
@@ -628,11 +627,11 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 			"precondition: head should span at least 10h, got %dms", headSpanBefore)
 
 		// Advance time to let the periodic compaction ticker fire.
-		// The ticker interval is 2*maxBlockDuration (4h) with a random
+		// The ticker interval is maxBlockDuration (2h) with a random
 		// initial delay up to 10% of maxBlockDuration (~12min). After
-		// 8h, 1-2 ticks will have fired. A correct implementation
+		// 5h, 2 ticks will have fired. A correct implementation
 		// should drain the full backlog within a single tick.
-		time.Sleep(8 * time.Hour)
+		time.Sleep(5 * time.Hour)
 		synctest.Wait()
 
 		head := db.Head()
@@ -645,7 +644,7 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 
 		// 10h of data with 2h blocks should produce at least 3 on-disk
 		// blocks. The exact count depends on the random compaction delay
-		// and how many ticks fired within the 8h window.
+		// and how many ticks fired within the 5h window.
 		testutil.Assert(t, len(db.Blocks()) >= 3,
 			"expected at least 3 blocks, got %d",
 			len(db.Blocks()))
@@ -658,6 +657,77 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 			}
 		}
 		testutil.Assert(t, oooBlocks > 0)
+	})
+}
+
+func TestNotifiedHeadCompaction(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		maxBlockDuration := (2 * time.Hour).Milliseconds()
+
+		m := NewMultiTSDB(
+			openTestRoot(t, dir),
+			log.NewLogfmtLogger(os.Stderr),
+			prometheus.NewRegistry(),
+			&tsdb.Options{
+				MinBlockDuration:    maxBlockDuration,
+				MaxBlockDuration:    maxBlockDuration,
+				RetentionDuration:   (24 * time.Hour).Milliseconds(),
+				BlockReloadInterval: time.Hour,
+			},
+			labels.FromStrings("replica", "test"),
+			"tenant_id",
+			nil,
+			false,
+			false,
+			metadata.NoneFunc,
+			WithGCImmediately(),
+		)
+		defer m.Close()
+
+		// Record start time so we can evaluate wall-clock time.
+		start := time.Now()
+		synctest.Wait()
+
+		// Initialize tenant storage to count blocks.
+		testutil.Ok(t, appendSample(m, "test-tenant", start))
+		tenant := m.testGetTenant("test-tenant")
+		db := tenant.readyStorage().Get()
+		testutil.Assert(t, db != nil, "TSDB should be initialized")
+
+		// No head blocks should exist at start time.
+		blocksBefore := len(db.Blocks())
+		testutil.Equals(t, 0, blocksBefore)
+
+		// Advance time alongside ingestion.
+		// The first periodic tick, triggered during ingestion, will be ineligible.
+		for elapsed := time.Minute; elapsed <= 210*time.Minute; elapsed += time.Minute {
+			time.Sleep(time.Minute)
+			testutil.Ok(t, appendSample(m, "test-tenant", time.Now()))
+			synctest.Wait()
+		}
+
+		// Notifications must have produced one block before the next periodic tick.
+		testutil.Equals(t, 1, len(db.Blocks())-blocksBefore)
+
+		for range 12 {
+			time.Sleep(10 * time.Second)
+			testutil.Ok(t, appendSample(m, "test-tenant", time.Now()))
+			synctest.Wait()
+		}
+
+		// Further commits over two minutes must not notify compaction
+		testutil.Equals(t, 1, len(db.Blocks())-blocksBefore)
+
+		head := db.Head()
+
+		// The current head must contain data younger than the max block duration span.
+		testutil.Assert(t, head.MinTime() >= start.UnixMilli()+tenant.maxBlockDuration,
+			"expected older data to be younger than, got minTime=%d < startTime=%d + maxBlockDuration=%d",
+			head.MinTime(), start.UnixMilli(), tenant.maxBlockDuration)
+		testutil.Assert(t, head.MaxTime()-head.MinTime() <= 3*maxBlockDuration/2)
 	})
 }
 
