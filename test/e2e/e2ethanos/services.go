@@ -14,6 +14,7 @@ import (
 
 	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	e2eobs "github.com/efficientgo/e2e/observable"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/config"
@@ -1286,8 +1287,8 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 
 	return s3.Config{
 		Bucket:           bucket,
-		AccessKey:        SeaweedFSAccessKey,
-		SecretKey:        SeaweedFSSecretKey,
+		AccessKey:        e2edb.S3AccessKey,
+		SecretKey:        e2edb.S3SecretKey,
 		Endpoint:         endpoint,
 		Insecure:         false,
 		HTTPConfig:       httpDefaultConf,

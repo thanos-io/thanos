@@ -176,8 +176,19 @@ type bucketStoreMetrics struct {
 	chunkFetchDurationSum *prometheus.HistogramVec
 }
 
-func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
+func newBucketStoreMetrics(reg prometheus.Registerer, chunkPool pool.Pool[byte]) *bucketStoreMetrics {
 	var m bucketStoreMetrics
+
+	if chunkPool != nil {
+		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "thanos_bucket_store_chunk_pool_used_bytes",
+			Help: "Number of bytes currently in use from the chunk pool.",
+		}, func() float64 { return float64(chunkPool.UsedBytes()) })
+		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "thanos_bucket_store_chunk_pool_max_bytes",
+			Help: "Maximum number of bytes the chunk pool allows to be in use, as set by --chunk-pool-size.",
+		}, func() float64 { return float64(chunkPool.MaxBytes()) })
+	}
 
 	m.blockLoads = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_block_loads_total",
@@ -686,7 +697,7 @@ func NewBucketStore(
 	// Depend on the options
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
 	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.indexHeaderLazyDownloadStrategy)
-	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
+	s.metrics = newBucketStoreMetrics(s.reg, s.chunkPool) // TODO(metalmatze): Might be possible via Option too
 
 	if err := s.validate(); err != nil {
 		return nil, errors.Wrap(err, "validate config")

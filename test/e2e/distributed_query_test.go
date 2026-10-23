@@ -13,6 +13,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -108,7 +109,7 @@ func TestDistributedEngineWithOverlappingIntervalsEnabled(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs-test1"
-	s3Server := e2ethanos.NewSeaweedFS(e, "1", bucket1, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "1", bucket1, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)
@@ -201,7 +202,7 @@ func TestDistributedEngineWithoutOverlappingIntervals(t *testing.T) {
 	now := time.Now()
 
 	bucket1 := "dist-disj-tsdbs2-test2"
-	s3Server := e2ethanos.NewSeaweedFS(e, "1", bucket1, e2ethanos.WithSeaweedFSTLS())
+	s3Server := e2edb.NewSeaweedFS(e, "1", bucket1, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 
 	bkt1, err := s3.NewBucketWithConfig(l, e2ethanos.NewS3Config(bucket1, s3Server.Endpoint("http"), s3Server.Dir()), "test", nil)

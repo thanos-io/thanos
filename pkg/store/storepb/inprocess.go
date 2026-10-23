@@ -30,7 +30,12 @@ func newInProcessServer(ctx context.Context, yield func(*SeriesResponse, error) 
 }
 
 func (s *inProcessServer) Send(resp *SeriesResponse) error {
-	s.yield(resp, nil)
+	if !s.yield(resp, nil) {
+		if s.ctx.Err() != nil {
+			return s.ctx.Err()
+		}
+		return io.EOF
+	}
 	return nil
 }
 

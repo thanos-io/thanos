@@ -12,13 +12,21 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
+- [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
 - [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
 - [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
 - [#8906](https://github.com/thanos-io/thanos/pull/8906) *: Add `--auto-gomemlimit.refresh-interval` flag to periodically refresh GOMEMLIMIT from the detected container or system memory limit, so in-place container memory resizes are picked up. Defaults to `0` (no refresh, previous behavior).
 - [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
+- [#9056](https://github.com/thanos-io/thanos/pull/9056): *: Add `http_headers` to the HTTP client config, so Rule can send custom headers to query and Alertmanager endpoints (also available in Sidecar and Receive).
+- [#8234](https://github.com/thanos-io/thanos/pull/8234) ruler: Add flag to configure the queue for pending Alertmanager notifications
 
 ### Fixed
 
+- [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
+- [#9081](https://github.com/thanos-io/thanos/pull/9081): Receive: Apply the `write.global.max_concurrency` limit to Cap'n Proto replication writes. Writes waiting for the gate are released when the router cancels them, instead of piling up on the TSDB appender of an ingester that cannot keep up.
+- [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
+- [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
 - [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
 - [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
@@ -26,8 +34,10 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
 - [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
 - [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
+- [#9054](https://github.com/thanos-io/thanos/pull/9054): Store: Count batched series responses in `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested`.
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
 - [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
+- [#9087](https://github.com/thanos-io/thanos/pull/9087): Query: Delete `storeInfo()` and instead use `st.Addr()` where it was used.
 
 ### Changed
 

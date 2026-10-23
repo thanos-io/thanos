@@ -59,11 +59,11 @@ $(GOJSONTOYAML): $(BINGO_DIR)/gojsontoyaml.mod
 	@echo "(re)installing $(GOBIN)/gojsontoyaml-v0.1.0"
 	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=gojsontoyaml.mod -o=$(GOBIN)/gojsontoyaml-v0.1.0 "github.com/brancz/gojsontoyaml"
 
-GOLANGCI_LINT := $(GOBIN)/golangci-lint-v2.4.0
+GOLANGCI_LINT := $(GOBIN)/golangci-lint-v2.14.0
 $(GOLANGCI_LINT): $(BINGO_DIR)/golangci-lint.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/golangci-lint-v2.4.0"
-	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v2.4.0 "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
+	@echo "(re)installing $(GOBIN)/golangci-lint-v2.14.0"
+	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=golangci-lint.mod -o=$(GOBIN)/golangci-lint-v2.14.0 "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 
 GOTESPLIT := $(GOBIN)/gotesplit-v0.2.1
 $(GOTESPLIT): $(BINGO_DIR)/gotesplit.mod
@@ -107,12 +107,6 @@ $(MDOX): $(BINGO_DIR)/mdox.mod
 	@echo "(re)installing $(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0"
 	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=mdox.mod -o=$(GOBIN)/mdox-v0.9.1-0.20220713110358-25b9abcf90a0 "github.com/bwplotka/mdox"
 
-MINIO := $(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de
-$(MINIO): $(BINGO_DIR)/minio.mod
-	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de"
-	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=minio.mod -o=$(GOBIN)/minio-v0.0.0-20241014163537-3da7c9cce3de "github.com/minio/minio"
-
 PROMDOC := $(GOBIN)/promdoc-v0.8.0
 $(PROMDOC): $(BINGO_DIR)/promdoc.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
@@ -148,4 +142,3 @@ $(SHFMT): $(BINGO_DIR)/shfmt.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
 	@echo "(re)installing $(GOBIN)/shfmt-v3.8.0"
 	@cd $(BINGO_DIR) && GOWORK=off GOOS=$(GOHOSTOS) GOARCH=$(GOHOSTARCH) GOARM=$(GOHOSTARM) $(GO) build -mod=mod -modfile=shfmt.mod -o=$(GOBIN)/shfmt-v3.8.0 "mvdan.cc/sh/v3/cmd/shfmt"
-

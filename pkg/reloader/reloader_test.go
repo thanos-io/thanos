@@ -322,7 +322,7 @@ func TestReloader_ConfigDirApply(t *testing.T) {
 	reloadsMtx := sync.Mutex{}
 
 	srv := &http.Server{}
-	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
 		reloadsMtx.Lock()
 		defer reloadsMtx.Unlock()
 
@@ -623,7 +623,7 @@ func TestReloader_ConfigDirApplyBasedOnWatchInterval(t *testing.T) {
 	reloads := &atomic.Value{}
 	reloads.Store(0)
 	srv := &http.Server{}
-	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, r *http.Request) {
+	srv.Handler = http.HandlerFunc(func(resp http.ResponseWriter, _ *http.Request) {
 		reloads.Store(reloads.Load().(int) + 1) // The only writer.
 		resp.WriteHeader(http.StatusOK)
 	})
