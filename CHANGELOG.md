@@ -40,6 +40,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#9079](https://github.com/thanos-io/thanos/pull/9079): Store: Answer `LabelValues` requests whose matchers are all on the requested label (e.g. `label/__name__/values?match[]={__name__=~".*foo.*"}`) from the index header instead of walking every matching series. Like requests without matchers, values come from each block overlapping the time range.
 - [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
