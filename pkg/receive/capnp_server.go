@@ -54,19 +54,34 @@ func (c *CapNProtoServer) Shutdown() {
 }
 
 type CapNProtoHandler struct {
-	writer *CapNProtoWriter
-	logger log.Logger
+	writer  *CapNProtoWriter
+	limiter *Limiter
+	logger  log.Logger
 }
 
-func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter) *CapNProtoHandler {
+func NewCapNProtoHandler(reg prometheus.Registerer, logger log.Logger, writer *CapNProtoWriter, limiter *Limiter) *CapNProtoHandler {
 	return &CapNProtoHandler{
-		logger: logger,
-		writer: writer,
+		logger:  logger,
+		writer:  writer,
+		limiter: limiter,
 	}
 }
 
 func (c CapNProtoHandler) Write(ctx context.Context, call writecapnp.Writer_write) error {
 	call.Go()
+
+	writeGate := c.limiter.WriteGate()
+	if err := writeGate.Start(ctx); err != nil {
+		level.Debug(c.logger).Log("msg", "write gate wait aborted", "err", err)
+		result, allocErr := call.AllocResults()
+		if allocErr != nil {
+			return allocErr
+		}
+		result.SetError(writecapnp.WriteError_unavailable)
+		return nil
+	}
+	defer writeGate.Done()
+
 	wr, err := call.Args().Wr()
 	if err != nil {
 		return err
