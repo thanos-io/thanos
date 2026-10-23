@@ -91,7 +91,7 @@ The [Thanos Receive Controller](https://github.com/observatorium/thanos-receive-
 
 ## TSDB stats
 
-Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
+Thanos Receive supports getting TSDB stats using the `/api/v1/status/tsdb` endpoint, served on `--http-address`. Serving this endpoint on `--remote-write.address` is deprecated and will be removed in a future release. Use the `THANOS-TENANT` HTTP header to get stats for individual Tenants. Use the `limit` query parameter to tweak the number of stats to return (the default is 10). The output format of the endpoint is compatible with [Prometheus API](https://prometheus.io/docs/prometheus/latest/querying/api/#tsdb-stats).
 
 Note that each Thanos Receive will only expose local stats and replicated series will not be included in the response.
 
@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1348,1358p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1371,1381p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
