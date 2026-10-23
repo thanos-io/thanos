@@ -4,11 +4,13 @@
 package downsample
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-kit/log"
@@ -2873,4 +2875,150 @@ func TestDownsampleNHCutNewChunk(t *testing.T) {
 	require.False(t, cutNewChunk(chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogram))
 	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncFloatHistogram))
 	require.True(t, cutNewChunk(chunkenc.EncXOR, chunkenc.EncHistogram))
+}
+
+// classicHistogramForTest returns a minimal valid classic exponential-schema
+// FloatHistogram for tests.
+func classicHistogramForTest(schema int32) *histogram.FloatHistogram {
+	return &histogram.FloatHistogram{
+		Schema:          schema,
+		Count:           2,
+		Sum:             1.5,
+		PositiveSpans:   []histogram.Span{{Offset: 0, Length: 2}},
+		PositiveBuckets: []float64{1, 1},
+	}
+}
+
+// customBucketsHistogramForTest returns a minimal valid native histogram with
+// custom buckets (NHCB) for tests.
+func customBucketsHistogramForTest() *histogram.FloatHistogram {
+	return &histogram.FloatHistogram{
+		Schema:          histogram.CustomBucketsSchema,
+		Count:           2,
+		Sum:             1.5,
+		PositiveSpans:   []histogram.Span{{Offset: 0, Length: 2}},
+		PositiveBuckets: []float64{1, 1},
+		CustomValues:    []float64{1, 2, 3},
+	}
+}
+
+func TestMinSchemaIgnoresCustomBuckets(t *testing.T) {
+	t.Run("classic schema wins over a mixed-in custom buckets sample", func(t *testing.T) {
+		got := minSchema([]sample{
+			{fh: classicHistogramForTest(3)},
+			{fh: customBucketsHistogramForTest()},
+			{fh: classicHistogramForTest(1)},
+		})
+		require.Equal(t, int32(1), got)
+	})
+
+	t.Run("all samples use custom buckets", func(t *testing.T) {
+		got := minSchema([]sample{
+			{fh: customBucketsHistogramForTest()},
+			{fh: customBucketsHistogramForTest()},
+		})
+		require.Equal(t, histogram.CustomBucketsSchema, got)
+	})
+
+	t.Run("no valid samples keeps the sentinel", func(t *testing.T) {
+		got := minSchema([]sample{{fh: nil}})
+		require.Equal(t, int32(math.MaxInt32), got)
+	})
+}
+
+// TestHistogramAggregatorSkipsIncompatibleSchema reproduces
+// https://github.com/thanos-io/thanos/issues/8698: a series that switches
+// between a classic exponential schema and native histograms with custom
+// buckets (e.g. after enabling NHCB) used to panic the whole compaction
+// ("cannot reduce resolution to custom buckets schema" or "schema must be
+// greater or equal to aggregator schema") instead of just dropping the
+// sample it can't reconcile with the rest of the batch.
+func TestHistogramAggregatorSkipsIncompatibleSchema(t *testing.T) {
+	batch := []sample{
+		{t: 0, fh: classicHistogramForTest(3)},
+		{t: 1, fh: customBucketsHistogramForTest()},
+		{t: 2, fh: classicHistogramForTest(3)},
+	}
+
+	agg := newHistogramAggregator(minSchema(batch))
+	require.NotPanics(t, func() {
+		for _, s := range batch {
+			agg.add(s)
+		}
+	})
+	require.Equal(t, 2, agg.processedSamples(), "the custom buckets sample should have been skipped, not aggregated")
+}
+
+func nhcbWithBoundsForTest(bounds []float64) *histogram.FloatHistogram {
+	h := customBucketsHistogramForTest()
+	h.CustomValues = bounds
+	return h
+}
+
+func TestDownsampleRawCountedNHCBBounds(t *testing.T) {
+	const windowSize = ResLevel1
+	boundsA := []float64{1, 2, 3}
+	boundsB := []float64{1, 2, 4}
+
+	t.Run("windows with the same bounds are aggregated and nothing is left out", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize + 60000, fh: nhcbWithBoundsForTest(boundsA)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 0, skipped)
+		testutil.Assert(t, len(chks) == 1, "expected one chunk, got %d", len(chks))
+	})
+
+	t.Run("a window that mixes bounds is left out and the others are kept", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: windowSize + 60000, fh: nhcbWithBoundsForTest(boundsB)},
+			{t: 2 * windowSize, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 2*windowSize + 60000, fh: nhcbWithBoundsForTest(boundsA)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 1, skipped)
+		testutil.Assert(t, len(chks) == 1, "expected one chunk, got %d", len(chks))
+	})
+
+	t.Run("a batch whose windows are all left out produces no chunk", func(t *testing.T) {
+		data := []sample{
+			{t: 0, fh: nhcbWithBoundsForTest(boundsA)},
+			{t: 60000, fh: nhcbWithBoundsForTest(boundsB)},
+		}
+		chks, skipped := DownsampleRawCounted(data, windowSize)
+		testutil.Equals(t, 1, skipped)
+		testutil.Equals(t, 0, len(chks))
+	})
+}
+
+func TestFloatAggregatorIsNeverMixed(t *testing.T) {
+	testutil.Equals(t, false, (&floatAggregator{}).isMixed())
+}
+
+func TestDownsampleRawCountedEmptyInput(t *testing.T) {
+	chks, skipped := DownsampleRawCounted(nil, ResLevel1)
+	testutil.Equals(t, 0, len(chks))
+	testutil.Equals(t, 0, skipped)
+}
+
+func TestDownsampleRawLoggedWarnsOnSkippedWindows(t *testing.T) {
+	const windowSize = ResLevel1
+	data := []sample{
+		{t: 0, fh: classicHistogramForTest(3)},
+		{t: windowSize, fh: customBucketsHistogramForTest()},
+	}
+
+	var buf bytes.Buffer
+	logger := log.NewLogfmtLogger(&buf)
+	chks := downsampleRawLogged(logger, data, windowSize, 42)
+
+	testutil.Assert(t, len(chks) > 0, "expected at least one chunk")
+	testutil.Assert(t, strings.Contains(buf.String(), "left out downsampled windows"), "expected a warning about left out windows, got: %s", buf.String())
+	testutil.Assert(t, strings.Contains(buf.String(), "windows=1"), "expected the warning to report one skipped window, got: %s", buf.String())
 }
