@@ -36,6 +36,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
 - [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
 - [#9087](https://github.com/thanos-io/thanos/pull/9087): Query: Delete `storeInfo()` and instead use `st.Addr()` where it was used.
+- [#9105](https://github.com/thanos-io/thanos/pull/9105): Receive: Reuse buffers of Cap'n Proto replication messages up to 8 MiB, which piled up in memory when messages were 512 KiB–1 MiB.
 
 ### Changed
 
