@@ -46,6 +46,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -297,6 +298,7 @@ func runReceive(
 
 		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
+		CapNProtoCompression:    writecapnp.Compression(conf.capnpCompression),
 		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
 		OtlpResourceAttributes:  conf.otlpResourceAttributes,
 		RetryAfterBackoff:       time.Duration(*conf.retryAfterBackoff),
@@ -916,6 +918,7 @@ type receiveConfig struct {
 	maxArtificialDelay  *model.Duration
 	compression         string
 	replicationProtocol string
+	capnpCompression    string
 	grpcServiceConfig   string
 	retryAfterBackoff   *model.Duration
 	retryAfterJitter    float64
@@ -1059,6 +1062,11 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replication-protocol", "The protocol to use for replicating remote-write requests. One of "+strings.Join(replicationProtocols, ", ")).
 		Default(string(receive.ProtobufReplication)).
 		EnumVar(&rc.replicationProtocol, replicationProtocols...)
+
+	capnprotoCompressions := []string{string(writecapnp.CompressionNone), string(writecapnp.CompressionZstd)}
+	cmd.Flag("receive.capnproto-compression", "Compression of replicated Cap'n Proto messages sent by this receiver. Receivers accept both. One of "+strings.Join(capnprotoCompressions, ", ")).
+		Default(string(writecapnp.CompressionNone)).
+		EnumVar(&rc.capnpCompression, capnprotoCompressions...)
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 

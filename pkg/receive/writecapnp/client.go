@@ -49,15 +49,26 @@ type RemoteWriteClient struct {
 	dialer Dialer
 	conn   *rpc.Conn
 
-	writer Writer
-	logger log.Logger
+	writer      Writer
+	logger      log.Logger
+	compression Compression
 }
 
-func NewRemoteWriteClient(dialer Dialer, logger log.Logger) *RemoteWriteClient {
-	return &RemoteWriteClient{
+type ClientOption func(*RemoteWriteClient)
+
+func WithCompression(c Compression) ClientOption {
+	return func(r *RemoteWriteClient) { r.compression = c }
+}
+
+func NewRemoteWriteClient(dialer Dialer, logger log.Logger, opts ...ClientOption) *RemoteWriteClient {
+	r := &RemoteWriteClient{
 		dialer: dialer,
 		logger: logger,
 	}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
@@ -205,7 +216,12 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to dial peer")
 	}
-	r.conn = rpc.NewConn(rpc.NewPackedStreamTransport(conn), nil)
+	transport, err := NewClientTransport(conn, r.compression)
+	if err != nil {
+		_ = conn.Close()
+		return errors.Wrap(err, "failed to set up transport")
+	}
+	r.conn = rpc.NewConn(transport, nil)
 	writer := Writer(r.conn.Bootstrap(ctx))
 	if err := writer.Resolve(ctx); err != nil {
 		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err)
