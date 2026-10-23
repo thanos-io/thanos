@@ -350,15 +350,15 @@ type tenantMetrics struct {
 func newTenantMetrics(r prometheus.Registerer) *tenantMetrics {
 	m := &tenantMetrics{}
 	m.compactionsTriggered = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_receive_head_compactions_triggered_total",
+		Name: "thanos_receive_multitsdb_head_compactions_triggered_total",
 		Help: "Total number of triggered compactions for the tenant.",
 	})
 	m.compactionsCompleted = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_receive_head_compactions_completed_total",
+		Name: "thanos_receive_multitsdb_head_compactions_completed_total",
 		Help: "Total number of successful compactions for the tenant.",
 	})
 	m.compactionsFailed = promauto.With(r).NewCounter(prometheus.CounterOpts{
-		Name: "thanos_receive_head_compactions_failed_total",
+		Name: "thanos_receive_multitsdb_head_compactions_failed_total",
 		Help: "Total number of compactions that failed for the tenant.",
 	})
 	return m
