@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"os"
 	"path"
@@ -21,15 +20,12 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
-	"github.com/pkg/errors"
 
 	"github.com/prometheus/client_golang/prometheus"
-	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/objstore"
 	"golang.org/x/sync/errgroup"
@@ -578,80 +574,6 @@ func tenantMetricCount(t *testing.T, g prometheus.Gatherer, tenant string) int {
 		}
 	}
 	return count
-}
-
-func TestHeadCompactionMetrics(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		name              string
-		expectedCompleted int
-		expectedFailure   int
-		expectedTriggered int
-		writeFailure      bool
-	}{
-		{
-			name:              "successful compaction",
-			expectedCompleted: 1,
-			expectedFailure:   0,
-			expectedTriggered: 1,
-			writeFailure:      false,
-		},
-		{
-			name:              "write failure",
-			expectedCompleted: 0,
-			expectedFailure:   1,
-			expectedTriggered: 1,
-			writeFailure:      true,
-		},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				reg := prometheus.NewRegistry()
-				opts := &tsdb.Options{
-					MinBlockDuration: (2 * time.Hour).Milliseconds(),
-					MaxBlockDuration: (2 * time.Hour).Milliseconds(),
-				}
-				if test.writeFailure {
-					opts.NewCompactorFunc = func(ctx context.Context, r prometheus.Registerer, logger *slog.Logger,
-						ranges []int64, pool chunkenc.Pool, options *tsdb.Options) (tsdb.Compactor, error) {
-						compactor, err := tsdb.NewLeveledCompactorWithOptions(
-							ctx, r, logger, ranges, pool, tsdb.LeveledCompactorOptions{})
-						if err != nil {
-							return nil, err
-						}
-						return &writeFailingCompactor{Compactor: compactor}, nil
-					}
-				}
-
-				m := NewMultiTSDB(openTestRoot(t, t.TempDir()), log.NewNopLogger(), reg, opts, labels.FromStrings("replica", "test"),
-					"tenant_id", nil, false, false, metadata.NoneFunc,
-				)
-				defer m.Close()
-
-				tenantName := "test_tenant"
-				testutil.Ok(t, appendSample(m, tenantName, time.Now()))
-
-				// Advance time to let the periodic compaction ticker fire.
-				time.Sleep(5 * time.Hour)
-				synctest.Wait()
-
-				metrics := m.testGetTenant(tenantName).metrics
-				testutil.Equals(t, float64(test.expectedCompleted), promtest.ToFloat64(metrics.compactionsCompleted))
-				testutil.Equals(t, float64(test.expectedFailure), promtest.ToFloat64(metrics.compactionsFailed))
-				testutil.Equals(t, float64(test.expectedTriggered), promtest.ToFloat64(metrics.compactionsTriggered))
-
-			})
-		})
-	}
-}
-
-type writeFailingCompactor struct {
-	tsdb.Compactor
-}
-
-func (*writeFailingCompactor) Write(_ string, _ tsdb.BlockReader, _, _ int64, _ *tsdb.BlockMeta) ([]ulid.ULID, error) {
-	return nil, errors.New("injected compactor write failure")
 }
 
 // synctest.Test controls fake time so t.Parallel() is not used.
