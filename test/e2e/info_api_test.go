@@ -14,13 +14,13 @@ import (
 	"time"
 
 	"github.com/efficientgo/e2e"
+	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/prometheus/prometheus/model/labels"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 
 	"github.com/efficientgo/core/testutil"
-	e2edb "github.com/efficientgo/e2e/db"
 	"github.com/thanos-io/thanos/pkg/query"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/test/e2e/e2ethanos"
@@ -39,14 +39,14 @@ func TestInfo(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1, prom2, sidecar2, prom3, sidecar3))
 
 	const bucket = "info-api-test"
-	m := e2edb.NewMinio(e, "thanos-minio", bucket, e2edb.WithMinioTLS())
-	testutil.Ok(t, e2e.StartAndWaitReady(m))
+	s3Server := e2edb.NewSeaweedFS(e, "thanos-seaweedfs", bucket, e2edb.WithSeaweedFSTLS())
+	testutil.Ok(t, e2e.StartAndWaitReady(s3Server))
 	store := e2ethanos.NewStoreGW(
 		e,
 		"1",
 		client.BucketConfig{
 			Type:   objstore.S3,
-			Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+			Config: e2ethanos.NewS3Config(bucket, s3Server.InternalEndpoint("http"), s3Server.InternalDir()),
 		},
 		"",
 		"",

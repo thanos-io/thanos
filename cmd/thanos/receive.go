@@ -93,6 +93,7 @@ func registerReceive(app *extkingpin.App) {
 			MaxBlockDuration:               int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
 			RetentionDuration:              int64(time.Duration(*conf.retention) / time.Millisecond),
 			OutOfOrderTimeWindow:           int64(time.Duration(*conf.tsdbOutOfOrderTimeWindow) / time.Millisecond),
+			BlockReloadInterval:            time.Duration(*conf.tsdbBlockReloadInterval),
 			MaxBytes:                       int64(conf.tsdbMaxBytes),
 			OutOfOrderCapMax:               conf.tsdbOutOfOrderCapMax,
 			NoLockfile:                     conf.noLockFile,
@@ -298,6 +299,8 @@ func runReceive(
 		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
 		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
 		OtlpResourceAttributes:  conf.otlpResourceAttributes,
+		RetryAfterBackoff:       time.Duration(*conf.retryAfterBackoff),
+		RetryAfterJitter:        conf.retryAfterJitter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -556,7 +559,7 @@ func runReceive(
 		capNProtoWriter := receive.NewCapNProtoWriter(logger, dbs, &receive.CapNProtoWriterOptions{
 			TooFarInFutureTimeWindow: int64(time.Duration(*conf.tsdbTooFarInFutureTimeWindow)),
 		})
-		handler := receive.NewCapNProtoHandler(reg, logger, capNProtoWriter)
+		handler := receive.NewCapNProtoHandler(reg, logger, capNProtoWriter, limiter)
 		listener, err := net.Listen("tcp", conf.replicationAddr)
 		if err != nil {
 			return err
@@ -914,11 +917,14 @@ type receiveConfig struct {
 	compression         string
 	replicationProtocol string
 	grpcServiceConfig   string
+	retryAfterBackoff   *model.Duration
+	retryAfterJitter    float64
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
 	tsdbTooFarInFutureTimeWindow *model.Duration
 	tsdbOutOfOrderTimeWindow     *model.Duration
+	tsdbBlockReloadInterval      *model.Duration
 	tsdbOutOfOrderCapMax         int64
 	tsdbAllowOverlappingBlocks   bool
 	tsdbMaxExemplars             int64
@@ -1144,6 +1150,14 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("receive.lazy-retrieval-max-buffered-responses", "The lazy retrieval strategy can buffer up to this number of responses. This is to limit the memory usage. This flag takes effect only when the lazy retrieval strategy is enabled.").
 		Default("20").IntVar(&rc.lazyRetrievalMaxBufferedResponses)
+
+	rc.retryAfterBackoff = extkingpin.ModelDuration(cmd.Flag("receive.retry-after-backoff", "Backoff duration for the Retry-After header returned on 429 (active-series-limiting exceeded) and 503 (quorum unavailable) responses.").Default("5s"))
+
+	cmd.Flag("receive.retry-after-jitter", "Fraction of the backoff duration to use as random jitter for the Retry-After header (e.g. 0.5 = ±50%).").Default("0.5").Float64Var(&rc.retryAfterJitter)
+
+	rc.tsdbBlockReloadInterval = extkingpin.ModelDuration(cmd.Flag("tsdb.block-reload-interval",
+		"Interval at which to check for new or removed blocks in storage. This includes head-chunk memory-mapping.",
+	).Default("1m").Hidden())
 }
 
 // determineMode returns the ReceiverMode that this receiver is configured to run in.

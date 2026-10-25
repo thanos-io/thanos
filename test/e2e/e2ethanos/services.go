@@ -1287,8 +1287,8 @@ func NewS3Config(bucket, endpoint, basePath string) s3.Config {
 
 	return s3.Config{
 		Bucket:           bucket,
-		AccessKey:        e2edb.MinioAccessKey,
-		SecretKey:        e2edb.MinioSecretKey,
+		AccessKey:        e2edb.S3AccessKey,
+		SecretKey:        e2edb.S3SecretKey,
 		Endpoint:         endpoint,
 		Insecure:         false,
 		HTTPConfig:       httpDefaultConf,

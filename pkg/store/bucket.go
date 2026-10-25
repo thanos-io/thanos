@@ -176,8 +176,19 @@ type bucketStoreMetrics struct {
 	chunkFetchDurationSum *prometheus.HistogramVec
 }
 
-func newBucketStoreMetrics(reg prometheus.Registerer) *bucketStoreMetrics {
+func newBucketStoreMetrics(reg prometheus.Registerer, chunkPool pool.Pool[byte]) *bucketStoreMetrics {
 	var m bucketStoreMetrics
+
+	if chunkPool != nil {
+		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "thanos_bucket_store_chunk_pool_used_bytes",
+			Help: "Number of bytes currently in use from the chunk pool.",
+		}, func() float64 { return float64(chunkPool.UsedBytes()) })
+		promauto.With(reg).NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "thanos_bucket_store_chunk_pool_max_bytes",
+			Help: "Maximum number of bytes the chunk pool allows to be in use, as set by --chunk-pool-size.",
+		}, func() float64 { return float64(chunkPool.MaxBytes()) })
+	}
 
 	m.blockLoads = promauto.With(reg).NewCounter(prometheus.CounterOpts{
 		Name: "thanos_bucket_store_block_loads_total",
@@ -686,7 +697,7 @@ func NewBucketStore(
 	// Depend on the options
 	indexReaderPoolMetrics := indexheader.NewReaderPoolMetrics(extprom.WrapRegistererWithPrefix("thanos_bucket_store_", s.reg))
 	s.indexReaderPool = indexheader.NewReaderPool(s.logger, lazyIndexReaderEnabled, lazyIndexReaderIdleTimeout, indexReaderPoolMetrics, s.indexHeaderLazyDownloadStrategy)
-	s.metrics = newBucketStoreMetrics(s.reg) // TODO(metalmatze): Might be possible via Option too
+	s.metrics = newBucketStoreMetrics(s.reg, s.chunkPool) // TODO(metalmatze): Might be possible via Option too
 
 	if err := s.validate(); err != nil {
 		return nil, errors.Wrap(err, "validate config")
@@ -1596,7 +1607,7 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		}
 		queryStatsEnabled = reqHints.EnableQueryStats
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -1849,7 +1860,7 @@ func chunksSize(chks []storepb.AggrChunk) (size int) {
 
 // LabelNames implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesRequest) (*storepb.LabelNamesResponse, error) {
-	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	reqSeriesMatchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
@@ -1866,7 +1877,7 @@ func (s *BucketStore) LabelNames(ctx context.Context, req *storepb.LabelNamesReq
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label names request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -2065,7 +2076,7 @@ func (b *bucketBlock) FilterExtLabelsMatchers(matchers []*labels.Matcher) ([]*la
 
 // LabelValues implements the storepb.StoreServer interface.
 func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesRequest) (*storepb.LabelValuesResponse, error) {
-	reqSeriesMatchers, err := storepb.MatchersToPromMatchers(req.Matchers...)
+	reqSeriesMatchers, err := storecache.MatchersToPromMatchersCached(s.matcherCache, req.Matchers...)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request labels matchers").Error())
 	}
@@ -2095,7 +2106,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "unmarshal label values request hints").Error())
 		}
 
-		reqBlockMatchers, err = storepb.MatchersToPromMatchers(reqHints.BlockMatchers...)
+		reqBlockMatchers, err = storecache.MatchersToPromMatchersCached(s.matcherCache, reqHints.BlockMatchers...)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, errors.Wrap(err, "translate request hints labels matchers").Error())
 		}
@@ -2145,13 +2156,6 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 		indexr := b.indexReader(blockLogger)
 
 		g.Go(func() error {
-			span, newCtx := tracing.StartSpan(gctx, "bucket_store_block_label_values", tracing.Tags{
-				"block.id":         b.meta.ULID,
-				"block.mint":       b.meta.MinTime,
-				"block.maxt":       b.meta.MaxTime,
-				"block.resolution": b.meta.Thanos.Downsample.Resolution,
-			})
-			defer span.Finish()
 			defer runutil.CloseWithLogOnErr(blockLogger, indexr, "label values")
 
 			var result []string
@@ -2175,7 +2179,7 @@ func (s *BucketStore) LabelValues(ctx context.Context, req *storepb.LabelValuesR
 					WithoutReplicaLabels: req.WithoutReplicaLabels,
 				}
 				blockClient := newBlockSeriesClient(
-					newCtx,
+					gctx,
 					blockLogger,
 					b,
 					seriesReq,

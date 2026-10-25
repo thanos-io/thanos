@@ -418,7 +418,7 @@ func processDownsampling(
 
 	begin = time.Now()
 
-	err = block.Upload(ctx, logger, bkt, resdir, hashFunc)
+	err = block.Upload(ctx, logger, bkt, resdir, hashFunc, objstore.WithUploadConcurrency(blockFilesConcurrency))
 	if err != nil {
 		return compact.NewRetryError(errors.Wrapf(err, "upload downsampled block %s", id))
 	}

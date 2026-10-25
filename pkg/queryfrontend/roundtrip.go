@@ -221,7 +221,6 @@ func newQueryRangeTripperware(
 			limits,
 			codec,
 			queryrange.PrometheusResponseExtractor{},
-			nil,
 			shouldCache,
 			reg,
 		)
@@ -307,7 +306,6 @@ func newLabelsTripperware(
 			limits,
 			codec,
 			ThanosResponseExtractor{},
-			nil,
 			shouldCache,
 			reg,
 		)

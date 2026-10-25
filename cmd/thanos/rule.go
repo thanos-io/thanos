@@ -114,6 +114,7 @@ type ruleConfig struct {
 	ignoredLabelNames  []string
 	storeRateLimits    store.SeriesSelectLimits
 	ruleConcurrentEval int64
+	ruleQueueCapacity  int
 
 	extendedFunctionsEnabled   bool
 	EnableFeatures             []string
@@ -167,6 +168,7 @@ func registerRule(app *extkingpin.App) {
 	cmd.Flag("restore-ignored-label", "Label names to be ignored when restoring alerts from the remote storage. This is only used in stateless mode.").
 		StringsVar(&conf.ignoredLabelNames)
 	cmd.Flag("rule-concurrent-evaluation", "How many rules can be evaluated concurrently. Default is 1.").Default("1").Int64Var(&conf.ruleConcurrentEval)
+	cmd.Flag("rule-queue-capacity", "The capacity of the queue for pending Alertmanager notifications. Default is 10000").Default("10000").Hidden().IntVar(&conf.ruleQueueCapacity)
 
 	cmd.Flag("grpc-query-endpoint", "Addresses of Thanos gRPC query API servers (repeatable). The scheme may be prefixed with 'dns+' or 'dnssrv+' to detect Thanos API servers through respective DNS lookups.").
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
@@ -197,11 +199,12 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			NoLockfile:        *noLockFile,
-			WALCompression:    compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			MinBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration:   int64(time.Duration(*tsdbRetention) / time.Millisecond),
+			BlockReloadInterval: time.Minute,
+			NoLockfile:          *noLockFile,
+			WALCompression:      compressutil.ParseCompressionType(*walCompression, compression.Snappy),
 		}
 
 		agentOpts := &agent.Options{
@@ -597,7 +600,7 @@ func runRule(
 
 	var (
 		ruleMgr *thanosrules.Manager
-		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
+		alertQ  = alert.NewQueue(logger, reg, conf.ruleQueueCapacity, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
 	)
 	{
 		if conf.extendedFunctionsEnabled {

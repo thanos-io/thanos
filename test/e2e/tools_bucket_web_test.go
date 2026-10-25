@@ -44,7 +44,7 @@ func TestToolsBucketWebExternalPrefixWithoutReverseProxy(t *testing.T) {
 	externalPrefix := "testThanos"
 
 	const bucket = "compact-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
+	m := e2edb.NewSeaweedFS(e, "thanos", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -77,8 +77,8 @@ func TestToolsBucketWebExternalPrefix(t *testing.T) {
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
 	externalPrefix := "testThanos"
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
+	const bucket = "tools-bucket-web-test"
+	m := e2edb.NewSeaweedFS(e, "thanos", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	svcConfig := client.BucketConfig{
@@ -117,8 +117,8 @@ func TestToolsBucketWebExternalPrefixAndRoutePrefix(t *testing.T) {
 
 	externalPrefix := "testThanos"
 	routePrefix := "test"
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
+	const bucket = "tools-bucket-web-test"
+	m := e2edb.NewSeaweedFS(e, "thanos", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, err)
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
@@ -154,9 +154,8 @@ func TestToolsBucketWebWithTimeAndRelabelFilter(t *testing.T) {
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
-	// Create Minio.
-	const bucket = "toolsBucketWeb-test"
-	m := e2edb.NewMinio(e, "thanos", bucket, e2edb.WithMinioTLS())
+	const bucket = "tools-bucket-web-test"
+	m := e2edb.NewSeaweedFS(e, "thanos", bucket, e2edb.WithSeaweedFSTLS())
 	testutil.Ok(t, e2e.StartAndWaitReady(m))
 
 	// Create bucket.
