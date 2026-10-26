@@ -8,6 +8,12 @@ NOTE: As semantic versioning states all 0.y.z releases can contain breaking chan
 
 We use *breaking :warning:* to mark changes that are not backward compatible (relates only to v0.y.z releases.)
 
+## [v0.42.5](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 10 26
+
+### Fixed
+
+- Updated busybox SHAs to the rebuilt base images, which drop the distrusted eMudhra roots (emSign ECC Root CA - G3, AAA Certificate Services) from the image CA bundle.
+
 ## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
 
 Had to do another version release due to broken base image SHAs. No changes.
