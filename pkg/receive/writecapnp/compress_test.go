@@ -12,6 +12,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -50,6 +51,26 @@ func wireSeries(n int) []prompb.TimeSeries {
 		ts = append(ts, prompb.TimeSeries{Labels: ls, Samples: []prompb.Sample{{Value: float64(i * 7), Timestamp: now + int64(i%15)}}})
 	}
 	return ts
+}
+
+// largeSeries builds n series whose label values are valueSize bytes each, so a
+// message of several MiB costs only a handful of allocations.
+func largeSeries(n, valueSize int) []prompb.TimeSeries {
+	ts := make([]prompb.TimeSeries, 0, n)
+	for i := range n {
+		ts = append(ts, prompb.TimeSeries{
+			Labels:  []labelpb.ZLabel{{Name: "__name__", Value: "m"}, {Name: "blob", Value: fmt.Sprintf("%d-", i) + strings.Repeat("x", valueSize)}},
+			Samples: []prompb.Sample{{Value: float64(i), Timestamp: int64(i)}},
+		})
+	}
+	return ts
+}
+
+// zstdFrameHeader returns a zstd frame header declaring contentSize bytes of
+// content without any blocks behind it.
+func zstdFrameHeader(contentSize uint64) []byte {
+	hdr := []byte{0x28, 0xb5, 0x2f, 0xfd, 0xe0} // magic, FCS flag = 8 bytes, single segment
+	return binary.LittleEndian.AppendUint64(hdr, contentSize)
 }
 
 type nopCloser struct{ *bytes.Buffer }
@@ -127,7 +148,7 @@ func BenchmarkCodecRoundTrip(b *testing.B) {
 }
 
 func TestZstdCodecRoundTripLargeMessage(t *testing.T) {
-	wr, err := Build("tenant", wireSeries(20000))
+	wr, err := Build("tenant", largeSeries(4, 512<<10))
 	require.NoError(t, err)
 	want, err := wr.Message().Marshal()
 	require.NoError(t, err)
@@ -210,7 +231,7 @@ func TestZstdCodecRejectsInvalidFrames(t *testing.T) {
 		{"length over limit", binary.AppendUvarint(nil, maxMessageSize+1), "exceeds"},
 		{"truncated frame", valid[:len(valid)-1], "unexpected EOF"},
 		{"not zstd", frame([]byte("not a zstd frame")), "decompress message"},
-		{"decompressed size over limit", frame(enc.EncodeAll(make([]byte, maxMessageSize+1), nil)), "decompress message"},
+		{"decompressed size over limit", frame(zstdFrameHeader(maxMessageSize + 1)), zstd.ErrDecoderSizeExceeded.Error()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			z := newZstdCodec(bufio.NewReader(bytes.NewReader(tc.data)), nopCloser{&bytes.Buffer{}}, enc)
@@ -221,7 +242,7 @@ func TestZstdCodecRejectsInvalidFrames(t *testing.T) {
 }
 
 func TestZstdCodecReleasesLargeBuffers(t *testing.T) {
-	big, err := Build("tenant", wireSeries(100000))
+	big, err := Build("tenant", largeSeries(8, 1<<20))
 	require.NoError(t, err)
 	bigRaw, err := big.Message().Marshal()
 	require.NoError(t, err)
