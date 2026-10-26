@@ -5,6 +5,7 @@ package store
 
 import (
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -33,8 +34,8 @@ func NewTSDBSelector(relabelConfig []*relabel.Config) *TSDBSelector {
 }
 
 // MatchLabelSets returns true if the given label sets match the TSDBSelector.
-// As a second parameter, it returns the matched label sets if they are a subset of the given input.
-// Otherwise the second return value is nil.
+// The second return value contains all matched label sets, even when none were dropped.
+// It is nil when no relabel configuration or no label sets are provided.
 func (sr *TSDBSelector) MatchLabelSets(labelSets ...labels.Labels) (bool, []labels.Labels) {
 	if sr.relabelConfig == nil || len(labelSets) == 0 {
 		return true, nil
@@ -74,7 +75,7 @@ func MatchersForLabelSets(labelSets []labels.Labels) []storepb.LabelMatcher {
 				labelNameValues[l.Name] = make(map[string]struct{})
 			}
 			labelNameCounts[l.Name]++
-			labelNameValues[l.Name][l.Value] = struct{}{}
+			labelNameValues[l.Name][regexp.QuoteMeta(l.Value)] = struct{}{}
 		})
 	}
 
