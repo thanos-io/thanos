@@ -266,11 +266,12 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			MaxBlockDuration:  int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			RetentionDuration: int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			NoLockfile:        *noLockFile,
-			WALCompression:    compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			MinBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration:   int64(time.Duration(*tsdbRetention) / time.Millisecond),
+			BlockReloadInterval: time.Minute,
+			NoLockfile:          *noLockFile,
+			WALCompression:      compressutil.ParseCompressionType(*walCompression, compression.Snappy),
 		}
 
 		agentOpts := &agent.Options{
