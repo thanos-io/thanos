@@ -22,6 +22,8 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
+- [#9081](https://github.com/thanos-io/thanos/pull/9081): Receive: Apply the `write.global.max_concurrency` limit to Cap'n Proto replication writes. Writes waiting for the gate are released when the router cancels them, instead of piling up on the TSDB appender of an ingester that cannot keep up.
 - [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
 - [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
 - [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.

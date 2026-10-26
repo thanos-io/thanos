@@ -57,7 +57,7 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 			&CapNProtoWriterOptions{},
 		)
 		listener = bufconn.Listen(1024)
-		handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
+		handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer, newNopLimiter(b))
 		srv      = NewCapNProtoServer(listener, handler, log.NewNopLogger())
 	)
 	go func() {

@@ -214,6 +214,8 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
+		runutil.CloseWithLogOnErr(p.logger, httpResp.Body, "unsupported content type response body")
+		queryPrometheusSpan.Finish()
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
 	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
