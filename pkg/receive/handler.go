@@ -105,33 +105,34 @@ type WriteableStoreAsyncClient interface {
 
 // Options for the web Handler.
 type Options struct {
-	Writer                  *Writer
-	ListenAddress           string
-	Registry                *prometheus.Registry
-	TenantHeader            string
-	TenantField             string
-	DefaultTenantID         string
-	ReplicaHeader           string
-	Endpoint                string
-	ReplicationFactor       uint64
-	SplitTenantLabelName    string
-	ReceiverMode            ReceiverMode
-	Tracer                  opentracing.Tracer
-	TLSConfig               *tls.Config
-	DialOpts                []grpc.DialOption
-	ForwardTimeout          time.Duration
-	MaxBackoff              time.Duration
-	MaxArtificialDelay      time.Duration
-	RelabelConfigs          []*relabel.Config
-	TSDBStats               TSDBStats
-	Limiter                 *Limiter
-	AsyncForwardWorkerCount uint
-	ReplicationProtocol     ReplicationProtocol
-	CapNProtoCompression    writecapnp.Compression
-	OtlpEnableTargetInfo    bool
-	OtlpResourceAttributes  []string
-	RetryAfterBackoff       time.Duration
-	RetryAfterJitter        float64
+	Writer                          *Writer
+	ListenAddress                   string
+	Registry                        *prometheus.Registry
+	TenantHeader                    string
+	TenantField                     string
+	DefaultTenantID                 string
+	ReplicaHeader                   string
+	Endpoint                        string
+	ReplicationFactor               uint64
+	SplitTenantLabelName            string
+	ReceiverMode                    ReceiverMode
+	Tracer                          opentracing.Tracer
+	TLSConfig                       *tls.Config
+	DialOpts                        []grpc.DialOption
+	ForwardTimeout                  time.Duration
+	MaxBackoff                      time.Duration
+	MaxArtificialDelay              time.Duration
+	RelabelConfigs                  []*relabel.Config
+	TSDBStats                       TSDBStats
+	Limiter                         *Limiter
+	AsyncForwardWorkerCount         uint
+	ReplicationProtocol             ReplicationProtocol
+	CapNProtoCompression            writecapnp.Compression
+	CapNProtoCompressionConcurrency int
+	OtlpEnableTargetInfo            bool
+	OtlpResourceAttributes          []string
+	RetryAfterBackoff               time.Duration
+	RetryAfterJitter                float64
 }
 
 // Handler serves a Prometheus remote write receiving HTTP endpoint.
@@ -224,6 +225,7 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 			o.MaxArtificialDelay,
 			o.ReplicationProtocol,
 			o.CapNProtoCompression,
+			o.CapNProtoCompressionConcurrency,
 			o.DialOpts...),
 		receiverMode: o.ReceiverMode,
 		Limiter:      o.Limiter,
@@ -1786,23 +1788,25 @@ func newPeerGroup(
 	maxArtificialDelay time.Duration,
 	replicationProtocol ReplicationProtocol,
 	capnprotoCompression writecapnp.Compression,
+	capnprotoCompressionConcurrency int,
 	dialOpts ...grpc.DialOption,
 ) *peerGroup {
 	return &peerGroup{
-		logger:                   logger,
-		dialOpts:                 dialOpts,
-		connections:              map[Endpoint]*peerWorker{},
-		m:                        sync.RWMutex{},
-		dialer:                   grpc.NewClient,
-		peerStates:               make(map[Endpoint]*retryState),
-		expBackoff:               backoff,
-		forwardDelay:             forwardDelay,
-		maxArtificialDelay:       maxArtificialDelay,
-		asyncForwardWorkersCount: asyncForwardWorkersCount,
-		replicationProtocol:      replicationProtocol,
-		capnprotoCompression:     capnprotoCompression,
-		localEndpoint:            localEndpoint,
-		writer:                   writer,
+		logger:                          logger,
+		dialOpts:                        dialOpts,
+		connections:                     map[Endpoint]*peerWorker{},
+		m:                               sync.RWMutex{},
+		dialer:                          grpc.NewClient,
+		peerStates:                      make(map[Endpoint]*retryState),
+		expBackoff:                      backoff,
+		forwardDelay:                    forwardDelay,
+		maxArtificialDelay:              maxArtificialDelay,
+		asyncForwardWorkersCount:        asyncForwardWorkersCount,
+		replicationProtocol:             replicationProtocol,
+		capnprotoCompression:            capnprotoCompression,
+		capnprotoCompressionConcurrency: capnprotoCompressionConcurrency,
+		localEndpoint:                   localEndpoint,
+		writer:                          writer,
 	}
 }
 
@@ -1875,18 +1879,19 @@ func (p *peerWorker) TryRemoteWriteAsync(ctx context.Context, req *storepb.Write
 }
 
 type peerGroup struct {
-	logger                   log.Logger
-	dialOpts                 []grpc.DialOption
-	connections              map[Endpoint]*peerWorker
-	peerStates               map[Endpoint]*retryState
-	expBackoff               backoff.Backoff
-	forwardDelay             *prometheus.HistogramVec
-	asyncForwardWorkersCount uint
-	replicationProtocol      ReplicationProtocol
-	capnprotoCompression     writecapnp.Compression
-	maxArtificialDelay       time.Duration
-	localEndpoint            string
-	writer                   *Writer
+	logger                          log.Logger
+	dialOpts                        []grpc.DialOption
+	connections                     map[Endpoint]*peerWorker
+	peerStates                      map[Endpoint]*retryState
+	expBackoff                      backoff.Backoff
+	forwardDelay                    *prometheus.HistogramVec
+	asyncForwardWorkersCount        uint
+	replicationProtocol             ReplicationProtocol
+	capnprotoCompression            writecapnp.Compression
+	capnprotoCompressionConcurrency int
+	maxArtificialDelay              time.Duration
+	localEndpoint                   string
+	writer                          *Writer
 
 	m sync.RWMutex
 
@@ -1977,7 +1982,7 @@ func (p *peerGroup) getConnection(ctx context.Context, endpoint Endpoint) (Write
 	} else {
 		switch p.replicationProtocol {
 		case CapNProtoReplication:
-			client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger, writecapnp.WithCompression(p.capnprotoCompression))
+			client = writecapnp.NewRemoteWriteClient(writecapnp.NewTCPDialer(endpoint.CapNProtoAddress), p.logger, writecapnp.WithCompression(p.capnprotoCompression), writecapnp.WithCompressionConcurrency(p.capnprotoCompressionConcurrency))
 
 		case ProtobufReplication:
 			conn, err := p.dialer(endpoint.Address, p.dialOpts...)

@@ -24,6 +24,29 @@ func (d *errorDialer) DialContext(ctx context.Context) (net.Conn, error) {
 	return nil, fmt.Errorf("dial failed")
 }
 
+type closedPipeDialer struct{}
+
+func (d *closedPipeDialer) DialContext(ctx context.Context) (net.Conn, error) {
+	client, server := net.Pipe()
+	_ = server.Close()
+	return client, nil
+}
+
+func TestRemoteWriteTransportSetupError(t *testing.T) {
+	t.Parallel()
+
+	client := NewRemoteWriteClient(&closedPipeDialer{}, log.NewNopLogger(), WithCompression(CompressionZstd))
+	t.Cleanup(func() { require.NoError(t, client.Close()) })
+
+	_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{})
+	require.ErrorContains(t, err, "failed to set up transport")
+	require.ErrorContains(t, err, "write compression preface")
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Unavailable, st.Code())
+}
+
 func TestRemoteWriteErrorCodes(t *testing.T) {
 	t.Parallel()
 

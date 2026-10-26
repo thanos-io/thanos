@@ -21,14 +21,29 @@ type CapNProtoServer struct {
 	listener net.Listener
 	server   writecapnp.Writer
 	logger   log.Logger
+
+	compressionConcurrency int
 }
 
-func NewCapNProtoServer(listener net.Listener, handler *CapNProtoHandler, logger log.Logger) *CapNProtoServer {
-	return &CapNProtoServer{
-		listener: listener,
-		server:   writecapnp.Writer_ServerToClient(handler),
-		logger:   logger,
+type CapNProtoServerOption func(*CapNProtoServer)
+
+// WithCapNProtoCompressionConcurrency sets the zstd encoder concurrency shared
+// with the replication clients of this process.
+func WithCapNProtoCompressionConcurrency(n int) CapNProtoServerOption {
+	return func(s *CapNProtoServer) { s.compressionConcurrency = n }
+}
+
+func NewCapNProtoServer(listener net.Listener, handler *CapNProtoHandler, logger log.Logger, opts ...CapNProtoServerOption) *CapNProtoServer {
+	s := &CapNProtoServer{
+		listener:               listener,
+		server:                 writecapnp.Writer_ServerToClient(handler),
+		logger:                 logger,
+		compressionConcurrency: writecapnp.DefaultCompressionConcurrency,
 	}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (c *CapNProtoServer) ListenAndServe() error {
@@ -39,9 +54,9 @@ func (c *CapNProtoServer) ListenAndServe() error {
 		}
 
 		go func() {
-			transport, err := writecapnp.NewServerTransport(conn)
+			transport, err := writecapnp.NewServerTransport(conn, c.compressionConcurrency)
 			if err != nil {
-				level.Debug(c.logger).Log("msg", "failed to set up capnproto transport", "err", err)
+				level.Debug(c.logger).Log("msg", "failed to set up capnproto transport", "peer", conn.RemoteAddr(), "err", err)
 				_ = conn.Close()
 				return
 			}

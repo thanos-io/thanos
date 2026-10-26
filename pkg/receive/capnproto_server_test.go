@@ -4,15 +4,24 @@
 package receive
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"capnproto.org/go/capnp/v3"
+	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
@@ -127,5 +136,113 @@ func TestCapNProtoServer_Compression(t *testing.T) {
 			}
 		}
 	}
+	require.NoError(t, listener.Close())
+}
+
+// A zstd client against a server from before this change must fail fast, not hang.
+func TestCapNProtoServer_CompressedClientAgainstLegacyServer(t *testing.T) {
+	t.Parallel()
+
+	var (
+		app      = newFakeAppender(nil, nil, nil)
+		writer   = NewCapNProtoWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: app}), &CapNProtoWriterOptions{})
+		handler  = NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer)
+		listener = bufconn.Listen(1 << 20)
+		server   = writecapnp.Writer_ServerToClient(handler)
+	)
+	defer server.Release()
+
+	// A server from before this change: packed stream only, no preface sniffing.
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				rpcConn := rpc.NewConn(rpc.NewPackedStreamTransport(conn), &rpc.Options{BootstrapClient: capnp.Client(server).AddRef()})
+				<-rpcConn.Done()
+			}()
+		}
+	}()
+	defer func() { require.NoError(t, listener.Close()) }()
+
+	client := writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(writecapnp.CompressionZstd))
+	defer func() { require.NoError(t, client.Close()) }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, err := client.RemoteWrite(ctx, &storepb.WriteRequest{Tenant: "default"})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Unavailable, st.Code(), "a legacy peer must fail fast, not hang until the deadline: %v", err)
+	require.Contains(t, err.Error(), "compression=zstd", "the error must say which compression was in use")
+}
+
+func TestCapNProtoServer_SurvivesConnectionWithoutPreface(t *testing.T) {
+	t.Parallel()
+
+	var logs bytes.Buffer
+	var logsMu sync.Mutex
+	logger := level.NewFilter(log.LoggerFunc(func(kv ...interface{}) error {
+		logsMu.Lock()
+		defer logsMu.Unlock()
+		return log.NewLogfmtLogger(&logs).Log(kv...)
+	}), level.AllowDebug())
+
+	var (
+		writer   = NewCapNProtoWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: newFakeAppender(nil, nil, nil)}), &CapNProtoWriterOptions{})
+		listener = bufconn.Listen(1 << 20)
+		srv      = NewCapNProtoServer(listener, NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer), logger)
+	)
+	go func() { _ = srv.ListenAndServe() }()
+	defer srv.Shutdown()
+
+	conn, err := listener.DialContext(context.Background())
+	require.NoError(t, err)
+	_, err = conn.Write([]byte("TZ"))
+	require.NoError(t, err)
+	require.NoError(t, conn.Close())
+
+	require.Eventually(t, func() bool {
+		logsMu.Lock()
+		defer logsMu.Unlock()
+		return strings.Contains(logs.String(), "failed to set up capnproto transport")
+	}, 5*time.Second, 10*time.Millisecond)
+
+	client := writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(writecapnp.CompressionZstd))
+	defer func() { require.NoError(t, client.Close()) }()
+	_, err = client.RemoteWrite(context.Background(), &storepb.WriteRequest{Tenant: "default"})
+	require.NoError(t, err)
+	require.NoError(t, listener.Close())
+}
+
+func TestCapNProtoServer_CompressionConcurrencyOption(t *testing.T) {
+	t.Parallel()
+
+	app := newFakeAppender(nil, nil, nil)
+	var (
+		writer   = NewCapNProtoWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: app}), &CapNProtoWriterOptions{})
+		listener = bufconn.Listen(1 << 20)
+		srv      = NewCapNProtoServer(listener, NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer), log.NewNopLogger(), WithCapNProtoCompressionConcurrency(0))
+	)
+	require.Equal(t, 0, srv.compressionConcurrency)
+	go func() { _ = srv.ListenAndServe() }()
+	defer srv.Shutdown()
+
+	client := writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(writecapnp.CompressionZstd), writecapnp.WithCompressionConcurrency(0))
+	defer func() { require.NoError(t, client.Close()) }()
+
+	lset := labels.FromStrings("__name__", "m", "series", "0")
+	_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
+		Tenant: "default",
+		Timeseries: []prompb.TimeSeries{{
+			Labels:  labelpb.ZLabelsFromPromLabels(lset),
+			Samples: []prompb.Sample{{Timestamp: 1, Value: 1}},
+		}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []prompb.Sample{{Timestamp: 1, Value: 1}}, app.Get(lset))
 	require.NoError(t, listener.Close())
 }
