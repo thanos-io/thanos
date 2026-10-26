@@ -337,7 +337,7 @@ By default, all these limits are disabled.
 ### Remote write request gates
 
 The available request gates in Thanos Receive can be configured within the `global` key:
-- `max_concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request request that would exceed this limit will be accepted, but wait until the gate allows it to be processed.
+- `max_concurrency`: the maximum amount of remote write requests that will be concurrently worked on. Any request that would exceed this limit will be accepted, but wait until the gate allows it to be processed. The limit covers HTTP remote write, OTLP and Cap'n Proto replication writes.
 
 ## Active Series Limiting (experimental)
 
@@ -372,7 +372,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1354,1364p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1352,1362p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -465,7 +465,7 @@ Flags:
                                  exceeded. 0 means no limit.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
-                                 Series request, The Series call fails if
+                                 Series request. The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
