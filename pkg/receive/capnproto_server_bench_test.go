@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
@@ -80,6 +82,17 @@ func BenchmarkCapNProtoServer_SingleConcurrentClient(b *testing.B) {
 	b.ReportMetric(totalWrites, "total_writes")
 }
 
+type nopAppender struct {
+	*fakeAppender
+}
+
+func (nopAppender) Append(ref storage.SeriesRef, l labels.Labels, _ int64, _ float64) (storage.SeriesRef, error) {
+	if ref == 0 {
+		ref = storage.SeriesRef(l.Hash())
+	}
+	return ref, nil
+}
+
 func BenchmarkCapNProtoServer_MessageSize(b *testing.B) {
 	for _, series := range []int{1000, 2500, 6000} {
 		wreq := storepb.WriteRequest{Tenant: "example-tenant"}
@@ -97,7 +110,7 @@ func BenchmarkCapNProtoServer_MessageSize(b *testing.B) {
 			var (
 				writer = NewCapNProtoWriter(
 					log.NewNopLogger(),
-					newFakeTenantAppendable(&fakeAppendable{appender: newFakeAppender(nil, nil, nil)}),
+					newFakeTenantAppendable(&fakeAppendable{appender: nopAppender{newFakeAppender(nil, nil, nil)}}),
 					&CapNProtoWriterOptions{},
 				)
 				listener = bufconn.Listen(1 << 20)
@@ -108,6 +121,8 @@ func BenchmarkCapNProtoServer_MessageSize(b *testing.B) {
 			defer srv.Shutdown()
 
 			client := writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger())
+			_, err := client.RemoteWrite(context.Background(), &wreq)
+			require.NoError(b, err)
 			b.ReportAllocs()
 			for b.Loop() {
 				_, err := client.RemoteWrite(context.Background(), &wreq)

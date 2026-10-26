@@ -8,7 +8,6 @@ import (
 	"net"
 
 	"capnproto.org/go/capnp/v3"
-	"capnproto.org/go/capnp/v3/exp/bufferpool"
 	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -17,10 +16,6 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 )
-
-func init() {
-	bufferpool.Default.BucketCount = 24
-}
 
 type CapNProtoServer struct {
 	listener net.Listener

@@ -8,7 +8,6 @@ import (
 	"os"
 	"testing"
 
-	"capnproto.org/go/capnp/v3/exp/bufferpool"
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -84,10 +83,4 @@ func TestCapNProtoServer_MultipleConcurrentClients(t *testing.T) {
 	}
 
 	require.NoError(t, listener.Close())
-}
-
-func TestCapNProtoBufferPoolReusesLargeMessages(t *testing.T) {
-	buf := bufferpool.Default.Get(600 << 10)
-	require.Equal(t, 1<<20, cap(buf))
-	bufferpool.Default.Put(buf)
 }
