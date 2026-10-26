@@ -826,9 +826,10 @@ func initializeMultiTSDB(t testing.TB, dir string) *MultiTSDB {
 
 	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 		&tsdb.Options{
-			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+			RetentionDuration:        (6 * time.Hour).Milliseconds(),
 		},
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
