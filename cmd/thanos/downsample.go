@@ -136,7 +136,7 @@ func RunDownsample(
 					metrics.downsamples.WithLabelValues(resolutionLabel)
 					metrics.downsampleFailures.WithLabelValues(resolutionLabel)
 				}
-				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, nil, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 
@@ -145,7 +145,7 @@ func RunDownsample(
 				if err != nil {
 					return errors.Wrap(err, "sync before second pass of downsampling")
 				}
-				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
+				if err := downsampleBucket(ctx, logger, metrics, insBkt, metas, nil, dataDir, downsampleConcurrency, blockFilesConcurrency, hashFunc, false); err != nil {
 					return errors.Wrap(err, "downsampling failed")
 				}
 				return nil
@@ -182,6 +182,7 @@ func downsampleBucket(
 	metrics *DownsampleMetrics,
 	bkt objstore.Bucket,
 	metas map[ulid.ULID]*metadata.Meta,
+	retentionByResolution map[compact.ResolutionLevel]time.Duration,
 	dir string,
 	downsampleConcurrency int,
 	blockFilesConcurrency int,
@@ -242,6 +243,19 @@ func downsampleBucket(
 		return metasULIDS[i].Compare(metasULIDS[j]) < 0
 	})
 
+	// Blocks shorter than the downsample range are normally left for the compactor to merge into
+	// bigger blocks first. A block that has reached its retention will be deleted by the retention
+	// step that runs right after downsampling, so it can never be compacted further. Downsample it
+	// anyway so that its data survives at the lower resolution.
+	now := time.Now()
+	downsampleBeforeExpiry := func(m *metadata.Meta) bool {
+		if !compact.IsRetentionExpired(m, retentionByResolution, now) {
+			return false
+		}
+		level.Info(logger).Log("msg", "downsampling block shorter than the downsample range before it is removed by retention", "id", m.ULID, "resolution", m.Thanos.Downsample.Resolution)
+		return true
+	}
+
 	var (
 		wg                      sync.WaitGroup
 		metaCh                  = make(chan *metadata.Meta)
@@ -295,7 +309,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.ResLevel1DownsampleRange {
+			if m.MaxTime-m.MinTime < downsample.ResLevel1DownsampleRange && !downsampleBeforeExpiry(m) {
 				continue
 			}
 
@@ -313,7 +327,7 @@ metaSendLoop:
 			// Only downsample blocks once we are sure to get roughly 2 chunks out of it.
 			// NOTE(fabxc): this must match with at which block size the compactor creates downsampled
 			// blocks. Otherwise we may never downsample some data.
-			if m.MaxTime-m.MinTime < downsample.ResLevel2DownsampleRange {
+			if m.MaxTime-m.MinTime < downsample.ResLevel2DownsampleRange && !downsampleBeforeExpiry(m) {
 				continue
 			}
 		}
