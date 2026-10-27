@@ -31,8 +31,12 @@ Flags:
       --debug.mem-profile-rate=-1
                            Sampling rate for the Go memory profiler:
                            approximately one profiled allocation per N bytes
-                           allocated. -1 keeps the Go runtime default (512KiB),
-                           0 disables memory profiling.
+                           allocated. Higher values sample fewer allocations and
+                           lower profiling overhead; lower values capture finer
+                           allocation detail at a higher cost. 0 disables memory
+                           profiling, -1 keeps the Go runtime default (512KiB).
+                           See https://pkg.go.dev/runtime#MemProfileRate for how
+                           the rate is applied.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -167,8 +171,12 @@ Flags:
       --debug.mem-profile-rate=-1
                            Sampling rate for the Go memory profiler:
                            approximately one profiled allocation per N bytes
-                           allocated. -1 keeps the Go runtime default (512KiB),
-                           0 disables memory profiling.
+                           allocated. Higher values sample fewer allocations and
+                           lower profiling overhead; lower values capture finer
+                           allocation detail at a higher cost. 0 disables memory
+                           profiling, -1 keeps the Go runtime default (512KiB).
+                           See https://pkg.go.dev/runtime#MemProfileRate for how
+                           the rate is applied.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -281,8 +289,13 @@ Flags:
       --debug.mem-profile-rate=-1
                                 Sampling rate for the Go memory profiler:
                                 approximately one profiled allocation per N
-                                bytes allocated. -1 keeps the Go runtime default
-                                (512KiB), 0 disables memory profiling.
+                                bytes allocated. Higher values sample fewer
+                                allocations and lower profiling overhead;
+                                lower values capture finer allocation detail
+                                at a higher cost. 0 disables memory profiling,
+                                -1 keeps the Go runtime default (512KiB).
+                                See https://pkg.go.dev/runtime#MemProfileRate
+                                for how the rate is applied.
       --[no-]enable-auto-gomemlimit
                                 Enable go runtime to automatically limit memory
                                 consumption.
@@ -412,8 +425,12 @@ Flags:
       --debug.mem-profile-rate=-1
                            Sampling rate for the Go memory profiler:
                            approximately one profiled allocation per N bytes
-                           allocated. -1 keeps the Go runtime default (512KiB),
-                           0 disables memory profiling.
+                           allocated. Higher values sample fewer allocations and
+                           lower profiling overhead; lower values capture finer
+                           allocation detail at a higher cost. 0 disables memory
+                           profiling, -1 keeps the Go runtime default (512KiB).
+                           See https://pkg.go.dev/runtime#MemProfileRate for how
+                           the rate is applied.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -503,8 +520,13 @@ Flags:
       --debug.mem-profile-rate=-1
                              Sampling rate for the Go memory profiler:
                              approximately one profiled allocation per N
-                             bytes allocated. -1 keeps the Go runtime default
-                             (512KiB), 0 disables memory profiling.
+                             bytes allocated. Higher values sample fewer
+                             allocations and lower profiling overhead;
+                             lower values capture finer allocation detail
+                             at a higher cost. 0 disables memory profiling,
+                             -1 keeps the Go runtime default (512KiB). See
+                             https://pkg.go.dev/runtime#MemProfileRate for how
+                             the rate is applied.
       --[no-]enable-auto-gomemlimit
                              Enable go runtime to automatically limit memory
                              consumption.
@@ -592,8 +614,13 @@ Flags:
       --debug.mem-profile-rate=-1
                              Sampling rate for the Go memory profiler:
                              approximately one profiled allocation per N
-                             bytes allocated. -1 keeps the Go runtime default
-                             (512KiB), 0 disables memory profiling.
+                             bytes allocated. Higher values sample fewer
+                             allocations and lower profiling overhead;
+                             lower values capture finer allocation detail
+                             at a higher cost. 0 disables memory profiling,
+                             -1 keeps the Go runtime default (512KiB). See
+                             https://pkg.go.dev/runtime#MemProfileRate for how
+                             the rate is applied.
       --[no-]enable-auto-gomemlimit
                              Enable go runtime to automatically limit memory
                              consumption.
@@ -662,8 +689,13 @@ Flags:
       --debug.mem-profile-rate=-1
                               Sampling rate for the Go memory profiler:
                               approximately one profiled allocation per N
-                              bytes allocated. -1 keeps the Go runtime default
-                              (512KiB), 0 disables memory profiling.
+                              bytes allocated. Higher values sample fewer
+                              allocations and lower profiling overhead;
+                              lower values capture finer allocation detail
+                              at a higher cost. 0 disables memory profiling,
+                              -1 keeps the Go runtime default (512KiB).
+                              See https://pkg.go.dev/runtime#MemProfileRate for
+                              how the rate is applied.
       --[no-]enable-auto-gomemlimit
                               Enable go runtime to automatically limit memory
                               consumption.
@@ -802,8 +834,13 @@ Flags:
       --debug.mem-profile-rate=-1
                               Sampling rate for the Go memory profiler:
                               approximately one profiled allocation per N
-                              bytes allocated. -1 keeps the Go runtime default
-                              (512KiB), 0 disables memory profiling.
+                              bytes allocated. Higher values sample fewer
+                              allocations and lower profiling overhead;
+                              lower values capture finer allocation detail
+                              at a higher cost. 0 disables memory profiling,
+                              -1 keeps the Go runtime default (512KiB).
+                              See https://pkg.go.dev/runtime#MemProfileRate for
+                              how the rate is applied.
       --[no-]enable-auto-gomemlimit
                               Enable go runtime to automatically limit memory
                               consumption.
@@ -915,8 +952,12 @@ Flags:
       --debug.mem-profile-rate=-1
                            Sampling rate for the Go memory profiler:
                            approximately one profiled allocation per N bytes
-                           allocated. -1 keeps the Go runtime default (512KiB),
-                           0 disables memory profiling.
+                           allocated. Higher values sample fewer allocations and
+                           lower profiling overhead; lower values capture finer
+                           allocation detail at a higher cost. 0 disables memory
+                           profiling, -1 keeps the Go runtime default (512KiB).
+                           See https://pkg.go.dev/runtime#MemProfileRate for how
+                           the rate is applied.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -1004,9 +1045,14 @@ Flags:
                             https://thanos.io/tip/thanos/tracing.md/#configuration
       --debug.mem-profile-rate=-1
                             Sampling rate for the Go memory profiler:
-                            approximately one profiled allocation per N bytes
-                            allocated. -1 keeps the Go runtime default (512KiB),
-                            0 disables memory profiling.
+                            approximately one profiled allocation per N
+                            bytes allocated. Higher values sample fewer
+                            allocations and lower profiling overhead;
+                            lower values capture finer allocation detail
+                            at a higher cost. 0 disables memory profiling,
+                            -1 keeps the Go runtime default (512KiB). See
+                            https://pkg.go.dev/runtime#MemProfileRate for how
+                            the rate is applied.
       --[no-]enable-auto-gomemlimit
                             Enable go runtime to automatically limit memory
                             consumption.
@@ -1091,8 +1137,13 @@ Flags:
       --debug.mem-profile-rate=-1
                                Sampling rate for the Go memory profiler:
                                approximately one profiled allocation per N
-                               bytes allocated. -1 keeps the Go runtime default
-                               (512KiB), 0 disables memory profiling.
+                               bytes allocated. Higher values sample fewer
+                               allocations and lower profiling overhead;
+                               lower values capture finer allocation detail
+                               at a higher cost. 0 disables memory profiling,
+                               -1 keeps the Go runtime default (512KiB).
+                               See https://pkg.go.dev/runtime#MemProfileRate for
+                               how the rate is applied.
       --[no-]enable-auto-gomemlimit
                                Enable go runtime to automatically limit memory
                                consumption.
@@ -1163,8 +1214,12 @@ Flags:
       --debug.mem-profile-rate=-1
                            Sampling rate for the Go memory profiler:
                            approximately one profiled allocation per N bytes
-                           allocated. -1 keeps the Go runtime default (512KiB),
-                           0 disables memory profiling.
+                           allocated. Higher values sample fewer allocations and
+                           lower profiling overhead; lower values capture finer
+                           allocation detail at a higher cost. 0 disables memory
+                           profiling, -1 keeps the Go runtime default (512KiB).
+                           See https://pkg.go.dev/runtime#MemProfileRate for how
+                           the rate is applied.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
