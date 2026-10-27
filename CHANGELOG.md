@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
 - [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
 - [#9081](https://github.com/thanos-io/thanos/pull/9081): Receive: Apply the `write.global.max_concurrency` limit to Cap'n Proto replication writes. Writes waiting for the gate are released when the router cancels them, instead of piling up on the TSDB appender of an ingester that cannot keep up.
 - [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
