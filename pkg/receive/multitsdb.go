@@ -294,7 +294,7 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 func (l *localClient) String() string {
 	mint, maxt := l.store.TimeRange()
 	return fmt.Sprintf(
-		"MinTime: %d MaxTime: %d",
+		"local store MinTime: %d MaxTime: %d",
 		mint, maxt,
 	)
 }

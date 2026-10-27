@@ -81,6 +81,8 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 	}
 	if err := tmpl.Execute(w, bu.tmplVariables); err != nil {
 		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
