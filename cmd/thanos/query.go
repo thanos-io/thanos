@@ -598,6 +598,7 @@ func runQuery(
 		)
 
 		api.Register(router.WithPrefix("/api/v1"), tracer, logger, ins, logMiddleware)
+		router.Get("/federate", ins.NewHandler("federate", http.HandlerFunc(api.Federate)))
 
 		srv := httpserver.New(logger, reg, comp, httpProbe,
 			httpserver.WithListen(httpBindAddr),

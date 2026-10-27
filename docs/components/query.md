@@ -248,6 +248,30 @@ http://localhost:10901/api/v1/query?query=up&dedup=true&partial_response=true&st
 
 Will only return metrics from `prometheus-foo.thanos-sidecar:10901`
 
+### Federation
+
+The Querier serves a `/federate` endpoint that is compatible with [Prometheus federation](https://prometheus.io/docs/prometheus/latest/federation/). It returns the latest sample of every series selected by the `match[]` parameters, read through the same deduplicated global view as the Query API. This lets another Prometheus server scrape aggregated or deduplicated series from Thanos.
+
+The endpoint accepts the same `dedup`, `replicaLabels[]`, `partial_response`, `storeMatch[]` and `lookback_delta` parameters as the Query API. Only samples within the lookback delta (`--query.lookback-delta`, 5m by default) are returned. Native histograms are not exposed yet.
+
+Example Prometheus scrape configuration:
+
+```yaml
+scrape_configs:
+  - job_name: thanos-federate
+    honor_labels: true
+    metrics_path: /federate
+    params:
+      match[]:
+        - '{job="prometheus"}'
+        - '{__name__=~"job:.*"}'
+    static_configs:
+      - targets:
+          - thanos-query:10902
+```
+
+Federating large numbers of series is expensive; select only the series you need.
+
 ## Expose UI on a sub-path
 
 It is possible to expose thanos-query UI and optionally API on a sub-path. The sub-path can be defined either statically or dynamically via an HTTP header. Static path prefix definition follows the pattern used in Prometheus, where `web.route-prefix` option defines HTTP request path prefix (endpoints prefix) and `web.external-prefix` prefixes the URLs in HTML code and the HTTP redirect responses.
