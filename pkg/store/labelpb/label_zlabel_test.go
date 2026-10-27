@@ -39,7 +39,10 @@ func TestLabelsToPromLabels_LabelsToPromLabels(t *testing.T) {
 	}
 
 	m := lset.Map()
-	testutil.Equals(t, "1yolo", m["a"])
+	if labels.ImplementationName == "slicelabels" {
+		// Only the slicelabels conversion shares memory with the input.
+		testutil.Equals(t, "1yolo", m["a"])
+	}
 
 	m["a"] = "1"
 	testutil.Equals(t, testLsetMap, m)

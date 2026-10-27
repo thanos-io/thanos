@@ -1,8 +1,11 @@
 // Copyright (c) The Thanos Authors.
 // Licensed under the Apache License 2.0.
 
-// Package containing proto and JSON serializable Labels and ZLabels (no copy) structs used to
-// identify series. This package expose no-copy converters to Prometheus labels.Labels.
+// Package containing proto and JSON serializable Labels and ZLabels structs used to
+// identify series. This package exposes converters to Prometheus labels.Labels.
+// The conversion is no-copy only in builds where the internal labels
+// representation allows it (slicelabels); otherwise it copies. See
+// zlabels_slicelabels.go and zlabels_stringlabels.go.
 
 package labelpb
 
@@ -36,20 +39,6 @@ func noAllocString(buf []byte) string {
 
 func noAllocBytes(buf string) []byte {
 	return *(*[]byte)(unsafe.Pointer(&buf))
-}
-
-// ZLabelsFromPromLabels converts Prometheus labels to slice of labelpb.ZLabel in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed labels.Labels.
-func ZLabelsFromPromLabels(lset labels.Labels) []ZLabel {
-	return *(*[]ZLabel)(unsafe.Pointer(&lset))
-}
-
-// ZLabelsToPromLabels convert slice of labelpb.ZLabel to Prometheus labels in type unsafe manner.
-// It reuses the same memory. Caller should abort using passed []ZLabel.
-// NOTE: Use with care. ZLabels holds memory from the whole protobuf unmarshal, so the returned
-// Prometheus Labels will hold this memory as well.
-func ZLabelsToPromLabels(lset []ZLabel) labels.Labels {
-	return *(*labels.Labels)(unsafe.Pointer(&lset))
 }
 
 // ReAllocAndInternZLabelsStrings re-allocates all underlying bytes for string, detaching it from bigger memory pool.
