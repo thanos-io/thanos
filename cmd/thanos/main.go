@@ -49,6 +49,11 @@ func main() {
 		Default(logging.LogFormatLogfmt).Enum(logging.LogFormatLogfmt, logging.LogFormatJSON, logging.LogFormatJournald)
 	tracingConfig := extkingpin.RegisterCommonTracingFlags(app)
 
+	memProfileRate := app.Flag("debug.mem-profile-rate",
+		"Sampling rate for the Go memory profiler: approximately one profiled allocation per N bytes allocated. "+
+			"-1 keeps the Go runtime default (512KiB), 0 disables memory profiling.").
+		Default("-1").Int()
+
 	goMemLimitConf := goMemLimitConfig{}
 
 	goMemLimitConf.registerFlag(app)
@@ -63,6 +68,12 @@ func main() {
 	registerQueryFrontend(app)
 
 	cmd, setup := app.Parse()
+
+	// Sampling reads the rate at each allocation, so set it before any component starts.
+	if *memProfileRate >= 0 {
+		runtime.MemProfileRate = *memProfileRate
+	}
+
 	logger, err := logging.NewLogger(*logLevel, *logFormat, *debugName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create logger: %v\n", err)

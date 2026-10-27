@@ -28,6 +28,11 @@ Flags:
                            (mutually exclusive). Content of YAML file
                            with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                           Sampling rate for the Go memory profiler:
+                           approximately one profiled allocation per N bytes
+                           allocated. -1 keeps the Go runtime default (512KiB),
+                           0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -159,6 +164,11 @@ Flags:
                            (mutually exclusive). Content of YAML file
                            with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                           Sampling rate for the Go memory profiler:
+                           approximately one profiled allocation per N bytes
+                           allocated. -1 keeps the Go runtime default (512KiB),
+                           0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -268,6 +278,11 @@ Flags:
                                 (mutually exclusive). Content of YAML file
                                 with tracing configuration. See format details:
                                 https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                                Sampling rate for the Go memory profiler:
+                                approximately one profiled allocation per N
+                                bytes allocated. -1 keeps the Go runtime default
+                                (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                                 Enable go runtime to automatically limit memory
                                 consumption.
@@ -394,6 +409,11 @@ Flags:
                            (mutually exclusive). Content of YAML file
                            with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                           Sampling rate for the Go memory profiler:
+                           approximately one profiled allocation per N bytes
+                           allocated. -1 keeps the Go runtime default (512KiB),
+                           0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -480,6 +500,11 @@ Flags:
                              (mutually exclusive). Content of YAML file
                              with tracing configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                             Sampling rate for the Go memory profiler:
+                             approximately one profiled allocation per N
+                             bytes allocated. -1 keeps the Go runtime default
+                             (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                              Enable go runtime to automatically limit memory
                              consumption.
@@ -564,6 +589,11 @@ Flags:
                              (mutually exclusive). Content of YAML file
                              with tracing configuration. See format details:
                              https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                             Sampling rate for the Go memory profiler:
+                             approximately one profiled allocation per N
+                             bytes allocated. -1 keeps the Go runtime default
+                             (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                              Enable go runtime to automatically limit memory
                              consumption.
@@ -629,6 +659,11 @@ Flags:
                               (mutually exclusive). Content of YAML file
                               with tracing configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                              Sampling rate for the Go memory profiler:
+                              approximately one profiled allocation per N
+                              bytes allocated. -1 keeps the Go runtime default
+                              (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                               Enable go runtime to automatically limit memory
                               consumption.
@@ -764,6 +799,11 @@ Flags:
                               (mutually exclusive). Content of YAML file
                               with tracing configuration. See format details:
                               https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                              Sampling rate for the Go memory profiler:
+                              approximately one profiled allocation per N
+                              bytes allocated. -1 keeps the Go runtime default
+                              (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                               Enable go runtime to automatically limit memory
                               consumption.
@@ -872,6 +912,11 @@ Flags:
                            (mutually exclusive). Content of YAML file
                            with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                           Sampling rate for the Go memory profiler:
+                           approximately one profiled allocation per N bytes
+                           allocated. -1 keeps the Go runtime default (512KiB),
+                           0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
@@ -957,6 +1002,11 @@ Flags:
                             (mutually exclusive). Content of YAML file
                             with tracing configuration. See format details:
                             https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                            Sampling rate for the Go memory profiler:
+                            approximately one profiled allocation per N bytes
+                            allocated. -1 keeps the Go runtime default (512KiB),
+                            0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                             Enable go runtime to automatically limit memory
                             consumption.
@@ -1038,6 +1088,11 @@ Flags:
                                (mutually exclusive). Content of YAML file
                                with tracing configuration. See format details:
                                https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                               Sampling rate for the Go memory profiler:
+                               approximately one profiled allocation per N
+                               bytes allocated. -1 keeps the Go runtime default
+                               (512KiB), 0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                                Enable go runtime to automatically limit memory
                                consumption.
@@ -1105,6 +1160,11 @@ Flags:
                            (mutually exclusive). Content of YAML file
                            with tracing configuration. See format details:
                            https://thanos.io/tip/thanos/tracing.md/#configuration
+      --debug.mem-profile-rate=-1
+                           Sampling rate for the Go memory profiler:
+                           approximately one profiled allocation per N bytes
+                           allocated. -1 keeps the Go runtime default (512KiB),
+                           0 disables memory profiling.
       --[no-]enable-auto-gomemlimit
                            Enable go runtime to automatically limit memory
                            consumption.
