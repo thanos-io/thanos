@@ -288,6 +288,32 @@ func TestCompactor_WriteSeries_e2e(t *testing.T) {
 			},
 		},
 		{
+			name: "1 blocks + delete modifier, intervals delete all samples of a chunk without covering it",
+			input: [][]seriesSamples{
+				{
+					{lset: labels.FromStrings("a", "1"),
+						chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{10, 10}, {11, 11}, {20, 20}}, {{30, 30}, {40, 40}}}},
+					{lset: labels.FromStrings("a", "2"),
+						chunks: [][]sample{{{10, 10}, {11, 11}, {20, 20}}}},
+				},
+			},
+			modifiers: []Modifier{WithDeletionModifier(
+				metadata.DeletionRequest{
+					Matchers:  []*labels.Matcher{labels.MustNewMatcher(labels.MatchRegexp, "a", "1|2")},
+					Intervals: tombstones.Intervals{{Mint: 9, Maxt: 12}, {Mint: 19, Maxt: 21}, {Mint: 40, Maxt: 40}},
+				})},
+			expected: []seriesSamples{
+				{lset: labels.FromStrings("a", "1"),
+					chunks: [][]sample{{{0, 0}, {1, 1}, {2, 2}}, {{30, 30}}}},
+			},
+			expectedChanges: "Deleted {a=\"1\"} [{10 12} {19 20} {40 40}]\nDeleted {a=\"2\"} [{10 12} {19 20}]\n",
+			expectedStats: tsdb.BlockStats{
+				NumSamples: 4,
+				NumSeries:  1,
+				NumChunks:  2,
+			},
+		},
+		{
 			name: "1 blocks + delete modifier, deletion request contains multiple matchers, delete second series",
 			input: [][]seriesSamples{
 				{
