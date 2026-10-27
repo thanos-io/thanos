@@ -83,6 +83,7 @@ type lazyPopulatableChunk struct {
 	cr tsdb.ChunkReader
 
 	populated chunkenc.Chunk
+	err       error
 }
 
 type errChunkIterator struct{ err error }
@@ -117,11 +118,18 @@ func (l *lazyPopulatableChunk) populate() {
 	// Ignore iterable as it should be nil.
 	l.populated, _, err = l.cr.ChunkOrIterable(*l.m)
 	if err != nil {
-		l.m.Chunk = errChunk{err: errChunkIterator{err: errors.Wrapf(err, "cannot populate chunk %d", l.m.Ref)}}
-		return
+		l.err = errors.Wrapf(err, "cannot populate chunk %d", l.m.Ref)
+		l.populated = errChunk{err: errChunkIterator{err: l.err}}
 	}
 
 	l.m.Chunk = l.populated
+}
+
+func (l *lazyPopulatableChunk) Err() error {
+	if l.populated == nil {
+		l.populate()
+	}
+	return l.err
 }
 
 func (l *lazyPopulatableChunk) Bytes() []byte {
@@ -214,6 +222,15 @@ func (w *Compactor) write(ctx context.Context, symbols index.StringIter, populat
 			// All series will be ignored.
 			p.SeriesProcessed()
 			continue
+		}
+
+		// Fail instead of writing chunks that could not be populated as empty.
+		for _, chk := range chks {
+			if lc, ok := chk.Chunk.(*lazyPopulatableChunk); ok {
+				if err := lc.Err(); err != nil {
+					return errors.Wrapf(err, "series %s", s.Labels())
+				}
+			}
 		}
 
 		if err := sWriter.WriteChunks(chks...); err != nil {

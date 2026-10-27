@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
@@ -771,4 +773,116 @@ func createBlockSeries(bDir string, inputSeries []seriesSamples) (err error) {
 		return errors.Wrap(err, "flush")
 	}
 	return nil
+}
+
+func TestCompactor_WriteSeries_DownsampledBlock(t *testing.T) {
+	ctx := context.Background()
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+
+	// Raw block with 3 series and a 10s interval over 2h, so that downsampling to 5m produces aggregated chunks.
+	var input []seriesSamples
+	for _, v := range []string{"1", "2", "3"} {
+		var smpls []sample
+		for ts := int64(0); ts < time.Hour.Milliseconds()*2; ts += 10 * 1000 {
+			smpls = append(smpls, sample{t: ts, v: float64(ts)})
+		}
+		input = append(input, seriesSamples{lset: labels.FromStrings("a", v), chunks: [][]sample{smpls}})
+	}
+	rawID := ulid.MustNew(1, nil)
+	rawDir := filepath.Join(tmpDir, rawID.String())
+	testutil.Ok(t, os.MkdirAll(rawDir, os.ModePerm))
+	testutil.Ok(t, createBlockSeries(rawDir, input))
+	rawMeta := metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{Version: 1, ULID: rawID, MinTime: 0, MaxTime: time.Hour.Milliseconds() * 2},
+		Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+	}
+	testutil.Ok(t, rawMeta.WriteToDir(logger, rawDir))
+	rawBlock, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), rawDir, chunkenc.NewPool(), nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, rawBlock.Close()) })
+
+	dsID, err := downsample.Downsample(ctx, logger, &rawMeta, rawBlock, tmpDir, downsample.ResLevel1)
+	testutil.Ok(t, err)
+	dsDir := filepath.Join(tmpDir, dsID.String())
+
+	deleteA2 := WithDeletionModifier(metadata.DeletionRequest{
+		Matchers: metadata.Matchers{labels.MustNewMatcher(labels.MatchEqual, "a", "2")},
+	})
+
+	t.Run("whole series deletion keeps the other chunks byte-identical", func(t *testing.T) {
+		chunkPool := downsample.NewPool()
+		b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), dsDir, chunkPool, nil)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, b.Close()) }()
+
+		outDir := filepath.Join(tmpDir, ulid.MustNew(3, nil).String())
+		d, err := block.NewDiskWriter(ctx, logger, outDir)
+		testutil.Ok(t, err)
+		changes := bytes.Buffer{}
+		comp := New(tmpDir, logger, &changeLog{w: &changes}, chunkPool)
+		testutil.Ok(t, comp.WriteSeries(ctx, []block.Reader{b}, d, NewProgressLogger(logger, 3), deleteA2))
+		testutil.Ok(t, os.MkdirAll(outDir, os.ModePerm))
+		stats, err := d.Flush()
+		testutil.Ok(t, err)
+		testutil.Equals(t, uint64(2), stats.NumSeries)
+
+		src := readBlockChunkBytes(t, dsDir)
+		testutil.Equals(t, 3, len(src))
+		for _, chks := range src {
+			for _, c := range chks {
+				testutil.Equals(t, byte(downsample.ChunkEncAggr), c[0])
+			}
+		}
+		delete(src, labels.FromStrings("a", "2").String())
+		testutil.Equals(t, src, readBlockChunkBytes(t, outDir))
+	})
+
+	t.Run("undecodable chunks return an error instead of panicking", func(t *testing.T) {
+		// The Prometheus pool cannot decode aggregated chunks.
+		chunkPool := chunkenc.NewPool()
+		b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), dsDir, chunkPool, nil)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, b.Close()) }()
+
+		d, err := block.NewDiskWriter(ctx, logger, filepath.Join(tmpDir, ulid.MustNew(4, nil).String()))
+		testutil.Ok(t, err)
+		changes := bytes.Buffer{}
+		comp := New(tmpDir, logger, &changeLog{w: &changes}, chunkPool)
+		err = comp.WriteSeries(ctx, []block.Reader{b}, d, NewProgressLogger(logger, 3), deleteA2)
+		testutil.NotOk(t, err)
+		testutil.Assert(t, strings.Contains(err.Error(), "cannot populate chunk"), "unexpected error: %v", err)
+	})
+}
+
+// readBlockChunkBytes returns the raw encoding and bytes of every chunk, by series labels.
+func readBlockChunkBytes(t *testing.T, bDir string) map[string][][]byte {
+	ctx := context.Background()
+
+	indexr, err := index.NewFileReader(filepath.Join(bDir, block.IndexFilename), index.DecodePostingsRaw)
+	testutil.Ok(t, err)
+	defer indexr.Close()
+
+	chunkr, err := chunks.NewDirReader(filepath.Join(bDir, block.ChunksDirname), downsample.NewPool())
+	testutil.Ok(t, err)
+	defer chunkr.Close()
+
+	k, v := index.AllPostingsKey()
+	all, err := indexr.Postings(ctx, k, v)
+	testutil.Ok(t, err)
+
+	var builder labels.ScratchBuilder
+	var chks []chunks.Meta
+	res := map[string][][]byte{}
+	for all.Next() {
+		testutil.Ok(t, indexr.Series(all.At(), &builder, &chks))
+		lset := builder.Labels().String()
+		for _, c := range chks {
+			chk, _, err := chunkr.ChunkOrIterable(c)
+			testutil.Ok(t, err)
+			res[lset] = append(res[lset], append([]byte{byte(chk.Encoding())}, chk.Bytes()...))
+		}
+	}
+	testutil.Ok(t, all.Err())
+	return res
 }
