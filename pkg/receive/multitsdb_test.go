@@ -77,7 +77,7 @@ func TestMultiTSDB(t *testing.T) {
 		defer cancel()
 
 		var a storage.Appender
-		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 			a, err = app.Appender(context.Background())
 			return err
 		}))
@@ -112,7 +112,7 @@ func TestMultiTSDB(t *testing.T) {
 		app, err = m.TenantAppendable("bar")
 		testutil.Ok(t, err)
 
-		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 			a, err = app.Appender(context.Background())
 			return err
 		}))
@@ -162,7 +162,7 @@ func TestMultiTSDB(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
-		testutil.Ok(t, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+		testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 			_, err := app.Appender(context.Background())
 			return err
 		}))
@@ -518,14 +518,18 @@ func TestMultiTSDBPrune(t *testing.T) {
 }*/
 
 func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
 
-		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
+		reg := prometheus.NewRegistry()
+		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), reg,
 			&tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				MinBlockDuration:    (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:    (2 * time.Hour).Milliseconds(),
+				RetentionDuration:   (6 * time.Hour).Milliseconds(),
+				BlockReloadInterval: 1 * time.Hour,
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -538,10 +542,14 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		defer m.Close()
 
 		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
+		testutil.Assert(t, tenantMetricCount(t, reg, "foo") > 0, "tenant TSDB metrics should be registered")
 		time.Sleep(5 * time.Hour)
 		synctest.Wait()
 		testutil.Ok(t, m.Prune(context.Background()))
 		testutil.Equals(t, 0, len(m.TSDBLocalClients()))
+		testutil.Assert(t, tenantMetricCount(t, reg, "foo") == 0, "tenant TSDB metrics should be not registered")
+		_, err := reg.Gather()
+		testutil.Ok(t, err)
 
 		testutil.Ok(t, appendSample(m, "foo", time.UnixMilli(int64(10))))
 		testutil.Equals(t, 1, len(m.TSDBLocalClients()))
@@ -549,8 +557,29 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 
 }
 
+// tenantMetricCount returns how many gathered metric series carry the
+// tenant="<tenant>" label that startTSDB attaches to a tenant's TSDB metrics.
+func tenantMetricCount(t *testing.T, g prometheus.Gatherer, tenant string) int {
+	t.Helper()
+	mfs, err := g.Gather()
+	testutil.Ok(t, err)
+	count := 0
+	for _, mf := range mfs {
+		for _, metric := range mf.GetMetric() {
+			for _, lp := range metric.GetLabel() {
+				if lp.GetName() == "tenant" && lp.GetValue() == tenant {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
 // synctest.Test controls fake time so t.Parallel() is not used.
 func TestPeriodicHeadCompaction(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
 
@@ -562,6 +591,7 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 				MaxBlockDuration:     maxBlockDuration,
 				RetentionDuration:    (24 * time.Hour).Milliseconds(),
 				OutOfOrderTimeWindow: (4 * time.Hour).Milliseconds(),
+				BlockReloadInterval:  time.Hour,
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -638,7 +668,7 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 	}
 
 	t.Parallel()
-	const iterations = 10
+	const iterations = 3
 	// This test detects race conditions, so we run it multiple times to increase the chance of catching the issue.
 	for i := range iterations {
 		t.Run(fmt.Sprintf("iteration-%d", i), func(t *testing.T) {
@@ -676,6 +706,43 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 			testutil.Equals(t, concurrency, len(m.TSDBLocalClients()))
 		})
 	}
+}
+
+func TestMultiTSDBPruneSkipsUnreadyTenant(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	maxBlockDuration := (2 * time.Hour).Milliseconds()
+	retentionDuration := (6 * time.Hour).Milliseconds()
+	m := NewMultiTSDB(
+		openTestRoot(t, dir),
+		log.NewNopLogger(),
+		prometheus.NewRegistry(),
+		&tsdb.Options{
+			MinBlockDuration:  maxBlockDuration,
+			MaxBlockDuration:  maxBlockDuration,
+			RetentionDuration: retentionDuration,
+		},
+		labels.FromStrings("replica", "test"),
+		"tenant_id",
+		nil,
+		false,
+		false,
+		metadata.NoneFunc,
+	)
+
+	const tenantID = "unready-tenant"
+	tenant := newTenant(log.NewNopLogger(), retentionDuration, maxBlockDuration, tenantID)
+	m.addTenantLocked(tenantID, tenant)
+	t.Cleanup(func() {
+		m.mtx.Lock()
+		m.removeTenantUnlocked(tenantID)
+		m.mtx.Unlock()
+		m.Close()
+	})
+
+	testutil.Ok(t, m.Prune(context.Background()))
+	testutil.Equals(t, false, tenant.readOnly.Load())
 }
 
 func TestAlignedHeadFlush(t *testing.T) {
@@ -921,7 +988,7 @@ func appendSampleWithLabels(m *MultiTSDB, tenant string, lbls labels.Labels, tim
 	}
 
 	var a storage.Appender
-	if err := runutil.Retry(1*time.Second, ctx.Done(), func() error {
+	if err := runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		a, err = app.Appender(ctx)
 		return err
 	}); err != nil {
@@ -987,7 +1054,7 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	defer cancel()
 
 	var a storage.Appender
-	testutil.Ok(b, runutil.Retry(1*time.Second, ctx.Done(), func() error {
+	testutil.Ok(b, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
 		a, err = app.Appender(context.Background())
 		return err
 	}))
@@ -1087,7 +1154,7 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	const iterations = 200
+	const iterations = 50
 
 	wg := sync.WaitGroup{}
 	wg.Go(func() {

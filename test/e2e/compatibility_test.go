@@ -53,7 +53,7 @@ func TestPromQLComplianceWithShardingQueryFrontend(t *testing.T) {
 	testPromQLCompliance(t, true, store.EagerRetrieval)
 }
 
-func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) {
+func testPromQLCompliance(t *testing.T, queryFrontend bool, retrievalStrategy store.RetrievalStrategy) { //nolint:unparam // Used after t.Skip below.
 	t.Skip("This is interactive test, it requires time to build up (scrape) the data. The data is also obtain from remote promlab servers.")
 
 	e, err := e2e.NewDockerEnvironment("compatibility")
@@ -210,7 +210,7 @@ func TestAlertCompliance(t *testing.T) {
 			WithResendDelay("1m").
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
-			InitTSDB(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
+			InitTSDB(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 				{
 					HTTPConfig: clientconfig.HTTPConfig{
 						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
@@ -235,8 +235,8 @@ func TestAlertCompliance(t *testing.T) {
 		{
 			var stdout bytes.Buffer
 			testutil.Ok(t, compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"), e2e.WithExecOptionStdout(&stdout)))
-			testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), "rules"), os.ModePerm))
-			testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), stdout.Bytes(), os.ModePerm))
+			testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), rulesSubDir), os.ModePerm))
+			testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), rulesSubDir, "rules.yaml"), stdout.Bytes(), os.ModePerm))
 
 			// Reload ruler.
 			resp, err := http.Post("http://"+ruler.Endpoint("http")+"/-/reload", "", nil)
@@ -258,7 +258,7 @@ func TestAlertCompliance(t *testing.T) {
 	})
 
 	t.Run("stateless ruler", func(t *testing.T) {
-		e, err := e2e.NewDockerEnvironment("alert-compat")
+		e, err := e2e.NewDockerEnvironment("alert-stateless")
 		testutil.Ok(t, err)
 		t.Cleanup(e.Close)
 
@@ -294,7 +294,7 @@ func TestAlertCompliance(t *testing.T) {
 			WithEvalInterval("1m").
 			WithReplicaLabel("").
 			WithRestoreIgnoredLabels("tenant_id").
-			InitStateless(filepath.Join(rFuture.InternalDir(), "rules"), []clientconfig.Config{
+			InitStateless(filepath.Join(rFuture.InternalDir(), rulesSubDir), []clientconfig.Config{
 				{
 					HTTPConfig: clientconfig.HTTPConfig{
 						EndpointsConfig: clientconfig.HTTPEndpointsConfig{
@@ -315,8 +315,8 @@ func TestAlertCompliance(t *testing.T) {
 		{
 			var stdout bytes.Buffer
 			testutil.Ok(t, compliance.Exec(e2e.NewCommand("cat", "/rules.yaml"), e2e.WithExecOptionStdout(&stdout)))
-			testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), "rules"), os.ModePerm))
-			testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), "rules", "rules.yaml"), stdout.Bytes(), os.ModePerm))
+			testutil.Ok(t, os.MkdirAll(filepath.Join(ruler.Dir(), rulesSubDir), os.ModePerm))
+			testutil.Ok(t, os.WriteFile(filepath.Join(ruler.Dir(), rulesSubDir, "rules.yaml"), stdout.Bytes(), os.ModePerm))
 
 			// Reload ruler.
 			resp, err := http.Post("http://"+ruler.Endpoint("http")+"/-/reload", "", nil)

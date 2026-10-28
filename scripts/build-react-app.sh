@@ -12,7 +12,7 @@ fi
 
 cd pkg/ui/react-app
 
-PUBLIC_URL=. npm run build
+PUBLIC_URL=. pnpm run build
 rm -rf ../static/react
 mkdir -p ../static
 mv build ../static/react

@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-kit/log"
@@ -82,6 +81,8 @@ func (bu *BaseUI) serveReactIndex(index string, w http.ResponseWriter, req *http
 	}
 	if err := tmpl.Execute(w, bu.tmplVariables); err != nil {
 		level.Warn(bu.logger).Log("msg", "template expansion failed", "err", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -163,7 +164,7 @@ func registerReactApp(r *route.Router, ins extpromhttp.InstrumentationMiddleware
 	// Static files required by the React app.
 	r.Get("/static/*filepath", func(w http.ResponseWriter, r *http.Request) {
 		fp := route.Param(r.Context(), "filepath")
-		fp = filepath.Join("static/react/static", fp)
+		fp = path.Join("static/react/static", fp)
 		if err := bu.serveAsset(fp, w, r); err != nil {
 			level.Warn(bu.logger).Log("msg", "Could not get file", "err", err, "file", fp)
 			w.WriteHeader(http.StatusNotFound)

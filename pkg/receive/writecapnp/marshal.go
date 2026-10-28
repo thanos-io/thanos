@@ -41,13 +41,63 @@ func Build(tenant string, tsreq []prompb.TimeSeries) (WriteRequest, error) {
 	if err != nil {
 		return WriteRequest{}, err
 	}
-	if err := BuildInto(wr, tenant, tsreq); err != nil {
+	sym, err := wr.NewSymbols()
+	if err != nil {
+		return WriteRequest{}, err
+	}
+	builder := symboltable.NewBuilder()
+
+	t, err := NewTimeSeriesTenantTuple_List(seg, 1)
+	if err != nil {
+		return WriteRequest{}, err
+	}
+	if err := wr.SetData(t); err != nil {
+		return WriteRequest{}, err
+	}
+	ttd := t.At(0)
+	if err := BuildInto(&ttd, tenant, tsreq, builder); err != nil {
+		return WriteRequest{}, err
+	}
+	if err := marshalSymbols(builder, sym); err != nil {
 		return WriteRequest{}, err
 	}
 	return wr, nil
 }
 
-func BuildInto(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error {
+func BuildInto(wr *TimeSeriesTenantTuple, tenant string, tsreq []prompb.TimeSeries, builder *symboltable.Builder) error {
+	if err := wr.SetTenant(tenant); err != nil {
+		return errors.Wrap(err, "set tenant")
+	}
+
+	series, err := wr.NewTimeSeries(int32(len(tsreq)))
+	if err != nil {
+		return err
+	}
+	for i, ts := range tsreq {
+		tsc := series.At(i)
+
+		lblsc, err := tsc.NewLabels(int32(len(ts.Labels)))
+		if err != nil {
+			return errors.Wrap(err, "new labels")
+		}
+		if err := marshalLabels(lblsc, ts.Labels, builder); err != nil {
+			return errors.Wrap(err, "marshal labels")
+		}
+		if err := marshalSamples(tsc, ts.Samples); err != nil {
+			return errors.Wrap(err, "marshal samples")
+		}
+		if err := marshalHistograms(tsc, ts.Histograms); err != nil {
+			return errors.Wrap(err, "marshal histograms")
+		}
+		if err := marshalExemplars(tsc, ts.Exemplars, builder); err != nil {
+			return errors.Wrap(err, "marshal exemplars")
+		}
+	}
+
+	return nil
+}
+
+func BuildIntoSingleTenantWriteRequest(wr WriteRequest, tenant string, tsreq []prompb.TimeSeries) error {
 	if err := wr.SetTenant(tenant); err != nil {
 		return errors.Wrap(err, "set tenant")
 	}
@@ -224,7 +274,7 @@ func marshalExemplars(ts TimeSeries, pbExemplars []prompb.Exemplar, symbols *sym
 	if err != nil {
 		return err
 	}
-	for i := range pbExemplars {
+	for i := 0; i < len(pbExemplars); i++ {
 		ex := exemplars.At(i)
 
 		lbls, err := ex.NewLabels(int32(len(pbExemplars[i].Labels)))

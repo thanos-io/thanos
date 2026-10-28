@@ -10,24 +10,89 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ## Unreleased
 
-It is recommend to upgrade the storage components first (Receive, Store, etc.) and then Queriers. This will enable batching support. Otherwise, you risk high memory usage in the Querier component if gRPC compression is enabled.
+### Added
 
-- [#8594](https://github.com/thanos-io/thanos/pull/8594): Query: Support per endpoint TLS configuration
+- [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
+- [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
+- [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
+- [#8882](https://github.com/thanos-io/thanos/pull/8882) Receive: implement multi-tenant writes; greatly improves throughput when using the split tenant label functionality.
+- [#8876](https://github.com/thanos-io/thanos/pull/8876): Query-Frontend: Reuse compatible lower-step query range cache entries by subsampling cached responses.
+- [#9056](https://github.com/thanos-io/thanos/pull/9056): *: Add `http_headers` to the HTTP client config, so Rule can send custom headers to query and Alertmanager endpoints (also available in Sidecar and Receive).
+- [#8234](https://github.com/thanos-io/thanos/pull/8234) ruler: Add flag to configure the queue for pending Alertmanager notifications
 
 ### Fixed
 
-- [#8702](https://github.com/thanos-io/thanos/issues/8702): Query: Fix exemplar proxy stripping external label matchers in multi-tier query topologies. In Query A → Query B → Sidecar setups, external label matchers are now preserved when forwarding to downstream Query nodes so they can route to the correct stores.
+- [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
+- [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
+- [#9081](https://github.com/thanos-io/thanos/pull/9081): Receive: Apply the `write.global.max_concurrency` limit to Cap'n Proto replication writes. Writes waiting for the gate are released when the router cancels them, instead of piling up on the TSDB appender of an ingester that cannot keep up.
+- [#9065](https://github.com/thanos-io/thanos/pull/9065): Receive: Stop reading the TSDB in `Series` once the request is canceled, so requests abandoned by the Querier's `--store.response-timeout` no longer keep running and holding memory until completion.
+- [#9055](https://github.com/thanos-io/thanos/pull/9055): Query: lazy chunk iterator creation with reuse in chunkSeriesIterator.
+- [#9014](https://github.com/thanos-io/thanos/pull/9014): Reloader: Optimize `Watch` to allocate constant memory despite the config size.
+- [#8990](https://github.com/thanos-io/thanos/pull/8990): Receive: Avoid a panic when pruning starts before a tenant TSDB is ready.
+- [#8968](https://github.com/thanos-io/thanos/pull/8968): *: Bump `google.golang.org/grpc` to v1.82.1 to fix GHSA-hrxh-6v49-42gf (CVSS 8.6): HTTP/2 Rapid Reset DoS bypass, xDS RBAC authorization bypass, and NOT-rule panic.
+- [#8900](https://github.com/thanos-io/thanos/pull/8900): UI: Fix web UI static assets (JS/CSS) returning 404 on Windows by using slash-separated paths for the embedded file system.
+- [#8935](https://github.com/thanos-io/thanos/pull/8935): Receive: remove redundant tl.Set() while building a Capnp WriteRequest.
+- [#8932](https://github.com/thanos-io/thanos/pull/8932): Store: Return the series set error from `TSDBStore.LabelValues` instead of an empty response.
+- [#8967](https://github.com/thanos-io/thanos/pull/8967): Query: Enforce store request series and samples limits for batched series responses.
+- [#9054](https://github.com/thanos-io/thanos/pull/9054): Store: Count batched series responses in `thanos_store_server_series_requested` and `thanos_store_server_chunks_requested`.
+- [#8970](https://github.com/thanos-io/thanos/pull/8970): clientconfig: Fix TLS client permanently failing with `unable to use specified CA cert: none configured` after cert/key file rotation, since `TLSRoundTripperSettings.CA` was never populated.
+- [#8937](https://github.com/thanos-io/thanos/pull/8937): Compact: Fix `tools bucket rewrite` silently writing a block with missing data when the source series set fails during relabeling.
+- [#9087](https://github.com/thanos-io/thanos/pull/9087): Query: Delete `storeInfo()` and instead use `st.Addr()` where it was used.
+- [#9105](https://github.com/thanos-io/thanos/pull/9105): Receive: Reuse buffers of Cap'n Proto replication messages up to 8 MiB, which piled up in memory when messages were 512 KiB–1 MiB.
+
+### Changed
+
+- [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
+- [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
+- [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
+
+## [v0.42.4](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 30
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.3](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 29
+
+Fixes a small bug - like before now Receive on shutdown creates a new block and uploads it.
+
+### Fixed
+
+- [#8948](https://github.com/thanos-io/thanos/pull/8948): receive: Preserve upload on shutdown behaviour
+
+## [v0.42.2](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+Had to do another version release due to broken base image SHAs. No changes.
+
+## [v0.42.1](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 16
+
+This change fixes a small issue regarding timeouts in the Shipper component in the Receiver - we've accidentally set them too small. Sorry for that!
+
+### Changed
+
+- [#8920](https://github.com/thanos-io/thanos/pull/8920): receive: bump timeouts
+
+## [v0.42.0](https://github.com/thanos-io/thanos/tree/release-0.42) - 2026 07 08
+
+The biggest new things in this release are, I think, Receive component's improvements regarding tenant's lifecycle handling, ability to have per endpoint configuration, and showing fanout information in Thanos Query. Thank you to everyone for your contributions!
+
+### Fixed
+
+- [#8752](https://github.com/thanos-io/thanos/pull/8752): Query: Fix exemplar proxy stripping external label matchers in multi-tier query topologies. In Query A → Query B → Sidecar setups, external label matchers are now preserved when forwarding to downstream Query nodes so they can route to the correct stores.
 - [#8726](https://github.com/thanos-io/thanos/pull/8726): *: Bump `thanos-community/grpc-go` fork to fix CVE-2026-33186 (CVSS 9.1), an authorization bypass via malformed `:path` headers that could bypass path-based "deny" rules in `grpc/authz` interceptors.
 - [#8714](https://github.com/thanos-io/thanos/pull/8714): Tracing: Fix `tls_config` fields (`ca_file`, `cert_file`, `key_file`) being silently ignored when using the OTLP gRPC exporter. Previously, deployments using a private CA or mTLS client certificates had to work around this via `OTEL_EXPORTER_OTLP_CERTIFICATE` and related environment variables.
-- [#8128](https://github.com/thanos-io/thanos/issues/8128): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
-- [#8720](https://github.com/thanos-io/thanos/issues/8720): Receive: Fix 503 errors during restarts in some cases.
+- [#8128](https://github.com/thanos-io/thanos/pull/8701): Query-Frontend: Fix panic in `AnalyzesMerge` caused by indexing the wrong slice variable, leading to an out-of-range access when merging more than two query analyses.
+- [#8720](https://github.com/thanos-io/thanos/pull/8720): Receive: Fix 503 errors during restarts in some cases.
 - [#8762](https://github.com/thanos-io/thanos/pull/8762): Query-Frontend: Fix trace ID missing from slow query logs, regression from #8618.
 - [#8799](https://github.com/thanos-io/thanos/pull/8799): *: Set a `KeepaliveEnforcementPolicy` with `MinTime: 10s` on all gRPC servers, matching the client keepalive interval.
 - [#8806](https://github.com/thanos-io/thanos/pull/8806): Receive: Validate tenant IDs extracted from split-tenant labels to prevent path traversal.
 - [#8810](https://github.com/thanos-io/thanos/pull/8810): Ruler: correctly pass query partial response for gRPC.
+- [#8881](https://github.com/thanos-io/thanos/pull/8881): Receive: Fix routing receivers crashing with `mkdir ./data: read-only file system` on startup by gating data directory setup on `enableIngestion`, since routing receivers don't write local TSDB data.
+- [#8890](https://github.com/thanos-io/thanos/pull/8890): block: fix GatherIndexHealthStats postings walk error check to prevent swallowing an error.
+- [#8889](https://github.com/thanos-io/thanos/pull/8889): Query: Return an error if Querier doesn't have any registered endpoints and partial response is disabled.
 
 ### Added
 
+- [#8691](https://github.com/thanos-io/thanos/pull/8844): Cache: add redis key prefix support
+- [#8691](https://github.com/thanos-io/thanos/pull/8819): query/ui: show fanout information
 - [#8691](https://github.com/thanos-io/thanos/pull/8691): Compactor: remove the directory marker objects for some s3 compatible object stores
 - [#8730](https://github.com/thanos-io/thanos/pull/8730): *: add `--grpc-server-tls-ciphers` to configure cipher suites for gRPC servers.
 - [#8730](https://github.com/thanos-io/thanos/pull/8730): Receive: add `--remote-write.server-tls-ciphers` to configure cipher suites for the HTTP server.
@@ -43,6 +108,8 @@ It is recommend to upgrade the storage components first (Receive, Store, etc.) a
 - [#8802](https://github.com/thanos-io/thanos/pull/8802): Cache: add `SendToReplicas` option while initializing Rueidis client to allow sending read-only requests to Redis replica instances.
 - [#8839](https://github.com/thanos-io/thanos/pull/8839): Store: *breaking :warning:* removed `--debug.advertise-compatibility-label`. Stores now don't advertise `@thanos_compatibility_store_type=store` external label by default, breaking compatibility with Thanos Query before v0.8.0.
 - [#8831](https://github.com/thanos-io/thanos/pull/8830): Query-Frontend: change `time_taken` field to `time_taken_ms` for consistent JSON output for easier parsing by the log collector.
+- [#8853](https://github.com/thanos-io/thanos/pull/8853): Compactor: remove labels specified as dedup replica labels in hashmod calculation; this fixes a footgun that users could inadvertently hit.
+- [#8796](https://github.com/thanos-io/thanos/pull/8796): queryfrontend: add other params to key
 
 ### Removed
 

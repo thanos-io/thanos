@@ -194,8 +194,7 @@ func prepareStoreWithTestBlocks(t testing.TB, dir string, bkt objstore.Bucket, m
 	defer cancel()
 
 	// Check if the blocks are being loaded.
-	start := time.Now()
-	time.Sleep(time.Second * 1)
+	start := time.Now().Truncate(time.Second)
 	testutil.Ok(t, store.SyncBlocks(ctx))
 
 	// Get the value of the metric 'thanos_bucket_store_blocks_last_loaded_timestamp_seconds' to capture the timestamp of the last loaded block.

@@ -205,6 +205,14 @@ func (i *instrumentedServer) Send(response *storepb.SeriesResponse) error {
 	if series := response.GetSeries(); series != nil {
 		i.seriesSent++
 		i.chunksSent += float64(len(series.Chunks))
+	} else if batch := response.GetBatch(); batch != nil {
+		for _, series := range batch.Series {
+			if series == nil {
+				continue
+			}
+			i.seriesSent++
+			i.chunksSent += float64(len(series.Chunks))
+		}
 	}
 	return nil
 }

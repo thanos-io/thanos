@@ -55,9 +55,14 @@ message WriteResponse {
 }
 
 message WriteRequest {
+  // This only allows to put one tenant and a set of series in one write request.
+  // In the case of split tenant label functionality, we want to send multiple tenants worth of
+  // data to improve throughput. Will mark as deprecated once the other field's functionality
+  // is implemented.
   repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
   string tenant = 2;
   int64 replica = 3;
+  repeated TimeSeriesTenantTuple timeseriesTenantData = 4 [(gogoproto.nullable) = false];
 }
 
 message SeriesRequest {
@@ -140,12 +145,15 @@ message QueryHints {
   // even if we only fetch the `label` label. For some storage implementations this is beneficial.
 
   // projection_labels are the minimum amount of labels required to be fetched for this Series call.
-  // When honored it is required to add an __series_hash__ label containing the hash of all labels
+  // When honored it is required to add a label with name `series_hash_label` (as in the parameter in this message) containing the hash of all labels
   // of a particular series so that the engine can still perform horizontal joins.
   repeated string projection_labels = 6;
 
   // projection_include defines if we have to include or exclude the labels from the projection_labels field.
   bool projection_include = 7;
+
+  // series_hash_label_name defines the name of the label which should contain the hash of all values.
+  string series_hash_label_name = 8;
 }
 
 // ShardInfo are the parameters used to shard series in Stores.
@@ -189,6 +197,11 @@ enum Aggr {
   COUNTER = 5;
 }
 
+message TimeSeriesTenantTuple {
+  repeated prometheus_copy.TimeSeries timeseries = 1 [(gogoproto.nullable) = false];
+  string tenant = 2;
+}
+
 message SeriesResponse {
   oneof result {
     /// series contains 1 response series. The series labels are sorted by name.
@@ -230,8 +243,8 @@ message LabelNamesRequest {
   // same as in series request.
   repeated string without_replica_labels = 7;
 
-    // limit is used to limit the number of results returned
-    int64 limit = 8;
+  // limit is used to limit the number of results returned
+  int64 limit = 8;
 }
 
 message LabelNamesResponse {

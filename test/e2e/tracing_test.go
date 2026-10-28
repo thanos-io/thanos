@@ -58,7 +58,7 @@ func TestJaegerTracing(t *testing.T) {
 	})
 	testutil.Ok(t, err)
 
-	prom1, sidecar1 := e2ethanos.NewPrometheusWithJaegerTracingSidecarCustomImage(env, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.LocalPrometheusTarget), "",
+	prom1, sidecar1 := e2ethanos.NewPrometheusWithJaegerTracingSidecarCustomImage(env, "alone", e2ethanos.DefaultPromConfig("prom-alone", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget), "",
 		e2ethanos.DefaultPrometheusImage(), "", e2ethanos.DefaultImage(), string(jaegerConfig), "")
 	testutil.Ok(t, e2e.StartAndWaitReady(prom1, sidecar1))
 
@@ -84,7 +84,7 @@ config:
 		},
 	})
 
-	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query&operation=proxy.series")
+	url := "http://" + strings.TrimSpace(newJaeger.Endpoint("http")+"/api/traces?service=thanos-query&operation=%2Fthanos.Store%2FSeries")
 	request, err := http.NewRequest("GET", url, nil)
 	testutil.Ok(t, err)
 	client := &http.Client{}

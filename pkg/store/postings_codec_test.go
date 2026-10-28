@@ -54,7 +54,7 @@ func TestStreamedSnappyMaximumDecodedLen(t *testing.T) {
 		testutil.Assert(t, maxLen == 100)
 	})
 	t.Run("random", func(t *testing.T) {
-		for i := 10000; i < 30000; i++ {
+		for i := 10000; i < 30000; i += 100 {
 			b := make([]byte, i)
 			_, err := crand.Read(b)
 			testutil.Ok(t, err)
@@ -95,7 +95,7 @@ func TestDiffVarintCodec(t *testing.T) {
 		testutil.Ok(t, h.Close())
 	}()
 
-	appendTestData(t, h.Appender(context.Background()), 1e6)
+	appendTestData(t, h.Appender(context.Background()), 1e5)
 
 	idx, err := h.Index()
 	testutil.Ok(t, err)

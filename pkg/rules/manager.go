@@ -28,7 +28,6 @@ import (
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
-	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 const tmpRuleDir = ".tmp-rules"
@@ -432,9 +431,7 @@ func (m *Manager) Rules(r *rulespb.RulesRequest, s rulespb.Rules_RulesServer) (e
 	enrichRulesWithExtLabels(pgs, m.extLset)
 
 	for _, pg := range pgs {
-		tracing.DoInSpan(s.Context(), "send_rule_group_response", func(_ context.Context) {
-			err = s.Send(&rulespb.RulesResponse{Result: &rulespb.RulesResponse_Group{Group: pg}})
-		})
+		err = s.Send(&rulespb.RulesResponse{Result: &rulespb.RulesResponse_Group{Group: pg}})
 		if err != nil {
 			return err
 		}

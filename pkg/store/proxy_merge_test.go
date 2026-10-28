@@ -10,8 +10,6 @@ import (
 	"testing"
 
 	"github.com/efficientgo/core/testutil"
-	"github.com/opentracing/opentracing-go"
-	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
@@ -276,7 +274,6 @@ func TestProxyResponseTreeSortWithBatchResponses(t *testing.T) {
 	// Create eagerRespSets which should unpack the batches
 	var shardInfo *storepb.ShardInfo
 	respSet1 := newEagerRespSet(
-		noopSpan{},
 		0,
 		"store1",
 		nil,
@@ -289,7 +286,6 @@ func TestProxyResponseTreeSortWithBatchResponses(t *testing.T) {
 		nil,
 	)
 	respSet2 := newEagerRespSet(
-		noopSpan{},
 		0,
 		"store2",
 		nil,
@@ -334,23 +330,6 @@ func (c *mockBatchSeriesClient) Recv() (*storepb.SeriesResponse, error) {
 
 func (c *mockBatchSeriesClient) CloseSend() error { return nil }
 
-// noopSpan implements opentracing.Span for testing.
-type noopSpan struct{}
-
-func (noopSpan) Finish()                                        {}
-func (noopSpan) SetTag(string, any) opentracing.Span            { return noopSpan{} }
-func (noopSpan) Context() opentracing.SpanContext               { return nil }
-func (noopSpan) SetOperationName(string) opentracing.Span       { return noopSpan{} }
-func (noopSpan) Tracer() opentracing.Tracer                     { return nil }
-func (noopSpan) SetBaggageItem(string, string) opentracing.Span { return noopSpan{} }
-func (noopSpan) BaggageItem(string) string                      { return "" }
-func (noopSpan) LogKV(...any)                                   {}
-func (noopSpan) LogFields(...otlog.Field)                       {}
-func (noopSpan) Log(opentracing.LogData)                        {}
-func (noopSpan) FinishWithOptions(opentracing.FinishOptions)    {}
-func (noopSpan) LogEvent(string)                                {}
-func (noopSpan) LogEventWithPayload(string, interface{})        {}
-
 // TestLazyRespSetUnpacksBatchResponses verifies that lazyRespSet properly unpacks
 // batch responses into individual series before being merged by the loser tree.
 func TestLazyRespSetUnpacksBatchResponses(t *testing.T) {
@@ -374,7 +353,6 @@ func TestLazyRespSetUnpacksBatchResponses(t *testing.T) {
 
 	var shardInfo *storepb.ShardInfo
 	respSet1 := newLazyRespSet(
-		noopSpan{},
 		0,
 		"store1",
 		nil,
@@ -387,7 +365,6 @@ func TestLazyRespSetUnpacksBatchResponses(t *testing.T) {
 		nil,
 	)
 	respSet2 := newLazyRespSet(
-		noopSpan{},
 		0,
 		"store2",
 		nil,

@@ -214,6 +214,8 @@ func (p *PrometheusStore) Series(r *storepb.SeriesRequest, seriesSrv storepb.Sto
 	}
 
 	if !strings.HasPrefix(contentType, "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse") {
+		runutil.CloseWithLogOnErr(p.logger, httpResp.Body, "unsupported content type response body")
+		queryPrometheusSpan.Finish()
 		return errors.Errorf("not supported remote read content type: %s", contentType)
 	}
 	return p.handleStreamedPrometheusResponse(s, shardMatcher, httpResp, queryPrometheusSpan, extLset, enableChunkHashCalculation, extLsetToRemove)
@@ -351,8 +353,10 @@ func (p *PrometheusStore) handleStreamedPrometheusResponse(
 				series.Chunks[i].Data = nil
 			}
 
+			lbls := labelpb.ZLabelsFromPromLabels(completeLabelset)
+			labelpb.ReAllocZLabelsStrings(&lbls)
 			r := storepb.NewSeriesResponse(&storepb.Series{
-				Labels: labelpb.ZLabelsFromPromLabels(completeLabelset),
+				Labels: lbls,
 				Chunks: thanosChks,
 			})
 			if err := s.Send(r); err != nil {
@@ -418,6 +422,10 @@ func (p *PrometheusStore) fetchSampledResponse(ctx context.Context, resp *http.R
 	}
 	if len(data.Results) != 1 {
 		return nil, errors.Errorf("unexpected result size %d", len(data.Results))
+	}
+
+	for _, ts := range data.Results[0].Timeseries {
+		labelpb.ReAllocZLabelsStrings(&ts.Labels)
 	}
 
 	return &data, nil

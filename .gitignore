@@ -23,6 +23,9 @@ examples/interactive/e2e_*
 # Ignore benchmarks dir.
 benchmarks/
 
+# Ignore coverage data.
+/.coverage
+
 # Ignore promu artifacts.
 /.build
 /.release

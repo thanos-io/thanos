@@ -5,7 +5,7 @@
 set -e
 set -u
 
-PROTOC_VERSION=${PROTOC_VERSION:-3.20.1}
+PROTOC_VERSION=${PROTOC_VERSION:-36.2}
 PROTOC_BIN=${PROTOC_BIN:-protoc}
 GOIMPORTS_BIN=${GOIMPORTS_BIN:-goimports}
 PROTOC_GEN_GOGOFAST_BIN=${PROTOC_GEN_GOGOFAST_BIN:-protoc-gen-gogofast}
@@ -26,7 +26,7 @@ PATH=${PATH}:/tmp/protobin
 GOGOPROTO_ROOT="$(GO111MODULE=on go list -modfile=.bingo/protoc-gen-gogofast.mod -f '{{ .Dir }}' -m github.com/gogo/protobuf)"
 GOGOPROTO_PATH="${GOGOPROTO_ROOT}:${GOGOPROTO_ROOT}/protobuf"
 
-DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb status/statuspb"
+DIRS="store/storepb/ store/storepb/prompb/ store/labelpb rules/rulespb targets/targetspb store/hintspb queryfrontend metadata/metadatapb exemplars/exemplarspb info/infopb api/query/querypb status/statuspb store/storepb/prompb/io/prometheus/write/v2"
 echo "generating code"
 pushd "pkg"
 for dir in ${DIRS}; do
@@ -70,3 +70,4 @@ done
 popd
 
 ./scripts/remove_method.sh pkg/store/storepb/types.pb.go Chunk Unmarshal
+./scripts/remove_method.sh pkg/store/storepb/prompb/io/prometheus/write/v2/types.pb.go Request Unmarshal

@@ -267,7 +267,7 @@ func (l *localClient) Matches(matchers []*labels.Matcher) bool {
 }
 
 func (l *localClient) LabelSets() []labels.Labels {
-	return labelpb.ZLabelSetsToPromLabelSets(l.store.LabelSet()...)
+	return l.store.ExtLabelSets()
 }
 
 func (l *localClient) TimeRange() (mint int64, maxt int64) {
@@ -293,7 +293,7 @@ func (l *localClient) TSDBInfos() []infopb.TSDBInfo {
 func (l *localClient) String() string {
 	mint, maxt := l.store.TimeRange()
 	return fmt.Sprintf(
-		"MinTime: %d MaxTime: %d",
+		"local store MinTime: %d MaxTime: %d",
 		mint, maxt,
 	)
 }
@@ -343,7 +343,11 @@ func (t *tenant) shouldBeMarkedInactive() bool {
 	// NOTE(GiedriusS): it could also happen that compaction is failing and it is not producing new blocks.
 	// But if compaction is failing then that probably also means that the storage layer is hosed
 	// and if that is the case then we cannot do anything about it anyway.
-	head := t.tsdb.Head()
+	db := t.readyS.Get()
+	if db == nil {
+		return false
+	}
+	head := db.Head()
 	if head.MaxTime() < 0 {
 		return false
 	}
@@ -499,10 +503,8 @@ func (t *tenant) startPeriodicUploader() {
 		panic("BUG: periodic uploader started but shipper is nil")
 	}
 
-	var interval = 30 * time.Second
-
 	doIter := func() error {
-		syncCtx, cancel := context.WithTimeout(context.Background(), interval)
+		syncCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		if _, err := s.Sync(syncCtx); err != nil {
 			return fmt.Errorf("sync: %w", err)
@@ -512,7 +514,7 @@ func (t *tenant) startPeriodicUploader() {
 	}
 
 	go func() {
-		ticker := time.NewTicker(interval)
+		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 
 		if err := doIter(); err != nil {
@@ -576,6 +578,10 @@ func (t *tenant) close(cd closeDelete) {
 	t.closeOnce.Do(func() {
 		close(t.doneC)
 
+		if t.reg != nil {
+			t.reg.UnregisterAll()
+		}
+
 		// NOTE(GiedriusS): on paper, we could Close() again but the TSDB's Close() function is not idempotent.
 		// If storage starts erroring out then we are hosed anyway, so just log an error.
 		if err := t.tsdb.Close(); err != nil {
@@ -637,9 +643,6 @@ func (t *tenant) set(storeTSDB *store.TSDBStore, tenantTSDB *tsdb.DB, ship *ship
 func (t *tenant) setComponents(storeTSDB *store.TSDBStore, ship *shipper.Shipper, exemplarsTSDB *exemplars.TSDB, tenantTSDB *tsdb.DB, reg *UnRegisterer) {
 	if storeTSDB == nil && t.storeTSDB != nil {
 		t.storeTSDB.Close()
-	}
-	if reg == nil && t.reg != nil {
-		t.reg.UnregisterAll()
 	}
 	t.storeTSDB = storeTSDB
 	t.reg = reg
@@ -935,7 +938,8 @@ func (t *MultiTSDB) TenantStats(limit int, statsByLabelName string, tenantIDs ..
 
 func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant) error {
 	reg := prometheus.WrapRegistererWith(prometheus.Labels{"tenant": tenantID}, t.reg)
-	reg = NewUnRegisterer(reg)
+	unreg := NewUnRegisterer(reg)
+	reg = unreg
 
 	initialLset := labelpb.ExtendSortedLabels(t.labels, labels.FromStrings(t.tenantLabelName, tenantID))
 	lset := t.extractTenantsLabels(tenantID, initialLset)
@@ -1004,6 +1008,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		nil,
 	)
 	if err != nil {
+		unreg.UnregisterAll()
 		t.removeTenantLocked(tenantID)
 		return err
 	}
@@ -1018,6 +1023,9 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 		// shipDataDir must be closed together with tenant
 		shipDataDir, err := os.OpenRoot(dataDir)
 		if err != nil {
+			s.Close()
+			unreg.UnregisterAll()
+			t.removeTenantLocked(tenantID)
 			return err
 		}
 		ship = shipper.New(
@@ -1269,7 +1277,6 @@ func (u *UnRegisterer) MustRegister(cs ...prometheus.Collector) {
 			panic(err)
 		}
 	}
-	u.collectors = append(u.collectors, cs...)
 }
 
 // extractTenantsLabels extracts tenant's external labels from hashring configs.

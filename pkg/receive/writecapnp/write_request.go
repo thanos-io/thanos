@@ -37,14 +37,12 @@ type Request struct {
 	symbols *[]string
 	builder labels.ScratchBuilder
 	series  TimeSeries_List
+
+	Tenant string
 }
 
-func NewRequest(wr WriteRequest) (*Request, error) {
+func NewRequest(wr TimeSeriesTenantTuple, symTable Symbols, tenant string) (*Request, error) {
 	ts, err := wr.TimeSeries()
-	if err != nil {
-		return nil, err
-	}
-	symTable, err := wr.Symbols()
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +55,10 @@ func NewRequest(wr WriteRequest) (*Request, error) {
 		return nil, err
 	}
 
-	strings, _ := symbolsPool.Get(offsets.Len())
+	strings, err := symbolsPool.Get(offsets.Len())
+	if err != nil {
+		return nil, err
+	}
 	start := uint32(0)
 	for i := 0; i < offsets.Len(); i++ {
 		end := offsets.At(i)
@@ -75,6 +76,7 @@ func NewRequest(wr WriteRequest) (*Request, error) {
 		symbols: strings,
 		series:  ts,
 		builder: labels.NewScratchBuilder(8),
+		Tenant:  tenant,
 	}, nil
 }
 
@@ -268,4 +270,44 @@ func (s *Request) readExemplar(symbols *[]string, e Exemplar) (exemplar.Exemplar
 func (s *Request) Close() error {
 	symbolsPool.Put(s.symbols)
 	return nil
+}
+
+func NewSingleTenantRequest(wr WriteRequest, tenant string) (*Request, error) {
+	ts, err := wr.TimeSeries()
+	if err != nil {
+		return nil, err
+	}
+	symTable, err := wr.Symbols()
+	if err != nil {
+		return nil, err
+	}
+	data, err := symTable.Data()
+	if err != nil {
+		return nil, err
+	}
+	offsets, err := symTable.Offsets()
+	if err != nil {
+		return nil, err
+	}
+
+	strings, _ := symbolsPool.Get(offsets.Len())
+	start := uint32(0)
+	for i := 0; i < offsets.Len(); i++ {
+		end := offsets.At(i)
+		if start == end {
+			*strings = append(*strings, "")
+		} else {
+			b := data[start:end]
+			*strings = append(*strings, unsafe.String(&b[0], len(b)))
+		}
+		start = end
+	}
+
+	return &Request{
+		i:       -1,
+		symbols: strings,
+		series:  ts,
+		builder: labels.NewScratchBuilder(8),
+		Tenant:  tenant,
+	}, nil
 }

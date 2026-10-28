@@ -430,6 +430,9 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			}
 		}
 	}
+	if err := set.Err(); err != nil {
+		return errorOnlyStringIter{err}, nil
+	}
 
 	symbolsSlice := make([]string, 0, len(symbols))
 	for s := range symbols {

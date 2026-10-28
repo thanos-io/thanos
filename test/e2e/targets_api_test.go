@@ -15,6 +15,7 @@ import (
 	"github.com/efficientgo/e2e"
 	e2emon "github.com/efficientgo/e2e/monitoring"
 	"github.com/go-kit/log"
+	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 
 	"github.com/efficientgo/core/testutil"
@@ -36,14 +37,14 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.LocalPrometheusTarget, "localhost:80"),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "localhost:80"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
@@ -64,9 +65,12 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 			{
 				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:9090"},
+					{Name: "__always_scrape_classic_histograms__", Value: "false"},
+					{Name: "__convert_classic_histograms_to_nhcb__", Value: "false"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
 					{Name: "__scrape_interval__", Value: "1s"},
+					{Name: "__scrape_native_histograms__", Value: "false"},
 					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
@@ -85,9 +89,12 @@ func TestTargetsAPI_Fanout(t *testing.T) {
 			{
 				DiscoveredLabels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{
 					{Name: "__address__", Value: "localhost:80"},
+					{Name: "__always_scrape_classic_histograms__", Value: "false"},
+					{Name: "__convert_classic_histograms_to_nhcb__", Value: "false"},
 					{Name: "__metrics_path__", Value: "/metrics"},
 					{Name: "__scheme__", Value: "http"},
 					{Name: "__scrape_interval__", Value: "1s"},
+					{Name: "__scrape_native_histograms__", Value: "false"},
 					{Name: "__scrape_timeout__", Value: "1s"},
 					{Name: "job", Value: "myself"},
 					{Name: "prometheus", Value: "ha"},
@@ -127,7 +134,7 @@ func targetAndAssert(t *testing.T, ctx context.Context, addr, state string, want
 		sort.Slice(res.DroppedTargets, func(i, j int) bool { return res.DroppedTargets[i].Compare(res.DroppedTargets[j]) < 0 })
 
 		if !reflect.DeepEqual(want, res) {
-			return errors.Errorf("unexpected result\nwant %v\ngot: %v", want, res)
+			return errors.Errorf("unexpected result\nwant %v\ngot: %v\v%s", want, res, cmp.Diff(want, res))
 		}
 
 		return nil

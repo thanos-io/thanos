@@ -32,14 +32,14 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	prom1, sidecar1 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom1",
-		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.LocalPrometheusTarget, "sidecar-prom1:8080"),
+		e2ethanos.DefaultPromConfig("ha", 0, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "sidecar-prom1:8080"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)
 	prom2, sidecar2 := e2ethanos.NewPrometheusWithSidecar(
 		e,
 		"prom2",
-		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.LocalPrometheusTarget, "sidecar-prom2:8080"),
+		e2ethanos.DefaultPromConfig("ha", 1, "", "", e2ethanos.Version1PB, e2ethanos.LocalPrometheusTarget, "sidecar-prom2:8080"),
 		"",
 		e2ethanos.DefaultPrometheusImage(), "",
 	)

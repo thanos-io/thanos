@@ -920,6 +920,8 @@ By default, rewrite also produces `change.log` in the tmp local dir. Look for lo
 ts=2020-11-09T00:40:13.703322181Z caller=level.go:63 level=info msg="changelog will be available" file=/tmp/thanos-rewrite/01EPN74E401ZD2SQXS4SRY6DZX/change.log`
 ```
 
+Downsampled blocks (5m or 1h resolution) can only be rewritten with deletions of whole series, that is, deletion requests without `intervals`. Deletions with `intervals` and relabeling would have to re-encode aggregated chunks, which is not supported, so rewrite returns an error for such blocks.
+
 ```$ mdox-exec="thanos tools bucket rewrite --help"
 usage: thanos tools bucket rewrite --id=ID [<flags>]
 

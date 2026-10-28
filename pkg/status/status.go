@@ -182,7 +182,6 @@ func (srv *Server) TSDBStatistics(r *statuspb.TSDBStatisticsRequest, s statuspb.
 		}
 
 		tenantStats.HeadStatistics.NumSeries += stat.NumSeries
-		tenantStats.HeadStatistics.NumLabelPairs += int64(stat.IndexPostingStats.NumLabelPairs)
 		//TODO: ChunkCount is retrieved from the prometheus_tsdb_head_chunks metric.
 
 		if tenantStats.HeadStatistics.MinTime <= 0 || tenantStats.HeadStatistics.MinTime < stat.MinTime {
@@ -192,10 +191,14 @@ func (srv *Server) TSDBStatistics(r *statuspb.TSDBStatisticsRequest, s statuspb.
 			tenantStats.HeadStatistics.MaxTime = stat.MaxTime
 		}
 
-		tenantStats.SeriesCountByMetricName = toStatistic(stat.IndexPostingStats.CardinalityMetricsStats)
-		tenantStats.LabelValueCountByLabelName = toStatistic(stat.IndexPostingStats.CardinalityLabelStats)
-		tenantStats.MemoryInBytesByLabelName = toStatistic(stat.IndexPostingStats.LabelValueStats)
-		tenantStats.SeriesCountByLabelValuePair = toStatistic(stat.IndexPostingStats.LabelValuePairsStats)
+		if stat.IndexPostingStats != nil {
+			tenantStats.HeadStatistics.NumLabelPairs += int64(stat.IndexPostingStats.NumLabelPairs)
+			tenantStats.SeriesCountByMetricName = toStatistic(stat.IndexPostingStats.CardinalityMetricsStats)
+			tenantStats.LabelValueCountByLabelName = toStatistic(stat.IndexPostingStats.CardinalityLabelStats)
+			tenantStats.MemoryInBytesByLabelName = toStatistic(stat.IndexPostingStats.LabelValueStats)
+			tenantStats.SeriesCountByLabelValuePair = toStatistic(stat.IndexPostingStats.LabelValuePairsStats)
+		}
+
 	}
 
 	if err := s.Send(&statuspb.TSDBStatisticsResponse{

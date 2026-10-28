@@ -83,11 +83,20 @@ func TestMarshalWriteRequest(t *testing.T) {
 	wr, err := ReadRootWriteRequest(msg)
 	require.NoError(t, err)
 
-	tenant, err := wr.Tenant()
+	syms, err := wr.Symbols()
+	require.NoError(t, err)
+
+	data, err := wr.Data()
+	require.NoError(t, err)
+	require.Equal(t, 1, data.Len())
+
+	tuple := data.At(0)
+
+	tenant, err := tuple.Tenant()
 	require.NoError(t, err)
 	require.Equal(t, wreq.Tenant, tenant)
 
-	series, err := wr.TimeSeries()
+	series, err := tuple.TimeSeries()
 	require.NoError(t, err)
 	require.Equal(t, len(wreq.Timeseries), series.Len())
 
@@ -95,7 +104,7 @@ func TestMarshalWriteRequest(t *testing.T) {
 		i      int
 		actual Series
 	)
-	request, err := NewRequest(wr)
+	request, err := NewRequest(tuple, syms, tenant)
 	require.NoError(t, err)
 	for request.Next() {
 		require.NoError(t, request.At(&actual))
@@ -178,11 +187,20 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 	wr, err := ReadRootWriteRequest(msg)
 	require.NoError(t, err)
 
-	tenant, err := wr.Tenant()
+	syms, err := wr.Symbols()
+	require.NoError(t, err)
+
+	data, err := wr.Data()
+	require.NoError(t, err)
+	require.Equal(t, 1, data.Len())
+
+	tuple := data.At(0)
+
+	tenant, err := tuple.Tenant()
 	require.NoError(t, err)
 	require.Equal(t, wreq.Tenant, tenant)
 
-	series, err := wr.TimeSeries()
+	series, err := tuple.TimeSeries()
 	require.NoError(t, err)
 	require.Equal(t, len(wreq.Timeseries), series.Len())
 	var (
@@ -191,7 +209,7 @@ func TestMarshalWithMultipleHistogramSeries(t *testing.T) {
 		readHistograms      []*histogram.Histogram
 		readFloatHistograms []*histogram.FloatHistogram
 	)
-	request, err := NewRequest(wr)
+	request, err := NewRequest(tuple, syms, tenant)
 	require.NoError(t, err)
 
 	for request.Next() {

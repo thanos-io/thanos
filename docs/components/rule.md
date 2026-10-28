@@ -96,7 +96,7 @@ labels:
   [ <labelname>: <labelvalue> ]
 ```
 
-Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--store <thanos-ruler-ip>` command-line argument to the Thanos Query command.
+Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--endpoint <thanos-ruler-ip>` command-line argument to the Thanos Query command.
 
 ### Alerting Rules
 
@@ -463,7 +463,7 @@ Flags:
                                  exceeded. 0 means no limit.
       --store.limits.request-samples=0
                                  The maximum samples allowed for a single
-                                 Series request, The Series call fails if
+                                 Series request. The Series call fails if
                                  this limit is exceeded. 0 means no limit.
                                  NOTE: For efficiency the limit is internally
                                  implemented as 'chunks limit' considering each
@@ -635,3 +635,15 @@ The configuration format is the following:
   grpc_config:
     endpoint_addresses: []
 ```
+
+To send extra headers with every HTTP query, for example a tenant ID, set `http_headers` in `http_config`. Each header takes `values`, `secrets` or `files`, as in Prometheus' `http_headers`; relative `files` paths are resolved from the working directory. The Alertmanager `http_config` accepts it too:
+
+```yaml
+- http_config:
+    http_headers:
+      X-Scope-OrgID:
+        values: [tenant-a]
+  static_configs: ["querier:9090"]
+```
+
+Note that a header like this applies to every query the Ruler makes, so setting a tenant ID means running one Ruler per tenant. That is only practical for a small number of tenants.

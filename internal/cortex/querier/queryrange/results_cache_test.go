@@ -245,7 +245,6 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 				PrometheusResponseExtractor{},
 				nil,
 				nil,
-				nil,
 			)
 			require.NoError(t, err)
 
@@ -267,13 +266,12 @@ func TestStatsCacheQuerySamples(t *testing.T) {
 
 func TestShouldCache(t *testing.T) {
 	maxCacheTime := int64(150 * 1000)
-	c := &resultsCache{logger: log.NewNopLogger(), cacheGenNumberLoader: newMockCacheGenNumberLoader()}
+	c := &resultsCache{logger: log.NewNopLogger()}
 	for _, tc := range []struct {
-		name                   string
-		request                Request
-		input                  Response
-		cacheGenNumberToInject string
-		expected               bool
+		name     string
+		request  Request
+		input    Response
+		expected bool
 	}{
 		// Tests only for cacheControlHeader
 		{
@@ -336,94 +334,6 @@ func TestShouldCache(t *testing.T) {
 				Headers: []*PrometheusResponseHeader{{Name: cacheControlHeader}},
 			}),
 			expected: true,
-		},
-
-		// Tests only for cacheGenNumber header
-		{
-			name:    "cacheGenNumber not set in both header and store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   "meaninglessheader",
-						Values: []string{},
-					},
-				},
-			}),
-			expected: true,
-		},
-		{
-			name:    "cacheGenNumber set in store but not in header",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   "meaninglessheader",
-						Values: []string{},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
-		},
-		{
-			name:    "cacheGenNumber set in header but not in store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1"},
-					},
-				},
-			}),
-			expected: false,
-		},
-		{
-			name:    "cacheGenNumber in header and store are the same",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "1"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               true,
-		},
-		{
-			name:    "inconsistency between cacheGenNumber in header and store",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "2"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
-		},
-		{
-			name:    "cacheControl header says not to catch and cacheGenNumbers in store and headers have consistency",
-			request: &PrometheusRequest{Query: "metric"},
-			input: Response(&PrometheusResponse{
-				Headers: []*PrometheusResponseHeader{
-					{
-						Name:   cacheControlHeader,
-						Values: []string{noStoreValue},
-					},
-					{
-						Name:   ResultsCacheGenNumberHeaderName,
-						Values: []string{"1", "1"},
-					},
-				},
-			}),
-			cacheGenNumberToInject: "1",
-			expected:               false,
 		},
 		// @ modifier on vector selectors.
 		{
@@ -578,7 +488,7 @@ func TestShouldCache(t *testing.T) {
 	} {
 		{
 			t.Run(tc.name, func(t *testing.T) {
-				ctx := cache.InjectCacheGenNumber(context.Background(), tc.cacheGenNumberToInject)
+				ctx := context.Background()
 				ret := c.shouldCacheResponse(ctx, tc.request, tc.input, maxCacheTime)
 				require.Equal(t, tc.expected, ret)
 			})
@@ -838,7 +748,7 @@ func TestPartition(t *testing.T) {
 				extractor:      PrometheusResponseExtractor{},
 				minCacheExtent: 10,
 			}
-			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse)
+			reqs, resps, err := s.partition(tc.input, tc.prevCachedResponse, extractAnyStep)
 			require.Nil(t, err)
 			require.Equal(t, tc.expectedRequests, reqs)
 			require.Equal(t, tc.expectedCachedResponse, resps)
@@ -1044,7 +954,7 @@ func TestHandleHit(t *testing.T) {
 			}
 
 			ctx := user.InjectOrgID(context.Background(), "1")
-			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0)
+			response, updatedExtents, err := sut.handleHit(ctx, tc.input, tc.cachedEntry, 0, extractAnyStep)
 			require.NoError(t, err)
 
 			expectedResponse := mkAPIResponse(tc.input.GetStart(), tc.input.GetEnd(), tc.input.GetStep())
@@ -1052,6 +962,60 @@ func TestHandleHit(t *testing.T) {
 			require.Equal(t, tc.expectedUpdatedCachedEntry, updatedExtents, "updated cache entry does not match the expectation")
 		})
 	}
+}
+
+type alternativeStepSplitter struct {
+	interval time.Duration
+	steps    []int64
+}
+
+func (s alternativeStepSplitter) GenerateCacheKey(userID string, r Request) string {
+	return s.generateCacheKey(userID, r, r.GetStep())
+}
+
+func (s alternativeStepSplitter) GenerateCacheKeyAlternatives(userID string, r Request) []string {
+	keys := make([]string, 0, len(s.steps))
+	for _, step := range s.steps {
+		keys = append(keys, s.generateCacheKey(userID, r, step))
+	}
+	return keys
+}
+
+func (s alternativeStepSplitter) generateCacheKey(userID string, r Request, step int64) string {
+	currentInterval := r.GetStart() / int64(s.interval/time.Millisecond)
+	return fmt.Sprintf("%s:%s:%d:%d", userID, r.GetQuery(), step, currentInterval)
+}
+
+type recordingCache struct {
+	cache.Cache
+	fetches [][]string
+}
+
+func (c *recordingCache) Fetch(ctx context.Context, keys []string) ([]string, [][]byte, []string) {
+	c.fetches = append(c.fetches, append([]string(nil), keys...))
+	return c.Cache.Fetch(ctx, keys)
+}
+
+func newTestResultsCache(t *testing.T, c cache.Cache) *resultsCache {
+	t.Helper()
+
+	cfg := ResultsCacheConfig{
+		CacheConfig: cache.Config{
+			Cache: c,
+		},
+	}
+	rm, _, err := NewResultsCacheMiddleware(
+		log.NewNopLogger(),
+		cfg,
+		constSplitter(day),
+		mockLimits{},
+		PrometheusCodec,
+		PrometheusResponseExtractor{},
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	return rm.Wrap(nil).(*resultsCache)
 }
 
 func TestResultsCache(t *testing.T) {
@@ -1068,7 +1032,6 @@ func TestResultsCache(t *testing.T) {
 		mockLimits{},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1100,6 +1063,123 @@ func TestResultsCache(t *testing.T) {
 	require.Equal(t, 2, calls)
 }
 
+func TestResultsCacheUsesLowerStepCache(t *testing.T) {
+	cfg := ResultsCacheConfig{
+		CacheConfig: cache.Config{
+			Cache: cache.NewMockCache(),
+		},
+	}
+	rcm, _, err := NewResultsCacheMiddleware(
+		log.NewNopLogger(),
+		cfg,
+		alternativeStepSplitter{
+			interval: day,
+			steps:    []int64{15 * 1000},
+		},
+		mockLimits{},
+		PrometheusCodec,
+		PrometheusResponseExtractor{},
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	calls := 0
+	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+		calls++
+		return mkAPIResponse(req.GetStart(), req.GetEnd(), req.GetStep()), nil
+	}))
+	ctx := user.InjectOrgID(context.Background(), "1")
+
+	warmCacheReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  15 * 1000,
+		Query: "up",
+	}
+	resp, err := rc.Do(ctx, warmCacheReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Equal(t, mkAPIResponse(0, 120*1000, 15*1000), resp)
+
+	crossStepReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  30 * 1000,
+		Query: "up",
+	}
+	resp, err = rc.Do(ctx, crossStepReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Equal(t, mkAPIResponse(0, 120*1000, 30*1000), resp)
+}
+
+func TestResultsCacheFetchesAlternativeKeysInBulk(t *testing.T) {
+	cacheRecorder := &recordingCache{Cache: cache.NewMockCache()}
+	splitter := alternativeStepSplitter{
+		interval: day,
+		steps:    []int64{60 * 1000, 15 * 1000, 30 * 1000, 15 * 1000},
+	}
+	cfg := ResultsCacheConfig{
+		CacheConfig: cache.Config{
+			Cache: cacheRecorder,
+		},
+	}
+	rcm, _, err := NewResultsCacheMiddleware(
+		log.NewNopLogger(),
+		cfg,
+		splitter,
+		mockLimits{},
+		PrometheusCodec,
+		PrometheusResponseExtractor{},
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	calls := 0
+	rc := rcm.Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+		calls++
+		return mkAPIResponse(req.GetStart(), req.GetEnd(), req.GetStep()), nil
+	}))
+	ctx := user.InjectOrgID(context.Background(), "1")
+
+	warmCacheReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  15 * 1000,
+		Query: "up",
+	}
+	_, err = rc.Do(ctx, warmCacheReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+
+	cacheRecorder.fetches = nil
+
+	crossStepReq := &PrometheusRequest{
+		Path:  "/api/v1/query_range",
+		Start: 0,
+		End:   120 * 1000,
+		Step:  30 * 1000,
+		Query: "up",
+	}
+	resp, err := rc.Do(ctx, crossStepReq)
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+	require.Equal(t, mkAPIResponse(0, 120*1000, 30*1000), resp)
+
+	require.Equal(t, [][]string{
+		{cache.HashKey(splitter.GenerateCacheKey("1", crossStepReq))},
+		{
+			cache.HashKey(splitter.generateCacheKey("1", crossStepReq, 60*1000)),
+			cache.HashKey(splitter.generateCacheKey("1", crossStepReq, 15*1000)),
+		},
+	}, cacheRecorder.fetches)
+}
+
 func TestResultsCacheRecent(t *testing.T) {
 	var cfg ResultsCacheConfig
 	flagext.DefaultValues(&cfg)
@@ -1112,7 +1192,6 @@ func TestResultsCacheRecent(t *testing.T) {
 		mockLimits{maxCacheFreshness: 10 * time.Minute},
 		PrometheusCodec,
 		PrometheusResponseExtractor{},
-		nil,
 		nil,
 		nil,
 	)
@@ -1177,7 +1256,6 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 				PrometheusResponseExtractor{},
 				nil,
 				nil,
-				nil,
 			)
 			require.NoError(t, err)
 
@@ -1200,24 +1278,7 @@ func TestResultsCacheMaxFreshness(t *testing.T) {
 }
 
 func Test_resultsCache_MissingData(t *testing.T) {
-	cfg := ResultsCacheConfig{
-		CacheConfig: cache.Config{
-			Cache: cache.NewMockCache(),
-		},
-	}
-	rm, _, err := NewResultsCacheMiddleware(
-		log.NewNopLogger(),
-		cfg,
-		constSplitter(day),
-		mockLimits{},
-		PrometheusCodec,
-		PrometheusResponseExtractor{},
-		nil,
-		nil,
-		nil,
-	)
-	require.NoError(t, err)
-	rc := rm.Wrap(nil).(*resultsCache)
+	rc := newTestResultsCache(t, cache.NewMockCache())
 	ctx := context.Background()
 
 	// fill up the cache
@@ -1244,6 +1305,37 @@ func Test_resultsCache_MissingData(t *testing.T) {
 	extents, hit = rc.get(ctx, "mixed")
 	require.Equal(t, len(extents), 0)
 	require.False(t, hit)
+}
+
+func TestResultsCacheGetFirstSkipsInvalidEntries(t *testing.T) {
+	rc := newTestResultsCache(t, cache.NewMockCache())
+	ctx := context.Background()
+
+	rc.put(ctx, "empty", []Extent{{
+		Start:    100,
+		End:      200,
+		Response: nil,
+	}})
+	rc.put(ctx, "notempty", []Extent{mkExtent(100, 120)})
+
+	extents, key, hit := rc.getFirst(ctx, []string{"empty", "notempty"})
+	require.True(t, hit)
+	require.Equal(t, "notempty", key)
+	require.Len(t, extents, 1)
+}
+
+func TestResultsCacheGetFirstReturnsFirstValidEntry(t *testing.T) {
+	rc := newTestResultsCache(t, cache.NewMockCache())
+	ctx := context.Background()
+
+	rc.put(ctx, "first", []Extent{mkExtent(100, 120)})
+	rc.put(ctx, "second", []Extent{mkExtent(100, 140)})
+
+	extents, key, hit := rc.getFirst(ctx, []string{"first", "second"})
+	require.True(t, hit)
+	require.Equal(t, "first", key)
+	require.Len(t, extents, 1)
+	require.Equal(t, int64(120), extents[0].End)
 }
 
 func TestConstSplitter_generateCacheKey(t *testing.T) {
@@ -1317,7 +1409,6 @@ func TestResultsCacheShouldCacheFunc(t *testing.T) {
 				mockLimits{maxCacheFreshness: 10 * time.Minute},
 				PrometheusCodec,
 				PrometheusResponseExtractor{},
-				nil,
 				tc.shouldCache,
 				nil,
 			)
@@ -1354,7 +1445,6 @@ func TestNativeHistograms(t *testing.T) {
 		PrometheusResponseExtractor{},
 		nil,
 		nil,
-		nil,
 	)
 	require.NoError(t, err)
 
@@ -1386,17 +1476,6 @@ func TestNativeHistograms(t *testing.T) {
 
 func toMs(t time.Duration) int64 {
 	return int64(t / time.Millisecond)
-}
-
-type mockCacheGenNumberLoader struct {
-}
-
-func newMockCacheGenNumberLoader() CacheGenNumberLoader {
-	return mockCacheGenNumberLoader{}
-}
-
-func (mockCacheGenNumberLoader) GetResultsCacheGenNumber(tenantIDs []string) string {
-	return ""
 }
 
 func genSampleHistogram() SampleHistogram {

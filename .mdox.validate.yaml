@@ -20,6 +20,9 @@ validators:
   # Causes http stream errors with statuscode 0 sometimes. But is safe to skip.
   - regex: 'slack\.cncf\.io'
     type: 'ignore'
+  # Slack workspace archive links require a logged-in session, so mdox gets a 403.
+  - regex: 'cloud-native\.slack\.com'
+    type: 'ignore'
   # 301 errors even when curl-ed.
   - regex: 'envoyproxy\.io'
     type: 'ignore'

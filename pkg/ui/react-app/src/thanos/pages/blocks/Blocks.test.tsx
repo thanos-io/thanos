@@ -5,6 +5,7 @@ import { UncontrolledAlert } from 'reactstrap';
 import Blocks from './Blocks';
 import { QueryParamProvider } from 'use-query-params';
 import { SourceView } from './SourceView';
+import TimeInput from '../../../pages/graph/TimeInput';
 import { sampleAPIResponse } from './__testdata__/testdata';
 import { act } from 'react-dom/test-utils';
 
@@ -34,6 +35,32 @@ describe('Blocks', () => {
 
       const sourceViews = blocks.find(SourceView);
       expect(sourceViews).toHaveLength(8);
+    });
+
+    it('starts with an empty end time and remains empty after clearing a selected time', async () => {
+      await act(async () => {
+        blocks = mount(
+          <QueryParamProvider>
+            <Blocks />
+          </QueryParamProvider>
+        );
+      });
+      blocks.update();
+
+      expect(blocks.find(TimeInput).prop('time')).toBeNull();
+
+      const explicitEndTime = Math.max(...sampleAPIResponse.data.blocks.map((block) => block.maxTime));
+      act(() => {
+        blocks.find(TimeInput).prop('onChangeTime')(explicitEndTime);
+      });
+      blocks.update();
+      expect(blocks.find(TimeInput).prop('time')).toEqual(explicitEndTime);
+
+      act(() => {
+        blocks.find(TimeInput).prop('onChangeTime')(null);
+      });
+      blocks.update();
+      expect(blocks.find(TimeInput).prop('time')).toBeNull();
     });
 
     it('fetched data with different view', async () => {

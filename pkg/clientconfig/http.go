@@ -58,6 +58,8 @@ type HTTPClientConfig struct {
 	TLSConfig TLSConfig `yaml:"tls_config"`
 	// TransportConfig for Client transport properties
 	TransportConfig TransportConfig `yaml:"transport_config"`
+	// HTTPHeaders specify headers to inject in the requests.
+	HTTPHeaders config_util.Headers `yaml:"http_headers"`
 	// ClientMetrics contains metrics that will be used to instrument
 	// the client that will be created with this config.
 	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
@@ -187,6 +189,10 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 			}
 			rt = config_util.NewBasicAuthRoundTripper(username, password, rt)
 		}
+
+		if cfg.HTTPHeaders != nil {
+			rt = config_util.NewHeadersRoundTripper(cfg.HTTPHeaders, rt)
+		}
 		// Return a new configured RoundTripper.
 		return rt, nil
 	}
@@ -202,7 +208,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 	}
 
 	rtConfig := config_util.TLSRoundTripperSettings{
-		Cert: config_util.NewFileSecret(cfg.TLSConfig.CAFile),
+		CA: config_util.NewFileSecret(cfg.TLSConfig.CAFile),
 	}
 	if len(cfg.TLSConfig.CertFile) > 0 {
 		rtConfig.Cert = config_util.NewFileSecret(cfg.TLSConfig.CertFile)
@@ -251,6 +257,8 @@ func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 	if cfg.BearerTokenFile != "" {
 		httpClientConfig.BearerTokenFile = cfg.BearerTokenFile
 	}
+
+	httpClientConfig.HTTPHeaders = &cfg.HTTPHeaders
 
 	if err := httpClientConfig.Validate(); err != nil {
 		return nil, err
