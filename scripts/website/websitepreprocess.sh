@@ -22,11 +22,10 @@ git remote add origin https://github.com/thanos-io/thanos.git
 git remote -v
 git fetch origin
 
-# Keep the original Git ref, but correct the historical branch-name typo for
-# documentation paths and sorting.
+# release-41.0 contains the v0.41 docs. Use v0.41 for URLs and version ordering,
+# while keeping the original Git ref to read the docs from that branch.
 documentation_version() {
   local branchName=${1##*/}
-  # Remove this exception before publishing an actual 41.0 release.
   if [[ ${branchName} == "release-41.0" ]]; then
     echo "v0.41"
   else

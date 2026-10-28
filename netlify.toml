@@ -17,9 +17,8 @@
   # NOTE: the sleep at the end is to make sure logs are not truncated on error.
   command = "(export GOPATH=$HOME/go && env && make web HUGO=$(which hugo) WEBSITE_BASE_URL=${DEPLOY_PRIME_URL}) || (sleep 30; false)"
 
-# Preserve links to the historical release-41.0 branch-name typo.
-# Remove this rule before publishing documentation for the actual v41.0 release.
-# Do not force it: real files at the source path should take precedence.
+# The v0.41 docs were published under /v41.0/ because the branch is named release-41.0.
+# Keep existing links working after moving the docs to /v0.41/.
 [[redirects]]
   from = "/v41.0/*"
   to = "/v0.41/:splat"
