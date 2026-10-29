@@ -1,10 +1,14 @@
 # Changing Golang version
 
-Thanos build system is pinned to certain Golang version. This is to ensure that Golang version changes is done by us in controlled, traceable way.
+The Thanos build system pins Go versions so that toolchain upgrades are controlled and traceable.
 
-To update Thanos build system to newer Golang:
+To update the Thanos build system to a newer Go version:
 
-1. Edit [.promu.yaml](../../.promu.yml) and edit `go: version: <go version>` in YAML to desired version. This will ensure that all artifacts are built with desired Golang version. How to verify? Download tarball, unpack and invoke `thanos --version`
-2. Edit [.circleci/config.yaml](../../.circleci/config.yml) and update ` - image: cimg/go:<go version>-node` to desired Golang version. This will ensure that all docker images and go tests are using desired Golang version. How to verify? Invoke `docker pull quay.io/thanos/thanos:<version> --version`
-3. Edit [.github/workflows/docs.yaml](../../.github/workflows/docs.yaml) [.github/workflows/go.yaml](../../.github/workflows/go.yaml) and update Go version.
-4. Edit [Dockerfile.e2e-tests](../../Dockerfile.e2e-tests) and update Go version.
+1. Update [`.go-version`](../../.go-version). The GitHub workflows in [`.github/workflows/docs.yaml`](../../.github/workflows/docs.yaml) and [`.github/workflows/go.yaml`](../../.github/workflows/go.yaml) use `go-version-file: .go-version`, so their Go version does not need to be edited separately.
+2. Update the `go` directive in [`go.mod`](../../go.mod) and `go.version` in [`.promu.yml`](../../.promu.yml).
+3. Update the `cimg/go:<go version>-node` images in [`.circleci/config.yml`](../../.circleci/config.yml).
+4. Update the Go builder images in [`Dockerfile.e2e-tests`](../../Dockerfile.e2e-tests), [`Dockerfile.multi-stage`](../../Dockerfile.multi-stage), and [`cloudflare/thanos.dockerfile`](../../cloudflare/thanos.dockerfile). Update pinned image digests along with their tags.
+5. Check the `cloudflare/ci/golang/make` component used by [`.gitlab-ci.yml`](../../.gitlab-ci.yml). Its builder image supplies the Go toolchain for the amd64 and arm64 package builds. These jobs run `make build PREFIX=output`; the subsequent nfpm jobs package `output/thanos` without recompiling it. The container Dockerfile's Go version does not control these package builds.
+6. Update the development requirements in [`.bingo/README.md`](../../.bingo/README.md).
+
+Verify the actual toolchain in the resulting artifacts, rather than relying only on configuration: run `thanos --version` or `go version -m /path/to/thanos` on the binary extracted from each release archive, package, or container image. The `go` directive specifies a minimum version; it does not pin the compiler to an exact patch version.

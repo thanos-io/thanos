@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"maps"
 	"net"
 	"net/http"
 	"time"
@@ -18,8 +17,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/thanos-io/promql-engine/execution/parse"
 	"github.com/weaveworks/common/user"
 	"gopkg.in/yaml.v2"
 
@@ -33,6 +30,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
@@ -300,14 +298,10 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	if cfg.EnableXFunctions {
-		maps.Copy(parser.Functions, parse.XFunctions)
-	}
-
 	if len(cfg.EnableFeatures) > 0 {
 		for _, feature := range cfg.EnableFeatures {
 			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
+				extpromql.DefaultParserOptions.EnableExperimentalFunctions = true
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 			}
 		}

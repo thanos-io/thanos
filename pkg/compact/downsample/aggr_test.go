@@ -31,7 +31,7 @@ func TestAggrChunk(t *testing.T) {
 		testutil.Ok(t, err)
 
 		for _, s := range smpls {
-			a.Append(s.t, s.v)
+			a.Append(0, s.t, s.v)
 		}
 	}
 

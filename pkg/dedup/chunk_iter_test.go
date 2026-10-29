@@ -333,6 +333,8 @@ type histoSample struct {
 	fh *histogram.FloatHistogram
 }
 
+func (h histoSample) ST() int64 { return 0 }
+
 func (h histoSample) T() int64 {
 	return h.t
 }

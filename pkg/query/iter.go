@@ -209,6 +209,7 @@ func (errSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Hi
 func (errSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return 0, nil
 }
+func (errSeriesIterator) AtST() int64   { return 0 }
 func (errSeriesIterator) AtT() int64    { return 0 }
 func (it errSeriesIterator) Err() error { return it.err }
 
@@ -256,6 +257,8 @@ func (it *chunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *hist
 func (it *chunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return it.cur.AtFloatHistogram(fh)
 }
+
+func (it *chunkSeriesIterator) AtST() int64 { return 0 }
 
 func (it *chunkSeriesIterator) AtT() int64 {
 	return it.cur.AtT()

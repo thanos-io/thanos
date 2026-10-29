@@ -58,6 +58,8 @@ func (it *HistogramIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64,
 	return it.l[it.i].T, it.l[it.i].H.ToFloat(nil)
 }
 
+func (it *HistogramIterator) AtST() int64 { return 0 }
+
 func (it *HistogramIterator) AtT() int64 {
 	return it.l[it.i].T
 }
@@ -111,6 +113,8 @@ func (it *FloatHistogramIterator) AtHistogram(*histogram.Histogram) (int64, *his
 func (it *FloatHistogramIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return it.l[it.i].T, it.l[it.i].FH
 }
+
+func (it *FloatHistogramIterator) AtST() int64 { return 0 }
 
 func (it *FloatHistogramIterator) AtT() int64 {
 	return it.l[it.i].T

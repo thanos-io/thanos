@@ -15,10 +15,10 @@ import (
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
-	tsdb_errors "github.com/prometheus/prometheus/tsdb/errors"
 	"github.com/prometheus/prometheus/tsdb/index"
 
 	"github.com/thanos-io/thanos/pkg/block"
+	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
 type ProgressLogger interface {
@@ -84,11 +84,9 @@ func (w *Compactor) WriteSeries(ctx context.Context, readers []block.Reader, sWr
 		closers  []io.Closer
 	)
 	defer func() {
-		errs := tsdb_errors.NewMulti(err)
-		if cerr := tsdb_errors.CloseAll(closers); cerr != nil {
-			errs.Add(errors.Wrap(cerr, "close"))
+		for _, closer := range closers {
+			runutil.CloseWithErrCapture(&err, closer, "close")
 		}
-		err = errs.Err()
 	}()
 
 	for _, b := range readers {

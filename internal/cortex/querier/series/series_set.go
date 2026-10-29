@@ -132,6 +132,9 @@ func (c *concreteSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (in
 	panic("not implemented")
 }
 
+// AtST returns zero because model.SamplePair does not carry start timestamps.
+func (c *concreteSeriesIterator) AtST() int64 { return 0 }
+
 func (c *concreteSeriesIterator) AtT() int64 {
 	t, _ := c.At()
 	return t
@@ -180,6 +183,8 @@ func (errIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.Histogra
 func (errIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return 0, nil
 }
+
+func (errIterator) AtST() int64 { return 0 }
 
 func (errIterator) AtT() int64 {
 	return 0
@@ -258,6 +263,8 @@ func (d DeletedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histog
 func (d DeletedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
+
+func (d DeletedSeriesIterator) AtST() int64 { return 0 }
 
 func (d DeletedSeriesIterator) AtT() int64 {
 	t, _ := d.itr.At()

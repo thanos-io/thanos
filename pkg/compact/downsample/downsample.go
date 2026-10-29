@@ -440,10 +440,10 @@ func minSchema(samples []sample) int32 {
 func downsampleFloatBatch(batch []sample, resolution int64) chunks.Meta {
 	ab := newAggrChunkBuilder()
 	// Encode first raw value; see ApplyCounterResetsSeriesIterator.
-	ab.apps[AggrCounter].Append(batch[0].t, batch[0].v)
+	ab.apps[AggrCounter].Append(0, batch[0].t, batch[0].v)
 	lastT := downsampleBatch(batch, resolution, &floatAggregator{}, ab.add)
 	// Encode last raw value; see ApplyCounterResetsSeriesIterator.
-	ab.apps[AggrCounter].Append(lastT, batch[len(batch)-1].v)
+	ab.apps[AggrCounter].Append(0, lastT, batch[len(batch)-1].v)
 	return ab.encode()
 }
 
@@ -480,7 +480,7 @@ func (b *aggrChunkBuilder) addHistogram(t int64, a sampleAggregator) {
 	}
 	b.appendFloatHistogram(AggrCounter, t, aggr.counter)
 	b.appendFloatHistogram(AggrSum, t, aggr.sum)
-	b.apps[AggrCount].Append(t, float64(aggr.count))
+	b.apps[AggrCount].Append(0, t, float64(aggr.count))
 
 	b.added++
 }
@@ -490,7 +490,7 @@ func (b *aggrChunkBuilder) addHistogram(t int64, a sampleAggregator) {
 func (b *aggrChunkBuilder) appendFloatHistogram(t AggrType, ts int64, fh *histogram.FloatHistogram) {
 	app := b.apps[t].(*chunkenc.FloatHistogramAppender)
 
-	ch, _, cApp, err := b.apps[t].AppendFloatHistogram(app, ts, fh, false)
+	ch, _, cApp, err := b.apps[t].AppendFloatHistogram(app, 0, ts, fh, false)
 	if err != nil {
 		panic("unexpected error: " + err.Error())
 	}
@@ -613,11 +613,11 @@ func (b *aggrChunkBuilder) add(t int64, a sampleAggregator) {
 	}
 
 	aggr := mustGetFloatAggregator(a)
-	b.apps[AggrSum].Append(t, aggr.sum)
-	b.apps[AggrMin].Append(t, aggr.min)
-	b.apps[AggrMax].Append(t, aggr.max)
-	b.apps[AggrCount].Append(t, float64(aggr.count))
-	b.apps[AggrCounter].Append(t, aggr.counter)
+	b.apps[AggrSum].Append(0, t, aggr.sum)
+	b.apps[AggrMin].Append(0, t, aggr.min)
+	b.apps[AggrMax].Append(0, t, aggr.max)
+	b.apps[AggrCount].Append(0, t, float64(aggr.count))
+	b.apps[AggrCounter].Append(0, t, aggr.counter)
 
 	b.added++
 }
@@ -813,7 +813,7 @@ func genericAggregate(
 		if t > maxt {
 			maxt = t
 		}
-		ab.apps[at].Append(t, f(a))
+		ab.apps[at].Append(0, t, f(a))
 	})
 
 	return mint, maxt, nil
@@ -1083,7 +1083,7 @@ func downsampleFloatAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64
 	ab.apps[AggrCounter], _ = ab.chunks[AggrCounter].Appender()
 
 	// Retain first raw value; see ApplyCounterResetsSeriesIterator.
-	ab.apps[AggrCounter].Append((*buf)[0].t, (*buf)[0].v)
+	ab.apps[AggrCounter].Append(0, (*buf)[0].t, (*buf)[0].v)
 
 	lastT := downsampleBatch(*buf, resolution, &floatAggregator{}, func(t int64, a sampleAggregator) {
 		if t < mint {
@@ -1092,11 +1092,11 @@ func downsampleFloatAggrBatch(chks []*AggrChunk, buf *[]sample, resolution int64
 		if t > maxt {
 			maxt = t
 		}
-		ab.apps[AggrCounter].Append(t, mustGetFloatAggregator(a).counter)
+		ab.apps[AggrCounter].Append(0, t, mustGetFloatAggregator(a).counter)
 	})
 
 	// Retain last raw value; see ApplyCounterResetsSeriesIterator.
-	ab.apps[AggrCounter].Append(lastT, it.lastV)
+	ab.apps[AggrCounter].Append(0, lastT, it.lastV)
 
 	ab.mint = mint
 	ab.maxt = maxt
@@ -1204,6 +1204,9 @@ func (it *ApplyCounterResetsSeriesIterator) AtFloatHistogram(fh *histogram.Float
 	return it.chks[it.i].AtFloatHistogram(fh)
 }
 
+// Downsampled aggregates do not retain start timestamps.
+func (it *ApplyCounterResetsSeriesIterator) AtST() int64 { return 0 }
+
 func (it *ApplyCounterResetsSeriesIterator) AtT() int64 {
 	return it.lastT
 }
@@ -1301,6 +1304,9 @@ func (it *AverageChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int
 	}
 	return it.t, it.fh
 }
+
+// Downsampled aggregates do not retain start timestamps.
+func (it *AverageChunkIterator) AtST() int64 { return 0 }
 
 func (it *AverageChunkIterator) AtT() int64 {
 	return it.t
