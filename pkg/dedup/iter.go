@@ -285,6 +285,9 @@ type dedupSeriesIterator struct {
 	// responsive to gaps: https://github.com/thanos-io/thanos/issues/981, let's do it in next PR.
 	lastT    int64
 	lastIter chunkenc.Iterator
+	// switched is true when the current sample comes from a different replica
+	// than the previous one.
+	switched bool
 
 	penA, penB int64
 	useA       bool
@@ -305,7 +308,9 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	lastFloatVal, isFloatVal := it.lastFloatVal()
 	lastUseA := it.useA
+	prevIter, hadSample := it.lastIter, it.lastT != math.MinInt64
 	defer func() {
+		it.switched = hadSample && it.lastIter != prevIter
 		if it.useA != lastUseA && isFloatVal {
 			// We switched replicas.
 			// Ensure values are correct bases on value before At.
@@ -421,12 +426,26 @@ func (it *dedupSeriesIterator) At() (int64, float64) {
 	return it.lastIter.At()
 }
 
+// AtHistogram returns the current histogram. A histogram taken from a different
+// replica than the previous sample keeps the counter reset hint of its own chunk,
+// which says nothing about the previous sample. Like Prometheus' chain merge, the
+// hint is then set to unknown so PromQL detects counter resets by value.
 func (it *dedupSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
-	return it.lastIter.AtHistogram(h)
+	t, h := it.lastIter.AtHistogram(h)
+	if it.switched && h != nil && h.CounterResetHint != histogram.GaugeType {
+		h.CounterResetHint = histogram.UnknownCounterReset
+	}
+	return t, h
 }
 
+// AtFloatHistogram returns the current float histogram; see AtHistogram for the
+// counter reset hint on a replica switch.
 func (it *dedupSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
-	return it.lastIter.AtFloatHistogram(fh)
+	t, fh := it.lastIter.AtFloatHistogram(fh)
+	if it.switched && fh != nil && fh.CounterResetHint != histogram.GaugeType {
+		fh.CounterResetHint = histogram.UnknownCounterReset
+	}
+	return t, fh
 }
 
 func (it *dedupSeriesIterator) AtT() int64 {
