@@ -2773,7 +2773,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 		name    string
 		mode    string
 		req     writev2.Request
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "valid sample request",
@@ -2797,7 +2797,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "symbol table must start with an empty string",
 		},
 		{
 			name: "invalid UTF-8 symbol rejected",
@@ -2810,7 +2810,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "invalid UTF-8 in symbol table",
 		},
 		{
 			name: "odd labels_refs rejected",
@@ -2823,7 +2823,21 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "invalid labels_refs length",
+		},
+		{
+			name: "out-of-bounds metadata ref rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{HelpRef: 99},
+					},
+				},
+			},
+			wantErr: "metadata symbol reference out of bounds",
 		},
 		{
 			name: "out-of-bounds label ref rejected",
@@ -2836,7 +2850,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "label symbol reference out of bounds",
 		},
 		{
 			name: "missing __name__ label rejected",
@@ -2849,7 +2863,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "time series missing __name__ label",
 		},
 		{
 			name: "metadata-only timeseries rejected",
@@ -2862,7 +2876,21 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "time series must contain at least one sample, histogram, or exemplar",
+		},
+		{
+			name: "mixed float samples and histograms rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Histograms: []writev2.Histogram{{Timestamp: 1000}},
+					},
+				},
+			},
+			wantErr: "time series cannot contain both float samples and histograms",
 		},
 		{
 			name: "exemplar-only timeseries allowed in default mode",
@@ -2889,7 +2917,7 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "time series must contain at least one sample or histogram in stateless mode",
 		},
 		{
 			name: "untyped metadata rejected in stateless mode",
@@ -2904,7 +2932,37 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "metadata metric type must be specified in stateless mode",
+		},
+		{
+			name: "float samples with histogram metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist_bucket"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_HISTOGRAM},
+					},
+				},
+			},
+			wantErr: "classic histogram float samples are not allowed with histogram metadata in stateless mode",
+		},
+		{
+			name: "histograms with non-histogram metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{{Timestamp: 1000}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_GAUGE},
+					},
+				},
+			},
+			wantErr: "histograms require histogram or gaugehistogram metadata in stateless mode",
 		},
 		{
 			name: "counter without start_timestamp rejected in stateless-st mode",
@@ -2919,7 +2977,51 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "summary _sum without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "rpc_duration_seconds_sum"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_SUMMARY},
+					},
+				},
+			},
+			wantErr: "sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "histogram without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{{Sum: 1, Timestamp: 1000}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_HISTOGRAM},
+					},
+				},
+			},
+			wantErr: "histogram sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "invalid exemplar labels rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4, 3, 4}, Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "invalid exemplar labels",
 		},
 		{
 			name: "invalid histogram count mismatch rejected",
@@ -2941,13 +3043,13 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 					},
 				},
 			},
-			wantErr: true,
+			wantErr: "invalid histogram",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := translateV2ToV1(tc.req, tc.mode)
-			if tc.wantErr {
-				require.Error(t, err)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
 				return
 			}
 			require.NoError(t, err)
