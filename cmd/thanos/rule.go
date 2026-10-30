@@ -1182,6 +1182,9 @@ func parseRemoteWriteConfig(rwCfgYAML []byte, externalLabels labels.Labels) (*co
 	if err := yaml.UnmarshalStrict(rwCfgYAML, &rwCfg); err != nil {
 		return nil, errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
 	}
+	if len(rwCfg.RemoteWriteConfigs) == 0 {
+		return nil, errors.New("no remote_write configs specified")
+	}
 
 	globalCfg := config.DefaultGlobalConfig
 	globalCfg.ExternalLabels = externalLabels
