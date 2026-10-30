@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/annotations"
-	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
 )
@@ -221,16 +221,16 @@ remote_write:
 		t.Run(tc.name, func(t *testing.T) {
 			cfg, err := parseRemoteWriteConfig([]byte(tc.yaml), extLabels)
 			if tc.expectErr {
-				require.Error(t, err)
+				testutil.NotOk(t, err)
 				return
 			}
-			require.NoError(t, err)
-			require.Equal(t, model.UTF8Validation, cfg.GlobalConfig.MetricNameValidationScheme)
-			require.Equal(t, extLabels, cfg.GlobalConfig.ExternalLabels)
-			require.Len(t, cfg.RemoteWriteConfigs, 1)
-			require.Equal(t, remote.WriteV2MessageType, cfg.RemoteWriteConfigs[0].ProtobufMessage)
-			require.Len(t, cfg.RemoteWriteConfigs[0].WriteRelabelConfigs, 1)
-			require.Equal(t, model.UTF8Validation, cfg.RemoteWriteConfigs[0].WriteRelabelConfigs[0].NameValidationScheme)
+			testutil.Ok(t, err)
+			testutil.Equals(t, model.UTF8Validation, cfg.GlobalConfig.MetricNameValidationScheme)
+			testutil.Equals(t, extLabels, cfg.GlobalConfig.ExternalLabels)
+			testutil.Equals(t, 1, len(cfg.RemoteWriteConfigs))
+			testutil.Equals(t, remote.WriteV2MessageType, cfg.RemoteWriteConfigs[0].ProtobufMessage)
+			testutil.Equals(t, 1, len(cfg.RemoteWriteConfigs[0].WriteRelabelConfigs))
+			testutil.Equals(t, model.UTF8Validation, cfg.RemoteWriteConfigs[0].WriteRelabelConfigs[0].NameValidationScheme)
 		})
 	}
 }
@@ -253,7 +253,11 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		w.Header().Set("X-Prometheus-Remote-Write-Written-Samples", "1")
+		var writtenSamples int
+		for _, ts := range req.Timeseries {
+			writtenSamples += len(ts.Samples)
+		}
+		w.Header().Set("X-Prometheus-Remote-Write-Written-Samples", strconv.Itoa(writtenSamples))
 		w.Header().Set("X-Prometheus-Remote-Write-Written-Histograms", "0")
 		w.Header().Set("X-Prometheus-Remote-Write-Written-Exemplars", "0")
 		w.WriteHeader(http.StatusNoContent)
@@ -285,30 +289,38 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 		labels.FromStrings("replica", "0"),
 		agent.DefaultOptions(),
 	)
-	require.NoError(t, err)
+	testutil.Ok(t, err)
 	t.Cleanup(func() {
-		require.NoError(t, store.Close())
+		testutil.Ok(t, store.Close())
 	})
 
-	var req *writev2.Request
-	require.Eventually(t, func() bool {
+	var (
+		req      *writev2.Request
+		ts       = time.Now().Add(time.Second).UnixMilli()
+		deadline = time.After(3 * time.Second)
+		ticker   = time.NewTicker(50 * time.Millisecond)
+	)
+	defer ticker.Stop()
+
+	for req == nil {
 		app := store.Appender(t.Context())
-		_, err := app.Append(0, labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"), time.Now().Add(time.Second).UnixMilli(), 42)
-		require.NoError(t, err)
-		require.NoError(t, app.Commit())
+		_, err := app.Append(0, labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"), ts, 42)
+		testutil.Ok(t, err)
+		testutil.Ok(t, app.Commit())
+		ts++
 
 		select {
 		case req = <-reqCh:
-			return true
-		default:
-			return false
+		case <-ticker.C:
+		case <-deadline:
+			t.Fatal("timed out waiting for remote write v2 request")
 		}
-	}, 3*time.Second, 50*time.Millisecond)
+	}
 
-	require.NotEmpty(t, req.Timeseries)
+	testutil.Assert(t, len(req.Timeseries) > 0, "expected at least one timeseries")
 	gotLabels, err := req.Timeseries[0].ToLabels(&labels.ScratchBuilder{}, req.Symbols)
-	require.NoError(t, err)
-	require.Equal(t, labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"), gotLabels)
-	require.NotEmpty(t, req.Timeseries[0].Samples)
-	require.Equal(t, 42.0, req.Timeseries[0].Samples[0].Value)
+	testutil.Ok(t, err)
+	testutil.Equals(t, labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"), gotLabels)
+	testutil.Assert(t, len(req.Timeseries[0].Samples) > 0, "expected at least one sample")
+	testutil.Equals(t, 42.0, req.Timeseries[0].Samples[0].Value)
 }
