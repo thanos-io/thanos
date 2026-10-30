@@ -665,15 +665,15 @@ func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, erro
 		v1Ts := prompb.TimeSeries{
 			Labels: make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2),
 		}
-		hasMetricName := false
+		var metricName string
 		for i := 0; i < len(t.LabelsRefs); i += 2 {
 			nameRef, valRef := int(t.LabelsRefs[i]), int(t.LabelsRefs[i+1])
 			if nameRef >= len(w.Symbols) || valRef >= len(w.Symbols) {
 				return nil, errors.New("label symbol reference out of bounds")
 			}
 			name, val := w.Symbols[nameRef], w.Symbols[valRef]
-			if name == labels.MetricName && val != "" {
-				hasMetricName = true
+			if name == labels.MetricName {
+				metricName = val
 			}
 			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
 				Name:  name,
@@ -683,15 +683,18 @@ func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, erro
 		if err := labelpb.ValidateLabels(v1Ts.Labels); err != nil {
 			return nil, errors.Wrap(err, "invalid series labels")
 		}
-		if !hasMetricName {
+		if metricName == "" {
 			return nil, errors.New("time series missing __name__ label")
 		}
 
 		if len(t.Samples) > 0 {
+			requiresST := mode == rwModeStatelessST &&
+				(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER ||
+					(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_SUMMARY && (strings.HasSuffix(metricName, "_sum") || strings.HasSuffix(metricName, "_count"))))
 			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
 			for _, v2s := range t.Samples {
-				if mode == rwModeStatelessST && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER && !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
-					return nil, errors.New("counter sample missing start_timestamp in stateless-st mode")
+				if requiresST && !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
+					return nil, errors.New("sample missing start_timestamp in stateless-st mode")
 				}
 				v1Ts.Samples = append(v1Ts.Samples, prompb.Sample{
 					Timestamp: v2s.Timestamp,
