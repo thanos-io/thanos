@@ -267,6 +267,10 @@ type aggrChunkIterator struct {
 	curr         chunks.Meta
 	countChkIter chunks.Iterator
 
+	// pending[i] is set when iters[i] was advanced past the previous chunk's
+	// maxt, so its current sample belongs to a later chunk.
+	pending [5]bool
+
 	err error
 }
 
@@ -337,15 +341,24 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 		return nil, err
 	}
 
-	it := NewBoundedSeriesIterator(a.iters[at], minTime, maxTime)
+	it := a.iters[at]
 
 	var (
 		lastT int64
 		lastV float64
 	)
-	for it.Next() != chunkenc.ValNone {
-		lastT, lastV = it.At()
-		appender.Append(lastT, lastV)
+	for a.pending[at] || it.Next() != chunkenc.ValNone {
+		t, v := it.At()
+		if t > maxTime {
+			a.pending[at] = true
+			break
+		}
+		a.pending[at] = false
+		if t < minTime {
+			continue
+		}
+		lastT, lastV = t, v
+		appender.Append(t, v)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
