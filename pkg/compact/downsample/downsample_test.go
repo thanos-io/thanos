@@ -1622,7 +1622,7 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	app, err := raw.Appender()
 	testutil.Ok(t, err)
 
-	app.Append(1587690005794, 42.5)
+	app.Append(0, 1587690005794, 42.5)
 
 	ser.chunks = append(ser.chunks, encodeTestAggrSeries(aggr), chunks.Meta{
 		MinTime: math.MaxInt64,
@@ -1717,14 +1717,14 @@ func chunksToSeriesIteratable(t *testing.T, inRaw [][]sample, inAggr []map[AggrT
 
 			for _, s := range samples {
 				if s.fh != nil {
-					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), 0, s.t, s.fh, false)
 					require.NoError(t, err)
 					if c != nil {
 						chk = c
 					}
 					continue
 				}
-				app.Append(s.t, s.v)
+				app.Append(0, s.t, s.v)
 			}
 			ser.chunks = append(ser.chunks, chunks.Meta{
 				MinTime: samples[0].t,
@@ -1768,10 +1768,10 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 					b.maxt = s.t
 				}
 				if at == AggrCount {
-					b.apps[at].Append(s.t, s.v)
+					b.apps[at].Append(0, s.t, s.v)
 				} else {
 					app := b.apps[at].(*chunkenc.FloatHistogramAppender)
-					_, _, _, err := app.AppendFloatHistogram(app, s.t, s.fh, false)
+					_, _, _, err := app.AppendFloatHistogram(app, 0, s.t, s.fh, false)
 					if err != nil {
 						panic(err)
 					}
@@ -1790,7 +1790,7 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 				if s.t > b.maxt {
 					b.maxt = s.t
 				}
-				b.apps[at].Append(s.t, s.v)
+				b.apps[at].Append(0, s.t, s.v)
 			}
 		}
 		return b.encode()
@@ -2096,6 +2096,8 @@ type testSample struct {
 	f float64
 }
 
+func (s testSample) ST() int64 { return 0 }
+
 func (s testSample) T() int64 {
 	return s.t
 }
@@ -2157,6 +2159,8 @@ func (it *sampleIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.H
 func (it *sampleIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
+
+func (it *sampleIterator) AtST() int64 { return 0 }
 
 func (it *sampleIterator) AtT() int64 {
 	return it.l[it.i].t
@@ -2716,7 +2720,7 @@ func chunksFromHistogramSamples(t *testing.T, samples []sample) []chunks.Meta {
 			chk, app = newHistogramChunk(t)
 			mint = s.t
 		}
-		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), 0, s.t, s.fh, false)
 		if err != nil {
 			panic(err)
 		}

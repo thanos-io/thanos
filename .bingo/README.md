@@ -10,4 +10,4 @@ This is directory which stores Go modules with pinned buildable package that is 
 
 ## Requirements
 
-* Go 1.24.x or 1.25.x
+* Go 1.27.3 or newer; use the version pinned in [`.go-version`](../.go-version) for development.

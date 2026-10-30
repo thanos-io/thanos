@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -264,7 +265,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	set[g.group.Name] = struct{}{}
 
 	for i, r := range g.group.Rules {
-		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation) {
+		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation, extpromql.NewParser()) {
 			var ruleName string
 			if r.Alert != "" {
 				ruleName = r.Alert

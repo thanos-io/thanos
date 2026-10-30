@@ -15,14 +15,23 @@ import (
 	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
+// DefaultParserOptions is configured at startup, before serving queries.
+var DefaultParserOptions parser.Options
+
+func init() {
+	// Prometheus 3.15 does not support per-parser custom functions. Register
+	// Thanos functions during initialization, before any concurrent parsing.
+	maps.Copy(parser.Functions, parse.XFunctions)
+}
+
+// NewParser returns a parser configured with the startup options.
+func NewParser() parser.Parser {
+	return parser.NewParser(DefaultParserOptions)
+}
+
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	maps.Copy(allFuncs, parser.Functions)
-	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	return NewParser().ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of

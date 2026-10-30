@@ -48,7 +48,7 @@ func TestParseMetricSelector(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			//lint:ignore faillint Testing against prometheus parser.
-			want, err := parser.ParseMetricSelector(tc.input)
+			want, err := parser.NewParser(parser.Options{}).ParseMetricSelector(tc.input)
 			if err != nil {
 				t.Fatalf("Prometheus ParseMetricSelector failed: %v", err)
 			}
@@ -60,6 +60,32 @@ func TestParseMetricSelector(t *testing.T) {
 
 			testutil.Equals(t, stringFmt(want), stringFmt(got))
 		})
+	}
+}
+
+func TestParserOptions(t *testing.T) {
+	previous := extpromql.DefaultParserOptions
+	t.Cleanup(func() { extpromql.DefaultParserOptions = previous })
+
+	extpromql.DefaultParserOptions = parser.Options{}
+	disabled := extpromql.NewParser()
+	for _, query := range []string{"rate(up[5m])", "xrate(up[5m])", "xincrease(up[5m])", "xdelta(up[5m])"} {
+		_, err := disabled.ParseExpr(query)
+		testutil.Ok(t, err)
+	}
+
+	const experimental = `sort_by_label(up, "job")`
+	_, err := disabled.ParseExpr(experimental)
+	if err == nil {
+		t.Fatal("experimental functions must be disabled by default")
+	}
+
+	extpromql.DefaultParserOptions.EnableExperimentalFunctions = true
+	_, err = extpromql.ParseExpr(experimental)
+	testutil.Ok(t, err)
+	_, err = disabled.ParseExpr(experimental)
+	if err == nil {
+		t.Fatal("changing startup options must not mutate an existing parser")
 	}
 }
 

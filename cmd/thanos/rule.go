@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"maps"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -35,7 +34,6 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/notifier"
 	"github.com/prometheus/prometheus/promql"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/prometheus/storage"
@@ -48,7 +46,6 @@ import (
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
 	objstoretracing "github.com/thanos-io/objstore/tracing/opentracing"
-	"github.com/thanos-io/promql-engine/execution/parse"
 
 	"github.com/thanos-io/thanos/pkg/alert"
 	v1 "github.com/thanos-io/thanos/pkg/api/rule"
@@ -585,14 +582,10 @@ func runRule(
 		alertQ  = alert.NewQueue(logger, reg, 10000, 100, labelsTSDBToProm(conf.lset), conf.alertmgr.alertExcludeLabels, alertRelabelConfigs)
 	)
 	{
-		if conf.extendedFunctionsEnabled {
-			maps.Copy(parser.Functions, parse.XFunctions)
-		}
-
 		if len(conf.EnableFeatures) > 0 {
 			for _, feature := range conf.EnableFeatures {
 				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
+					extpromql.DefaultParserOptions.EnableExperimentalFunctions = true
 					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 				}
 			}
@@ -627,6 +620,7 @@ func runRule(
 		}
 
 		managerOpts := rules.ManagerOptions{
+			Parser:                 extpromql.NewParser(),
 			NotifyFunc:             notifyFunc,
 			Logger:                 logutil.GoKitLogToSlog(logger),
 			Appendable:             appendable,

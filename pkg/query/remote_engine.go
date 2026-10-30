@@ -105,7 +105,7 @@ func NewRemoteEndpoints(logger log.Logger, getClients func() []Client, opts Opts
 	}
 }
 
-func (r remoteEndpoints) Engines() []api.RemoteEngine {
+func (r remoteEndpoints) Engines(_, _ int64) []api.RemoteEngine {
 	clients := r.getClients()
 	engines := make([]api.RemoteEngine, len(clients))
 	for i := range clients {

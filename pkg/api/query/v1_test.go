@@ -2010,6 +2010,8 @@ type sample struct {
 	f float64
 }
 
+func (s sample) ST() int64 { return 0 }
+
 func (s sample) T() int64 {
 	return s.t
 }

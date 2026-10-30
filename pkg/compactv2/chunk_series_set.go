@@ -97,6 +97,7 @@ func (e errChunkIterator) AtHistogram(*histogram.Histogram) (int64, *histogram.H
 func (e errChunkIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
+func (e errChunkIterator) AtST() int64              { return 0 }
 func (e errChunkIterator) AtT() int64               { return 0 }
 func (e errChunkIterator) Next() chunkenc.ValueType { return chunkenc.ValNone }
 func (e errChunkIterator) Err() error               { return e.err }

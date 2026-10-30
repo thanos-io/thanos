@@ -31,6 +31,8 @@ type sample struct {
 	f float64
 }
 
+func (s sample) ST() int64 { return 0 }
+
 func (s sample) T() int64 {
 	return s.t
 }
@@ -118,6 +120,8 @@ func (s *mockedSeriesIterator) AtHistogram(*histogram.Histogram) (int64, *histog
 func (s *mockedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	panic("not implemented")
 }
+
+func (s *mockedSeriesIterator) AtST() int64 { return 0 }
 
 func (s *mockedSeriesIterator) AtT() int64 {
 	return s.samples[s.cur].t

@@ -614,6 +614,8 @@ func (it *dedupSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (i
 	return it.lastIter.AtFloatHistogram(fh)
 }
 
+func (it *dedupSeriesIterator) AtST() int64 { return 0 }
+
 func (it *dedupSeriesIterator) AtT() int64 {
 	var t int64
 	if it.useA {
@@ -663,6 +665,8 @@ func (it *boundedSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *hi
 func (it *boundedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return it.it.AtFloatHistogram(fh)
 }
+
+func (it *boundedSeriesIterator) AtST() int64 { return 0 }
 
 func (it *boundedSeriesIterator) AtT() int64 {
 	return it.it.AtT()

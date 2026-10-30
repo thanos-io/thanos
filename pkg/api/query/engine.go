@@ -33,6 +33,7 @@ import (
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
@@ -93,23 +94,20 @@ func NewQueryFactory(
 	mode PromqlQueryMode,
 	disableFallback bool,
 ) *QueryFactory {
-	makeOpts := func(registry prometheus.Registerer) engine.Opts {
-		opts := engine.Opts{
-			EngineOpts: promql.EngineOpts{
-				Logger: logutil.GoKitLogToSlog(logger),
-				Reg:    registry,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples:    math.MaxInt32,
-				Timeout:       queryTimeout,
-				LookbackDelta: lookbackDelta,
-				NoStepSubqueryIntervalFn: func(int64) int64 {
-					return evaluationInterval.Milliseconds()
-				},
-				EnableNegativeOffset: true,
-				EnableAtModifier:     true,
+	makePromOpts := func(registry prometheus.Registerer) promql.EngineOpts {
+		opts := promql.EngineOpts{
+			Logger: logutil.GoKitLogToSlog(logger),
+			Reg:    registry,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return evaluationInterval.Milliseconds()
 			},
-			EnableXFunctions: enableXFunctions,
-			EnableAnalysis:   true,
+			EnableNegativeOffset: true,
+			EnableAtModifier:     true,
+			Parser:               extpromql.NewParser(),
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker
@@ -117,10 +115,26 @@ func NewQueryFactory(
 		return opts
 	}
 
-	promEngine := promql.NewEngine(makeOpts(extprom.WrapRegistererWith(
+	makeOpts := func(registry prometheus.Registerer) engine.Opts {
+		opts := makePromOpts(registry)
+		return engine.Opts{
+			Logger:                      opts.Logger,
+			Reg:                         opts.Reg,
+			MaxSamples:                  opts.MaxSamples,
+			Timeout:                     opts.Timeout,
+			LookbackDelta:               opts.LookbackDelta,
+			NoStepSubqueryIntervalFn:    opts.NoStepSubqueryIntervalFn,
+			ActiveQueryTracker:          opts.ActiveQueryTracker,
+			EnableExperimentalFunctions: extpromql.DefaultParserOptions.EnableExperimentalFunctions,
+			EnableXFunctions:            enableXFunctions,
+			EnableAnalysis:              true,
+		}
+	}
+
+	promEngine := promql.NewEngine(makePromOpts(extprom.WrapRegistererWith(
 		map[string]string{
 			"mode":   string(PromqlQueryModeLocal),
-			"engine": string(PromqlEnginePrometheus)}, reg)).EngineOpts)
+			"engine": string(PromqlEnginePrometheus)}, reg)))
 
 	thanosLocal := engine.New(makeOpts(extprom.WrapRegistererWith(
 		map[string]string{

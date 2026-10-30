@@ -345,7 +345,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 	)
 	for it.Next() != chunkenc.ValNone {
 		lastT, lastV = it.At()
-		appender.Append(lastT, lastV)
+		appender.Append(0, lastT, lastV)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
@@ -358,7 +358,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 
 	// Encode last sample for AggrCounter.
 	if at == downsample.AggrCounter {
-		appender.Append(lastT, lastV)
+		appender.Append(0, lastT, lastV)
 	}
 
 	return &chunks.Meta{
