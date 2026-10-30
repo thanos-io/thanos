@@ -552,22 +552,11 @@ func (h *Handler) retryAfterDuration() time.Duration {
 const (
 	remoteWriteAcceptHeaderValue = "application/x-protobuf, application/x-protobuf;proto=prometheus.WriteRequest, application/x-protobuf;proto=io.prometheus.write.v2.Request, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=none, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless-st"
 
-	writtenSamplesHeader    = "X-Prometheus-Remote-Write-Samples-Written"
-	writtenHistogramsHeader = "X-Prometheus-Remote-Write-Histograms-Written"
-	writtenExemplarsHeader  = "X-Prometheus-Remote-Write-Exemplars-Written"
-
 	// TODO(bwplotka): Switch to remoteapi.WriteMode and remoteapi.ParseContentType once github.com/prometheus/prometheus is upgraded past v0.309.1.
 	rwModeNone        = "none"
 	rwModeStateless   = "stateless"
 	rwModeStatelessST = "stateless-st"
 )
-
-func setV2WrittenHeaders(w http.ResponseWriter, samples, histograms, exemplars int) {
-	h := w.Header()
-	h.Set(writtenSamplesHeader, strconv.Itoa(samples))
-	h.Set(writtenHistogramsHeader, strconv.Itoa(histograms))
-	h.Set(writtenExemplarsHeader, strconv.Itoa(exemplars))
-}
 
 func determineRWVersion(r *http.Request) (int, string, error) {
 	ct := r.Header.Get("Content-Type")
@@ -802,7 +791,7 @@ func translateV2SpansToV1(spans []writev2.BucketSpan) []prompb.BucketSpan {
 }
 
 func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, mode string, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {
-	setV2WrittenHeaders(w, 0, 0, 0)
+	remote.WriteResponseStats{}.SetHeaders(w)
 
 	var wreq writev2.Request
 	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
@@ -821,14 +810,13 @@ func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 
 	// NOTE(GiedriusS): This part of the spec is still not 100% clear regarding async
 	// writes so just tell Prometheus that we accepted all data.
-	var ts, hs, es int
-
+	var stats remote.WriteResponseStats
 	for _, i := range wreq.Timeseries {
-		hs += len(i.Histograms)
-		ts += len(i.Samples)
-		es += len(i.Exemplars)
+		stats.Histograms += len(i.Histograms)
+		stats.Samples += len(i.Samples)
+		stats.Exemplars += len(i.Exemplars)
 	}
-	setV2WrittenHeaders(w, ts, hs, es)
+	stats.SetHeaders(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -952,7 +940,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if rwVersion == 2 {
-		setV2WrittenHeaders(w, 0, 0, 0)
+		remote.WriteResponseStats{}.SetHeaders(w)
 	}
 
 	writeGate := h.Limiter.WriteGate()

@@ -42,6 +42,7 @@ import (
 	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -2735,9 +2736,9 @@ func TestReceiveHTTP_RW2NegotiationAndStatus(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handlers[0].receiveHTTP(rec, req)
 		require.Equal(t, http.StatusNoContent, rec.Code)
-		require.Equal(t, "1", rec.Header().Get(writtenSamplesHeader))
-		require.Equal(t, "0", rec.Header().Get(writtenHistogramsHeader))
-		require.Equal(t, "0", rec.Header().Get(writtenExemplarsHeader))
+		stats, err := remote.ParseWriteResponseStats(rec.Result())
+		require.NoError(t, err)
+		require.Equal(t, remote.WriteResponseStats{Samples: 1, Confirmed: true}, stats)
 	})
 
 	t.Run("v2 conflict error returns 400 and zero written headers", func(t *testing.T) {
@@ -2760,9 +2761,9 @@ func TestReceiveHTTP_RW2NegotiationAndStatus(t *testing.T) {
 		rec := httptest.NewRecorder()
 		handlers[0].receiveHTTP(rec, req)
 		require.Equal(t, http.StatusBadRequest, rec.Code)
-		require.Equal(t, "0", rec.Header().Get(writtenSamplesHeader))
-		require.Equal(t, "0", rec.Header().Get(writtenHistogramsHeader))
-		require.Equal(t, "0", rec.Header().Get(writtenExemplarsHeader))
+		stats, err := remote.ParseWriteResponseStats(rec.Result())
+		require.NoError(t, err)
+		require.Equal(t, remote.WriteResponseStats{Confirmed: true}, stats)
 	})
 }
 
