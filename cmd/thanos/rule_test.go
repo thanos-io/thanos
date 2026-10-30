@@ -210,6 +210,22 @@ func TestParseRemoteWriteConfig(t *testing.T) {
 			expectErr: true,
 		},
 		{
+			name: "empty remote write list",
+			yaml: `remote_write: []
+`,
+			expectErr: true,
+		},
+		{
+			name: "invalid write_relabel_configs missing target_label",
+			yaml: `remote_write:
+  - url: http://127.0.0.1:9090/api/v1/write
+    write_relabel_configs:
+      - source_labels: [__tmp_name]
+        action: replace
+`,
+			expectErr: true,
+		},
+		{
 			name: "unknown top-level field",
 			yaml: `unknown_field: true
 remote_write:
@@ -281,12 +297,22 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
         action: labeldrop
 `, srv.URL, remote.WriteV2MessageType)
 
+	dataDir := t.TempDir()
+	extLabels := labels.FromStrings("replica", "0")
+
+	// Duplicate unnamed remote_write configs pass parseRemoteWriteConfig but fail
+	// duplicate hash detection in remoteStore.ApplyConfig; verify agentDB and
+	// remoteStore are closed on error so reusing dataDir succeeds without a lock error.
+	dupCfgYAML := fmt.Sprintf("remote_write:\n  - url: %s\n  - url: %s\n", srv.URL, srv.URL)
+	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, agent.DefaultOptions())
+	testutil.NotOk(t, err)
+
 	store, err := openStatelessRuleStorage(
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
-		t.TempDir(),
+		dataDir,
 		[]byte(rwCfgYAML),
-		labels.FromStrings("replica", "0"),
+		extLabels,
 		agent.DefaultOptions(),
 	)
 	testutil.Ok(t, err)
