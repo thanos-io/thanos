@@ -82,8 +82,11 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
 func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 	if serviceConfig == "" {
-		// NOTE: Thanos gRPC servers register their readiness state on the empty "" gRPC health service
-		// in pkg/prober/grpc.go, so round_robin skips NOT_SERVING backends in an endpoint group.
+		// NOTE: healthCheckConfig enables client-side gRPC health checking (opening a single
+		// long-lived grpc.health.v1.Health/Watch stream per subchannel) so round_robin skips
+		// NOT_SERVING backends in an endpoint group. Setting serviceName to "" watches the
+		// overall server health rather than an individual gRPC service, matching how Thanos
+		// servers report readiness via SetServingStatus("", ...) in pkg/prober/grpc.go.
 		serviceConfig = `
 {
   "loadBalancingPolicy": "round_robin",
