@@ -33,26 +33,37 @@ import (
 
 type GetStatsFunc func(r *http.Request, statsByLabelName string) ([]api.TenantStats, *api.ApiError)
 
+const defaultTSDBStatusHandlerName = "tsdb_status"
+
 type Options struct {
 	GetStats GetStatsFunc
 	Registry *prometheus.Registry
+	// TSDBStatusHandlerName is the handler name used for instrumentation of the TSDB status endpoint.
+	// Defaults to "tsdb_status".
+	TSDBStatusHandlerName string
 }
 
 type StatusAPI struct {
-	getTSDBStats GetStatsFunc
-	registry     *prometheus.Registry
+	getTSDBStats          GetStatsFunc
+	registry              *prometheus.Registry
+	tsdbStatusHandlerName string
 }
 
 func New(opts Options) *StatusAPI {
+	handlerName := opts.TSDBStatusHandlerName
+	if handlerName == "" {
+		handlerName = defaultTSDBStatusHandlerName
+	}
 	return &StatusAPI{
-		getTSDBStats: opts.GetStats,
-		registry:     opts.Registry,
+		getTSDBStats:          opts.GetStats,
+		registry:              opts.Registry,
+		tsdbStatusHandlerName: handlerName,
 	}
 }
 
 func (sapi *StatusAPI) Register(r *route.Router, tracer opentracing.Tracer, logger log.Logger, ins extpromhttp.InstrumentationMiddleware, logMiddleware *logging.HTTPServerMiddleware) {
 	instr := api.GetInstr(tracer, logger, ins, logMiddleware, false)
-	r.Get("/api/v1/status/tsdb", instr("tsdb_status", sapi.httpServeStats))
+	r.Get("/api/v1/status/tsdb", instr(sapi.tsdbStatusHandlerName, sapi.httpServeStats))
 }
 
 func (sapi *StatusAPI) httpServeStats(r *http.Request) (any, []error, *api.ApiError, func()) {
