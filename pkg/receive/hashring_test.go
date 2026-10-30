@@ -684,6 +684,57 @@ func TestInvalidAZHashringCfg(t *testing.T) {
 	}
 }
 
+func TestShuffleShardHashringGetShardSize(t *testing.T) {
+	t.Parallel()
+
+	endpoints := []Endpoint{
+		{Address: "node-1", AZ: "az-1"},
+		{Address: "node-2", AZ: "az-1"},
+		{Address: "node-3", AZ: "az-2"},
+		{Address: "node-4", AZ: "az-2"},
+	}
+
+	cfg := ShuffleShardingConfig{
+		ShardSize: 2,
+		Overrides: []ShuffleShardingOverrideConfig{
+			{
+				// No matcher type, which means exact.
+				Tenants:   []string{"tenant-a"},
+				ShardSize: 3,
+			},
+			{
+				Tenants:           []string{"tenant-b"},
+				ShardSize:         4,
+				TenantMatcherType: TenantMatcherTypeExact,
+			},
+			{
+				Tenants:           []string{"glob-*"},
+				ShardSize:         4,
+				TenantMatcherType: TenantMatcherGlob,
+			},
+		},
+	}
+
+	baseRing, err := newKetamaHashring(endpoints, SectionsPerNode, 2)
+	require.NoError(t, err)
+	ring, err := newShuffleShardHashring(baseRing, cfg, 2, prometheus.NewRegistry(), "test")
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		tenant   string
+		expected int
+	}{
+		{tenant: "tenant-a", expected: 3},
+		{tenant: "tenant-b", expected: 4},
+		{tenant: "glob-1", expected: 4},
+		{tenant: "other", expected: 2},
+	} {
+		t.Run(tc.tenant, func(t *testing.T) {
+			require.Equal(t, tc.expected, ring.getShardSize(tc.tenant))
+		})
+	}
+}
+
 func TestShuffleShardHashring(t *testing.T) {
 	t.Parallel()
 
