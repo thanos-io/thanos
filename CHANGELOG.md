@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#9106](https://github.com/thanos-io/thanos/pull/9106) Receive: Add per-tenant `thanos_receive_head_compactions_triggered_total`, `thanos_receive_head_compactions_completed_total`, and `thanos_receive_head_compactions_failed_total` counters for head compactions.
 - [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
 - [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
 - [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses
