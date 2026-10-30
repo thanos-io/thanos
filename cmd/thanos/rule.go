@@ -538,7 +538,6 @@ func runRule(
 		appendable storage.Appendable
 		queryable  storage.Queryable
 		tsdbDB     *tsdb.DB
-		agentDB    *agent.DB
 	)
 
 	rwCfgYAML, err := conf.rwConfig.Content()
@@ -548,35 +547,19 @@ func runRule(
 
 	var rwReloader *remoteWriteConfigReloader
 	if len(rwCfgYAML) > 0 {
-		slogger := logutil.GoKitLogToSlog(logger)
-		// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-		// TODO: add type and unit labels support?
-		remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
-			return 0, nil
-		}, conf.dataDir, 1*time.Minute, &readyScrapeManager{}, false)
-		rwCfg, err := parseRemoteWriteConfig(rwCfgYAML, conf.lset)
+		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts)
 		if err != nil {
 			return err
 		}
-		if err := remoteStore.ApplyConfig(rwCfg); err != nil {
-			return errors.Wrap(err, "applying config to remote storage")
+		{
+			done := make(chan struct{})
+			g.Add(func() error {
+				<-done
+				return fanoutStore.Close()
+			}, func(error) {
+				close(done)
+			})
 		}
-		rwReloader = &remoteWriteConfigReloader{
-			loadConfig:     conf.rwConfig.Content,
-			applyConfig:    remoteStore.ApplyConfig,
-			externalLabels: conf.lset,
-		}
-
-		agentDB, err = agent.Open(slogger, reg, remoteStore, conf.dataDir, agentOpts)
-		if err != nil {
-			return errors.Wrap(err, "start remote write agent db")
-		}
-		// We need to call SetWriteNotified() so that agendDB gets notified about every write.
-		// Without it we fallback to polling, which pulls new samples to write every 15s.
-		// If we don't call SetWriteNotified() we'll have up to 15s lag between rule evaluation
-		// and samples being sent over via remote_write.
-		agentDB.SetWriteNotified(remoteStore)
-		fanoutStore := storage.NewFanout(slogger, agentDB, remoteStore)
 		appendable = fanoutStore
 		// Use a separate queryable to restore the ALERTS firing states.
 		// We cannot use remoteStore directly because it uses remote read for
@@ -1263,3 +1246,79 @@ func (rm *readyScrapeManager) Get() (*scrape.Manager, error) {
 
 // ErrNotReady is returned if the underlying scrape manager is not ready yet.
 var ErrNotReady = errors.New("scrape manager not ready")
+
+func parseRemoteWriteConfig(rwCfgYAML []byte, externalLabels labels.Labels) (*config.Config, error) {
+	var rwCfg struct {
+		RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
+	}
+	if err := yaml.UnmarshalStrict(rwCfgYAML, &rwCfg); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse remote write config %v", string(rwCfgYAML))
+	}
+	if len(rwCfg.RemoteWriteConfigs) == 0 {
+		return nil, errors.New("no remote_write configs specified")
+	}
+
+	globalCfg := config.DefaultGlobalConfig
+	globalCfg.ExternalLabels = externalLabels
+
+	rwNames := make(map[string]struct{}, len(rwCfg.RemoteWriteConfigs))
+	for _, rwcfg := range rwCfg.RemoteWriteConfigs {
+		if rwcfg == nil {
+			return nil, errors.New("empty or null remote write config section")
+		}
+		if _, ok := rwNames[rwcfg.Name]; ok && rwcfg.Name != "" {
+			return nil, errors.Errorf("found multiple remote write configs with job name %q", rwcfg.Name)
+		}
+		if err := rwcfg.Validate(globalCfg.MetricNameValidationScheme); err != nil {
+			return nil, errors.Wrap(err, "validate remote write config")
+		}
+		rwNames[rwcfg.Name] = struct{}{}
+	}
+
+	return &config.Config{
+		GlobalConfig:       globalCfg,
+		RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
+	}, nil
+}
+
+func openStatelessRuleStorage(
+	logger log.Logger,
+	reg prometheus.Registerer,
+	dataDir string,
+	rwCfgYAML []byte,
+	externalLabels labels.Labels,
+	agentOpts *agent.Options,
+) (storage.Storage, error) {
+	promCfg, err := parseRemoteWriteConfig(rwCfgYAML, externalLabels)
+	if err != nil {
+		return nil, err
+	}
+
+	slogger := logutil.GoKitLogToSlog(logger)
+	// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
+	// TODO: add type and unit labels support?
+	remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
+		return 0, nil
+	}, dataDir, 1*time.Minute, &readyScrapeManager{}, false)
+
+	// Open the agent WAL before applying remote storage config so that the initial
+	// WAL segment exists when QueueManager starts its WAL watcher.
+	agentDB, err := agent.Open(slogger, reg, remoteStore, dataDir, agentOpts)
+	if err != nil {
+		_ = remoteStore.Close()
+		return nil, errors.Wrap(err, "start remote write agent db")
+	}
+	// We need to call SetWriteNotified() so that agentDB gets notified about every write.
+	// Without it we fallback to polling, which pulls new samples to write every 15s.
+	// If we don't call SetWriteNotified() we'll have up to 15s lag between rule evaluation
+	// and samples being sent over via remote_write.
+	agentDB.SetWriteNotified(remoteStore)
+
+	if err := remoteStore.ApplyConfig(promCfg); err != nil {
+		_ = agentDB.Close()
+		_ = remoteStore.Close()
+		return nil, errors.Wrap(err, "applying config to remote storage")
+	}
+
+	return storage.NewFanout(slogger, agentDB, remoteStore), nil
+}

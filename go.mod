@@ -20,7 +20,7 @@ require (
 	github.com/cristalhq/hedgedhttp v0.9.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/efficientgo/core v1.0.0-rc.3
-	github.com/efficientgo/e2e v0.14.1-0.20260927140226-a3483d56ac4b
+	github.com/efficientgo/e2e v0.14.1-0.20261029123711-3e70d69890e8
 	github.com/efficientgo/tools/extkingpin v0.0.0-20230505153745-6b7392939a60
 	github.com/facette/natsort v0.0.0-20181210072756-2cd4dd1e2dcb
 	github.com/fatih/structtag v1.2.0
@@ -119,6 +119,7 @@ require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/colega/zeropool v0.0.0-20230505084239-6fb4a4f75381
 	github.com/oklog/ulid/v2 v2.1.1
+	github.com/prometheus/client_golang/exp v0.0.0-20251212205219-7ba246a648ca
 	github.com/prometheus/otlptranslator v1.0.0
 	github.com/tjhop/slog-gokit v0.2.2
 	go.opentelemetry.io/collector/pdata v1.48.0
@@ -265,7 +266,6 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/prometheus/client_golang/exp v0.0.0-20251212205219-7ba246a648ca // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/prometheus/sigv4 v0.3.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
