@@ -1026,7 +1026,12 @@ func TestReloader_DirectoriesApply(t *testing.T) {
 	g.Wait()
 
 	testutil.Ok(t, err)
-	testutil.Equals(t, 6.0, promtest.ToFloat64(reloader.watcher.watchEvents))
+	expectedWatchEvents := 6.0
+	if runtime.GOOS == "darwin" {
+		// macOS reports an additional event for one of the symlink updates.
+		expectedWatchEvents = 7.0
+	}
+	testutil.Equals(t, expectedWatchEvents, promtest.ToFloat64(reloader.watcher.watchEvents))
 	testutil.Equals(t, 0.0, promtest.ToFloat64(reloader.watcher.watchErrors))
 	testutil.Equals(t, 4.0, promtest.ToFloat64(reloader.reloadErrors))
 	testutil.Equals(t, 9.0, promtest.ToFloat64(reloader.reloads))

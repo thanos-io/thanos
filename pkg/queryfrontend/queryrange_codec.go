@@ -88,6 +88,11 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 		return nil, errStepTooSmall
 	}
 
+	result.StepAlignmentLocation, err = parseTimezone(r.FormValue(queryv1.TimezoneParam))
+	if err != nil {
+		return nil, err
+	}
+
 	result.Dedup, err = parseEnableDedupParam(r.FormValue(queryv1.DedupParam))
 	if err != nil {
 		return nil, err
@@ -223,6 +228,18 @@ func parseDurationMillis(s string) (int64, error) {
 		return int64(d) / int64(time.Millisecond/time.Nanosecond), nil
 	}
 	return 0, httpgrpc.Errorf(http.StatusBadRequest, "cannot parse %q to a valid duration", s)
+}
+
+func parseTimezone(s string) (*time.Location, error) {
+	if s == "" {
+		return nil, nil
+	}
+
+	location, err := time.LoadLocation(s)
+	if err != nil {
+		return nil, httpgrpc.Errorf(http.StatusBadRequest, "cannot parse %q as a time zone", s)
+	}
+	return location, nil
 }
 
 func parseEnableDedupParam(s string) (bool, error) {

@@ -750,11 +750,10 @@ func testReceiveQuorum(t *testing.T, hashringAlgo HashringAlgorithm, withConsist
 			defer func() {
 				testutil.Ok(t, closeFunc())
 				// Wait a few milliseconds for peer workers to process the queue.
-				time.AfterFunc(50*time.Millisecond, func() {
-					for _, h := range handlers {
-						h.Close()
-					}
-				})
+				time.Sleep(50 * time.Millisecond)
+				for _, h := range handlers {
+					h.Close()
+				}
 			}()
 			tenant := "test"
 

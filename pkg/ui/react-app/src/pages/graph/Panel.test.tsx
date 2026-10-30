@@ -112,6 +112,29 @@ describe('Panel', () => {
       throw new Error('query request body is not URLSearchParams');
     }
     expect(body.get('step')).toEqual('15');
+    expect(body.get('timezone')).toBeNull();
+  });
+
+  it('sends the browser timezone when local time is enabled', async () => {
+    const graphPanel = shallow(
+      <Panel {...defaultProps} pathPrefix="" useLocalTime options={{ ...defaultProps.options, type: PanelType.Graph }} />
+    );
+    const executeQuery = graphPanel.find(ExpressionInput).prop('executeQuery');
+    if (executeQuery === undefined) {
+      throw new Error('executeQuery prop is missing');
+    }
+    fetchMock.mockClear();
+
+    await act(async () => {
+      executeQuery();
+    });
+
+    const body = fetchMock.mock.calls[0][1]?.body;
+    expect(body instanceof URLSearchParams).toBe(true);
+    if (!(body instanceof URLSearchParams)) {
+      throw new Error('query request body is not URLSearchParams');
+    }
+    expect(body.get('timezone')).toBeTruthy();
   });
 
   it('renders NavLinks', () => {
