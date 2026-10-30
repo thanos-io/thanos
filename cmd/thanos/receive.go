@@ -317,15 +317,20 @@ func runReceive(
 	// hashringChangedChan signals when TSDB needs to be flushed and updated due to hashring config change.
 	hashringChangedChan := make(chan struct{}, 1)
 
+	var storageShutdownComplete chan struct{}
 	if enableIngestion {
 		// uploadC signals when new blocks should be uploaded.
 		uploadC := make(chan struct{}, 1)
 		// uploadDone signals when uploading has finished.
 		uploadDone := make(chan struct{}, 1)
+		// storageShutdownComplete signals when all storage flushing, uploading,
+		// and DB closing have completed, allowing the metrics HTTP server to stay
+		// alive for scrapes until storage is fully shut down.
+		storageShutdownComplete = make(chan struct{})
 
 		level.Debug(logger).Log("msg", "setting up TSDB")
 		{
-			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm)); err != nil {
+			if err := startTSDBAndUpload(g, logger, reg, dbs, uploadC, hashringChangedChan, upload, uploadDone, statusProber, bkt, receive.HashringAlgorithm(conf.hashringsAlgorithm), storageShutdownComplete); err != nil {
 				return err
 			}
 		}
@@ -352,6 +357,9 @@ func runReceive(
 			statusProber.NotReady(err)
 			defer statusProber.NotHealthy(err)
 
+			if storageShutdownComplete != nil {
+				<-storageShutdownComplete
+			}
 			srv.Shutdown(err)
 		})
 	}
@@ -704,6 +712,7 @@ func startTSDBAndUpload(g *run.Group,
 	statusProber prober.Probe,
 	bkt objstore.Bucket,
 	hashringAlgorithm receive.HashringAlgorithm,
+	storageShutdownComplete chan struct{},
 ) error {
 
 	log.With(logger, "component", "storage")
@@ -726,6 +735,9 @@ func startTSDBAndUpload(g *run.Group,
 	g.Add(func() error {
 		// Before quitting, ensure the WAL is flushed and the DBs are closed.
 		defer func() {
+			if storageShutdownComplete != nil {
+				defer close(storageShutdownComplete)
+			}
 			level.Info(logger).Log("msg", "shutting down storage")
 			if err := dbs.Flush(); err != nil {
 				level.Error(logger).Log("err", err, "msg", "failed to flush storage")
