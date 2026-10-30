@@ -105,7 +105,7 @@ func (c *PrometheusConverter) addSumNumberDataPoints(ctx context.Context, dataPo
 		if settings.ExportCreatedMetric && metric.Sum().IsMonotonic() {
 			startTimestamp := pt.StartTimestamp()
 			if startTimestamp == 0 {
-				return nil
+				continue
 			}
 
 			createdLabels := make([]labelpb.ZLabel, len(lbls))
