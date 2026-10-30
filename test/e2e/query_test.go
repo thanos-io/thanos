@@ -234,20 +234,23 @@ outer:
 	q := e2ethanos.NewQuerierBuilder(e, "1").WithEndpointGroups("1.2.3.4:1111").WithInjectEndpointGroupAddrs(sidecar1.InternalEndpoint("grpc"), sidecar2.InternalEndpoint("grpc")).Init()
 	testutil.Ok(t, e2e.StartAndWaitReady(q))
 
+	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Minute)
+	t.Cleanup(cancel)
+
+	testutil.Ok(t, q.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
+
+	// Wait until prom2 has scraped its initial target so every subsequent query must succeed.
+	instantQuery(t, ctx, q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		Deduplicate:             false,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
+	}, 1)
+
 	for range 20 {
-		_, _, err := simpleInstantQuery(t, context.Background(), q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
+		_, _, err := simpleInstantQuery(t, t.Context(), q.Endpoint("http"), e2ethanos.QueryUpWithoutInstance, time.Now, promclient.QueryOptions{
 			Deduplicate:             false,
 			PartialResponseStrategy: storepb.PartialResponseStrategy_ABORT,
 		}, 1)
-		if err != nil {
-			if strings.Contains(err.Error(), "no such host") {
-				t.Fatalf("found error even though expected not to: %s", err.Error())
-			}
-		}
-		select {
-		case <-time.After(500 * time.Millisecond):
-		case <-t.Context().Done():
-		}
+		testutil.Ok(t, err)
 	}
 }
 

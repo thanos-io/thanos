@@ -28,6 +28,9 @@ import (
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 	"golang.org/x/net/http2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
+	apihttp "google.golang.org/api/transport/http"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
@@ -52,6 +55,8 @@ type HTTPClientConfig struct {
 	BearerToken string `yaml:"bearer_token"`
 	// The bearer token file for the targets.
 	BearerTokenFile string `yaml:"bearer_token_file"`
+	// Google Cloud IAM / Application Default Credentials authentication for the targets.
+	GoogleIAM *GoogleIAMConfig `yaml:"google_iam"`
 	// HTTP proxy server to use to connect to the targets.
 	ProxyURL string `yaml:"proxy_url"`
 	// TLSConfig to use to connect to the targets.
@@ -63,6 +68,17 @@ type HTTPClientConfig struct {
 	// ClientMetrics contains metrics that will be used to instrument
 	// the client that will be created with this config.
 	ClientMetrics *extpromhttp.ClientMetrics `yaml:"-"`
+}
+
+const defaultGoogleIAMScope = "https://www.googleapis.com/auth/monitoring.read"
+
+// GoogleIAMConfig configures Google Cloud IAM authentication for HTTP clients.
+type GoogleIAMConfig struct {
+	// CredentialsFile is an optional path to a Google Cloud credentials JSON file.
+	// When empty, Application Default Credentials are used.
+	CredentialsFile string `yaml:"credentials_file"`
+	// Scopes specifies OAuth2 scopes to request. Defaults to https://www.googleapis.com/auth/monitoring.read.
+	Scopes []string `yaml:"scopes"`
 }
 
 // TLSConfig configures TLS connections.
@@ -263,6 +279,9 @@ func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 	if err := httpClientConfig.Validate(); err != nil {
 		return nil, err
 	}
+	if cfg.GoogleIAM != nil && (!cfg.BasicAuth.IsZero() || cfg.BearerToken != "" || cfg.BearerTokenFile != "") {
+		return nil, fmt.Errorf("at most one of basic_auth, bearer_token, bearer_token_file & google_iam must be configured")
+	}
 
 	rt, err := NewRoundTripperFromConfig(
 		httpClientConfig,
@@ -271,6 +290,12 @@ func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.GoogleIAM != nil {
+		rt, err = newGoogleIAMRoundTripper(cfg.GoogleIAM, rt)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if cfg.ClientMetrics != nil {
@@ -281,6 +306,32 @@ func NewHTTPClient(cfg HTTPClientConfig, name string) (*http.Client, error) {
 	client := &http.Client{Transport: rt}
 
 	return client, nil
+}
+
+func newGoogleIAMRoundTripper(cfg *GoogleIAMConfig, next http.RoundTripper) (http.RoundTripper, error) {
+	if next == nil {
+		next = http.DefaultTransport
+	}
+	scopes := cfg.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{defaultGoogleIAMScope}
+	}
+
+	ctx := context.Background()
+	opts := []option.ClientOption{
+		option.WithScopes(scopes...),
+	}
+	if cfg.CredentialsFile != "" {
+		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile))
+	} else {
+		creds, err := google.FindDefaultCredentials(ctx, scopes...)
+		if err != nil {
+			return nil, fmt.Errorf("error finding default Google credentials: %w", err)
+		}
+		opts = append(opts, option.WithCredentials(creds))
+	}
+
+	return apihttp.NewTransport(ctx, next, opts...)
 }
 
 var ThanosUserAgent = fmt.Sprintf("Thanos/%s", version.Version)

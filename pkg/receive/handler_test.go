@@ -42,6 +42,7 @@ import (
 	prometheusMetadata "github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -57,6 +58,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
@@ -2533,4 +2535,569 @@ func TestRetryAfterHeaderOnQuorumUnavailable(t *testing.T) {
 			require.Equalf(t, time.Now().UTC().Add(backoff).Format(http.TimeFormat), rec.Header().Get("Retry-After"), "handler %d", i)
 		}
 	})
+}
+
+func TestDetermineRWVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		rwVersion   string
+		wantVer     int
+		wantMode    string
+		wantErr     bool
+	}{
+		{
+			name:    "empty headers defaults to v1",
+			wantVer: 1,
+		},
+		{
+			name:        "v1 content-type without proto",
+			contentType: "application/x-protobuf",
+			wantVer:     1,
+		},
+		{
+			name:        "v1 content-type with proto",
+			contentType: "application/x-protobuf;proto=prometheus.WriteRequest",
+			wantVer:     1,
+		},
+		{
+			name:        "v2 default mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request",
+			wantVer:     2,
+		},
+		{
+			name:        "v2 explicit mode=none",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=none",
+			wantVer:     2,
+			wantMode:    "none",
+		},
+		{
+			name:        "v2 mode=stateless",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless",
+			wantVer:     2,
+			wantMode:    "stateless",
+		},
+		{
+			name:        "v2 mode=stateless-st",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless-st",
+			wantVer:     2,
+			wantMode:    "stateless-st",
+		},
+		{
+			name:        "v2 RFC 9110 whitespace, uppercase params, quoted values, reordered",
+			contentType: `application/x-protobuf; MODE="stateless-st"; PROTO="io.prometheus.write.v2.Request"`,
+			wantVer:     2,
+			wantMode:    "stateless-st",
+		},
+		{
+			name:      "v2 version header without content-type fails",
+			rwVersion: "2.0.0",
+			wantErr:   true,
+		},
+		{
+			name:        "unsupported media type",
+			contentType: "application/json",
+			wantErr:     true,
+		},
+		{
+			name:        "unsupported proto",
+			contentType: "application/x-protobuf;proto=unsupported.Message",
+			wantErr:     true,
+		},
+		{
+			name:        "empty proto",
+			contentType: "application/x-protobuf;proto=",
+			wantErr:     true,
+		},
+		{
+			name:        "unsupported mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=unknown",
+			wantErr:     true,
+		},
+		{
+			name:        "empty mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=",
+			wantErr:     true,
+		},
+		{
+			name:        "mode on v1 rejected",
+			contentType: "application/x-protobuf;proto=prometheus.WriteRequest;mode=stateless",
+			wantErr:     true,
+		},
+		{
+			name:        "mode without proto rejected",
+			contentType: "application/x-protobuf;mode=stateless",
+			wantErr:     true,
+		},
+		{
+			name:        "unknown parameter rejected",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;unknown=param",
+			wantErr:     true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", nil)
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			if tc.rwVersion != "" {
+				req.Header.Set("X-Prometheus-Remote-Write-Version", tc.rwVersion)
+			}
+			gotVer, gotMode, err := determineRWVersion(req)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantVer, gotVer)
+			require.Equal(t, tc.wantMode, gotMode)
+		})
+	}
+}
+
+func TestReceiveHTTP_RW2NegotiationAndStatus(t *testing.T) {
+	t.Parallel()
+
+	validV2Req := &writev2.Request{
+		Symbols: []string{"", "__name__", "test_metric"},
+		Timeseries: []writev2.TimeSeries{
+			{
+				LabelsRefs: []uint32{1, 2},
+				Samples:    []writev2.Sample{{Timestamp: 100, Value: 1.5}},
+			},
+		},
+	}
+	rawV2, err := proto.Marshal(validV2Req)
+	require.NoError(t, err)
+	compressedV2 := snappy.Encode(nil, rawV2)
+
+	t.Run("unsupported content-encoding returns 415 with Accept-Encoding", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_encoding", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader([]byte("corrupt")))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+		require.Equal(t, "snappy", rec.Header().Get("Accept-Encoding"))
+	})
+
+	t.Run("unsupported content-type returns 415 with Accept", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_ct", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=unknown")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+		require.Contains(t, rec.Header().Get("Accept"), "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+	})
+
+	t.Run("valid v2 write returns 204 and written headers", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_204", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusNoContent, rec.Code)
+		stats, err := remote.ParseWriteResponseStats(rec.Result())
+		require.NoError(t, err)
+		require.Equal(t, remote.WriteResponseStats{Samples: 1, Confirmed: true}, stats)
+	})
+
+	t.Run("v2 conflict error returns 400 and zero written headers", func(t *testing.T) {
+		conflictErrFn := func() error { return storage.ErrOutOfOrderSample }
+		appendables := []*fakeAppendable{{appender: newFakeAppender(conflictErrFn, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_conflict_400", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		stats, err := remote.ParseWriteResponseStats(rec.Result())
+		require.NoError(t, err)
+		require.Equal(t, remote.WriteResponseStats{Confirmed: true}, stats)
+	})
+}
+
+func TestTranslateV2ToV1Validation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		mode    string
+		req     writev2.Request
+		wantErr string
+	}{
+		{
+			name: "valid sample request",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "http_requests_total", "job", "api"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 42}},
+					},
+				},
+			},
+		},
+		{
+			name: "empty symbols table with timeseries rejected",
+			req: writev2.Request{
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{0, 1},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "symbol table must start with an empty string",
+		},
+		{
+			name: "invalid UTF-8 symbol rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "bad\xffname"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "invalid UTF-8 in symbol table",
+		},
+		{
+			name: "odd labels_refs rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 1},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "invalid labels_refs length",
+		},
+		{
+			name: "out-of-bounds metadata ref rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{HelpRef: 99},
+					},
+				},
+			},
+			wantErr: "metadata symbol reference out of bounds",
+		},
+		{
+			name: "out-of-bounds label ref rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 99},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "label symbol reference out of bounds",
+		},
+		{
+			name: "missing __name__ label rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "job", "api"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "time series missing __name__ label",
+		},
+		{
+			name: "metadata-only timeseries rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_GAUGE},
+					},
+				},
+			},
+			wantErr: "time series must contain at least one sample, histogram, or exemplar",
+		},
+		{
+			name: "mixed float samples and histograms rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Histograms: []writev2.Histogram{{Timestamp: 1000}},
+					},
+				},
+			},
+			wantErr: "time series cannot contain both float samples and histograms",
+		},
+		{
+			name: "exemplar-only timeseries allowed in default mode",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4}, Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+		},
+		{
+			name: "exemplar-only timeseries rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4}, Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_COUNTER},
+					},
+				},
+			},
+			wantErr: "time series must contain at least one sample or histogram in stateless mode",
+		},
+		{
+			name: "untyped metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_UNSPECIFIED},
+					},
+				},
+			},
+			wantErr: "metadata metric type must be specified in stateless mode",
+		},
+		{
+			name: "float samples with histogram metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist_bucket"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_HISTOGRAM},
+					},
+				},
+			},
+			wantErr: "classic histogram float samples are not allowed with histogram metadata in stateless mode",
+		},
+		{
+			name: "histograms with non-histogram metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{{Timestamp: 1000}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_GAUGE},
+					},
+				},
+			},
+			wantErr: "histograms require histogram or gaugehistogram metadata in stateless mode",
+		},
+		{
+			name: "counter without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "requests_total"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_COUNTER},
+					},
+				},
+			},
+			wantErr: "sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "summary _sum without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "rpc_duration_seconds_sum"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_SUMMARY},
+					},
+				},
+			},
+			wantErr: "sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "histogram without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{{Sum: 1, Timestamp: 1000}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_HISTOGRAM},
+					},
+				},
+			},
+			wantErr: "histogram sample missing start_timestamp in stateless-st mode",
+		},
+		{
+			name: "invalid exemplar labels rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4, 3, 4}, Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: "invalid exemplar labels",
+		},
+		{
+			name: "invalid histogram count mismatch rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{
+							{
+								Count:          &writev2.Histogram_CountInt{CountInt: 999},
+								Sum:            10,
+								Schema:         0,
+								PositiveSpans:  []writev2.BucketSpan{{Offset: 0, Length: 1}},
+								PositiveDeltas: []int64{1},
+								Timestamp:      1000,
+							},
+						},
+					},
+				},
+			},
+			wantErr: "invalid histogram",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := translateV2ToV1(tc.req, tc.mode)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+// Recommended CLI invocation:
+//
+//	export bench=translateV2ToV1 && go test -tags=slicelabels ./pkg/receive/... \
+//		-run '^$' -bench '^BenchmarkTranslateV2ToV1$' \
+//		-benchtime 1s -count 6 -cpu 2 -timeout 999m -benchmem \
+//		| tee ${bench}.txt
+func BenchmarkTranslateV2ToV1(b *testing.B) {
+	symbols := []string{"", "__name__", "http_requests_total", "help text", "requests", "trace_id", "abc123def456"}
+	baseRefs := []uint32{1, 2}
+	for i := range 9 {
+		symbols = append(symbols, fmt.Sprintf("label_name_%d", i), fmt.Sprintf("label_value_%d", i))
+		baseRefs = append(baseRefs, uint32(len(symbols)-2), uint32(len(symbols)-1))
+	}
+
+	ts := make([]writev2.TimeSeries, 500)
+	for i := range ts {
+		ts[i] = writev2.TimeSeries{
+			LabelsRefs: baseRefs,
+			Samples:    []writev2.Sample{{StartTimestamp: 100, Timestamp: 1000, Value: float64(i)}},
+			Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{5, 6}, Timestamp: 1000, Value: 1}},
+			Metadata: writev2.Metadata{
+				Type:    writev2.Metadata_METRIC_TYPE_COUNTER,
+				HelpRef: 3,
+				UnitRef: 4,
+			},
+		}
+	}
+	req := writev2.Request{
+		Symbols:    symbols,
+		Timeseries: ts,
+	}
+
+	for _, mode := range []string{rwModeNone, rwModeStatelessST} {
+		b.Run("mode="+mode, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				_, err := translateV2ToV1(req, mode)
+				require.NoError(b, err)
+			}
+		})
+	}
 }
