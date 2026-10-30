@@ -1376,11 +1376,12 @@ func benchmarkHandlerMultiTSDBReceiveRemoteWrite(b testutil.TB) {
 	logger := log.NewNopLogger()
 	m := NewMultiTSDB(
 		openTestRoot(b, dir), logger, reg, &tsdb.Options{
-			MinBlockDuration:  int64(2 * time.Hour / time.Millisecond),
-			MaxBlockDuration:  int64(2 * time.Hour / time.Millisecond),
-			RetentionDuration: int64(6 * time.Hour / time.Millisecond),
-			NoLockfile:        true,
-			StripeSize:        1, // Disable stripe pre allocation so we can have clear profiles.
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         int64(2 * time.Hour / time.Millisecond),
+			MaxBlockDuration:         int64(2 * time.Hour / time.Millisecond),
+			RetentionDuration:        int64(6 * time.Hour / time.Millisecond),
+			NoLockfile:               true,
+			StripeSize:               1, // Disable stripe pre allocation so we can have clear profiles.
 		},
 		labels.FromStrings("replica", "01"),
 		"tenant_id",

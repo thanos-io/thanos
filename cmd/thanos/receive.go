@@ -46,6 +46,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/receive/writecapnp"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -178,6 +179,9 @@ func runReceive(
 	if conf.compression != compressionNone {
 		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(conf.compression)))
 	}
+	if conf.capnpCompressionConcurrency < 0 {
+		return errors.Errorf("--receive.capnproto-compression-concurrency must not be negative, got %d", conf.capnpCompressionConcurrency)
+	}
 
 	if conf.grpcServiceConfig != "" {
 		dialOpts = append(dialOpts, grpc.WithDefaultServiceConfig(conf.grpcServiceConfig))
@@ -295,12 +299,14 @@ func runReceive(
 		TSDBStats:            dbs,
 		Limiter:              limiter,
 
-		AsyncForwardWorkerCount: conf.asyncForwardWorkerCount,
-		ReplicationProtocol:     receive.ReplicationProtocol(conf.replicationProtocol),
-		OtlpEnableTargetInfo:    conf.otlpEnableTargetInfo,
-		OtlpResourceAttributes:  conf.otlpResourceAttributes,
-		RetryAfterBackoff:       time.Duration(*conf.retryAfterBackoff),
-		RetryAfterJitter:        conf.retryAfterJitter,
+		AsyncForwardWorkerCount:         conf.asyncForwardWorkerCount,
+		ReplicationProtocol:             receive.ReplicationProtocol(conf.replicationProtocol),
+		CapNProtoCompression:            writecapnp.Compression(conf.capnpCompression),
+		CapNProtoCompressionConcurrency: conf.capnpCompressionConcurrency,
+		OtlpEnableTargetInfo:            conf.otlpEnableTargetInfo,
+		OtlpResourceAttributes:          conf.otlpResourceAttributes,
+		RetryAfterBackoff:               time.Duration(*conf.retryAfterBackoff),
+		RetryAfterJitter:                conf.retryAfterJitter,
 	})
 
 	grpcProbe := prober.NewGRPC()
@@ -564,7 +570,7 @@ func runReceive(
 		if err != nil {
 			return err
 		}
-		server := receive.NewCapNProtoServer(listener, handler, logger)
+		server := receive.NewCapNProtoServer(listener, handler, logger, receive.WithCapNProtoCompressionConcurrency(conf.capnpCompressionConcurrency))
 		g.Add(func() error {
 			return server.ListenAndServe()
 		}, func(err error) {
@@ -903,22 +909,24 @@ type receiveConfig struct {
 	hashringsFileContent string
 	hashringsAlgorithm   string
 
-	refreshInterval     *model.Duration
-	endpoint            string
-	tenantHeader        string
-	tenantField         string
-	tenantLabelName     string
-	defaultTenantID     string
-	replicaHeader       string
-	replicationFactor   uint64
-	forwardTimeout      *model.Duration
-	maxBackoff          *model.Duration
-	maxArtificialDelay  *model.Duration
-	compression         string
-	replicationProtocol string
-	grpcServiceConfig   string
-	retryAfterBackoff   *model.Duration
-	retryAfterJitter    float64
+	refreshInterval             *model.Duration
+	endpoint                    string
+	tenantHeader                string
+	tenantField                 string
+	tenantLabelName             string
+	defaultTenantID             string
+	replicaHeader               string
+	replicationFactor           uint64
+	forwardTimeout              *model.Duration
+	maxBackoff                  *model.Duration
+	maxArtificialDelay          *model.Duration
+	compression                 string
+	replicationProtocol         string
+	capnpCompression            string
+	capnpCompressionConcurrency int
+	grpcServiceConfig           string
+	retryAfterBackoff           *model.Duration
+	retryAfterJitter            float64
 
 	tsdbMinBlockDuration         *model.Duration
 	tsdbMaxBlockDuration         *model.Duration
@@ -1059,6 +1067,15 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("receive.replication-protocol", "The protocol to use for replicating remote-write requests. One of "+strings.Join(replicationProtocols, ", ")).
 		Default(string(receive.ProtobufReplication)).
 		EnumVar(&rc.replicationProtocol, replicationProtocols...)
+
+	capnprotoCompressions := []string{string(writecapnp.CompressionNone), string(writecapnp.CompressionZstd)}
+	cmd.Flag("receive.capnproto-compression", "Compression of replicated Cap'n Proto messages sent by this receiver. Receivers accept both. One of "+strings.Join(capnprotoCompressions, ", ")).
+		Default(string(writecapnp.CompressionNone)).
+		EnumVar(&rc.capnpCompression, capnprotoCompressions...)
+
+	cmd.Flag("receive.capnproto-compression-concurrency", "Maximum number of Cap'n Proto messages compressed at the same time by this process when --receive.capnproto-compression=zstd. Each slot holds about 3 MiB of encoder state. 0 means one slot per GOMAXPROCS.").
+		Default(fmt.Sprintf("%d", writecapnp.DefaultCompressionConcurrency)).
+		IntVar(&rc.capnpCompressionConcurrency)
 
 	cmd.Flag("receive.capnproto-address", "Address for the Cap'n Proto server.").Default(fmt.Sprintf("0.0.0.0:%s", receive.DefaultCapNProtoPort)).StringVar(&rc.replicationAddr)
 

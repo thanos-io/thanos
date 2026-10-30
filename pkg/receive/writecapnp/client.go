@@ -49,15 +49,35 @@ type RemoteWriteClient struct {
 	dialer Dialer
 	conn   *rpc.Conn
 
-	writer Writer
-	logger log.Logger
+	writer                 Writer
+	logger                 log.Logger
+	compression            Compression
+	compressionConcurrency int
 }
 
-func NewRemoteWriteClient(dialer Dialer, logger log.Logger) *RemoteWriteClient {
-	return &RemoteWriteClient{
-		dialer: dialer,
-		logger: logger,
+type ClientOption func(*RemoteWriteClient)
+
+func WithCompression(c Compression) ClientOption {
+	return func(r *RemoteWriteClient) { r.compression = c }
+}
+
+// WithCompressionConcurrency bounds how many messages the process compresses at
+// once; encoders are shared by all clients with the same value. 0 means GOMAXPROCS.
+func WithCompressionConcurrency(n int) ClientOption {
+	return func(r *RemoteWriteClient) { r.compressionConcurrency = n }
+}
+
+func NewRemoteWriteClient(dialer Dialer, logger log.Logger, opts ...ClientOption) *RemoteWriteClient {
+	r := &RemoteWriteClient{
+		dialer:                 dialer,
+		logger:                 logger,
+		compression:            CompressionNone,
+		compressionConcurrency: DefaultCompressionConcurrency,
 	}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
 }
 
 func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
@@ -87,7 +107,14 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return &storepb.WriteResponse{}, status.Error(codes.Canceled, fmt.Sprintf("writing to peer: %s", err.Error()))
 	}
-	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s", err.Error()))
+	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s%s", err.Error(), r.compressionHint()))
+}
+
+func (r *RemoteWriteClient) compressionHint() string {
+	if r.compression == CompressionNone {
+		return ""
+	}
+	return fmt.Sprintf(" (compression=%s: a peer that was not upgraded yet closes compressed connections)", r.compression)
 }
 
 func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnects int, in *storepb.WriteRequest) (*storepb.WriteResponse, WriteError, error) {
@@ -205,10 +232,15 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to dial peer")
 	}
-	r.conn = rpc.NewConn(rpc.NewPackedStreamTransport(conn), nil)
+	transport, err := NewClientTransport(conn, r.compression, r.compressionConcurrency)
+	if err != nil {
+		_ = conn.Close()
+		return errors.Wrap(err, "failed to set up transport")
+	}
+	r.conn = rpc.NewConn(transport, nil)
 	writer := Writer(r.conn.Bootstrap(ctx))
 	if err := writer.Resolve(ctx); err != nil {
-		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err)
+		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err, "compression", r.compression)
 		r.closeUnlocked()
 		return errors.Wrap(err, "failed to bootstrap capnp writer")
 	}
