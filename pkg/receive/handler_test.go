@@ -2765,3 +2765,192 @@ func TestReceiveHTTP_RW2NegotiationAndStatus(t *testing.T) {
 		require.Equal(t, "0", rec.Header().Get(writtenExemplarsHeader))
 	})
 }
+
+func TestTranslateV2ToV1Validation(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		mode    string
+		req     writev2.Request
+		wantErr bool
+	}{
+		{
+			name: "valid sample request",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "http_requests_total", "job", "api"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 3, 4},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 42}},
+					},
+				},
+			},
+		},
+		{
+			name: "empty symbols table with timeseries rejected",
+			req: writev2.Request{
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{0, 1},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid UTF-8 symbol rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "bad\xffname"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "odd labels_refs rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2, 1},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "out-of-bounds label ref rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 99},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing __name__ label rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "job", "api"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "metadata-only timeseries rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_GAUGE},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "exemplar-only timeseries allowed in default mode",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4}, Timestamp: 1000, Value: 1}},
+					},
+				},
+			},
+		},
+		{
+			name: "exemplar-only timeseries rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up", "trace_id", "abc"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{3, 4}, Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_COUNTER},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "untyped metadata rejected in stateless mode",
+			mode: rwModeStateless,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "up"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_UNSPECIFIED},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "counter without start_timestamp rejected in stateless-st mode",
+			mode: rwModeStatelessST,
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "requests_total"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Samples:    []writev2.Sample{{Timestamp: 1000, Value: 1}},
+						Metadata:   writev2.Metadata{Type: writev2.Metadata_METRIC_TYPE_COUNTER},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid histogram count mismatch rejected",
+			req: writev2.Request{
+				Symbols: []string{"", "__name__", "hist"},
+				Timeseries: []writev2.TimeSeries{
+					{
+						LabelsRefs: []uint32{1, 2},
+						Histograms: []writev2.Histogram{
+							{
+								Count:          &writev2.Histogram_CountInt{CountInt: 999},
+								Sum:            10,
+								Schema:         0,
+								PositiveSpans:  []writev2.BucketSpan{{Offset: 0, Length: 1}},
+								PositiveDeltas: []int64{1},
+								Timestamp:      1000,
+							},
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := translateV2ToV1(tc.req, tc.mode)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

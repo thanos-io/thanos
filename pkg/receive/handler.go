@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colega/zeropool"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
 	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
@@ -616,29 +618,78 @@ func determineRWVersion(r *http.Request) (int, string, error) {
 	return rwVersion, mode, nil
 }
 
-func translateV2ToV1(w writev2.Request, _ string) (*prompb.WriteRequest, error) {
+func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, error) {
+	for _, sym := range w.Symbols {
+		if !utf8.ValidString(sym) {
+			return nil, errors.New("invalid UTF-8 in symbol table")
+		}
+	}
+	if len(w.Timeseries) > 0 && (len(w.Symbols) == 0 || w.Symbols[0] != "") {
+		return nil, errors.New("symbol table must start with an empty string")
+	}
+
 	// TODO(GiedriusS): somehow ensure programmatically that all fields are set and we don't miss anything.
 	out := &prompb.WriteRequest{
 		Timeseries: make([]prompb.TimeSeries, 0, len(w.Timeseries)),
 	}
 
 	for _, t := range w.Timeseries {
-		if len(t.LabelsRefs)%2 != 0 {
-			return nil, errors.New("odd number of label refs")
+		if len(t.LabelsRefs) == 0 || len(t.LabelsRefs)%2 != 0 {
+			return nil, errors.New("invalid labels_refs length")
 		}
+		if int(t.Metadata.HelpRef) >= len(w.Symbols) || int(t.Metadata.UnitRef) >= len(w.Symbols) {
+			return nil, errors.New("metadata symbol reference out of bounds")
+		}
+		if len(t.Samples) == 0 && len(t.Histograms) == 0 && len(t.Exemplars) == 0 {
+			return nil, errors.New("time series must contain at least one sample, histogram, or exemplar")
+		}
+		if len(t.Samples) > 0 && len(t.Histograms) > 0 {
+			return nil, errors.New("time series cannot contain both float samples and histograms")
+		}
+
+		if mode == rwModeStateless || mode == rwModeStatelessST {
+			if len(t.Samples) == 0 && len(t.Histograms) == 0 {
+				return nil, fmt.Errorf("time series must contain at least one sample or histogram in %s mode", mode)
+			}
+			if t.Metadata.Type == writev2.Metadata_METRIC_TYPE_UNSPECIFIED {
+				return nil, fmt.Errorf("metadata metric type must be specified in %s mode", mode)
+			}
+			if len(t.Samples) > 0 && (t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM || t.Metadata.Type == writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM) {
+				return nil, fmt.Errorf("classic histogram float samples are not allowed with histogram metadata in %s mode", mode)
+			}
+		}
+
 		v1Ts := prompb.TimeSeries{
 			Labels: make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2),
 		}
+		hasMetricName := false
 		for i := 0; i < len(t.LabelsRefs); i += 2 {
+			nameRef, valRef := int(t.LabelsRefs[i]), int(t.LabelsRefs[i+1])
+			if nameRef >= len(w.Symbols) || valRef >= len(w.Symbols) {
+				return nil, errors.New("label symbol reference out of bounds")
+			}
+			name, val := w.Symbols[nameRef], w.Symbols[valRef]
+			if name == labels.MetricName && val != "" {
+				hasMetricName = true
+			}
 			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
-				Name:  w.Symbols[t.LabelsRefs[i]],
-				Value: w.Symbols[t.LabelsRefs[i+1]],
+				Name:  name,
+				Value: val,
 			})
+		}
+		if err := labelpb.ValidateLabels(v1Ts.Labels); err != nil {
+			return nil, errors.Wrap(err, "invalid series labels")
+		}
+		if !hasMetricName {
+			return nil, errors.New("time series missing __name__ label")
 		}
 
 		if len(t.Samples) > 0 {
 			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
 			for _, v2s := range t.Samples {
+				if mode == rwModeStatelessST && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER && !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
+					return nil, errors.New("counter sample missing start_timestamp in stateless-st mode")
+				}
 				v1Ts.Samples = append(v1Ts.Samples, prompb.Sample{
 					Timestamp: v2s.Timestamp,
 					Value:     v2s.Value,
@@ -650,7 +701,7 @@ func translateV2ToV1(w writev2.Request, _ string) (*prompb.WriteRequest, error) 
 			v1Ts.Exemplars = make([]prompb.Exemplar, 0, len(t.Exemplars))
 			for _, e := range t.Exemplars {
 				if len(e.LabelsRefs)%2 != 0 {
-					return nil, errors.New("odd number of label refs for exemplars")
+					return nil, errors.New("invalid exemplar labels_refs length")
 				}
 				v1Exemplar := prompb.Exemplar{
 					Value:     e.Value,
@@ -658,10 +709,19 @@ func translateV2ToV1(w writev2.Request, _ string) (*prompb.WriteRequest, error) 
 					Labels:    make([]labelpb.ZLabel, 0, len(e.LabelsRefs)/2),
 				}
 				for i := 0; i < len(e.LabelsRefs); i += 2 {
+					nameRef, valRef := int(e.LabelsRefs[i]), int(e.LabelsRefs[i+1])
+					if nameRef >= len(w.Symbols) || valRef >= len(w.Symbols) {
+						return nil, errors.New("exemplar label symbol reference out of bounds")
+					}
 					v1Exemplar.Labels = append(v1Exemplar.Labels, labelpb.ZLabel{
-						Name:  w.Symbols[e.LabelsRefs[i]],
-						Value: w.Symbols[e.LabelsRefs[i+1]],
+						Name:  w.Symbols[nameRef],
+						Value: w.Symbols[valRef],
 					})
+				}
+				if len(v1Exemplar.Labels) > 0 {
+					if err := labelpb.ValidateLabels(v1Exemplar.Labels); err != nil {
+						return nil, errors.Wrap(err, "invalid exemplar labels")
+					}
 				}
 				v1Ts.Exemplars = append(v1Ts.Exemplars, v1Exemplar)
 			}
@@ -670,6 +730,9 @@ func translateV2ToV1(w writev2.Request, _ string) (*prompb.WriteRequest, error) 
 		if len(t.Histograms) > 0 {
 			v1Ts.Histograms = make([]prompb.Histogram, 0, len(t.Histograms))
 			for _, h := range t.Histograms {
+				if mode == rwModeStatelessST && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM && !value.IsStaleNaN(h.Sum) && h.StartTimestamp == 0 {
+					return nil, errors.New("histogram sample missing start_timestamp in stateless-st mode")
+				}
 				v1Histogram := prompb.Histogram{
 					Sum:            h.Sum,
 					Schema:         h.Schema,
@@ -697,6 +760,16 @@ func translateV2ToV1(w writev2.Request, _ string) (*prompb.WriteRequest, error) 
 					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountInt{ZeroCountInt: zc.ZeroCountInt}
 				case *writev2.Histogram_ZeroCountFloat:
 					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: zc.ZeroCountFloat}
+				}
+
+				if v1Histogram.IsFloatHistogram() {
+					if err := prompb.FloatHistogramProtoToFloatHistogram(v1Histogram).Validate(); err != nil {
+						return nil, errors.Wrap(err, "invalid float histogram")
+					}
+				} else {
+					if err := prompb.HistogramProtoToHistogram(v1Histogram).Validate(); err != nil {
+						return nil, errors.Wrap(err, "invalid histogram")
+					}
 				}
 
 				v1Ts.Histograms = append(v1Ts.Histograms, v1Histogram)

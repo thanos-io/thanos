@@ -23,6 +23,9 @@ type writeErrorTracker struct {
 	numSamplesOutOfBounds int
 	numSamplesTooOld      int
 
+	numHistogramsInvalid    int
+	lastHistogramInvalidErr error
+
 	numExemplarsOutOfOrder  int
 	numExemplarsDuplicate   int
 	numExemplarsLabelLength int
@@ -91,6 +94,8 @@ func (a *writeErrorTracker) addHistogramError(err error, tLogger log.Logger, lse
 		a.numSamplesTooOld++
 		level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", timestamp)
 	default:
+		a.numHistogramsInvalid++
+		a.lastHistogramInvalidErr = err
 		level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
 	}
 }
@@ -145,6 +150,10 @@ func (a *writeErrorTracker) collectErrors(tLogger log.Logger) writeErrors {
 	if a.numSamplesTooOld > 0 {
 		level.Warn(tLogger).Log("msg", "Error on ingesting samples that are outside of the allowed out-of-order time window", "numDropped", a.numSamplesTooOld)
 		errs.Add(errors.Wrapf(storage.ErrTooOldSample, "add %d samples", a.numSamplesTooOld))
+	}
+	if a.numHistogramsInvalid > 0 {
+		level.Warn(tLogger).Log("msg", "Error on ingesting invalid histograms", "numDropped", a.numHistogramsInvalid, "err", a.lastHistogramInvalidErr)
+		errs.Add(errors.Wrapf(errConflict, "add %d invalid histograms: %v", a.numHistogramsInvalid, a.lastHistogramInvalidErr))
 	}
 
 	if a.numExemplarsOutOfOrder > 0 {
