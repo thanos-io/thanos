@@ -390,20 +390,26 @@ func runStore(
 	default:
 		return errors.Errorf("unknown sync strategy %s", conf.blockListStrategy)
 	}
-	ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
 	parquetConvertedBlocksFilter, err := block.NewIgnoreParquetConvertedBlocksFilter(logger, parquetBktConfigYaml, conf.blockMetaFetchConcurrency, extprom.WrapRegistererWithPrefix("thanos_", reg))
 	if err != nil {
 		return errors.Wrap(err, "create parquet converted blocks filter")
 	}
-	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg),
-		[]block.MetadataFilter{
-			parquetConvertedBlocksFilter,
-			block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
-			block.NewLabelShardedMetaFilter(relabelConfig),
-			block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
-			ignoreDeletionMarkFilter,
-			block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency),
-		})
+
+	filters := []block.MetadataFilter{
+		parquetConvertedBlocksFilter,
+		block.NewTimePartitionMetaFilter(conf.filterConf.MinTime, conf.filterConf.MaxTime),
+		block.NewLabelShardedMetaFilter(relabelConfig),
+		block.NewConsistencyDelayMetaFilter(logger, time.Duration(conf.consistencyDelay), extprom.WrapRegistererWithPrefix("thanos_", reg)),
+	}
+
+	if time.Duration(conf.ignoreDeletionMarksDelay) > 0 {
+		ignoreDeletionMarkFilter := block.NewIgnoreDeletionMarkFilter(logger, insBkt, time.Duration(conf.ignoreDeletionMarksDelay), conf.blockMetaFetchConcurrency)
+		filters = append(filters, ignoreDeletionMarkFilter)
+	}
+
+	filters = append(filters, block.NewDeduplicateFilter(conf.blockMetaFetchConcurrency))
+
+	metaFetcher, err := block.NewMetaFetcher(logger, conf.blockMetaFetchConcurrency, insBkt, blockLister, dataDir, extprom.WrapRegistererWithPrefix("thanos_", reg), filters)
 	if err != nil {
 		return errors.Wrap(err, "meta fetcher")
 	}
