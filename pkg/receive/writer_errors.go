@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -80,6 +81,7 @@ func (a *writeErrorTracker) addHistogramError(err error, tLogger log.Logger, lse
 	if err == nil {
 		return
 	}
+	var histErr histogram.Error
 	switch {
 	case errors.Is(err, storage.ErrOutOfOrderSample):
 		a.numSamplesOutOfOrder++
@@ -93,9 +95,11 @@ func (a *writeErrorTracker) addHistogramError(err error, tLogger log.Logger, lse
 	case errors.Is(err, storage.ErrTooOldSample):
 		a.numSamplesTooOld++
 		level.Debug(tLogger).Log("msg", "Histogram is too old", "lset", lset, "timestamp", timestamp)
-	default:
+	case errors.As(err, &histErr):
 		a.numHistogramsInvalid++
 		a.lastHistogramInvalidErr = err
+		level.Debug(tLogger).Log("msg", "Invalid histogram", "lset", lset, "timestamp", timestamp, "err", err)
+	default:
 		level.Debug(tLogger).Log("msg", "Error ingesting histogram", "err", err)
 	}
 }
