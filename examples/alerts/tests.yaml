@@ -111,3 +111,84 @@ tests:
           description: 'Thanos Rule thanos-ruler-1 did not perform any rule evaluations in the past 10 minutes.'
           runbook_url: 'https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosnoruleevaluations'
           summary: 'Thanos Rule did not perform any rule evaluations.'
+
+# Synthetic long-lived Store.Series calls: starts and completions can have different rates.
+# 2/100 completed errors must not become 2/20; 10/100 must not become 10/500.
+- interval: 1m
+  input_series:
+  - series: grpc_server_handled_total{job="thanos-query-declining",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+2x20
+  - series: grpc_server_handled_total{job="thanos-query-declining",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+98x20
+  - series: grpc_server_started_total{job="thanos-query-declining",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+20x20
+  - series: grpc_server_handled_total{job="thanos-query-rising",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+10x20
+  - series: grpc_server_handled_total{job="thanos-query-rising",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+90x20
+  - series: grpc_server_started_total{job="thanos-query-rising",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+500x20
+  - series: grpc_server_handled_total{job="thanos-query-threshold",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+5x20
+  - series: grpc_server_handled_total{job="thanos-query-threshold",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+95x20
+  - series: grpc_server_started_total{job="thanos-query-threshold",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+100x20
+  - series: grpc_server_handled_total{job="thanos-query-healthy",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+0x20
+  - series: grpc_server_handled_total{job="thanos-query-healthy",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+100x20
+  - series: grpc_server_started_total{job="thanos-query-healthy",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+100x20
+  - series: grpc_server_handled_total{job="thanos-query-all-errors",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+100x20
+  - series: grpc_server_handled_total{job="thanos-query-all-errors",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+0x20
+  - series: grpc_server_started_total{job="thanos-query-all-errors",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+100x20
+  - series: grpc_server_handled_total{job="thanos-query-idle",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+0x20
+  - series: grpc_server_handled_total{job="thanos-query-idle",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+0x20
+  - series: grpc_server_started_total{job="thanos-query-idle",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+0x20
+  - series: grpc_server_handled_total{job="thanos-query-canceled",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Internal"}
+    values: 0+5x20
+  - series: grpc_server_handled_total{job="thanos-query-canceled",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="OK"}
+    values: 0+45x20
+  - series: grpc_server_handled_total{job="thanos-query-canceled",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream",grpc_code="Canceled"}
+    values: 0+50x20
+  - series: grpc_server_started_total{job="thanos-query-canceled",instance="query-0",grpc_service="thanos.Store",grpc_method="Series",grpc_type="server_stream"}
+    values: 0+100x20
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: ThanosQueryGrpcServerErrorRate
+    exp_alerts: []
+  - eval_time: 6m
+    alertname: ThanosQueryGrpcServerErrorRate
+    exp_alerts: &id001
+    - exp_labels:
+        job: thanos-query-rising
+        severity: warning
+      exp_annotations:
+        description: Thanos Query thanos-query-rising is failing to handle 10% of
+          requests.
+        summary: Thanos Query is failing to handle requests.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosquerygrpcservererrorrate
+    - exp_labels:
+        job: thanos-query-all-errors
+        severity: warning
+      exp_annotations:
+        description: Thanos Query thanos-query-all-errors is failing to handle 100%
+          of requests.
+        summary: Thanos Query is failing to handle requests.
+        runbook_url: https://github.com/thanos-io/thanos/tree/main/mixin/runbook.md#alert-name-thanosquerygrpcservererrorrate
+  - eval_time: 20m
+    alertname: ThanosQueryGrpcServerErrorRate
+    exp_alerts: *id001
+- interval: 1m
+  input_series: []
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: ThanosQueryGrpcServerErrorRate
+    exp_alerts: []
