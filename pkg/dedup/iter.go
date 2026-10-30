@@ -290,6 +290,141 @@ type dedupSeriesIterator struct {
 	useA       bool
 }
 
+// intervalPeekIterator wraps an adjustableSeriesIterator from which one
+// sample was read ahead (to measure the sample interval on the first
+// dedupSeriesIterator.Next call). It presents the sample that was read
+// past as the current position, then continues with the read-ahead sample,
+// so no sample is lost.
+type intervalPeekIterator struct {
+	adjustableSeriesIterator
+	// Buffered sample: the sample the wrapped iterator advanced past.
+	t  int64
+	v  float64
+	vt chunkenc.ValueType
+	// Read-ahead sample, where the wrapped iterator is positioned.
+	nextT   int64
+	nextVT  chunkenc.ValueType
+	hasNext bool
+	// atBuf reports whether the iterator is positioned at the buffered sample.
+	atBuf bool
+}
+
+func (it *intervalPeekIterator) At() (int64, float64) {
+	if it.atBuf {
+		return it.t, it.v
+	}
+	return it.adjustableSeriesIterator.At()
+}
+
+func (it *intervalPeekIterator) AtT() int64 {
+	if it.atBuf {
+		return it.t
+	}
+	return it.adjustableSeriesIterator.AtT()
+}
+
+func (it *intervalPeekIterator) Next() chunkenc.ValueType {
+	if it.atBuf {
+		it.atBuf = false
+		if it.hasNext {
+			return it.nextVT
+		}
+	}
+	return it.adjustableSeriesIterator.Next()
+}
+
+func (it *intervalPeekIterator) Seek(t int64) chunkenc.ValueType {
+	if it.atBuf {
+		if t <= it.t {
+			// Seeking at or before the buffered sample: stay positioned there.
+			return it.vt
+		}
+		// Seeking past the buffered sample: advance to the read-ahead sample.
+		it.atBuf = false
+		if it.hasNext && t <= it.nextT {
+			return it.nextVT
+		}
+	}
+	return it.adjustableSeriesIterator.Seek(t)
+}
+
+func (it *intervalPeekIterator) adjustAtValue(lastFloatValue float64) {
+	if it.atBuf {
+		// Positioned at the buffered sample: lift it directly and propagate
+		// the delta to the wrapped iterator, so future samples stay adjusted.
+		if lastFloatValue > it.v {
+			if c, ok := it.adjustableSeriesIterator.(*counterErrAdjustSeriesIterator); ok {
+				c.errAdjust += lastFloatValue - it.v
+			} else {
+				it.adjustableSeriesIterator.adjustAtValue(lastFloatValue)
+			}
+			it.v = lastFloatValue
+		}
+		return
+	}
+	it.adjustableSeriesIterator.adjustAtValue(lastFloatValue)
+}
+
+// initialPenaltyFor determines the penalty for the replica that was not
+// picked on the first Next call. Instead of the constant initialPenalty, it
+// measures the picked replica's sample interval by reading one sample ahead,
+// so a fresh iterator (e.g. at a query-frontend split boundary) penalizes the
+// other replica the same way a warmed-up iterator would. The picked replica's
+// iterator is wrapped to preserve the sample read ahead. If the interval
+// cannot be determined, it returns initialPenalty.
+//
+// The measurement is only done for counterErrAdjustSeriesIterator (the query
+// path); other implementations fall back to the constant to avoid changing
+// the chunk merger behavior.
+func (it *dedupSeriesIterator) initialPenaltyFor(pickA bool, curT int64) int64 {
+	const initialPenalty = 5000
+
+	target := &it.a
+	curVT := it.aval
+	if !pickA {
+		target = &it.b
+		curVT = it.bval
+	}
+	if curVT != chunkenc.ValFloat {
+		return initialPenalty
+	}
+	// Only measure for the counter iterator used on the query path. The chunk
+	// merger uses noopAdjustableSeriesIterator with various chunk encodings;
+	// keep its historical behavior.
+	if _, ok := (*target).(*counterErrAdjustSeriesIterator); !ok {
+		return initialPenalty
+	}
+	t, v := (*target).At()
+	if t != curT {
+		return initialPenalty
+	}
+	nextVT := (*target).Next()
+	w := &intervalPeekIterator{
+		adjustableSeriesIterator: *target,
+		t:                        t,
+		v:                        v,
+		vt:                       curVT,
+		atBuf:                    true,
+	}
+	*target = w
+	if nextVT == chunkenc.ValNone {
+		return initialPenalty
+	}
+	nextT, _ := w.adjustableSeriesIterator.At()
+	w.nextT = nextT
+	w.nextVT = nextVT
+	w.hasNext = true
+	if nextT <= curT {
+		return initialPenalty
+	}
+	// Never go below the constant: for very small intervals the measured
+	// penalty would be less aggressive than the historical behavior.
+	if p := 2 * (nextT - curT); p > initialPenalty {
+		return p
+	}
+	return initialPenalty
+}
+
 func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator {
 	return &dedupSeriesIterator{
 		a:        a,
@@ -353,15 +488,16 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	// This ensures that we don't pick a sample too close, which would increase the overall
 	// sample frequency. It also guards against clock drift and inaccuracies during
 	// timestamp assignment.
-	// If we don't know a delta yet, we pick 5000 as a constant, which is based on the knowledge
-	// that timestamps are in milliseconds and sampling frequencies typically multiple seconds long.
-	const initialPenalty = 5000
-
+	// If we don't know a delta yet (first Next call), we measure the picked replica's
+	// sample interval, so a fresh iterator behaves like a warmed-up one. If the interval
+	// cannot be determined, we fall back to 5000 as a constant, which is based on the
+	// knowledge that timestamps are in milliseconds and sampling frequencies typically
+	// multiple seconds long.
 	if it.useA {
 		if it.lastT != math.MinInt64 {
 			it.penB = 2 * (ta - it.lastT)
 		} else {
-			it.penB = initialPenalty
+			it.penB = it.initialPenaltyFor(true, ta)
 		}
 		it.penA = 0
 		it.lastT = ta
@@ -372,7 +508,7 @@ func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	if it.lastT != math.MinInt64 {
 		it.penA = 2 * (tb - it.lastT)
 	} else {
-		it.penA = initialPenalty
+		it.penA = it.initialPenaltyFor(false, tb)
 	}
 	it.penB = 0
 	it.lastT = tb
