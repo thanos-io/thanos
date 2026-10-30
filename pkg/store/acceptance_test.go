@@ -201,6 +201,40 @@ func testStoreAPIsAcceptance(t *testing.T, startStore startStoreFn) {
 					label:    "foo",
 					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "bar", Value: "different"}},
 				},
+				// Matchers only on the requested label.
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "foo",
+					expectedValues: []string{"foovalue1"},
+					matchers:       []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "foo", Value: "foovalue1|other"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "foo",
+					expectedValues: []string{"foovalue2"},
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "foo", Value: "foo.+"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "foo", Value: "foovalue1"},
+					},
+				},
+				{
+					start:    timestamp.FromTime(minTime),
+					end:      timestamp.FromTime(maxTime),
+					label:    "foo",
+					matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "foo", Value: "bar.*"}},
+				},
+				{
+					start:          timestamp.FromTime(minTime),
+					end:            timestamp.FromTime(maxTime),
+					label:          "foo",
+					expectedValues: []string{"foovalue1", "foovalue2"},
+					matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "foo", Value: "foo.*"},
+						{Type: storepb.LabelMatcher_EQ, Name: "region", Value: "eu-west"},
+					},
+				},
 				// Matchers on external labels.
 				{
 					start:          timestamp.FromTime(minTime),

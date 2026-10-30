@@ -984,6 +984,69 @@ func TestBucketStore_LabelValues_e2e(t *testing.T) {
 				},
 				expected: []string{"2"},
 			},
+			"label a, a=~1|3": {
+				req: &storepb.LabelValuesRequest{
+					Label:    "a",
+					Start:    timestamp.FromTime(minTime),
+					End:      timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|3"}},
+				},
+				expected: []string{"1"},
+			},
+			"label a, a!=1": {
+				req: &storepb.LabelValuesRequest{
+					Label:    "a",
+					Start:    timestamp.FromTime(minTime),
+					End:      timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "1"}},
+				},
+				expected: []string{"2"},
+			},
+			"label a, a=~.+, a!=2": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".+"},
+						{Type: storepb.LabelMatcher_NEQ, Name: "a", Value: "2"},
+					},
+				},
+				expected: []string{"1"},
+			},
+			"label a, a=~3.*": {
+				req: &storepb.LabelValuesRequest{
+					Label:    "a",
+					Start:    timestamp.FromTime(minTime),
+					End:      timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{{Type: storepb.LabelMatcher_RE, Name: "a", Value: "3.*"}},
+				},
+				expected: nil,
+			},
+			"label a, a=~.*, ext1=value1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "a", Value: ".*"},
+						{Type: storepb.LabelMatcher_EQ, Name: "ext1", Value: "value1"},
+					},
+				},
+				expected: []string{"1", "2"},
+			},
+			"label a, a=~1|2, b=1": {
+				req: &storepb.LabelValuesRequest{
+					Label: "a",
+					Start: timestamp.FromTime(minTime),
+					End:   timestamp.FromTime(maxTime),
+					Matchers: []storepb.LabelMatcher{
+						{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+						{Type: storepb.LabelMatcher_EQ, Name: "b", Value: "1"},
+					},
+				},
+				expected: []string{"1", "2"},
+			},
 			"label ext1": {
 				req: &storepb.LabelValuesRequest{
 					Label: "ext1",
@@ -1062,7 +1125,7 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 				Matchers: []storepb.LabelMatcher{
 					{
 						Type:  storepb.LabelMatcher_EQ,
-						Name:  "a",
+						Name:  "b",
 						Value: "1",
 					},
 				},
@@ -1084,6 +1147,36 @@ func TestBucketStore_LabelValues_SeriesLimiter_e2e(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBucketStore_LabelValues_MatchersOnRequestedLabel_SkipSeries_e2e(t *testing.T) {
+	if testing.
+		Short() {
+		t.Skip("too slow for testing.Short")
+	}
+
+	t.Parallel()
+
+	ctx := t.Context()
+	bkt := objstore.NewInMemBucket()
+	dir := t.TempDir()
+
+	s := prepareStoreWithTestBlocks(t, dir, bkt, false, NewChunksLimiterFactory(0), NewSeriesLimiterFactory(1), NewBytesLimiterFactory(0), emptyRelabelConfig, allowAllFilterConf)
+	testutil.Ok(t, s.store.SyncBlocks(ctx))
+	s.cache.SwapWith(noopCache{})
+
+	// A series limit of 1 fails any request that walks the series of a block, so success shows
+	// the values were read from the index header.
+	vals, err := s.store.LabelValues(ctx, &storepb.LabelValuesRequest{
+		Label: "a",
+		Start: minTimeDuration.PrometheusTimestamp(),
+		End:   maxTimeDuration.PrometheusTimestamp(),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_RE, Name: "a", Value: "1|2"},
+		},
+	})
+	testutil.Ok(t, err)
+	testutil.Equals(t, []string{"1", "2"}, vals.Values)
 }
 
 func emptyToNil(values []string) []string {
