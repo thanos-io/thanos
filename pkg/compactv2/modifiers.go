@@ -307,13 +307,26 @@ type delChunkSeriesIterator struct {
 }
 
 func (p *delChunkSeriesIterator) Next() bool {
-	if !p.next() {
-		return false
+	// Skip chunks emptied by deletion intervals that do not cover the whole chunk.
+	for p.next() {
+		p.curr = p.currChkMeta
+		if p.currDelIter == nil {
+			return true
+		}
+		if p.populateCurr() {
+			return true
+		}
 	}
+	return false
+}
 
-	p.curr = p.currChkMeta
-	if p.currDelIter == nil {
-		return true
+// populateCurr returns false if no samples are left or on error.
+func (p *delChunkSeriesIterator) populateCurr() bool {
+	if p.currDelIter.Next() == chunkenc.ValNone {
+		if err := p.currDelIter.Err(); err != nil {
+			p.err = errors.Wrap(err, "iterate chunk while re-encoding")
+		}
+		return false
 	}
 
 	// Re-encode the chunk if iterator is provider. This means that it has some samples to be deleted or chunk is opened.
@@ -321,17 +334,6 @@ func (p *delChunkSeriesIterator) Next() bool {
 	app, err := newChunk.Appender()
 	if err != nil {
 		p.err = err
-		return false
-	}
-
-	if p.currDelIter.Next() == chunkenc.ValNone {
-		if err := p.currDelIter.Err(); err != nil {
-			p.err = errors.Wrap(err, "iterate chunk while re-encoding")
-			return false
-		}
-
-		// Empty chunk, this should not happen, as we assume full deletions being filtered before this iterator.
-		p.err = errors.Wrap(err, "populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
 		return false
 	}
 
