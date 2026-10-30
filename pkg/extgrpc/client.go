@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
+	_ "google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/mem"
 
@@ -81,6 +82,8 @@ func (c *nonPoolingCodec) Marshal(v any) (mem.BufferSlice, error) {
 // For details on retry capabilities, see https://github.com/grpc/proposal/blob/master/A6-client-retries.md#retry-policy-capabilities
 func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 	if serviceConfig == "" {
+		// NOTE: Thanos gRPC servers register their readiness state on the empty "" gRPC health service
+		// in pkg/prober/grpc.go, so round_robin skips NOT_SERVING backends in an endpoint group.
 		serviceConfig = `
 {
   "loadBalancingPolicy": "round_robin",
@@ -97,7 +100,10 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
         ]
       }
     }
-  ]
+  ],
+  "healthCheckConfig": {
+    "serviceName": ""
+  }
 }`
 	}
 
