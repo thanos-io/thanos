@@ -137,6 +137,10 @@ func (c *concreteSeriesIterator) AtT() int64 {
 	return t
 }
 
+func (c *concreteSeriesIterator) AtST() int64 {
+	panic("not implemented")
+}
+
 func (c *concreteSeriesIterator) Next() chunkenc.ValueType {
 	c.cur++
 
@@ -183,6 +187,10 @@ func (errIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *histogra
 
 func (errIterator) AtT() int64 {
 	return 0
+}
+
+func (errIterator) AtST() int64 {
+	panic("not implemented")
 }
 
 func (e errIterator) Err() error {
@@ -262,6 +270,10 @@ func (d DeletedSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int6
 func (d DeletedSeriesIterator) AtT() int64 {
 	t, _ := d.itr.At()
 	return t
+}
+
+func (d DeletedSeriesIterator) AtST() int64 {
+	panic("not implemented")
 }
 
 func (d DeletedSeriesIterator) Next() chunkenc.ValueType {

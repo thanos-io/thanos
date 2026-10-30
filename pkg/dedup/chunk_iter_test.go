@@ -323,6 +323,7 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 }
 
 type histoSample struct {
+	st int64
 	t  int64
 	f  float64
 	h  *histogram.Histogram
@@ -331,6 +332,10 @@ type histoSample struct {
 
 func (h histoSample) T() int64 {
 	return h.t
+}
+
+func (h histoSample) ST() int64 {
+	panic("not implemented")
 }
 
 func (h histoSample) F() float64 {
