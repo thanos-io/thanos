@@ -4,11 +4,24 @@
 package main
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/golang/snappy"
+	"github.com/prometheus/client_golang/exp/api/remote"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/labels"
+	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/annotations"
+	"github.com/stretchr/testify/require"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
 )
@@ -157,4 +170,145 @@ func TestFilterOutPromQLWarnings(t *testing.T) {
 			testutil.Equals(t, tc.expected, output)
 		})
 	}
+}
+
+func TestParseRemoteWriteConfig(t *testing.T) {
+	extLabels := labels.FromStrings("replica", "0")
+
+	for _, tc := range []struct {
+		name      string
+		yaml      string
+		expectErr bool
+	}{
+		{
+			name: "valid rw2 config with replace relabeling",
+			yaml: `remote_write:
+  - name: rw2-default
+    url: http://127.0.0.1:9090/api/v1/write
+    protobuf_message: io.prometheus.write.v2.Request
+    write_relabel_configs:
+      - source_labels: [__tmp_name]
+        target_label: __name__
+        action: replace
+`,
+		},
+		{
+			name: "duplicate queue name",
+			yaml: `remote_write:
+  - name: dup
+    url: http://127.0.0.1:9090/api/v1/write
+  - name: dup
+    url: http://127.0.0.1:9091/api/v1/write
+`,
+			expectErr: true,
+		},
+		{
+			name: "null remote write entry",
+			yaml: `remote_write:
+  - null
+`,
+			expectErr: true,
+		},
+		{
+			name: "unknown top-level field",
+			yaml: `unknown_field: true
+remote_write:
+  - url: http://127.0.0.1:9090/api/v1/write
+`,
+			expectErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := parseRemoteWriteConfig([]byte(tc.yaml), extLabels)
+			if tc.expectErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, model.UTF8Validation, cfg.GlobalConfig.MetricNameValidationScheme)
+			require.Equal(t, extLabels, cfg.GlobalConfig.ExternalLabels)
+			require.Len(t, cfg.RemoteWriteConfigs, 1)
+			require.Equal(t, remote.WriteV2MessageType, cfg.RemoteWriteConfigs[0].ProtobufMessage)
+			require.Len(t, cfg.RemoteWriteConfigs[0].WriteRelabelConfigs, 1)
+			require.Equal(t, model.UTF8Validation, cfg.RemoteWriteConfigs[0].WriteRelabelConfigs[0].NameValidationScheme)
+		})
+	}
+}
+
+func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
+	reqCh := make(chan *writev2.Request, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		compressed, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		raw, err := snappy.Decode(nil, compressed)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var req writev2.Request
+		if err := req.Unmarshal(raw); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("X-Prometheus-Remote-Write-Written-Samples", "1")
+		w.Header().Set("X-Prometheus-Remote-Write-Written-Histograms", "0")
+		w.Header().Set("X-Prometheus-Remote-Write-Written-Exemplars", "0")
+		w.WriteHeader(http.StatusNoContent)
+		select {
+		case reqCh <- &req:
+		default:
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	rwCfgYAML := fmt.Sprintf(`remote_write:
+  - url: %s
+    protobuf_message: %s
+    queue_config:
+      batch_send_deadline: 50ms
+    write_relabel_configs:
+      - source_labels: [__tmp_name]
+        target_label: __name__
+        action: replace
+      - regex: __tmp_name
+        action: labeldrop
+`, srv.URL, remote.WriteV2MessageType)
+
+	store, err := openStatelessRuleStorage(
+		log.NewNopLogger(),
+		prometheus.NewRegistry(),
+		t.TempDir(),
+		[]byte(rwCfgYAML),
+		labels.FromStrings("replica", "0"),
+		agent.DefaultOptions(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, store.Close())
+	})
+
+	var req *writev2.Request
+	require.Eventually(t, func() bool {
+		app := store.Appender(t.Context())
+		_, err := app.Append(0, labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"), time.Now().Add(time.Second).UnixMilli(), 42)
+		require.NoError(t, err)
+		require.NoError(t, app.Commit())
+
+		select {
+		case req = <-reqCh:
+			return true
+		default:
+			return false
+		}
+	}, 3*time.Second, 50*time.Millisecond)
+
+	require.NotEmpty(t, req.Timeseries)
+	gotLabels, err := req.Timeseries[0].ToLabels(&labels.ScratchBuilder{}, req.Symbols)
+	require.NoError(t, err)
+	require.Equal(t, labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"), gotLabels)
+	require.NotEmpty(t, req.Timeseries[0].Samples)
+	require.Equal(t, 42.0, req.Timeseries[0].Samples[0].Value)
 }
