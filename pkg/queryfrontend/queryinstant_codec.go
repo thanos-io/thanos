@@ -457,7 +457,17 @@ func matrixMerge(resps []*queryrange.PrometheusInstantQueryResponse) *queryrange
 					stream.Samples = queryrange.SliceSamples(stream.Samples, existingEndTs)
 				} // else there is no overlap, yay!
 			}
+			// Same for histograms as for samples above.
+			if len(existing.Histograms) > 0 && len(stream.Histograms) > 0 {
+				existingEndTs := existing.Histograms[len(existing.Histograms)-1].GetTimestamp()
+				if existingEndTs == stream.Histograms[0].GetTimestamp() {
+					stream.Histograms = stream.Histograms[1:]
+				} else if existingEndTs > stream.Histograms[0].GetTimestamp() {
+					stream.Histograms = queryrange.SliceHistogram(stream.Histograms, existingEndTs)
+				}
+			}
 			existing.Samples = append(existing.Samples, stream.Samples...)
+			existing.Histograms = append(existing.Histograms, stream.Histograms...)
 			output[metric] = existing
 		}
 	}
