@@ -626,168 +626,63 @@ func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, erro
 	}
 
 	for _, t := range w.Timeseries {
-		if len(t.LabelsRefs) == 0 || len(t.LabelsRefs)%2 != 0 {
-			return nil, errors.New("invalid labels_refs length")
+		v1Ts, err := t.ToV1Series(w.Symbols)
+		if err != nil {
+			return nil, err
 		}
-		if int(t.Metadata.HelpRef) >= len(w.Symbols) || int(t.Metadata.UnitRef) >= len(w.Symbols) {
-			return nil, errors.New("metadata symbol reference out of bounds")
-		}
-		if len(t.Samples) == 0 && len(t.Histograms) == 0 && len(t.Exemplars) == 0 {
-			return nil, errors.New("time series must contain at least one sample, histogram, or exemplar")
-		}
-		if len(t.Samples) > 0 && len(t.Histograms) > 0 {
-			return nil, errors.New("time series cannot contain both float samples and histograms")
-		}
-
 		if mode == rwModeStateless || mode == rwModeStatelessST {
-			if len(t.Samples) == 0 && len(t.Histograms) == 0 {
-				return nil, fmt.Errorf("time series must contain at least one sample or histogram in %s mode", mode)
-			}
-			if t.Metadata.Type == writev2.Metadata_METRIC_TYPE_UNSPECIFIED {
-				return nil, fmt.Errorf("metadata metric type must be specified in %s mode", mode)
-			}
-			if len(t.Samples) > 0 && (t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM || t.Metadata.Type == writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM) {
-				return nil, fmt.Errorf("classic histogram float samples are not allowed with histogram metadata in %s mode", mode)
-			}
-			if len(t.Histograms) > 0 && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_HISTOGRAM && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM {
-				return nil, fmt.Errorf("histograms require histogram or gaugehistogram metadata in %s mode", mode)
+			if err := validateV2SeriesMode(t, v1Ts.Labels, mode); err != nil {
+				return nil, err
 			}
 		}
-
-		v1Ts := prompb.TimeSeries{
-			Labels: make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2),
-		}
-		var metricName string
-		for i := 0; i < len(t.LabelsRefs); i += 2 {
-			nameRef, valRef := int(t.LabelsRefs[i]), int(t.LabelsRefs[i+1])
-			if nameRef >= len(w.Symbols) || valRef >= len(w.Symbols) {
-				return nil, errors.New("label symbol reference out of bounds")
-			}
-			name, val := w.Symbols[nameRef], w.Symbols[valRef]
-			if name == labels.MetricName {
-				metricName = val
-			}
-			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
-				Name:  name,
-				Value: val,
-			})
-		}
-		if err := labelpb.ValidateLabels(v1Ts.Labels); err != nil {
-			return nil, errors.Wrap(err, "invalid series labels")
-		}
-		if metricName == "" {
-			return nil, errors.New("time series missing __name__ label")
-		}
-
-		if len(t.Samples) > 0 {
-			requiresST := mode == rwModeStatelessST &&
-				(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER ||
-					(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_SUMMARY && (strings.HasSuffix(metricName, "_sum") || strings.HasSuffix(metricName, "_count"))))
-			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
-			for _, v2s := range t.Samples {
-				if requiresST && !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
-					return nil, errors.New("sample missing start_timestamp in stateless-st mode")
-				}
-				v1Ts.Samples = append(v1Ts.Samples, prompb.Sample{
-					Timestamp: v2s.Timestamp,
-					Value:     v2s.Value,
-				})
-			}
-		}
-
-		if len(t.Exemplars) > 0 {
-			v1Ts.Exemplars = make([]prompb.Exemplar, 0, len(t.Exemplars))
-			for _, e := range t.Exemplars {
-				if len(e.LabelsRefs)%2 != 0 {
-					return nil, errors.New("invalid exemplar labels_refs length")
-				}
-				v1Exemplar := prompb.Exemplar{
-					Value:     e.Value,
-					Timestamp: e.Timestamp,
-					Labels:    make([]labelpb.ZLabel, 0, len(e.LabelsRefs)/2),
-				}
-				for i := 0; i < len(e.LabelsRefs); i += 2 {
-					nameRef, valRef := int(e.LabelsRefs[i]), int(e.LabelsRefs[i+1])
-					if nameRef >= len(w.Symbols) || valRef >= len(w.Symbols) {
-						return nil, errors.New("exemplar label symbol reference out of bounds")
-					}
-					v1Exemplar.Labels = append(v1Exemplar.Labels, labelpb.ZLabel{
-						Name:  w.Symbols[nameRef],
-						Value: w.Symbols[valRef],
-					})
-				}
-				if len(v1Exemplar.Labels) > 0 {
-					if err := labelpb.ValidateLabels(v1Exemplar.Labels); err != nil {
-						return nil, errors.Wrap(err, "invalid exemplar labels")
-					}
-				}
-				v1Ts.Exemplars = append(v1Ts.Exemplars, v1Exemplar)
-			}
-		}
-
-		if len(t.Histograms) > 0 {
-			v1Ts.Histograms = make([]prompb.Histogram, 0, len(t.Histograms))
-			for _, h := range t.Histograms {
-				if mode == rwModeStatelessST && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM && !value.IsStaleNaN(h.Sum) && h.StartTimestamp == 0 {
-					return nil, errors.New("histogram sample missing start_timestamp in stateless-st mode")
-				}
-				v1Histogram := prompb.Histogram{
-					Sum:            h.Sum,
-					Schema:         h.Schema,
-					ZeroThreshold:  h.ZeroThreshold,
-					NegativeSpans:  translateV2SpansToV1(h.NegativeSpans),
-					NegativeDeltas: h.NegativeDeltas,
-					NegativeCounts: h.NegativeCounts,
-					PositiveSpans:  translateV2SpansToV1(h.PositiveSpans),
-					PositiveDeltas: h.PositiveDeltas,
-					PositiveCounts: h.PositiveCounts,
-					ResetHint:      prompb.Histogram_ResetHint(h.ResetHint),
-					Timestamp:      h.Timestamp,
-					CustomValues:   h.CustomValues,
-				}
-
-				switch c := h.Count.(type) {
-				case *writev2.Histogram_CountInt:
-					v1Histogram.Count = &prompb.Histogram_CountInt{CountInt: c.CountInt}
-				case *writev2.Histogram_CountFloat:
-					v1Histogram.Count = &prompb.Histogram_CountFloat{CountFloat: c.CountFloat}
-				}
-
-				switch zc := h.ZeroCount.(type) {
-				case *writev2.Histogram_ZeroCountInt:
-					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountInt{ZeroCountInt: zc.ZeroCountInt}
-				case *writev2.Histogram_ZeroCountFloat:
-					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: zc.ZeroCountFloat}
-				}
-
-				if v1Histogram.IsFloatHistogram() {
-					if err := prompb.FloatHistogramProtoToFloatHistogram(v1Histogram).Validate(); err != nil {
-						return nil, errors.Wrap(err, "invalid float histogram")
-					}
-				} else {
-					if err := prompb.HistogramProtoToHistogram(v1Histogram).Validate(); err != nil {
-						return nil, errors.Wrap(err, "invalid histogram")
-					}
-				}
-
-				v1Ts.Histograms = append(v1Ts.Histograms, v1Histogram)
-			}
-		}
-
 		out.Timeseries = append(out.Timeseries, v1Ts)
 	}
 	return out, nil
 }
 
-func translateV2SpansToV1(spans []writev2.BucketSpan) []prompb.BucketSpan {
-	if len(spans) == 0 {
+func validateV2SeriesMode(t writev2.TimeSeries, lbls []labelpb.ZLabel, mode string) error {
+	if len(t.Samples) == 0 && len(t.Histograms) == 0 {
+		return fmt.Errorf("time series must contain at least one sample or histogram in %s mode", mode)
+	}
+	if t.Metadata.Type == writev2.Metadata_METRIC_TYPE_UNSPECIFIED {
+		return fmt.Errorf("metadata metric type must be specified in %s mode", mode)
+	}
+	if len(t.Samples) > 0 && (t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM || t.Metadata.Type == writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM) {
+		return fmt.Errorf("classic histogram float samples are not allowed with histogram metadata in %s mode", mode)
+	}
+	if len(t.Histograms) > 0 && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_HISTOGRAM && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM {
+		return fmt.Errorf("histograms require histogram or gaugehistogram metadata in %s mode", mode)
+	}
+	if mode != rwModeStatelessST {
 		return nil
 	}
-	out := make([]prompb.BucketSpan, len(spans))
-	for i, s := range spans {
-		out[i] = prompb.BucketSpan{Offset: s.Offset, Length: s.Length}
+
+	if len(t.Samples) > 0 {
+		var metricName string
+		for _, l := range lbls {
+			if l.Name == labels.MetricName {
+				metricName = l.Value
+				break
+			}
+		}
+		requiresST := t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER ||
+			(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_SUMMARY && (strings.HasSuffix(metricName, "_sum") || strings.HasSuffix(metricName, "_count")))
+		if requiresST {
+			for _, v2s := range t.Samples {
+				if !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
+					return errors.New("sample missing start_timestamp in stateless-st mode")
+				}
+			}
+		}
 	}
-	return out
+	if len(t.Histograms) > 0 && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM {
+		for _, h := range t.Histograms {
+			if !value.IsStaleNaN(h.Sum) && h.StartTimestamp == 0 {
+				return errors.New("histogram sample missing start_timestamp in stateless-st mode")
+			}
+		}
+	}
+	return nil
 }
 
 func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, mode string, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {

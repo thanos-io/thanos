@@ -3057,3 +3057,47 @@ func TestTranslateV2ToV1Validation(t *testing.T) {
 		})
 	}
 }
+
+// Recommended CLI invocation:
+//
+//	export bench=translateV2ToV1 && go test -tags=slicelabels ./pkg/receive/... \
+//		-run '^$' -bench '^BenchmarkTranslateV2ToV1$' \
+//		-benchtime 1s -count 6 -cpu 2 -timeout 999m -benchmem \
+//		| tee ${bench}.txt
+func BenchmarkTranslateV2ToV1(b *testing.B) {
+	symbols := []string{"", "__name__", "http_requests_total", "help text", "requests", "trace_id", "abc123def456"}
+	baseRefs := []uint32{1, 2}
+	for i := range 9 {
+		symbols = append(symbols, fmt.Sprintf("label_name_%d", i), fmt.Sprintf("label_value_%d", i))
+		baseRefs = append(baseRefs, uint32(len(symbols)-2), uint32(len(symbols)-1))
+	}
+
+	ts := make([]writev2.TimeSeries, 500)
+	for i := range ts {
+		ts[i] = writev2.TimeSeries{
+			LabelsRefs: baseRefs,
+			Samples:    []writev2.Sample{{StartTimestamp: 100, Timestamp: 1000, Value: float64(i)}},
+			Exemplars:  []writev2.Exemplar{{LabelsRefs: []uint32{5, 6}, Timestamp: 1000, Value: 1}},
+			Metadata: writev2.Metadata{
+				Type:    writev2.Metadata_METRIC_TYPE_COUNTER,
+				HelpRef: 3,
+				UnitRef: 4,
+			},
+		}
+	}
+	req := writev2.Request{
+		Symbols:    symbols,
+		Timeseries: ts,
+	}
+
+	for _, mode := range []string{rwModeNone, rwModeStatelessST} {
+		b.Run("mode="+mode, func(b *testing.B) {
+			b.ReportAllocs()
+			b.ResetTimer()
+			for b.Loop() {
+				_, err := translateV2ToV1(req, mode)
+				require.NoError(b, err)
+			}
+		})
+	}
+}
