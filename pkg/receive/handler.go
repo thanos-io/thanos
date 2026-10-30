@@ -33,6 +33,7 @@ import (
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
@@ -40,6 +41,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
 	"go.opentelemetry.io/otel/attribute"
@@ -554,6 +556,7 @@ const (
 	writtenHistogramsHeader = "X-Prometheus-Remote-Write-Histograms-Written"
 	writtenExemplarsHeader  = "X-Prometheus-Remote-Write-Exemplars-Written"
 
+	// TODO(bwplotka): Switch to remoteapi.WriteMode and remoteapi.ParseContentType once github.com/prometheus/prometheus is upgraded past v0.309.1.
 	rwModeNone        = "none"
 	rwModeStateless   = "stateless"
 	rwModeStatelessST = "stateless-st"
@@ -569,7 +572,7 @@ func setV2WrittenHeaders(w http.ResponseWriter, samples, histograms, exemplars i
 func determineRWVersion(r *http.Request) (int, string, error) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
-		if r.Header.Get("X-Prometheus-Remote-Write-Version") == "2.0.0" {
+		if r.Header.Get(remote.RemoteWriteVersionHeader) == remote.RemoteWriteVersion20HeaderValue {
 			return 0, "", fmt.Errorf("missing Content-Type header")
 		}
 		return 1, "", nil
@@ -588,10 +591,10 @@ func determineRWVersion(r *http.Request) (int, string, error) {
 	for k, v := range params {
 		switch k {
 		case "proto":
-			switch v {
-			case "prometheus.WriteRequest":
+			switch remoteapi.WriteMessageType(v) {
+			case remoteapi.WriteV1MessageType:
 				rwVersion = 1
-			case "io.prometheus.write.v2.Request":
+			case remoteapi.WriteV2MessageType:
 				rwVersion = 2
 			default:
 				return 0, "", fmt.Errorf("unsupported remote write proto %q in Content-Type %q", v, ct)
@@ -936,8 +939,8 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 	tLogger := log.With(h.logger, "tenant", tenantHTTP)
 	span.SetTag("tenant", tenantHTTP)
 
-	if enc := r.Header.Get("Content-Encoding"); enc != "" && enc != "snappy" {
-		w.Header().Set("Accept-Encoding", "snappy")
+	if enc := r.Header.Get("Content-Encoding"); enc != "" && enc != string(remoteapi.SnappyBlockCompression) {
+		w.Header().Set("Accept-Encoding", string(remoteapi.SnappyBlockCompression))
 		http.Error(w, fmt.Sprintf("unsupported Content-Encoding %q; only snappy is supported", enc), http.StatusUnsupportedMediaType)
 		return
 	}
