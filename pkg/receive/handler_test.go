@@ -57,6 +57,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
+	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
 	"github.com/thanos-io/thanos/pkg/tenancy"
 )
 
@@ -2532,5 +2533,235 @@ func TestRetryAfterHeaderOnQuorumUnavailable(t *testing.T) {
 
 			require.Equalf(t, time.Now().UTC().Add(backoff).Format(http.TimeFormat), rec.Header().Get("Retry-After"), "handler %d", i)
 		}
+	})
+}
+
+func TestDetermineRWVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		contentType string
+		rwVersion   string
+		wantVer     int
+		wantMode    string
+		wantErr     bool
+	}{
+		{
+			name:    "empty headers defaults to v1",
+			wantVer: 1,
+		},
+		{
+			name:        "v1 content-type without proto",
+			contentType: "application/x-protobuf",
+			wantVer:     1,
+		},
+		{
+			name:        "v1 content-type with proto",
+			contentType: "application/x-protobuf;proto=prometheus.WriteRequest",
+			wantVer:     1,
+		},
+		{
+			name:        "v2 default mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request",
+			wantVer:     2,
+		},
+		{
+			name:        "v2 explicit mode=none",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=none",
+			wantVer:     2,
+			wantMode:    "none",
+		},
+		{
+			name:        "v2 mode=stateless",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless",
+			wantVer:     2,
+			wantMode:    "stateless",
+		},
+		{
+			name:        "v2 mode=stateless-st",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless-st",
+			wantVer:     2,
+			wantMode:    "stateless-st",
+		},
+		{
+			name:        "v2 RFC 9110 whitespace, uppercase params, quoted values, reordered",
+			contentType: `application/x-protobuf; MODE="stateless-st"; PROTO="io.prometheus.write.v2.Request"`,
+			wantVer:     2,
+			wantMode:    "stateless-st",
+		},
+		{
+			name:      "v2 version header without content-type fails",
+			rwVersion: "2.0.0",
+			wantErr:   true,
+		},
+		{
+			name:        "unsupported media type",
+			contentType: "application/json",
+			wantErr:     true,
+		},
+		{
+			name:        "unsupported proto",
+			contentType: "application/x-protobuf;proto=unsupported.Message",
+			wantErr:     true,
+		},
+		{
+			name:        "empty proto",
+			contentType: "application/x-protobuf;proto=",
+			wantErr:     true,
+		},
+		{
+			name:        "unsupported mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=unknown",
+			wantErr:     true,
+		},
+		{
+			name:        "empty mode",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=",
+			wantErr:     true,
+		},
+		{
+			name:        "mode on v1 rejected",
+			contentType: "application/x-protobuf;proto=prometheus.WriteRequest;mode=stateless",
+			wantErr:     true,
+		},
+		{
+			name:        "mode without proto rejected",
+			contentType: "application/x-protobuf;mode=stateless",
+			wantErr:     true,
+		},
+		{
+			name:        "unknown parameter rejected",
+			contentType: "application/x-protobuf;proto=io.prometheus.write.v2.Request;unknown=param",
+			wantErr:     true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", nil)
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			if tc.rwVersion != "" {
+				req.Header.Set("X-Prometheus-Remote-Write-Version", tc.rwVersion)
+			}
+			gotVer, gotMode, err := determineRWVersion(req)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantVer, gotVer)
+			require.Equal(t, tc.wantMode, gotMode)
+		})
+	}
+}
+
+func TestReceiveHTTP_RW2NegotiationAndStatus(t *testing.T) {
+	t.Parallel()
+
+	validV2Req := &writev2.Request{
+		Symbols: []string{"", "__name__", "test_metric"},
+		Timeseries: []writev2.TimeSeries{
+			{
+				LabelsRefs: []uint32{1, 2},
+				Samples:    []writev2.Sample{{Timestamp: 100, Value: 1.5}},
+			},
+		},
+	}
+	rawV2, err := proto.Marshal(validV2Req)
+	require.NoError(t, err)
+	compressedV2 := snappy.Encode(nil, rawV2)
+
+	t.Run("unsupported content-encoding returns 415 with Accept-Encoding", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_encoding", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader([]byte("corrupt")))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+		require.Equal(t, "snappy", rec.Header().Get("Accept-Encoding"))
+	})
+
+	t.Run("unsupported content-type returns 415 with Accept", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_ct", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=unknown")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+		require.Contains(t, rec.Header().Get("Accept"), "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+	})
+
+	t.Run("valid v2 write returns 204 and written headers", func(t *testing.T) {
+		appendables := []*fakeAppendable{{appender: newFakeAppender(nil, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_204", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusNoContent, rec.Code)
+		require.Equal(t, "1", rec.Header().Get(writtenSamplesHeader))
+		require.Equal(t, "0", rec.Header().Get(writtenHistogramsHeader))
+		require.Equal(t, "0", rec.Header().Get(writtenExemplarsHeader))
+	})
+
+	t.Run("v2 conflict error returns 400 and zero written headers", func(t *testing.T) {
+		conflictErrFn := func() error { return storage.ErrOutOfOrderSample }
+		appendables := []*fakeAppendable{{appender: newFakeAppender(conflictErrFn, nil, nil)}}
+		handlers, _, closeFunc, err := newTestHandlerHashring("rw2_conflict_400", appendables, 1, AlgorithmHashmod, false)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, closeFunc())
+			for _, hh := range handlers {
+				hh.Close()
+			}
+		})
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/receive", bytes.NewReader(compressedV2))
+		req.Header.Set(handlers[0].options.TenantHeader, "test-tenant")
+		req.Header.Set("Content-Encoding", "snappy")
+		req.Header.Set("Content-Type", "application/x-protobuf;proto=io.prometheus.write.v2.Request")
+
+		rec := httptest.NewRecorder()
+		handlers[0].receiveHTTP(rec, req)
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+		require.Equal(t, "0", rec.Header().Get(writtenSamplesHeader))
+		require.Equal(t, "0", rec.Header().Get(writtenHistogramsHeader))
+		require.Equal(t, "0", rec.Header().Get(writtenExemplarsHeader))
 	})
 }
