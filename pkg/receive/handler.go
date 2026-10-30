@@ -657,6 +657,9 @@ func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, erro
 			if len(t.Samples) > 0 && (t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM || t.Metadata.Type == writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM) {
 				return nil, fmt.Errorf("classic histogram float samples are not allowed with histogram metadata in %s mode", mode)
 			}
+			if len(t.Histograms) > 0 && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_HISTOGRAM && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM {
+				return nil, fmt.Errorf("histograms require histogram or gaugehistogram metadata in %s mode", mode)
+			}
 		}
 
 		v1Ts := prompb.TimeSeries{
