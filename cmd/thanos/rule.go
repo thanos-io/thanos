@@ -923,7 +923,9 @@ func runRule(
 		g.Add(func() error {
 			defer runutil.CloseWithLogOnErr(logger, bkt, "bucket client")
 			return runutil.Repeat(30*time.Second, ctx.Done(), func() error {
-				if _, err := s.Sync(ctx); err != nil {
+				syncCtx, cancel := context.WithTimeout(ctx, shipperSyncTimeout)
+				defer cancel()
+				if _, err := s.Sync(syncCtx); err != nil {
 					level.Warn(logger).Log("err", err)
 				}
 				return nil
@@ -1191,6 +1193,11 @@ func (rm *readyScrapeManager) Get() (*scrape.Manager, error) {
 
 	return nil, ErrNotReady
 }
+
+// shipperSyncTimeout bounds a single shipper Sync iteration in the ruler's
+// periodic uploader, so a hung bucket call cannot stall block uploads
+// indefinitely.
+const shipperSyncTimeout = 10 * time.Minute
 
 // ErrNotReady is returned if the underlying scrape manager is not ready yet.
 var ErrNotReady = errors.New("scrape manager not ready")
