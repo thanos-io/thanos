@@ -291,6 +291,14 @@ func NewHandler(logger log.Logger, o *Options) *Handler {
 		if buckets[len(buckets)-1] < o.ForwardTimeout.Seconds() {
 			buckets = append(buckets, o.ForwardTimeout.Seconds())
 		}
+		// HTTP request processing starts before forwarding, so the forward timeout
+		// does not bound its total duration. Keep the existing boundaries and
+		// measure beyond the mixin's default 10s latency threshold.
+		for _, upperBound := range []float64{10, 20, 30} {
+			if upperBound > buckets[len(buckets)-1] {
+				buckets = append(buckets, upperBound)
+			}
+		}
 
 		ins = extpromhttp.NewTenantInstrumentationMiddleware(
 			o.TenantHeader,
