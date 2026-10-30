@@ -1230,6 +1230,7 @@ func openStatelessRuleStorage(
 	// WAL segment exists when QueueManager starts its WAL watcher.
 	agentDB, err := agent.Open(slogger, reg, remoteStore, dataDir, agentOpts)
 	if err != nil {
+		_ = remoteStore.Close()
 		return nil, errors.Wrap(err, "start remote write agent db")
 	}
 	// We need to call SetWriteNotified() so that agentDB gets notified about every write.
@@ -1240,6 +1241,7 @@ func openStatelessRuleStorage(
 
 	if err := remoteStore.ApplyConfig(promCfg); err != nil {
 		_ = agentDB.Close()
+		_ = remoteStore.Close()
 		return nil, errors.Wrap(err, "applying config to remote storage")
 	}
 
