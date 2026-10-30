@@ -83,15 +83,21 @@ func EndpointGroupGRPCOpts(serviceConfig string) []grpc.DialOption {
 	if serviceConfig == "" {
 		serviceConfig = `
 {
-  "loadBalancingPolicy":"round_robin",
-  "retryPolicy": {
-    "maxAttempts": 3,
-    "initialBackoff": "0.1s",
-    "backoffMultiplier": 2,
-    "retryableStatusCodes": [
-  	  "UNAVAILABLE"
-    ]
-  }
+  "loadBalancingPolicy": "round_robin",
+  "methodConfig": [
+    {
+      "name": [{}],
+      "retryPolicy": {
+        "maxAttempts": 5,
+        "initialBackoff": "0.2s",
+        "maxBackoff": "1s",
+        "backoffMultiplier": 2,
+        "retryableStatusCodes": [
+          "UNAVAILABLE"
+        ]
+      }
+    }
+  ]
 }`
 	}
 
