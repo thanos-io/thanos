@@ -806,7 +806,7 @@ func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := h.handleV1HTTP(ctx, w, r, translatedReq, 2, tLogger, tenantHTTP, requestLimiter); err != nil {
+	if err := h.handleWriteRequestHTTP(ctx, w, r, translatedReq, 2, tLogger, tenantHTTP, requestLimiter); err != nil {
 		return
 	}
 
@@ -823,7 +823,7 @@ func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, rwVersion int, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
+func (h *Handler) handleWriteRequestHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, rwVersion int, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
 	var err error
 
 	rep := uint64(0)
@@ -888,10 +888,9 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 		case errUnavailable:
 			responseStatusCode = http.StatusServiceUnavailable
 		case errConflict:
+			responseStatusCode = http.StatusConflict
 			if rwVersion == 2 {
 				responseStatusCode = http.StatusBadRequest
-			} else {
-				responseStatusCode = http.StatusConflict
 			}
 		case errBadReplica:
 			responseStatusCode = http.StatusBadRequest
@@ -1007,7 +1006,7 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = h.handleV1HTTP(ctx, w, r, &wreq, 1, tLogger, tenantHTTP, requestLimiter)
+		_ = h.handleWriteRequestHTTP(ctx, w, r, &wreq, 1, tLogger, tenantHTTP, requestLimiter)
 	case 2:
 		h.handleV2HTTP(ctx, w, r, reqBuf, rwMode, tLogger, tenantHTTP, requestLimiter)
 	default:
