@@ -349,6 +349,27 @@ endpoints:
   - address: "<endpoint-address>"
 ```
 
+### HTTP service discovery
+
+Endpoint addresses can also be discovered over HTTP with `http_sd_configs` in the same file. Thanos polls each URL, which must serve the [Prometheus HTTP SD format](https://prometheus.io/docs/prometheus/latest/http_sd/): a JSON list of target groups whose `targets` are endpoint addresses (`<host>:<port>`, or `dns+`/`dnssrv+` names). Labels are ignored. Discovered endpoints are non-strict and use `default_client_config`.
+
+```yaml
+default_client_config:
+  tls_config:
+    enabled: true
+    ca_file: "/path/to/ca.crt"
+
+http_sd_configs:
+  - url: "https://sd.example.com/thanos/stores"
+    refresh_interval: 1m              # default 60s
+    # The HTTP client settings of Prometheus HTTP SD are supported for the SD request itself,
+    # e.g. basic_auth, authorization, oauth2, tls_config, proxy_url.
+    authorization:
+      credentials_file: "/etc/thanos/sd-token"
+```
+
+Changes to `http_sd_configs` are applied when the endpoint config is reloaded (see `--endpoint.sd-config-reload-interval`).
+
 ## Flags
 
 ```$ mdox-exec="thanos query --help"

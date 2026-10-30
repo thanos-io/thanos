@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
+	"github.com/prometheus/prometheus/discovery/http"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 
 	"github.com/thanos-io/thanos/pkg/component"
@@ -69,6 +71,9 @@ type endpointSettings struct {
 type EndpointConfig struct {
 	DefaultClientConfig clientConfig       `yaml:"default_client_config"`
 	Endpoints           []endpointSettings `yaml:"endpoints"`
+	// HTTPSDConfigs discovers endpoint addresses from HTTP endpoints that serve
+	// the Prometheus HTTP SD format. Discovered addresses use the default client config.
+	HTTPSDConfigs []*http.SDConfig `yaml:"http_sd_configs"`
 }
 
 type endpointConfigProvider struct {
@@ -164,8 +169,13 @@ func (er *endpointConfigProvider) config() EndpointConfig {
 	er.mu.Lock()
 	defer er.mu.Unlock()
 
-	res := EndpointConfig{Endpoints: make([]endpointSettings, len(er.cfg.Endpoints)), DefaultClientConfig: er.cfg.DefaultClientConfig}
+	res := EndpointConfig{
+		Endpoints:           make([]endpointSettings, len(er.cfg.Endpoints)),
+		DefaultClientConfig: er.cfg.DefaultClientConfig,
+		HTTPSDConfigs:       make([]*http.SDConfig, len(er.cfg.HTTPSDConfigs)),
+	}
 	copy(res.Endpoints, er.cfg.Endpoints)
+	copy(res.HTTPSDConfigs, er.cfg.HTTPSDConfigs)
 	return res
 }
 
@@ -367,6 +377,7 @@ func setupEndpointSet(
 		}
 	}
 	legacyFileSDCache := cache.New()
+	httpSDCache := cache.New()
 
 	// Perform initial DNS resolution before starting periodic updates.
 	// This ensures that DNS providers have addresses when the first endpoint update runs.
@@ -396,6 +407,15 @@ func setupEndpointSet(
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// HTTP SD can only be configured through the endpoint config file, so only run it
+	// when there are HTTP SD configs or a config file that may add them on reload.
+	if len(configProvider.config().HTTPSDConfigs) > 0 || (configFile != nil && configFile.Path() != "") {
+		if err := runHTTPSD(ctx, g, comp, reg, logger, configProvider, configReloadInterval, httpSDCache); err != nil {
+			cancel()
+			return nil, err
+		}
+	}
 
 	if fileSD != nil {
 		fileSDUpdates := make(chan []*targetgroup.Group)
@@ -441,6 +461,7 @@ func setupEndpointSet(
 					}
 				}
 				addresses = append(addresses, legacyFileSDCache.Addresses()...)
+				addresses = append(addresses, httpSDCache.Addresses()...)
 				if err := dnsEndpointProvider.Resolve(ctxUpdateIter, addresses, true); err != nil {
 					level.Error(logger).Log("msg", "failed to resolve addresses for endpoints", "err", err)
 				}
@@ -563,4 +584,78 @@ func setupEndpointSet(
 	})
 
 	return endpointset, nil
+}
+
+const httpSDProviderName = "http_sd"
+
+// runHTTPSD runs the HTTP service discovery configured in the endpoint config and
+// keeps httpSDCache up to date with the discovered addresses. The HTTP SD configs are
+// re-applied whenever a config reload changes them.
+func runHTTPSD(
+	ctx context.Context,
+	g *run.Group,
+	comp component.Component,
+	reg prometheus.Registerer,
+	logger log.Logger,
+	configProvider *endpointConfigProvider,
+	configReloadInterval time.Duration,
+	httpSDCache *cache.Cache,
+) error {
+	sdReg := extprom.WrapRegistererWithPrefix(fmt.Sprintf("thanos_%s_endpoints_http_sd_", comp), reg)
+	sdMetrics, err := discovery.CreateAndRegisterSDMetrics(sdReg)
+	if err != nil {
+		return errors.Wrapf(err, "unable to register HTTP SD metrics")
+	}
+	manager := discovery.NewManager(ctx, logutil.GoKitLogToSlog(logger), sdReg, sdMetrics, discovery.Name("endpoints"))
+	if manager == nil {
+		return errors.Newf("unable to create HTTP SD manager")
+	}
+
+	var applied []*http.SDConfig
+	apply := func(cfgs []*http.SDConfig) error {
+		configs := make(discovery.Configs, 0, len(cfgs))
+		for _, c := range cfgs {
+			configs = append(configs, c)
+		}
+		if err := manager.ApplyConfig(map[string]discovery.Configs{httpSDProviderName: configs}); err != nil {
+			return err
+		}
+		applied = cfgs
+		return nil
+	}
+	if err := apply(configProvider.config().HTTPSDConfigs); err != nil {
+		return errors.Wrapf(err, "unable to apply HTTP SD config")
+	}
+
+	g.Add(func() error {
+		return manager.Run()
+	}, func(error) {})
+
+	g.Add(func() error {
+		for {
+			select {
+			case tgs := <-manager.SyncCh():
+				httpSDCache.Update(tgs[httpSDProviderName])
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}, func(error) {})
+
+	if configReloadInterval > 0 {
+		g.Add(func() error {
+			return runutil.Repeat(configReloadInterval, ctx.Done(), func() error {
+				cfgs := configProvider.config().HTTPSDConfigs
+				if reflect.DeepEqual(cfgs, applied) {
+					return nil
+				}
+				level.Info(logger).Log("msg", "applying reloaded HTTP SD config", "configs", len(cfgs))
+				if err := apply(cfgs); err != nil {
+					level.Error(logger).Log("msg", "failed to apply reloaded HTTP SD config", "err", err)
+				}
+				return nil
+			})
+		}, func(error) {})
+	}
+	return nil
 }
