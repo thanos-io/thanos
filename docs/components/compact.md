@@ -166,6 +166,8 @@ Compactor downsampling is done in two passes:
 1) All raw resolution metrics that are older than **40 hours** are downsampled at a 5m resolution
 2) All 5m resolution metrics older than **10 days** are downsampled at a 1h resolution
 
+Blocks that cover less than these ranges, for example blocks next to a gap in the data or the first blocks of a new source, are normally downsampled only after the compactor merges them into bigger blocks. If such a block reaches the retention of its resolution first, the compactor downsamples it just before retention removes it, so its data is kept at the lower resolution.
+
 > **NOTE:** If retention at each resolution is lower than minimum age for the successive downsampling pass, data will be deleted before downsampling can be completed. As a rule of thumb retention for each downsampling level should be the same, and should be greater than the maximum date range (10 days for 5m to 1h downsampling).
 
 Keep in mind that the initial goal of downsampling is not saving disk or object storage space. In fact, downsampling doesn't save you **any** space but instead, it adds 2 more blocks for each raw block which are only slightly smaller or relatively similar size to raw blocks. This is done by internal downsampling implementation which, to ensure mathematical correctness, holds various aggregations. This means that downsampling can increase the size of your storage a bit (~3x), if you choose to store all resolutions (recommended and enabled by default).
