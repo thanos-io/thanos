@@ -50,6 +50,21 @@ func TestParseTags(t *testing.T) {
 			input:          "foo=${_TEST_PARSE_TAGS:default}",
 			expectedOutput: opentracing.Tags{"foo": "env-bar"},
 		},
+		{
+			description:    `A case with environment variable and no default, key "foo" and value "env-bar"`,
+			input:          "foo=${_TEST_PARSE_TAGS}",
+			expectedOutput: opentracing.Tags{"foo": "env-bar"},
+		},
+		{
+			description:    `A case with unset environment variable and no default, key "foo" and value ""`,
+			input:          "foo=${_TEST_PARSE_TAGS_UNSET}",
+			expectedOutput: opentracing.Tags{"foo": ""},
+		},
+		{
+			description:    `A case with an entry without "=", which is skipped`,
+			input:          "foo=bar,baz",
+			expectedOutput: opentracing.Tags{"foo": "bar"},
+		},
 	}
 
 	os.Setenv("_TEST_PARSE_TAGS", "env-bar")
