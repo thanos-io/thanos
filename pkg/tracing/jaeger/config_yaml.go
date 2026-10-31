@@ -211,8 +211,8 @@ func parseTags(sTags string) []attribute.KeyValue {
 		k, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
 
 		if strings.HasPrefix(v, "${") && strings.HasSuffix(v, "}") {
-			ed := strings.SplitN(v[2:len(v)-1], ":", 2)
-			e, d := ed[0], ed[1]
+			// The default value is optional: "${envVar}" is valid too.
+			e, d, _ := strings.Cut(v[2:len(v)-1], ":")
 			v = os.Getenv(e)
 			if v == "" && d != "" {
 				v = d
