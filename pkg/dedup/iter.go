@@ -227,13 +227,15 @@ type adjustableSeriesIterator interface {
 	// adjustAtValue allows to adjust value by implementation if needed knowing the last value. This is used by counter
 	// implementation which can adjust for obsolete counter value.
 	adjustAtValue(lastFloatValue float64)
+	adjustAtHistogram(lastH *histogram.Histogram)
 }
 
 type noopAdjustableSeriesIterator struct {
 	chunkenc.Iterator
 }
 
-func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
+func (it noopAdjustableSeriesIterator) adjustAtValue(float64)                  {}
+func (it noopAdjustableSeriesIterator) adjustAtHistogram(*histogram.Histogram) {}
 
 // counterErrAdjustSeriesIterator is extendedSeriesIterator used when we deduplicate counter.
 // It makes sure we always adjust for the latest seen last counter value for all replicas.
@@ -260,7 +262,9 @@ func (it noopAdjustableSeriesIterator) adjustAtValue(float64) {}
 type counterErrAdjustSeriesIterator struct {
 	chunkenc.Iterator
 
-	errAdjust float64
+	errAdjust               float64
+	errAdjustHistogramCount uint64
+	errAdjustHistogramSum   float64
 }
 
 func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) {
@@ -271,9 +275,68 @@ func (it *counterErrAdjustSeriesIterator) adjustAtValue(lastFloatValue float64) 
 	}
 }
 
+func (it *counterErrAdjustSeriesIterator) adjustAtHistogram(lastH *histogram.Histogram) {
+	if lastH == nil {
+		return
+	}
+	_, currentH := it.AtHistogram(nil)
+	if currentH == nil {
+		return
+	}
+	if lastH.Count > currentH.Count {
+		it.errAdjustHistogramCount += lastH.Count - currentH.Count
+	}
+	if lastH.Sum > currentH.Sum {
+		it.errAdjustHistogramSum += lastH.Sum - currentH.Sum
+	}
+}
+
 func (it *counterErrAdjustSeriesIterator) At() (int64, float64) {
 	t, v := it.Iterator.At()
 	return t, v + it.errAdjust
+}
+
+func (it *counterErrAdjustSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *histogram.Histogram) {
+	t, origH := it.Iterator.AtHistogram(h)
+	if origH == nil || (it.errAdjustHistogramCount == 0 && it.errAdjustHistogramSum == 0) {
+		return t, origH
+	}
+
+	adjustedH := origH.Copy()
+	adjustedH.Count += it.errAdjustHistogramCount
+	adjustedH.Sum += it.errAdjustHistogramSum
+
+	// Ensure bucket sums remain mathematically consistent with Count.
+	if len(adjustedH.PositiveBuckets) > 0 {
+		adjustedH.PositiveBuckets[len(adjustedH.PositiveBuckets)-1] += int64(it.errAdjustHistogramCount)
+	} else if len(adjustedH.NegativeBuckets) > 0 {
+		adjustedH.NegativeBuckets[len(adjustedH.NegativeBuckets)-1] += int64(it.errAdjustHistogramCount)
+	} else {
+		adjustedH.ZeroCount += it.errAdjustHistogramCount
+	}
+
+	return t, adjustedH
+}
+
+func (it *counterErrAdjustSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
+	t, origFH := it.Iterator.AtFloatHistogram(fh)
+	if origFH == nil || (it.errAdjustHistogramCount == 0 && it.errAdjustHistogramSum == 0) {
+		return t, origFH
+	}
+
+	adjustedFH := origFH.Copy()
+	adjustedFH.Count += float64(it.errAdjustHistogramCount)
+	adjustedFH.Sum += it.errAdjustHistogramSum
+
+	if len(adjustedFH.PositiveBuckets) > 0 {
+		adjustedFH.PositiveBuckets[len(adjustedFH.PositiveBuckets)-1] += float64(it.errAdjustHistogramCount)
+	} else if len(adjustedFH.NegativeBuckets) > 0 {
+		adjustedFH.NegativeBuckets[len(adjustedFH.NegativeBuckets)-1] += float64(it.errAdjustHistogramCount)
+	} else {
+		adjustedFH.ZeroCount += float64(it.errAdjustHistogramCount)
+	}
+
+	return t, adjustedFH
 }
 
 type dedupSeriesIterator struct {
@@ -304,13 +367,17 @@ func newDedupSeriesIterator(a, b adjustableSeriesIterator) *dedupSeriesIterator 
 
 func (it *dedupSeriesIterator) Next() chunkenc.ValueType {
 	lastFloatVal, isFloatVal := it.lastFloatVal()
+	lastHistVal, isHistVal := it.lastHistogramVal()
 	lastUseA := it.useA
 	defer func() {
-		if it.useA != lastUseA && isFloatVal {
+		if it.useA != lastUseA {
 			// We switched replicas.
-			// Ensure values are correct bases on value before At.
-			// TODO(rabenhorst): Investigate if we also need to implement adjusting histograms here.
-			it.adjustAtValue(lastFloatVal)
+			// Ensure values are correct based on value before At.
+			if isFloatVal {
+				it.adjustAtValue(lastFloatVal)
+			} else if isHistVal {
+				it.adjustAtHistogram(lastHistVal)
+			}
 		}
 	}()
 
@@ -398,6 +465,27 @@ func (it *dedupSeriesIterator) adjustAtValue(lastFloatValue float64) {
 	}
 	if it.bval == chunkenc.ValFloat {
 		it.b.adjustAtValue(lastFloatValue)
+	}
+}
+
+func (it *dedupSeriesIterator) lastHistogramVal() (*histogram.Histogram, bool) {
+	if it.useA && it.aval == chunkenc.ValHistogram {
+		_, h := it.lastIter.AtHistogram(nil)
+		return h, true
+	}
+	if !it.useA && it.bval == chunkenc.ValHistogram {
+		_, h := it.lastIter.AtHistogram(nil)
+		return h, true
+	}
+	return nil, false
+}
+
+func (it *dedupSeriesIterator) adjustAtHistogram(lastH *histogram.Histogram) {
+	if it.aval == chunkenc.ValHistogram {
+		it.a.adjustAtHistogram(lastH)
+	}
+	if it.bval == chunkenc.ValHistogram {
+		it.b.adjustAtHistogram(lastH)
 	}
 }
 
