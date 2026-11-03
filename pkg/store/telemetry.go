@@ -202,9 +202,21 @@ func (i *instrumentedServer) Send(response *storepb.SeriesResponse) error {
 	if err := i.Store_SeriesServer.Send(response); err != nil {
 		return err
 	}
-	if series := response.GetSeries(); series != nil {
-		i.seriesSent++
-		i.chunksSent += float64(len(series.Chunks))
+	switch result := response.Result.(type) {
+	case *storepb.SeriesResponse_Series:
+		if result.Series != nil {
+			i.seriesSent++
+			i.chunksSent += float64(len(result.Series.Chunks))
+		}
+	case *storepb.SeriesResponse_Batch:
+		if result.Batch != nil {
+			for _, series := range result.Batch.Series {
+				if series != nil {
+					i.seriesSent++
+					i.chunksSent += float64(len(series.Chunks))
+				}
+			}
+		}
 	}
 	return nil
 }
