@@ -14,6 +14,8 @@ thanos query-frontend \
 
 _**NOTE:** Currently only range queries (`/api/v1/query_range` API call) are actually processed through Query Frontend. All other API calls just directly go to the downstream Querier, which means only range queries are split and cached. But we are planning to support instant queries as well.
 
+When step alignment is enabled, range queries can set the optional `timezone` parameter to an IANA time zone name. This is used to align daily and multi-day steps to midnight in that time zone. If the parameter is not set, UTC is used. The Thanos web UI sends the browser time zone when local time is enabled.
+
 For more information please check out [initial design proposal](../proposals-done/202004-embedd-cortex-frontend.md).
 
 ## Features

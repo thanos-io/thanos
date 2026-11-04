@@ -30,7 +30,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:          60 * seconds,
 				SplitInterval: time.Hour,
 			},
-			expected: "fe::up:60000:3600000:0:2:-:0::false::false",
+			expected: "fe::up:UTC:60000:3600000:0:2:-:0::false::false",
 		},
 		{
 			name: "10s step",
@@ -40,7 +40,18 @@ func TestGenerateCacheKey(t *testing.T) {
 				Step:          10 * seconds,
 				SplitInterval: time.Hour,
 			},
-			expected: "fe::up:10000:3600000:0:2:-:0::false::false",
+			expected: "fe::up:UTC:10000:3600000:0:2:-:0::false::false",
+		},
+		{
+			name: "timezone",
+			req: &ThanosQueryRangeRequest{
+				Query:                 "up",
+				Start:                 0,
+				Step:                  60 * seconds,
+				SplitInterval:         time.Hour,
+				StepAlignmentLocation: time.FixedZone("Asia/Shanghai", 8*60*60),
+			},
+			expected: "fe::up:Asia/Shanghai:60000:3600000:0:2:-:0::false::false",
 		},
 		{
 			name: "1m downsampling resolution",
@@ -51,7 +62,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				MaxSourceResolution: 60 * seconds,
 				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:3600000:0:2:-:0::false::false",
+			expected: "fe::up:UTC:10000:3600000:0:2:-:0::false::false",
 		},
 		{
 			name: "5m downsampling resolution, different cache key",
@@ -62,7 +73,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				MaxSourceResolution: 300 * seconds,
 				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:3600000:0:1:-:0::false::false",
+			expected: "fe::up:UTC:10000:3600000:0:1:-:0::false::false",
 		},
 		{
 			name: "1h downsampling resolution, different cache key",
@@ -73,7 +84,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				MaxSourceResolution: hour,
 				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:3600000:0:0:-:0::false::false",
+			expected: "fe::up:UTC:10000:3600000:0:0:-:0::false::false",
 		},
 		{
 			name: "1h downsampling resolution with lookback delta",
@@ -85,7 +96,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				LookbackDelta:       1000,
 				SplitInterval:       time.Hour,
 			},
-			expected: "fe::up:10000:3600000:0:0:-:1000::false::false",
+			expected: "fe::up:UTC:10000:3600000:0:0:-:1000::false::false",
 		},
 		{
 			name: "partial response enabled, different cache key",
@@ -96,7 +107,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				SplitInterval:   time.Hour,
 				PartialResponse: true,
 			},
-			expected: "fe::up:60000:3600000:0:2:-:0::true::false",
+			expected: "fe::up:UTC:60000:3600000:0:2:-:0::true::false",
 		},
 		{
 			name: "replica labels set, different cache key",
@@ -107,7 +118,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				SplitInterval: time.Hour,
 				ReplicaLabels: []string{"prometheus", "pod"},
 			},
-			expected: "fe::up:60000:3600000:0:2:-:0::false:pod,prometheus:false",
+			expected: "fe::up:UTC:60000:3600000:0:2:-:0::false:pod,prometheus:false",
 		},
 		{
 			name: "analyze enabled, different cache key",
@@ -118,7 +129,7 @@ func TestGenerateCacheKey(t *testing.T) {
 				SplitInterval: time.Hour,
 				Analyze:       true,
 			},
-			expected: "fe::up:60000:3600000:0:2:-:0::false::true",
+			expected: "fe::up:UTC:60000:3600000:0:2:-:0::false::true",
 		},
 		{
 			name: "label names, no matcher",
@@ -220,12 +231,12 @@ func TestGenerateCacheKeyAlternatives(t *testing.T) {
 	}
 
 	testutil.Equals(t, []string{
-		"fe::up:30000:3600000:0:2:-:0::false::false",
-		"fe::up:20000:3600000:0:2:-:0::false::false",
-		"fe::up:15000:3600000:0:2:-:0::false::false",
-		"fe::up:10000:3600000:0:2:-:0::false::false",
-		"fe::up:5000:3600000:0:2:-:0::false::false",
-		"fe::up:1000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:30000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:20000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:15000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:10000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:5000:3600000:0:2:-:0::false::false",
+		"fe::up:UTC:1000:3600000:0:2:-:0::false::false",
 	}, splitter.GenerateCacheKeyAlternatives("", req))
 
 	req.Step = 14 * seconds

@@ -7,6 +7,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -54,4 +55,45 @@ func TestStepAlign(t *testing.T) {
 			require.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+func TestStepAlignTimezone(t *testing.T) {
+	location := time.FixedZone("UTC+8", 8*60*60)
+	day := int64((24 * time.Hour) / time.Millisecond)
+	input := &PrometheusRequest{
+		Start: 2*day + 10*60*60*1000,
+		End:   4*day + 10*60*60*1000,
+		Step:  day,
+	}
+
+	var result *PrometheusRequest
+	s := NewStepAlignMiddleware(location).Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+		result = req.(*PrometheusRequest)
+		return nil, nil
+	}))
+	_, err := s.Do(context.Background(), input)
+	require.NoError(t, err)
+
+	// UTC+8 midnight is UTC 16:00 on the previous day.
+	require.Equal(t, int64(day+16*60*60*1000), result.Start)
+	require.Equal(t, int64(3*day+16*60*60*1000), result.End)
+}
+
+func TestStepAlignTimezoneOnlyAppliesToWholeDays(t *testing.T) {
+	location := time.FixedZone("UTC+8", 8*60*60)
+	input := &PrometheusRequest{
+		Start: 2*60*60*1000 + 1,
+		End:   4*60*60*1000 + 1,
+		Step:  60 * 60 * 1000,
+	}
+
+	var result *PrometheusRequest
+	s := NewStepAlignMiddleware(location).Wrap(HandlerFunc(func(_ context.Context, req Request) (Response, error) {
+		result = req.(*PrometheusRequest)
+		return nil, nil
+	}))
+	_, err := s.Do(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, int64(2*60*60*1000), result.Start)
+	require.Equal(t, int64(4*60*60*1000), result.End)
 }
