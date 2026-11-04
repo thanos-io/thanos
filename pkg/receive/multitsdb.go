@@ -17,6 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid/v2"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/thanos-io/thanos/pkg/runutil"
 
 	"github.com/pkg/errors"
@@ -325,6 +326,8 @@ type tenant struct {
 	mtx  *sync.RWMutex
 	tsdb *tsdb.DB
 
+	metrics *tenantMetrics
+
 	// For tests.
 	blocksToDeleteFn func(db *tsdb.DB) tsdb.BlocksToDeleteFunc
 
@@ -336,6 +339,29 @@ type tenant struct {
 	maxBlockDuration int64
 
 	lastSuccessfulHeadCompaction atomic.Int64
+}
+
+type tenantMetrics struct {
+	compactionsTriggered prometheus.Counter
+	compactionsCompleted prometheus.Counter
+	compactionsFailed    prometheus.Counter
+}
+
+func newTenantMetrics(r prometheus.Registerer) *tenantMetrics {
+	m := &tenantMetrics{}
+	m.compactionsTriggered = promauto.With(r).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_multitsdb_head_compactions_triggered_total",
+		Help: "Total number of triggered compactions for the tenant.",
+	})
+	m.compactionsCompleted = promauto.With(r).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_multitsdb_head_compactions_completed_total",
+		Help: "Total number of successful compactions for the tenant.",
+	})
+	m.compactionsFailed = promauto.With(r).NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receive_multitsdb_head_compactions_failed_total",
+		Help: "Total number of compactions that failed for the tenant.",
+	})
+	return m
 }
 
 // shouldBeMarkedInactive checks if the tenant should be marked as inactive / read-only.
@@ -453,9 +479,12 @@ func (t *tenant) startPeriodicHeadCompaction() {
 			default:
 			}
 
+			t.metrics.compactionsTriggered.Inc()
 			if err := t.compactHead(db); err != nil {
+				t.metrics.compactionsFailed.Inc()
 				return fmt.Errorf("compact head: %w", err)
 			}
+			t.metrics.compactionsCompleted.Inc()
 			t.lastSuccessfulHeadCompaction.Store(time.Now().UnixNano())
 
 			head = db.Head()
@@ -1049,6 +1078,7 @@ func (t *MultiTSDB) startTSDB(logger log.Logger, tenantID string, tenant *tenant
 	if t.matcherCache != nil {
 		options = append(options, store.WithMatcherCacheInstance(t.matcherCache))
 	}
+	tenant.metrics = newTenantMetrics(reg)
 	tenant.set(store.NewTSDBStore(logger, s, component.Receive, lset, options...), s, ship, exemplars.NewTSDB(s, lset), reg.(*UnRegisterer))
 	t.addTenantLocked(tenantID, tenant) // need to update the client list once store is ready & client != nil
 	level.Info(logger).Log("msg", "TSDB is now ready")
