@@ -841,6 +841,49 @@ func TestDedupSeriesIterator(t *testing.T) {
 	}
 }
 
+// TestDedupSeriesIterator_SplitBoundaryConsistency is a regression test for
+// https://github.com/thanos-io/thanos/issues/9034. The query-frontend splits
+// range queries into subqueries, each getting a fresh dedup iterator. A fresh
+// iterator must produce the same samples as a warmed-up iterator over the same
+// range; otherwise rate() shows false drops at split boundaries.
+func TestDedupSeriesIterator_SplitBoundaryConsistency(t *testing.T) {
+	// Two HA replicas with 30s scrape interval. Replica B was down and comes
+	// back 5m before the boundary with a 10s scrape skew and a behind counter
+	// (it restarted).
+	var aFull, bFull []sample
+	for ts := int64(-1800000); ts <= 1800000; ts += 30000 {
+		aFull = append(aFull, sample{t: ts, f: 20000 + 0.97*float64(ts+1800000)/1000})
+		if ts >= -300000 {
+			bFull = append(bFull, sample{t: ts + 10000, f: 3000 + 0.97*float64(ts+1800000)/1000})
+		}
+	}
+	// Fresh iterator sees data from 5m before the boundary, like a split
+	// subquery with lookback.
+	var aFresh []sample
+	for _, s := range aFull {
+		if s.t >= -300000 {
+			aFresh = append(aFresh, s)
+		}
+	}
+
+	run := func(a, b []sample) []sample {
+		it := newDedupSeriesIterator(
+			&counterErrAdjustSeriesIterator{Iterator: newMockedSeriesIterator(a)},
+			&counterErrAdjustSeriesIterator{Iterator: newMockedSeriesIterator(b)},
+		)
+		var res []sample
+		for it.Next() != chunkenc.ValNone {
+			ts, v := it.At()
+			if ts >= 0 && ts <= 300000 {
+				res = append(res, sample{t: ts, f: v})
+			}
+		}
+		return res
+	}
+
+	testutil.Equals(t, run(aFull, bFull), run(aFresh, bFull))
+}
+
 func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 	hs := tsdbutil.GenerateTestHistograms(1)
 
