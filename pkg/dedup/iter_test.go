@@ -368,6 +368,176 @@ func TestDedupSeriesSet_XFunctions(t *testing.T) {
 	}
 }
 
+func testHistogram(count uint64, sum float64) *histogram.Histogram {
+
+	return &histogram.Histogram{
+		Count:           count,
+		Sum:             sum,
+		Schema:          0,
+		PositiveSpans:   []histogram.Span{{Offset: 0, Length: 1}},
+		PositiveBuckets: []int64{int64(count)},
+	}
+}
+
+func TestDedupSeriesSet_NativeHistograms_CounterReset(t *testing.T) {
+	input := []series{
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10000, h: testHistogram(8, 80)},
+				{t: 20000, h: testHistogram(9, 90)},
+				{t: 50001, h: testHistogram(10, 100)},
+				{t: 60000, h: testHistogram(11, 110)},
+			},
+		},
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10001, h: testHistogram(8, 80)},
+				{t: 45001, h: testHistogram(8, 85)},
+				{t: 55001, h: testHistogram(9, 95)},
+			},
+		},
+	}
+
+	rateSet := NewSeriesSet(&mockedSeriesSet{series: input}, "rate", AlgorithmPenalty)
+	var rateSeries []storage.Series
+	for rateSet.Next() {
+		rateSeries = append(rateSeries, rateSet.At())
+	}
+	testutil.Ok(t, rateSet.Err())
+	testutil.Equals(t, 1, len(rateSeries))
+
+	res := expandHistogramSeries(t, rateSeries[0].Iterator(nil))
+	t.Logf("Result count: %d", len(res))
+	for i, r := range res {
+		pair := r.(*testiters.HistogramPair)
+		t.Logf("Sample %d: t=%d, count=%d, sum=%f", i, pair.T, pair.H.Count, pair.H.Sum)
+	}
+
+	// Because of counter adjustment across replicas, count must NOT drop from 9 back to 8!
+	// Sample 1 at t=20000 had count=9.
+	// When switching to Replica 2 at t=45001, its count must be adjusted so it stays >= 9!
+	sample1 := res[1].(*testiters.HistogramPair)
+	sample2 := res[2].(*testiters.HistogramPair)
+	testutil.Assert(t, sample2.H.Count >= sample1.H.Count, "count dropped after replica switch! sample1=%d, sample2=%d", sample1.H.Count, sample2.H.Count)
+
+	// Verify PositiveBuckets adjustment for FloatHistogram as well.
+	itFloat := rateSeries[0].Iterator(nil)
+	var floatHistograms []*histogram.FloatHistogram
+	for itFloat.Next() == chunkenc.ValHistogram {
+		_, fh := itFloat.AtFloatHistogram(nil)
+		floatHistograms = append(floatHistograms, fh)
+	}
+	testutil.Assert(t, floatHistograms[2].Count >= floatHistograms[1].Count, "float histogram count dropped after replica switch!")
+	testutil.Equals(t, float64(9), floatHistograms[2].Count)
+	testutil.Equals(t, float64(9), floatHistograms[2].PositiveBuckets[0])
+}
+
+func TestDedupSeriesSet_NativeHistograms_ZeroCountOnly(t *testing.T) {
+	// Tests edge case where histogram has no positive or negative buckets, only ZeroCount.
+	zeroOnlyHistogram := func(count uint64) *histogram.Histogram {
+		return &histogram.Histogram{
+			Schema:        1,
+			Count:         count,
+			Sum:           0.0,
+			ZeroThreshold: 0.001,
+			ZeroCount:     count,
+		}
+	}
+
+	input := []series{
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10000, h: zeroOnlyHistogram(5)},
+				{t: 20000, h: zeroOnlyHistogram(6)},
+				{t: 50001, h: zeroOnlyHistogram(7)},
+			},
+		},
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10001, h: zeroOnlyHistogram(5)},
+				{t: 45001, h: zeroOnlyHistogram(5)},
+			},
+		},
+	}
+
+	rateSet := NewSeriesSet(&mockedSeriesSet{series: input}, "rate", AlgorithmPenalty)
+	var rateSeries []storage.Series
+	for rateSet.Next() {
+		rateSeries = append(rateSeries, rateSet.At())
+	}
+	testutil.Ok(t, rateSet.Err())
+	testutil.Equals(t, 1, len(rateSeries))
+
+	res := expandHistogramSeries(t, rateSeries[0].Iterator(nil))
+	testutil.Equals(t, 3, len(res))
+
+	sample1 := res[1].(*testiters.HistogramPair)
+	sample2 := res[2].(*testiters.HistogramPair)
+	// Sample 2 must have its ZeroCount and Count adjusted from 5 up to 6!
+	testutil.Assert(t, sample2.H.Count >= sample1.H.Count, "count dropped after replica switch! sample1=%d, sample2=%d", sample1.H.Count, sample2.H.Count)
+	testutil.Equals(t, uint64(6), sample2.H.ZeroCount)
+}
+
+func TestDedupSeriesSet_NativeHistograms_NegativeBucketsAndFloatHistogram(t *testing.T) {
+	// 1. Coverage for noopAdjustableSeriesIterator
+	noop := noopAdjustableSeriesIterator{}
+	noop.adjustAtHistogram(nil)
+
+	// 2. Histogram with NegativeBuckets
+	negHistogram := func(count uint64, sum float64) *histogram.Histogram {
+		return &histogram.Histogram{
+			Schema:          1,
+			Count:           count,
+			Sum:             sum,
+			ZeroThreshold:   0.001,
+			ZeroCount:       0,
+			NegativeSpans:   []histogram.Span{{Offset: 0, Length: 1}},
+			NegativeBuckets: []int64{int64(count)},
+		}
+	}
+
+	input := []series{
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10000, h: negHistogram(5, -50)},
+				{t: 20000, h: negHistogram(6, -60)},
+				{t: 50001, h: negHistogram(7, -70)},
+			},
+		},
+		{
+			lset: labels.FromStrings("a", "1"),
+			samples: []sample{
+				{t: 10001, h: negHistogram(5, -50)},
+				{t: 45001, h: negHistogram(5, -50)},
+			},
+		},
+	}
+
+	rateSet := NewSeriesSet(&mockedSeriesSet{series: input}, "rate", AlgorithmPenalty)
+	var rateSeries []storage.Series
+	for rateSet.Next() {
+		rateSeries = append(rateSeries, rateSet.At())
+	}
+	testutil.Ok(t, rateSet.Err())
+	testutil.Equals(t, 1, len(rateSeries))
+
+	it := rateSeries[0].Iterator(nil)
+	var floatHistograms []*histogram.FloatHistogram
+	for it.Next() == chunkenc.ValHistogram {
+		_, fh := it.AtFloatHistogram(nil)
+		floatHistograms = append(floatHistograms, fh)
+	}
+	testutil.Equals(t, 3, len(floatHistograms))
+	testutil.Assert(t, floatHistograms[2].Count >= floatHistograms[1].Count, "float histogram count dropped after replica switch!")
+	testutil.Equals(t, float64(6), floatHistograms[2].Count)
+	testutil.Equals(t, float64(6), floatHistograms[2].NegativeBuckets[0])
+}
+
 func TestDedupSeriesSet(t *testing.T) {
 	for _, tcase := range []struct {
 		name      string
