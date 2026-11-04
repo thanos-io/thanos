@@ -26,13 +26,46 @@ func (f *CuckooMetricNameStoreFilter) Matches(matchers []*labels.Matcher) bool {
 	f.mtx.RLock()
 	defer f.mtx.RUnlock()
 
+	var constraints [][]string
 	for _, m := range matchers {
-		if m.Type == labels.MatchEqual && m.Name == labels.MetricName {
-			return f.filter.Lookup(unsafe.Slice(unsafe.StringData(m.Value), len(m.Value)))
+		if m.Name != labels.MetricName {
+			continue
+		}
+
+		switch m.Type {
+		case labels.MatchEqual:
+			constraints = append(constraints, []string{m.Value})
+		case labels.MatchRegexp:
+			vs := m.SetMatches()
+			if len(vs) == 0 {
+				continue
+			}
+			constraints = append(constraints, vs)
+		}
+	}
+
+	if len(constraints) == 0 {
+		return true
+	}
+
+	for _, values := range constraints {
+		matches := false
+		for _, value := range values {
+			if f.lookup(value) {
+				matches = true
+				break
+			}
+		}
+		if !matches {
+			return false
 		}
 	}
 
 	return true
+}
+
+func (f *CuckooMetricNameStoreFilter) lookup(v string) bool {
+	return f.filter.Lookup(unsafe.Slice(unsafe.StringData(v), len(v)))
 }
 
 func (f *CuckooMetricNameStoreFilter) ResetAndSet(values ...string) {
