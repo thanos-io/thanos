@@ -527,6 +527,8 @@ rules:
     (up{job=~".*thanos-receive.*"} - 1)
     + on (job, instance) # filters to only alert on current instance last 3h
     (sum by (job, instance) (increase(thanos_shipper_uploads_total{job=~".*thanos-receive.*"}[3h])) == 0)
+    and on (job, instance) # a fresh instance ships its first block only after ~3h
+    (time() - process_start_time_seconds{job=~".*thanos-receive.*"} > 3 * 3600)
   for: 3h
   labels:
     severity: critical
