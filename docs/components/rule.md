@@ -257,6 +257,8 @@ remote_write:
 
 You can pass this in file using `--remote-write.config-file=` or inline it using `--remote-write.config=`.
 
+When stateless mode is enabled, the remote-write configuration can be reloaded without restarting the Ruler by sending a `POST` request to `/-/reload-remote-write` on the Ruler HTTP endpoint. This endpoint only reloads the remote-write configuration; the existing `POST /-/reload` endpoint continues to reload rule files only. If the new configuration is invalid, the existing remote-write configuration remains active.
+
 **NOTE:**
 1. `metadata_config` is not supported in this mode and will be ignored if provided in the remote write configuration.
 2. Ruler won't expose Store API for querying data if stateless mode is enabled. If the remote storage is thanos receiver then you can use that to query rule evaluation results.

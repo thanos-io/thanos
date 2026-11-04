@@ -121,6 +121,73 @@ type ruleConfig struct {
 	tsdbEnableNativeHistograms bool
 }
 
+type remoteWriteConfigReloader struct {
+	loadConfig     func() ([]byte, error)
+	applyConfig    func(*config.Config) error
+	externalLabels labels.Labels
+}
+
+func (r *remoteWriteConfigReloader) reload() error {
+	content, err := r.loadConfig()
+	if err != nil {
+		return errors.Wrap(err, "load remote write config")
+	}
+
+	cfg, err := parseRemoteWriteConfig(content, r.externalLabels)
+	if err != nil {
+		return err
+	}
+
+	return r.applyConfig(cfg)
+}
+
+func parseRemoteWriteConfig(content []byte, externalLabels labels.Labels) (*config.Config, error) {
+	var rwCfg struct {
+		RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
+	}
+	if err := yaml.Unmarshal(content, &rwCfg); err != nil {
+		return nil, errors.Wrapf(err, "failed to parse remote write config %v", string(content))
+	}
+
+	return &config.Config{
+		GlobalConfig: config.GlobalConfig{
+			ExternalLabels: labelsTSDBToProm(externalLabels),
+		},
+		RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
+	}, nil
+}
+
+func reloadRemoteWriteConfig(logger log.Logger, reloader *remoteWriteConfigReloader, reloadMsg chan error) {
+	err := reloader.reload()
+	if err != nil {
+		level.Error(logger).Log("msg", "reload remote write config by webhandler failed", "err", err)
+	}
+	reloadMsg <- err
+}
+
+func remoteWriteReloadHandler(remoteWriteReloadWebhandler chan chan error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reloadMsg := make(chan error)
+		remoteWriteReloadWebhandler <- reloadMsg
+		if err := <-reloadMsg; err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+func newRemoteWriteReloadWebhandler(reloader *remoteWriteConfigReloader) chan chan error {
+	if reloader == nil {
+		return nil
+	}
+	return make(chan chan error)
+}
+
+func registerRemoteWriteReloadHandler(router *route.Router, reloadWebhandler chan chan error) {
+	if reloadWebhandler != nil {
+		router.Post("/-/reload-remote-write", remoteWriteReloadHandler(reloadWebhandler))
+	}
+}
+
 type Expression struct {
 	Expr string
 }
@@ -478,6 +545,7 @@ func runRule(
 		return err
 	}
 
+	var rwReloader *remoteWriteConfigReloader
 	if len(rwCfgYAML) > 0 {
 		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts)
 		if err != nil {
@@ -691,6 +759,7 @@ func runRule(
 
 	// Handle reload and termination interrupts.
 	reloadWebhandler := make(chan chan error)
+	remoteWriteReloadWebhandler := newRemoteWriteReloadWebhandler(rwReloader)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -711,6 +780,8 @@ func runRule(
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					}
 					reloadMsg <- err
+				case reloadMsg := <-remoteWriteReloadWebhandler:
+					reloadRemoteWriteConfig(logger, rwReloader, reloadMsg)
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -834,6 +905,7 @@ func runRule(
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
+		registerRemoteWriteReloadHandler(router, remoteWriteReloadWebhandler)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
