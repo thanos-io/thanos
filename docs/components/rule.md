@@ -292,6 +292,12 @@ Flags:
       --auto-gomemlimit.ratio=0.9
                                  The ratio of reserved GOMEMLIMIT memory to the
                                  detected maximum container or system memory.
+      --auto-gomemlimit.refresh-interval=0
+                                 Interval at which the detected maximum
+                                 container or system memory is refreshed and
+                                 GOMEMLIMIT is reapplied if it has changed.
+                                 Useful when the container memory limit can be
+                                 resized in place. 0 disables refreshing.
       --http-address="0.0.0.0:10902"
                                  Listen host:port for HTTP endpoints.
       --http-grace-period=2m     Time to wait after an interrupt received for
