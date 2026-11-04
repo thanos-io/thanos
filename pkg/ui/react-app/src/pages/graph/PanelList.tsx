@@ -10,7 +10,7 @@ import { Store } from '../../thanos/pages/stores/store';
 import { FlagMap } from '../flags/Flags';
 import { generateID, decodePanelOptionsFromQueryString, encodePanelOptionsToQueryString, callAll } from '../../utils';
 import { useFetch } from '../../hooks/useFetch';
-import { useLocalStorage } from '../../hooks/useLocalStorage';
+import { useLocalStorage, setStorageItem } from '../../hooks/useLocalStorage';
 import { withStatusIndicator } from '../../components/withStatusIndicator';
 
 export type PanelMeta = { key: string; options: PanelOptions; id: string };
@@ -100,7 +100,7 @@ export const PanelListContent: FC<PanelListProps> = ({
     ]);
   };
   const handleUsePartialResponseChange = (value: boolean): void => {
-    localStorage.setItem('usePartialResponse', JSON.stringify(value));
+    setStorageItem('usePartialResponse', value);
   };
 
   return (
