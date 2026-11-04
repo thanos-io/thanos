@@ -15,8 +15,6 @@ local utils = import '../lib/utils.libsonnet';
     },
   },
   grafanaDashboards+:: {
-    local grafana = import 'grafonnet/grafana.libsonnet',
-    local template = grafana.template,
     [if thanos.receive != null then 'receive.json']:
       local receiveHandlerSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'handler="receive"']);
       local grpcUnaryWriteSelector = utils.joinLabels([thanos.receive.dashboard.selector, 'grpc_type="unary"', 'grpc_method="RemoteWrite"']);
@@ -31,16 +29,10 @@ local utils = import '../lib/utils.libsonnet';
       g.dashboard(thanos.receive.title) {
         templating+: {
           list+: [
-            template.new(
+            utils.queryVariable(
               'tenant',
-              '$datasource',
               'label_values(http_requests_total{%s}, %s)' % [std.join(', ', [thanos.receive.dashboard.selector] + ['tenant!=""']), 'tenant'],
-              label='tenant',
-              refresh=1,
-              sort=2,
               current='all',
-              allValues=null,
-              includeAll=true
             ),
           ],
         },
