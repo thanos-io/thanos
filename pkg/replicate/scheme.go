@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thanos-io/objstore"
 
@@ -165,7 +166,7 @@ func newReplicationScheme(
 	}
 }
 
-func (rs *replicationScheme) execute(ctx context.Context) error {
+func (rs *replicationScheme) execute(ctx context.Context, concurrency int) error {
 	availableBlocks := []*metadata.Meta{}
 
 	metas, partials, err := rs.fetcher.Fetch(ctx)
@@ -190,13 +191,24 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return availableBlocks[i].MinTime < availableBlocks[j].MinTime
 	})
 
-	for _, b := range availableBlocks {
-		if err := rs.ensureBlockIsReplicated(ctx, b.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.ULID.String())
-		}
+	if concurrency < 1 {
+		concurrency = 1
 	}
 
-	return nil
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+
+	for _, b := range availableBlocks {
+		b := b
+		g.Go(func() error {
+			if err := rs.ensureBlockIsReplicated(gCtx, b.ULID); err != nil {
+				return errors.Wrapf(err, "ensure block %v is replicated", b.ULID.String())
+			}
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is
