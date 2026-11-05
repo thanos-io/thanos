@@ -25,6 +25,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
+	"github.com/thanos-io/thanos/pkg/compact"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
@@ -180,7 +181,7 @@ func TestRegression4960_Deadlock(t *testing.T) {
 
 	metas, _, err := metaFetcher.Fetch(ctx)
 	testutil.Ok(t, err)
-	err = downsampleBucket(ctx, logger, metrics, bkt, metas, dir, 1, 1, metadata.NoneFunc, false)
+	err = downsampleBucket(ctx, logger, metrics, bkt, metas, nil, dir, 1, 1, metadata.NoneFunc, false)
 	testutil.NotOk(t, err)
 
 	testutil.Assert(t, strings.Contains(err.Error(), "some random error has occurred"))
@@ -220,9 +221,75 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	metas, _, err := metaFetcher.Fetch(ctx)
 	testutil.Ok(t, err)
-	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, dir, 1, 1, metadata.NoneFunc, false))
+	testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, nil, dir, 1, 1, metadata.NoneFunc, false))
 	testutil.Equals(t, 1.0, promtest.ToFloat64(metrics.downsamples.WithLabelValues(meta.Thanos.ResolutionString())))
 
 	_, err = os.Stat(dir)
 	testutil.Assert(t, os.IsNotExist(err), "index cache dir should not exist at the end of execution")
+}
+
+// Blocks shorter than the downsample range must still be downsampled once they reach
+// their retention, otherwise their data is lost when retention removes them.
+// Testing for https://github.com/thanos-io/thanos/issues/7908.
+func TestDownsampleShortBlockBeforeRetention(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		retentionByResolution map[compact.ResolutionLevel]time.Duration
+		expectedDownsamples   float64
+	}{
+		{
+			name:                "no retention",
+			expectedDownsamples: 0,
+		},
+		{
+			name:                  "retention not reached",
+			retentionByResolution: map[compact.ResolutionLevel]time.Duration{compact.ResolutionLevelRaw: 100 * 365 * 24 * time.Hour},
+			expectedDownsamples:   0,
+		},
+		{
+			name:                  "retention reached",
+			retentionByResolution: map[compact.ResolutionLevel]time.Duration{compact.ResolutionLevelRaw: 48 * time.Hour},
+			expectedDownsamples:   1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := log.NewNopLogger()
+			dir := t.TempDir()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			bkt := objstore.WithNoopInstr(objstore.NewInMemBucket())
+			// A 2h block, far shorter than the 40h needed for regular 5m downsampling.
+			id, err := e2eutil.CreateBlock(
+				ctx,
+				dir,
+				[]labels.Labels{labels.FromStrings("a", "1")},
+				100, 0, (2 * time.Hour).Milliseconds(),
+				labels.FromStrings("e1", "1"),
+				downsample.ResLevel0, metadata.NoneFunc, nil)
+			testutil.Ok(t, err)
+			testutil.Ok(t, block.Upload(ctx, logger, bkt, path.Join(dir, id.String()), metadata.NoneFunc))
+
+			metrics := newDownsampleMetrics(prometheus.NewRegistry())
+			metaFetcher, err := block.NewMetaFetcher(nil, block.FetcherConcurrency, bkt, block.NewConcurrentLister(logger, bkt), "", nil, nil)
+			testutil.Ok(t, err)
+			metas, _, err := metaFetcher.Fetch(ctx)
+			testutil.Ok(t, err)
+
+			testutil.Ok(t, downsampleBucket(ctx, logger, metrics, bkt, metas, tc.retentionByResolution, path.Join(dir, "downsample"), 1, 1, metadata.NoneFunc, false))
+			testutil.Equals(t, tc.expectedDownsamples, promtest.ToFloat64(metrics.downsamples.WithLabelValues(metas[id].Thanos.ResolutionString())))
+
+			metas, _, err = metaFetcher.Fetch(ctx)
+			testutil.Ok(t, err)
+			var downsampled int
+			for _, m := range metas {
+				if m.Thanos.Downsample.Resolution == downsample.ResLevel1 {
+					testutil.Equals(t, []ulid.ULID{id}, m.Compaction.Sources)
+					downsampled++
+				}
+			}
+			testutil.Equals(t, int(tc.expectedDownsamples), downsampled)
+		})
+	}
 }
