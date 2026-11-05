@@ -31,6 +31,14 @@ const (
 	MetricLabel = "tenant"
 )
 
+type EnforcementMode string
+
+const (
+	EnforcementModeOff    EnforcementMode = "false"
+	EnforcementModeSoft   EnforcementMode = "soft"
+	EnforcementModeStrict EnforcementMode = "true"
+)
+
 // Allowed fields in client certificates.
 const (
 	CertificateFieldOrganization       = "organization"
@@ -46,12 +54,14 @@ func IsTenantValid(tenant string) error {
 }
 
 // GetTenantFromHTTP extracts the tenant from a http.Request object.
-func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string) (string, error) {
+func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy EnforcementMode) (string, error) {
 	var err error
 	tenant := r.Header.Get(tenantHeader)
 	if tenant == "" {
 		tenant = r.Header.Get(DefaultTenantHeader)
-		if tenant == "" {
+		if tenant == "" && enforceTenancy == EnforcementModeStrict {
+			// If tenancy is enforced, we must have a tenant header.
+			// If tenancy is soft, we only want a tenant header if it is present.
 			tenant = defaultTenantID
 		}
 	}
@@ -64,9 +74,11 @@ func GetTenantFromHTTP(r *http.Request, tenantHeader string, defaultTenantID str
 		}
 	}
 
-	err = IsTenantValid(tenant)
-	if err != nil {
-		return "", err
+	if enforceTenancy == EnforcementModeStrict || (enforceTenancy == EnforcementModeSoft && tenant != "") {
+		err = IsTenantValid(tenant)
+		if err != nil {
+			return "", err
+		}
 	}
 	return tenant, nil
 }
@@ -82,7 +94,7 @@ func (r roundTripperFunc) RoundTrip(request *http.Request) (*http.Response, erro
 // header is configured and present in the request, it will be stripped out.
 func InternalTenancyConversionTripper(customTenantHeader, certTenantField string, next http.RoundTripper) http.RoundTripper {
 	return roundTripperFunc(func(r *http.Request) (*http.Response, error) {
-		tenant, _ := GetTenantFromHTTP(r, customTenantHeader, DefaultTenant, certTenantField)
+		tenant, _ := GetTenantFromHTTP(r, customTenantHeader, DefaultTenant, certTenantField, "")
 		r.Header.Set(DefaultTenantHeader, tenant)
 		// If the custom tenant header is not the same as the default internal header, we want to exclude the custom
 		// one from the request to keep things simple.
@@ -161,7 +173,7 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 	return expr.String(), nil
 }
 
-func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool, tenantLabel string) ([][]*labels.Matcher, error) {
+func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy EnforcementMode, tenantLabel string) ([][]*labels.Matcher, error) {
 	tenantLabelMatcher := &labels.Matcher{
 		Name:  tenantLabel,
 		Type:  labels.MatchEqual,
@@ -171,7 +183,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 	matcherSets := make([][]*labels.Matcher, 0, len(formMatchers))
 
 	// If tenancy is enforced, but there are no matchers at all, add the tenant matcher
-	if len(formMatchers) == 0 && enforceTenancy {
+	if len(formMatchers) == 0 && (enforceTenancy == EnforcementModeStrict || (enforceTenancy == EnforcementModeSoft && tenant != "")) {
 		var matcher []*labels.Matcher
 		matcher = append(matcher, tenantLabelMatcher)
 		matcherSets = append(matcherSets, matcher)
@@ -184,7 +196,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 			return nil, err
 		}
 
-		if enforceTenancy {
+		if enforceTenancy == EnforcementModeStrict || (enforceTenancy == EnforcementModeSoft && tenant != "") {
 			e := injectproxy.NewPromQLEnforcer(false, tenantLabelMatcher)
 			matchers, err = e.EnforceMatchers(matchers)
 			if err != nil {
@@ -201,14 +213,14 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 // This function will:
 // - Get tenant from HTTP header and add it to context.
 // - if tenancy is enforced, add a tenant matcher to the promQL expression.
-func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, queryStr string) (string, string, context.Context, error) {
-	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
+func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy EnforcementMode, tenantLabel string, queryStr string) (string, string, context.Context, error) {
+	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField, enforceTenancy)
 	if err != nil {
 		return "", "", ctx, err
 	}
 	ctx = context.WithValue(ctx, TenantKey, tenant)
 
-	if enforceTenancy {
+	if enforceTenancy == EnforcementModeStrict || (enforceTenancy == EnforcementModeSoft && tenant != "") {
 		queryStr, err = EnforceQueryTenancy(tenantLabel, tenant, queryStr)
 		return queryStr, tenant, ctx, err
 	}
@@ -219,8 +231,8 @@ func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, de
 // - Get tenant from HTTP header and add it to context.
 // - Parse all labels matchers provided.
 // - If tenancy is enforced, make sure a tenant matcher is present.
-func RewriteLabelMatchers(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, formMatchers []string) ([][]*labels.Matcher, context.Context, error) {
-	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
+func RewriteLabelMatchers(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy EnforcementMode, tenantLabel string, formMatchers []string) ([][]*labels.Matcher, context.Context, error) {
+	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField, "")
 	if err != nil {
 		return nil, ctx, err
 	}
