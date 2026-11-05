@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -42,33 +41,33 @@ var defaultLimits = &cortexvalidation.Limits{
 	MaxCacheFreshness:   model.Duration(time.Minute),
 }
 
-// fakeRoundTripper implements the RoundTripper interface.
+var _ http.RoundTripper = (*fakeRoundTripper)(nil)
+
+// fakeRoundTripper implements the RoundTripper interface in-process so canceled
+// sibling shard requests cannot leave orphaned TCP requests running asynchronously
+// on an httptest.Server after RoundTrip returns.
 type fakeRoundTripper struct {
-	*httptest.Server
-	host string
+	handler http.Handler
 }
 
-func newFakeRoundTripper() (*fakeRoundTripper, error) {
-	s := httptest.NewServer(nil)
-	u, err := url.Parse(s.URL)
-	if err != nil {
-		return nil, err
-	}
-	return &fakeRoundTripper{
-		Server: s,
-		host:   u.Host,
-	}, nil
+func newFakeRoundTripper() *fakeRoundTripper {
+	return &fakeRoundTripper{}
 }
 
 // setHandler is used for mocking.
 func (r *fakeRoundTripper) setHandler(h http.Handler) {
-	r.Config.Handler = h
+	r.handler = h
 }
 
 func (r *fakeRoundTripper) RoundTrip(h *http.Request) (*http.Response, error) {
-	h.URL.Scheme = "http"
-	h.URL.Host = r.host
-	return http.DefaultTransport.RoundTrip(h)
+	// NOTE: Check context cancellation before invoking the handler so canceled
+	// concurrent shard requests do not increment the mock request counter.
+	if err := h.Context().Err(); err != nil {
+		return nil, err
+	}
+	rec := httptest.NewRecorder()
+	r.handler.ServeHTTP(rec, h)
+	return rec.Result(), nil
 }
 
 // TestRoundTripRetryMiddleware tests the retry middleware.
@@ -202,8 +201,7 @@ func TestRoundTripRetryMiddleware(t *testing.T) {
 			)
 			testutil.Ok(t, err)
 
-			rt, err := newFakeRoundTripper()
-			testutil.Ok(t, err)
+			rt := newFakeRoundTripper()
 			res, handler := tc.handlerFunc(tc.fail)
 			rt.setHandler(handler)
 
@@ -375,9 +373,7 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			)
 			testutil.Ok(t, err)
 
-			rt, err := newFakeRoundTripper()
-			testutil.Ok(t, err)
-			defer rt.Close()
+			rt := newFakeRoundTripper()
 			res, handler := tc.handlerFunc(false)
 			rt.setHandler(handler)
 
@@ -474,9 +470,7 @@ func TestRoundTripQueryRangeCacheMiddleware(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 
-	rt, err := newFakeRoundTripper()
-	testutil.Ok(t, err)
-	defer rt.Close()
+	rt := newFakeRoundTripper()
 	res, handler := promqlResults(false)
 	rt.setHandler(handler)
 
@@ -578,9 +572,7 @@ func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 
-	rt, err := newFakeRoundTripper()
-	testutil.Ok(t, err)
-	defer rt.Close()
+	rt := newFakeRoundTripper()
 	count, handler := promqlResultsWithFailures(3)
 	rt.setHandler(handler)
 
@@ -640,7 +632,7 @@ func testRoundTripQueryCacheWithShardingMiddleware(t *testing.T) {
 	httpReq, err := NewThanosQueryRangeCodec(true).EncodeRequest(ctx, testRequest)
 	testutil.Ok(t, err)
 
-	_, rtErr = tpw(rt).RoundTrip(httpReq)
+	res, rtErr = tpw(rt).RoundTrip(httpReq)
 	testutil.Ok(t, rtErr)
 	testutil.Equals(t, http.StatusOK, res.StatusCode)
 	testutil.Equals(t, n, count.Load())
@@ -715,9 +707,7 @@ func TestRoundTripLabelsCacheMiddleware(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 
-	rt, err := newFakeRoundTripper()
-	testutil.Ok(t, err)
-	defer rt.Close()
+	rt := newFakeRoundTripper()
 	res, handler := labelsResults(false)
 	rt.setHandler(handler)
 
@@ -829,9 +819,7 @@ func TestRoundTripSeriesCacheMiddleware(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 
-	rt, err := newFakeRoundTripper()
-	testutil.Ok(t, err)
-	defer rt.Close()
+	rt := newFakeRoundTripper()
 	res, handler := seriesResults(false)
 	rt.setHandler(handler)
 

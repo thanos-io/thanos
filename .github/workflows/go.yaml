@@ -51,6 +51,34 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  compliance:
+    runs-on: ubuntu-latest
+    name: Thanos compliance tests
+    env:
+      GOBIN: /tmp/.bin
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      - name: Install Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: 1.27.x
+
+      - uses: actions/cache@0c907a75c2c80ebcb7f088228285e798b750cf8f # v4.2.1
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/.cache/golangci-lint
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run compliance tests
+        working-directory: compliance
+        run: go test -v ./...
+
   cross-build-check:
     runs-on: ubuntu-latest
     name: Go build for different platforms

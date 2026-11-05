@@ -584,6 +584,9 @@ alertmanagers:
       password_file: ""
     bearer_token: ""
     bearer_token_file: ""
+    google_iam:
+      credentials_file: ""
+      scopes: []
     proxy_url: ""
     tls_config:
       ca_file: ""
@@ -619,6 +622,9 @@ The configuration format is the following:
       password_file: ""
     bearer_token: ""
     bearer_token_file: ""
+    google_iam:
+      credentials_file: ""
+      scopes: []
     proxy_url: ""
     tls_config:
       ca_file: ""
@@ -647,3 +653,5 @@ To send extra headers with every HTTP query, for example a tenant ID, set `http_
 ```
 
 Note that a header like this applies to every query the Ruler makes, so setting a tenant ID means running one Ruler per tenant. That is only practical for a small number of tenants.
+
+To authenticate against Google Cloud APIs such as Cloud Monitoring's Prometheus query endpoint, set `google_iam` in `http_config`. When `credentials_file` is empty, Application Default Credentials are used. `scopes` defaults to `["https://www.googleapis.com/auth/monitoring.read"]` when omitted.
