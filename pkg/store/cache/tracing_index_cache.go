@@ -31,7 +31,7 @@ func (c *TracingIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v [
 
 // FetchMultiPostings fetches multiple postings - each identified by a label -
 // and returns a map containing cache hits, along with a list of missing keys.
-func (c *TracingIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits map[labels.Label][]byte, misses []labels.Label) {
+func (c *TracingIndexCache) FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits [][]byte, misses []uint64) {
 	span, newCtx := tracing.StartSpan(ctx, "fetch_multi_postings", tracing.Tags{
 		"name":      c.name,
 		"block.id":  blockID.String(),
