@@ -453,8 +453,18 @@ type boundedSeriesIterator struct {
 	mint, maxt int64
 }
 
-func NewBoundedSeriesIterator(it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
+func NewBoundedSeriesIterator(reuseIt chunkenc.Iterator, it chunkenc.Iterator, mint, maxt int64) *boundedSeriesIterator {
+	if seriesIter, ok := reuseIt.(*boundedSeriesIterator); ok {
+		seriesIter.reset(it, mint, maxt)
+		return seriesIter
+	}
 	return &boundedSeriesIterator{it: it, mint: mint, maxt: maxt}
+}
+
+func (it *boundedSeriesIterator) reset(cit chunkenc.Iterator, mint, maxt int64) {
+	it.it = cit
+	it.mint = mint
+	it.maxt = maxt
 }
 
 func (it *boundedSeriesIterator) Seek(t int64) chunkenc.ValueType {
