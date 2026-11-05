@@ -678,6 +678,20 @@ Flags:
                               will be replicated. All Prometheus matchers are
                               supported, including =, !=, =~ and !~.
       --[no-]single-run       Run replication only one time, then exit.
+      --concurrency=1         Number of goroutines to use for replicating
+                              blocks. WARNING: A value greater than 1
+                              enables concurrent, non-sequential block
+                              replication. This means that a block from
+                              4 weeks ago can be uploaded after a block
+                              from 2 hours ago. In the default Thanos
+                              compactor with a 30m consistency delay
+                              (https://thanos.io/tip/components/compact.md/#consistency-delay),
+                              if within 30 minutes after uploading those blocks
+                              there are still blocks to upload between them,
+                              the compactor might do compaction assuming a
+                              gap! This is solvable with vertical compaction,
+                              but it wastes extra computation and is not enabled
+                              by default. Use with care.
       --min-time=0000-01-01T00:00:00Z
                               Start of time range limit to replicate. Thanos
                               Replicate will replicate only metrics, which
