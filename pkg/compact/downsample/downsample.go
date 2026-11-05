@@ -82,6 +82,11 @@ func Downsample(
 		return id, errors.New("target resolution not lower than existing one")
 	}
 
+	minT := time.Unix(origMeta.MinTime/1000, 0)
+	maxT := time.Unix(origMeta.MaxTime/1000, 0)
+	level.Info(logger).Log("msg", "starting downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution*int64(time.Minute)).String(), "target_resolution", time.Duration(resolution*int64(time.Minute)),
+		"time_window", fmt.Sprintf("%s-%s", minT.Format(time.RFC3339), maxT.Format(time.RFC3339)), "block", origMeta.ULID)
+
 	indexr, err := b.Index()
 	if err != nil {
 		return id, errors.Wrap(err, "open index reader")
@@ -280,6 +285,7 @@ func Downsample(
 	}
 
 	id = uid
+	level.Info(logger).Log("msg", "completed downsample operation", "source_resolution", time.Duration(origMeta.Thanos.Downsample.Resolution*int64(time.Minute)), "target_resolution", time.Duration(resolution*int64(time.Minute)), "source_block", origMeta.ULID, "result_block", id)
 	return
 }
 
