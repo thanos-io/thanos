@@ -13,9 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/pkg/errors"
@@ -23,6 +23,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+
+	"github.com/thanos-io/thanos/pkg/runutil/filewatch"
 )
 
 var (
@@ -160,11 +162,10 @@ func isExactMatcher(m tenantMatcher) bool {
 // ConfigWatcher is able to watch a file containing a hashring configuration
 // for updates.
 type ConfigWatcher struct {
-	ch       chan []HashringConfig
-	path     string
-	interval time.Duration
-	logger   log.Logger
-	watcher  *fsnotify.Watcher
+	ch     chan []HashringConfig
+	path   string
+	logger log.Logger
+	fw     *filewatch.Watcher
 
 	hashGauge            prometheus.Gauge
 	successGauge         prometheus.Gauge
@@ -177,6 +178,8 @@ type ConfigWatcher struct {
 
 	// lastLoadedConfigHash is the hash of the last successfully loaded configuration.
 	lastLoadedConfigHash float64
+
+	stopOnce sync.Once
 }
 
 // NewConfigWatcher creates a new ConfigWatcher.
@@ -185,20 +188,10 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 		logger = log.NewNopLogger()
 	}
 
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, errors.Wrap(err, "creating file watcher")
-	}
-	if err := watcher.Add(path); err != nil {
-		return nil, errors.Wrapf(err, "adding path %s to file watcher", path)
-	}
-
 	c := &ConfigWatcher{
-		ch:       make(chan []HashringConfig),
-		path:     path,
-		interval: time.Duration(interval),
-		logger:   logger,
-		watcher:  watcher,
+		ch:     make(chan []HashringConfig),
+		path:   path,
+		logger: logger,
 		hashGauge: promauto.With(reg).NewGauge(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_config_hash",
@@ -222,12 +215,12 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 		errorCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_hashrings_file_errors_total",
-				Help: "The number of errors watching the hashrings configuration file.",
+				Help: "The number of errors watching, reading, or parsing the hashrings configuration file.",
 			}),
 		refreshCounter: promauto.With(reg).NewCounter(
 			prometheus.CounterOpts{
 				Name: "thanos_receive_hashrings_file_refreshes_total",
-				Help: "The number of refreshes of the hashrings configuration file.",
+				Help: "The number of refreshes of the hashrings configuration file. Incremented when the file content has actually changed (or on the initial load); no-op periodic ticks where the content is unchanged are not counted.",
 			}),
 		hashringNodesGauge: promauto.With(reg).NewGaugeVec(
 			prometheus.GaugeOpts{
@@ -242,6 +235,23 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 			},
 			[]string{"name"}),
 	}
+
+	fw, err := filewatch.New(filewatch.Options{
+		Logger:   logger,
+		Patterns: []string{path},
+		Interval: time.Duration(interval),
+		// changesCounter is intentionally NOT shared with the primitive:
+		// the wrapper bumps it from refresh() only when loadConfig
+		// succeeds, preserving the pre-refactor "successful reload"
+		// semantics. Letting the primitive bump it too would double-count
+		// every change and would also bump on parse failures, which the
+		// original metric never did.
+		ErrorsCounter: c.errorCounter,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "creating file watcher")
+	}
+	c.fw = fw
 	return c, nil
 }
 
@@ -249,43 +259,31 @@ func NewConfigWatcher(logger log.Logger, reg prometheus.Registerer, path string,
 func (cw *ConfigWatcher) Run(ctx context.Context) {
 	defer cw.Stop()
 
+	// Emit the initial configuration before the file watcher signals any
+	// change so consumers don't have to wait for the first file mutation.
 	cw.refresh(ctx)
 
-	ticker := time.NewTicker(cw.interval)
-	defer ticker.Stop()
+	// Drive the file-watch primitive concurrently. It owns fsnotify, the
+	// periodic safety-net tick, parent-directory watching, and the content
+	// hash gate; we react to its signals by re-loading and re-emitting.
+	fwDone := make(chan struct{})
+	go func() {
+		cw.fw.Run(ctx)
+		close(fwDone)
+	}()
+	// Ensure the primitive's goroutine has fully exited before this Run
+	// returns, so cw.Stop's close of cw.ch is not racing with refresh.
+	defer func() { <-fwDone }()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
-		case event := <-cw.watcher.Events:
-			// fsnotify sometimes sends a bunch of events without name or operation.
-			// It's unclear what they are and why they are sent - filter them out.
-			if event.Name == "" {
-				break
+		case _, ok := <-cw.fw.C():
+			if !ok {
+				return
 			}
-			// Everything but a CHMOD requires rereading.
-			// If the file was removed, we can't read it, so skip.
-			if event.Op^(fsnotify.Chmod|fsnotify.Remove) == 0 {
-				break
-			}
-			// Changes to a file can spawn various sequences of events with
-			// different combinations of operations. For all practical purposes
-			// this is inaccurate.
-			// The most reliable solution is to reload everything if anything happens.
 			cw.refresh(ctx)
-
-		case <-ticker.C:
-			// Setting a new watch after an update might fail. Make sure we don't lose
-			// those files forever.
-			cw.refresh(ctx)
-
-		case err := <-cw.watcher.Errors:
-			if err != nil {
-				cw.errorCounter.Inc()
-				level.Error(cw.logger).Log("msg", "error watching file", "err", err)
-			}
 		}
 	}
 }
@@ -301,31 +299,16 @@ func (cw *ConfigWatcher) ValidateConfig() error {
 	return err
 }
 
-// Stop shuts down the config watcher.
+// Stop shuts down the config watcher. It is safe to call multiple times and
+// before Run has been started (e.g. when ValidateConfig fails); subsequent
+// calls are no-ops thanks to the sync.Once guard.
 func (cw *ConfigWatcher) Stop() {
-	level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
-
-	done := make(chan struct{})
-	defer close(done)
-
-	// Closing the watcher will deadlock unless all events and errors are drained.
-	go func() {
-		for {
-			select {
-			case <-cw.watcher.Errors:
-			case <-cw.watcher.Events:
-			// Drain all events and errors.
-			case <-done:
-				return
-			}
-		}
-	}()
-	if err := cw.watcher.Close(); err != nil {
-		level.Error(cw.logger).Log("msg", "error closing file watcher", "path", cw.path, "err", err)
-	}
-
-	close(cw.ch)
-	level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
+	cw.stopOnce.Do(func() {
+		level.Debug(cw.logger).Log("msg", "stopping hashring configuration watcher...", "path", cw.path)
+		cw.fw.Stop()
+		close(cw.ch)
+		level.Debug(cw.logger).Log("msg", "hashring configuration watcher stopped")
+	})
 }
 
 // refresh reads the configured file and sends the hashring configuration on the channel.
