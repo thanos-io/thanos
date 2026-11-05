@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -32,9 +33,9 @@ func NewFilteredIndexCache(cache IndexCache, enabledItems []string) *FilteredInd
 
 // StorePostings sets the postings identified by the ulid and label to the value v,
 // if the postings already exists in the cache it is not mutated.
-func (c *FilteredIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string) {
+func (c *FilteredIndexCache) StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string, ttl time.Duration) {
 	if c.postingsEnabled {
-		c.cache.StorePostings(blockID, l, v, tenant)
+		c.cache.StorePostings(blockID, l, v, tenant, ttl)
 	}
 }
 
@@ -48,9 +49,9 @@ func (c *FilteredIndexCache) FetchMultiPostings(ctx context.Context, blockID uli
 }
 
 // StoreExpandedPostings stores expanded postings for a set of label matchers.
-func (c *FilteredIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string) {
+func (c *FilteredIndexCache) StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string, ttl time.Duration) {
 	if c.expandedPostingsEnabled {
-		c.cache.StoreExpandedPostings(blockID, matchers, v, tenant)
+		c.cache.StoreExpandedPostings(blockID, matchers, v, tenant, ttl)
 	}
 }
 
@@ -64,9 +65,9 @@ func (c *FilteredIndexCache) FetchExpandedPostings(ctx context.Context, blockID 
 
 // StoreSeries sets the series identified by the ulid and id to the value v,
 // if the series already exists in the cache it is not mutated.
-func (c *FilteredIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string) {
+func (c *FilteredIndexCache) StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string, ttl time.Duration) {
 	if c.seriesEnabled {
-		c.cache.StoreSeries(blockID, id, v, tenant)
+		c.cache.StoreSeries(blockID, id, v, tenant, ttl)
 	}
 }
 

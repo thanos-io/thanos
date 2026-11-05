@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"golang.org/x/crypto/blake2b"
 
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -43,24 +45,38 @@ var (
 // (potentially with a deadline) as in the original user's request.
 type IndexCache interface {
 	// StorePostings stores postings for a single series.
-	StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string)
+	StorePostings(blockID ulid.ULID, l labels.Label, v []byte, tenant string, ttl time.Duration)
 
 	// FetchMultiPostings fetches multiple postings - each identified by a label -
 	// and returns a map containing cache hits, along with a list of missing keys.
 	FetchMultiPostings(ctx context.Context, blockID ulid.ULID, keys []labels.Label, tenant string) (hits map[labels.Label][]byte, misses []labels.Label)
 
 	// StoreExpandedPostings stores expanded postings for a set of label matchers.
-	StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string)
+	StoreExpandedPostings(blockID ulid.ULID, matchers []*labels.Matcher, v []byte, tenant string, ttl time.Duration)
 
 	// FetchExpandedPostings fetches expanded postings and returns cached data and a boolean value representing whether it is a cache hit or not.
 	FetchExpandedPostings(ctx context.Context, blockID ulid.ULID, matchers []*labels.Matcher, tenant string) ([]byte, bool)
 
 	// StoreSeries stores a single series.
-	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string)
+	StoreSeries(blockID ulid.ULID, id storage.SeriesRef, v []byte, tenant string, ttl time.Duration)
 
 	// FetchMultiSeries fetches multiple series - each identified by ID - from the cache
 	// and returns a map containing cache hits, along with a list of missing IDs.
 	FetchMultiSeries(ctx context.Context, blockID ulid.ULID, ids []storage.SeriesRef, tenant string) (hits map[storage.SeriesRef][]byte, misses []storage.SeriesRef)
+}
+
+// CacheTTL returns cache TTL based on the block meta. A Short TTL is useful for
+// temporary blocks that will be compacted soon and a long TTL for large blocks
+// that won't be compacted.
+func CacheTTL(meta *metadata.Meta) time.Duration {
+	ttl := time.Duration(meta.MaxTime-meta.MinTime) * time.Millisecond
+
+	// ceil to the next hour
+	if ttl%time.Hour != 0 {
+		ttl += time.Hour - ttl%time.Hour
+	}
+
+	return ttl
 }
 
 // Common metrics that should be used by all cache implementations.
