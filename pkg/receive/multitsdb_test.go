@@ -5,6 +5,7 @@ package receive
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -39,6 +40,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 )
 
 func openTestRoot(t testing.TB, dir string) *os.Root {
@@ -920,6 +922,86 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 	// Wait for tenant to become ready before terminating the test.
 	// This allows the tear down procedure to cleanup properly.
 	testutil.Ok(t, appendSample(m, tenantID, time.Now()))
+}
+
+// Regression test for https://github.com/thanos-io/thanos/issues/9004.
+func TestMultiTSDBTenantAppendableDoesNotWaitForWALReplay(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	newMultiTSDB := func() *MultiTSDB {
+		return NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
+			&tsdb.Options{
+				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
+				RetentionDuration: (6 * time.Hour).Milliseconds(),
+				NoLockfile:        true,
+			},
+			labels.FromStrings("replica", "test"),
+			"tenant_id",
+			nil,
+			false,
+			false,
+			metadata.NoneFunc,
+		)
+	}
+
+	// Leave data for tenant "foo" on disk.
+	m := newMultiTSDB()
+	testutil.Ok(t, appendSample(m, "foo", time.Now()))
+	m.Close()
+
+	m = newMultiTSDB()
+	defer m.Close()
+
+	// Simulate a WAL replay of "foo" that is in flight, as during Open().
+	started, release := make(chan struct{}), make(chan struct{})
+	replayDone := make(chan struct{})
+	go func() {
+		defer close(replayDone)
+		_, _, _ = m.initSingleFlight.Do("foo", func() (any, error) {
+			close(started)
+			<-release
+			return nil, nil
+		})
+	}()
+	<-started
+
+	appendableC := make(chan error, 1)
+	go func() {
+		app, err := m.TenantAppendable("foo")
+		if err != nil {
+			appendableC <- err
+			return
+		}
+		_, err = app.Appender(context.Background())
+		appendableC <- err
+	}()
+	select {
+	case err := <-appendableC:
+		testutil.Assert(t, errors.Is(err, tsdb.ErrNotReady), "expected tsdb.ErrNotReady, got %v", err)
+		testutil.Assert(t, isNotReady(err), "expected a not ready error, got %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("TenantAppendable blocked on the in-flight WAL replay")
+	}
+
+	// The writer must surface it as is, so that it is mapped to Unavailable.
+	err := NewWriter(log.NewNopLogger(), m, nil).Write(context.Background(), "foo", []prompb.TimeSeries{{
+		Labels:  []labelpb.ZLabel{{Name: "a", Value: "b"}},
+		Samples: []prompb.Sample{{Timestamp: time.Now().UnixMilli(), Value: 1}},
+	}})
+	testutil.Assert(t, errors.Is(err, tsdb.ErrNotReady), "expected tsdb.ErrNotReady, got %v", err)
+
+	// Once the replay is over, writes for "foo" go through again.
+	close(release)
+	<-replayDone
+	testutil.Ok(t, appendSample(m, "foo", time.Now()))
+
+	// A new tenant has nothing to replay, so it is ready right away (#8446).
+	app, err := m.TenantAppendable("bar")
+	testutil.Ok(t, err)
+	_, err = app.Appender(context.Background())
+	testutil.Ok(t, err)
 }
 
 type slowClient struct {
