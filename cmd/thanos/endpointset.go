@@ -18,12 +18,14 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	commonconfig "github.com/prometheus/common/config"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/http"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
 
+	"github.com/thanos-io/thanos/pkg/clientconfig"
 	"github.com/thanos-io/thanos/pkg/component"
 	"github.com/thanos-io/thanos/pkg/discovery/cache"
 	"github.com/thanos-io/thanos/pkg/discovery/dns"
@@ -606,7 +608,14 @@ func runHTTPSD(
 	if err != nil {
 		return errors.Wrapf(err, "unable to register HTTP SD metrics")
 	}
-	manager := discovery.NewManager(ctx, logutil.GoKitLogToSlog(logger), sdReg, sdMetrics, discovery.Name("endpoints"))
+	manager := discovery.NewManager(
+		ctx,
+		logutil.GoKitLogToSlog(logger),
+		sdReg,
+		sdMetrics,
+		discovery.Name("endpoints"),
+		discovery.HTTPClientOptions(commonconfig.WithUserAgent(clientconfig.ThanosUserAgent)),
+	)
 	if manager == nil {
 		return errors.Newf("unable to create HTTP SD manager")
 	}
