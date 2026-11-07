@@ -73,24 +73,28 @@ type CommonMetrics struct {
 
 // NewCommonMetrics initializes common metrics for index cache.
 func NewCommonMetrics(reg prometheus.Registerer) *CommonMetrics {
+	return newCommonMetrics(reg, "thanos_store_index_cache_")
+}
+
+func newCommonMetrics(reg prometheus.Registerer, prefix string) *CommonMetrics {
 	return &CommonMetrics{
 		RequestTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_store_index_cache_requests_total",
+			Name: prefix + "requests_total",
 			Help: "Total number of items requests to the cache.",
 		}, []string{"item_type", tenancy.MetricLabel}),
 		HitsTotal: promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
-			Name: "thanos_store_index_cache_hits_total",
+			Name: prefix + "hits_total",
 			Help: "Total number of items requests to the cache that were a hit.",
 		}, []string{"item_type", tenancy.MetricLabel}),
 		DataSizeBytes: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name: "thanos_store_index_cache_stored_data_size_bytes",
+			Name: prefix + "stored_data_size_bytes",
 			Help: "Histogram to track item data size stored in index cache",
 			Buckets: []float64{
 				32, 256, 512, 1024, 32 * 1024, 256 * 1024, 512 * 1024, 1024 * 1024, 32 * 1024 * 1024, 64 * 1024 * 1024, 128 * 1024 * 1024, 256 * 1024 * 1024, 512 * 1024 * 1024,
 			},
 		}, []string{"item_type", tenancy.MetricLabel}),
 		FetchLatency: promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
-			Name:    "thanos_store_index_cache_fetch_duration_seconds",
+			Name:    prefix + "fetch_duration_seconds",
 			Help:    "Histogram to track latency to fetch items from index cache",
 			Buckets: []float64{0.01, 0.1, 0.3, 0.6, 1, 3, 6, 10, 15, 20, 30, 45, 60, 90, 120},
 		}, []string{"item_type", tenancy.MetricLabel}),

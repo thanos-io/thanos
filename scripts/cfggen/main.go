@@ -69,6 +69,10 @@ var (
 		storecache.INMEMORY:  storecache.InMemoryIndexCacheConfig{},
 		storecache.MEMCACHED: cacheutil.MemcachedClientConfig{},
 		storecache.REDIS:     cacheutil.DefaultRedisClientConfig,
+		storecache.MULTILEVEL: storecache.MultiLevelIndexCacheConfig{Caches: []storecache.IndexCacheConfig{
+			{Type: storecache.INMEMORY, Config: storecache.DefaultInMemoryIndexCacheConfig},
+			{Type: storecache.MEMCACHED, Config: map[string]any{"addresses": []string{"memcached:11211"}}},
+		}},
 	}
 
 	queryfrontendCacheConfigs = map[queryfrontend.ResponseCacheProvider]any{

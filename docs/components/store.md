@@ -361,11 +361,12 @@ Check more [here](../sharding.md).
 
 ## Index cache
 
-Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. Three types of caches are supported:
+Thanos Store Gateway supports an index cache to speed up postings and series lookups from TSDB blocks indexes. The following types of caches are supported:
 
 - `in-memory` (*default*)
 - `memcached`
 - `redis`
+- `multilevel`
 
 ### In-memory index cache
 
@@ -521,6 +522,42 @@ Here is an example of what effect client-side caching could have:
   - `key_file`: path to the Key file for cert_file (NOTE: Both this and `cert_file` must be set if used)
   - `servername`: Override the server name used to validate the server certificate
   - `insecure_skip_verify`: Disable certificate verification
+
+### Multi-level index cache
+
+The `multilevel` index cache combines existing index caches into an ordered hierarchy. For example, a small in-memory L1 cache can serve frequently requested entries without retrieving them repeatedly from a shared Memcached L2 cache.
+
+Configure it through `--index-cache.config-file` or `--index-cache.config`:
+
+```yaml mdox-exec="go run scripts/cfggen/main.go --name=storecache.MultiLevelIndexCacheConfig"
+type: MULTILEVEL
+config:
+  caches:
+  - type: IN-MEMORY
+    config:
+      max_size: 262144000
+      max_item_size: 131072000
+    enabled_items: []
+    ttl: 0s
+  - type: MEMCACHED
+    config:
+      addresses:
+      - memcached:11211
+    enabled_items: []
+    ttl: 0s
+enabled_items: []
+ttl: 0s
+```
+
+`caches` must contain at least two backends, in lookup order (L1, L2, and so on). Each entry uses the same `type`, `config`, `enabled_items`, and `ttl` settings as a standalone index cache. Nested `MULTILEVEL` backends are not supported.
+
+Reads query each level only for keys missed by earlier levels, preserving batched lookups. Hits from lower levels are copied into earlier levels, so a Store Gateway with an empty L1 can warm it from a shared L2. New entries are stored in every enabled level. Remote writes remain asynchronous; cache errors are treated as misses and do not prevent loading data from object storage.
+
+The top-level `enabled_items` applies to the entire hierarchy; each level can further restrict which item types it stores. A level's `ttl` overrides the top-level `ttl`, which defaults to 24 hours for remote caches. As with the standalone in-memory index cache, in-memory entries have no TTL and are evicted according to the configured size limits. Index entries are immutable and keyed by block ID, so a remote entry expiring does not invalidate a local copy. Promotion to a remote level starts a new TTL in that level. This behavior applies only to the index cache, not the caching bucket.
+
+Existing `thanos_store_index_cache_requests_total`, `thanos_store_index_cache_hits_total`, `thanos_store_index_cache_stored_data_size_bytes`, and `thanos_store_index_cache_fetch_duration_seconds` metrics describe the whole hierarchy and count each application operation once. Per-level equivalents use the `thanos_store_index_cache_level_` prefix and a `level` label such as `L1` or `L2`. Backend-specific metrics also carry the `level` label. Per-level store metrics include promotions.
+
+Each Store Gateway maintains its own L1, so allow additional memory for cached data and cache bookkeeping in every replica. The benefit depends on repeated access to entries that fit in L1; low hit rates add local lookup overhead. Redis already supports client-side caching through `cache_size`, which may be sufficient without an additional level.
 
 ## Caching Bucket
 

@@ -1017,9 +1017,22 @@ func TestRedisClient_Rueidis(t *testing.T) {
 }
 
 func TestStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T) {
+	testStoreGatewayMemcachedIndexCacheExpandedPostings(t, false)
+}
+
+func TestStoreGatewayMultiLevelIndexCacheExpandedPostings(t *testing.T) {
+	testStoreGatewayMemcachedIndexCacheExpandedPostings(t, true)
+}
+
+func testStoreGatewayMemcachedIndexCacheExpandedPostings(t *testing.T, multiLevel bool) {
+	t.Helper()
 	t.Parallel()
 
-	e, err := e2e.NewDockerEnvironment("memcached-expand")
+	envName := "memcached-expand"
+	if multiLevel {
+		envName = "multi-cache-exp"
+	}
+	e, err := e2e.NewDockerEnvironment(envName)
 	testutil.Ok(t, err)
 	t.Cleanup(e2ethanos.CleanScenario(t, e))
 
@@ -1036,6 +1049,16 @@ config:
   max_async_concurrency: 10
   dns_provider_update_interval: 1s
   auto_discovery: false`, memcached.InternalEndpoint("memcached"))
+	if multiLevel {
+		indexCacheConfig = `type: MULTILEVEL
+config:
+  caches:
+    - type: IN-MEMORY
+      config:
+        max_size: 10MB
+        max_item_size: 1MB
+    - ` + strings.ReplaceAll(indexCacheConfig, "\n", "\n      ")
+	}
 
 	s1 := e2ethanos.NewStoreGW(
 		e,
@@ -1118,7 +1141,61 @@ config:
 
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(2), []string{`thanos_store_index_cache_requests_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
 		testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(1), []string{`thanos_store_index_cache_hits_total`}, e2emon.WithLabelMatchers(matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"))))
+		if multiLevel {
+			// The second query must be served by L1 without another L2 lookup.
+			for _, metric := range []struct {
+				name  string
+				level string
+				value float64
+			}{
+				{"thanos_store_index_cache_level_requests_total", "L1", 2},
+				{"thanos_store_index_cache_level_hits_total", "L1", 1},
+				{"thanos_store_index_cache_level_requests_total", "L2", 1},
+				{"thanos_store_index_cache_level_hits_total", "L2", 0},
+			} {
+				testutil.Ok(t, s1.WaitSumMetricsWithOptions(e2emon.Equals(metric.value), []string{metric.name}, e2emon.WithLabelMatchers(
+					matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"),
+					matchers.MustNewMatcher(matchers.MatchEqual, "level", metric.level),
+				)))
+			}
+		}
 	})
+
+	if multiLevel {
+		t.Run("cold L1 warms from shared L2", func(t *testing.T) {
+			// A second Store Gateway starts with an empty in-memory cache and
+			// shares the first gateway's remote cache.
+			s2 := e2ethanos.NewStoreGW(e, "2", client.BucketConfig{
+				Type:   objstore.S3,
+				Config: e2ethanos.NewS3Config(bucket, m.InternalEndpoint("http"), m.InternalDir()),
+			}, "", indexCacheConfig, nil)
+			testutil.Ok(t, e2e.StartAndWaitReady(s2))
+			testutil.Ok(t, s2.WaitSumMetrics(e2emon.Equals(1), "thanos_bucket_store_blocks_loaded"))
+			q2 := e2ethanos.NewQuerierBuilder(e, "2", s2.InternalEndpoint("grpc")).Init()
+			testutil.Ok(t, e2e.StartAndWaitReady(q2))
+			for range 2 {
+				queryAndAssertSeries(t, ctx, q2.Endpoint("http"), func() string { return testQuery },
+					time.Now, promclient.QueryOptions{Deduplicate: false}, []model.Metric{
+						{"a": "1", "b": "2", "ext1": "value1", "replica": "1"},
+					})
+			}
+			for _, metric := range []struct {
+				name  string
+				level string
+				value float64
+			}{
+				{"thanos_store_index_cache_level_requests_total", "L1", 2},
+				{"thanos_store_index_cache_level_hits_total", "L1", 1},
+				{"thanos_store_index_cache_level_requests_total", "L2", 1},
+				{"thanos_store_index_cache_level_hits_total", "L2", 1},
+			} {
+				testutil.Ok(t, s2.WaitSumMetricsWithOptions(e2emon.Equals(metric.value), []string{metric.name}, e2emon.WithLabelMatchers(
+					matchers.MustNewMatcher(matchers.MatchEqual, "item_type", "ExpandedPostings"),
+					matchers.MustNewMatcher(matchers.MatchEqual, "level", metric.level),
+				)))
+			}
+		})
+	}
 }
 
 func TestStoreGatewayLazyExpandedPostingsEnabled(t *testing.T) {
