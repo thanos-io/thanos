@@ -194,6 +194,10 @@ thanos query-frontend \
     --query-frontend.downstream-url="<thanos-querier>:<querier-http-port>"
 ```
 
+## gRPC
+
+Query Frontend can optionally expose its HTTP API over gRPC via the [httpgrpc](https://github.com/weaveworks/common/tree/master/httpgrpc) protocol. This is disabled by default and can be enabled by setting `--grpc-address`, mirroring how other Thanos components (e.g. Sidecar, Store, Receive) expose gRPC. This is useful for downstream components that already speak gRPC to other Thanos endpoints and want to avoid maintaining a separate HTTP connection to the query-frontend. Requests received over gRPC go through the same middleware chain (orgID injection, CORS, tracing, instrumentation, request logging) as requests received over HTTP.
+
 ## Flags
 
 ```$ mdox-exec="thanos query-frontend --help"
@@ -232,6 +236,39 @@ Flags:
       --http.config=""         [EXPERIMENTAL] Path to the configuration file
                                that can enable TLS or authentication for all
                                HTTP endpoints.
+      --grpc-address=""        Listen ip:port address for gRPC endpoints
+                               (StoreAPI). Make sure this address is routable
+                               from other components.
+      --grpc-server-tls-cert=""  
+                               TLS Certificate for gRPC server, leave blank to
+                               disable TLS
+      --grpc-server-tls-key=""  
+                               TLS Key for the gRPC server, leave blank to
+                               disable TLS
+      --grpc-server-tls-client-ca=""
+                               TLS CA to verify clients against. If no client
+                               CA is specified, there is no client verification
+                               on server side. (tls.NoClientCert)
+      --grpc-server-tls-min-version=1.3
+                               TLS supported minimum version for gRPC server.
+                               If no version is specified, it'll default to
+                               1.3. Allowed values: ["1.0", "1.1", "1.2", "1.3"]
+      --grpc-server-tls-ciphers=GRPC-SERVER-TLS-CIPHERS ...  
+                               TLS cipher suites for gRPC server (repeatable).
+                               If not specified, the default Go cipher suites
+                               are used. See
+                               https://pkg.go.dev/crypto/tls#pkg-constants for
+                               valid values.
+      --grpc-server-tls-curves=GRPC-SERVER-TLS-CURVES ...  
+                               TLS curves for gRPC server (repeatable). If not
+                               specified, the default Go curves are used. Valid
+                               values: CurveP256, CurveP384, CurveP521, X25519.
+      --grpc-server-max-connection-age=60m
+                               The grpc server max connection age. This
+                               controls how often to re-establish connections
+                               and redo TLS handshakes.
+      --grpc-grace-period=2m   Time to wait after an interrupt received for
+                               GRPC Server.
       --[no-]web.disable-cors  Whether to disable CORS headers to be set by
                                Thanos. By default Thanos sets CORS headers to be
                                allowed by all.
