@@ -64,4 +64,23 @@ describe('ScrapePoolList', () => {
       expect(alert.text()).toContain('Error fetching targets');
     });
   });
+
+  describe('when warnings are returned', () => {
+    it('displays a warning alert alongside the data', async () => {
+      const mock = fetchMock.mockResponse(
+        JSON.stringify({ ...sampleApiResponse, warnings: ['some store was unavailable'] })
+      );
+
+      let scrapePoolList: any;
+      await act(async () => {
+        scrapePoolList = mount(<ScrapePoolList {...defaultProps} />);
+      });
+      scrapePoolList.update();
+
+      expect(mock).toHaveBeenCalledWith('../api/v1/targets?state=active', { cache: 'no-store', credentials: 'same-origin' });
+      const alert = scrapePoolList.find(UncontrolledAlert).filterWhere((a: any) => a.prop('color') === 'warning');
+      expect(alert).toHaveLength(1);
+      expect(alert.text()).toContain('some store was unavailable');
+    });
+  });
 });
