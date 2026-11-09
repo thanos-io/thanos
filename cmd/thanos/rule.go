@@ -587,10 +587,10 @@ func runRule(
 			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
+		promQLParser := newPromQLParser(conf.EnableFeatures)
 		if len(conf.EnableFeatures) > 0 {
 			for _, feature := range conf.EnableFeatures {
 				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
 					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 				}
 			}
@@ -634,6 +634,7 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
+			Parser:                 promQLParser,
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
@@ -647,7 +648,7 @@ func runRule(
 			reg,
 			conf.dataDir,
 			managerOpts,
-			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
+			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams, promQLParser),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -950,6 +951,7 @@ func queryFuncCreator(
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
 	doNotAddThanosParams bool,
+	promQLParser parser.Parser,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -1002,7 +1004,7 @@ func queryFuncCreator(
 					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{
 						PartialResponse: partialResponseStrategy == storepb.PartialResponseStrategy_WARN,
 					})
-					expr, err := extpromql.ParseExpr(qs)
+					expr, err := extpromql.ParseExprWithParser(promQLParser, qs)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
