@@ -214,3 +214,66 @@ describe('Panel', () => {
     });
   });
 });
+
+describe('Panel partial response setting', () => {
+  const checkboxId = `#use-partial-resp-checkbox-${defaultProps.id}`;
+
+  beforeEach(() => {
+    fetchMock.resetMocks();
+    fetchMock.mockResponse(querySuccessResponse);
+    localStorage.clear();
+  });
+
+  afterAll(() => {
+    localStorage.clear();
+  });
+
+  it('applies a saved false value when the panel mounts', () => {
+    localStorage.setItem('usePartialResponse', 'false');
+    const onOptionsChanged = jest.fn();
+    shallow(
+      <Panel
+        {...defaultProps}
+        options={{ ...defaultProps.options, usePartialResponse: true }}
+        onOptionsChanged={onOptionsChanged}
+      />
+    );
+    expect(onOptionsChanged).toHaveBeenCalledWith(expect.objectContaining({ usePartialResponse: false }));
+  });
+
+  it('keeps the panel value when nothing is saved', () => {
+    const onOptionsChanged = jest.fn();
+    shallow(
+      <Panel
+        {...defaultProps}
+        options={{ ...defaultProps.options, usePartialResponse: true }}
+        onOptionsChanged={onOptionsChanged}
+      />
+    );
+    const changedValues = onOptionsChanged.mock.calls.map(([options]) => options.usePartialResponse);
+    expect(changedValues.every((value) => value === true)).toBe(true);
+  });
+
+  it('turns partial response off when unchecked, even if true was saved', () => {
+    localStorage.setItem('usePartialResponse', 'true');
+    const onOptionsChanged = jest.fn();
+    const onUsePartialResponseChange = jest.fn();
+    const panel = shallow(
+      <Panel
+        {...defaultProps}
+        options={{ ...defaultProps.options, usePartialResponse: true }}
+        onOptionsChanged={onOptionsChanged}
+        onUsePartialResponseChange={onUsePartialResponseChange}
+      />
+    );
+    panel.find(checkboxId).simulate('change', { target: { checked: false } });
+    expect(onOptionsChanged).toHaveBeenLastCalledWith(expect.objectContaining({ usePartialResponse: false }));
+    expect(onUsePartialResponseChange).toHaveBeenLastCalledWith(false);
+    expect(localStorage.getItem('usePartialResponse')).toBe('false');
+  });
+
+  it('shows the checkbox state from the panel options', () => {
+    const panel = shallow(<Panel {...defaultProps} options={{ ...defaultProps.options, usePartialResponse: false }} />);
+    expect(panel.find(checkboxId).prop('checked')).toBe(false);
+  });
+});
