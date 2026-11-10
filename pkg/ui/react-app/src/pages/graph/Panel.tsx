@@ -32,7 +32,7 @@ import PathPrefixProps from '../../types/PathPrefixProps';
 import { QueryParams } from '../../types/types';
 import { parseDuration } from '../../utils';
 import { defaultTenant, tenantHeader, displayTenantBox } from '../../thanos/config';
-import { getStorageItem, setStorageItem, hasStorageItem } from '../../hooks/useLocalStorage';
+import { getStorageItem, setStorageItem } from '../../hooks/useLocalStorage';
 
 export interface PanelProps {
   id: string;
@@ -218,11 +218,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
 
   componentDidMount(): void {
     this.executeQuery();
-    if (hasStorageItem('usePartialResponse')) {
-      // Set the default value in state and local storage
-      this.setOptions({ usePartialResponse: true });
-      this.props.onUsePartialResponseChange(true);
-      setStorageItem('usePartialResponse', true);
+    // The saved choice is shared by every panel, so it takes precedence over the value from the URL.
+    const storedValue = getStorageItem<boolean | null>('usePartialResponse', null);
+    if (typeof storedValue === 'boolean' && storedValue !== this.props.options.usePartialResponse) {
+      this.setOptions({ usePartialResponse: storedValue });
     }
   }
 
@@ -412,17 +411,10 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
   };
 
   handleChangePartialResponse = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    let newValue = event.target.checked;
-
-    const storedValue = getStorageItem<boolean | null>('usePartialResponse', null);
-
-    if (storedValue === true) {
-      newValue = true;
-    }
+    const newValue = event.target.checked;
     this.setOptions({ usePartialResponse: newValue });
     this.props.onUsePartialResponseChange(newValue);
-
-    setStorageItem('usePartialResponse', event.target.checked);
+    setStorageItem('usePartialResponse', newValue);
   };
 
   handleStoreMatchChange = (selectedStores: any): void => {
@@ -596,7 +588,7 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
                 wrapperStyles={{ marginLeft: 20, display: 'inline-block' }}
                 id={`use-partial-resp-checkbox-${id}`}
                 onChange={this.handleChangePartialResponse}
-                defaultChecked={options.usePartialResponse}
+                checked={options.usePartialResponse}
               >
                 Use Partial Response
               </Checkbox>

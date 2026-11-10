@@ -15,10 +15,6 @@ export function setStorageItem<S>(localStorageKey: string, value: S): void {
   localStorage.setItem(localStorageKey, JSON.stringify(value));
 }
 
-export function hasStorageItem(localStorageKey: string): boolean {
-  return localStorage.getItem(localStorageKey) !== null;
-}
-
 export function useLocalStorage<S>(localStorageKey: string, initialState: S): [S, Dispatch<SetStateAction<S>>] {
   const [value, setValue] = useState(getStorageItem(localStorageKey, initialState));
 
