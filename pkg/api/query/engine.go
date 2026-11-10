@@ -27,6 +27,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/promql-engine/api"
@@ -76,6 +77,7 @@ type queryCreator interface {
 type QueryFactory struct {
 	mode            PromqlQueryMode
 	disableFallback bool
+	parser          parser.Parser
 
 	prometheus        *promql.Engine
 	thanosLocal       *engine.Engine
@@ -92,6 +94,7 @@ func NewQueryFactory(
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
 	disableFallback bool,
+	p parser.Parser,
 ) *QueryFactory {
 	makeOpts := func(registry prometheus.Registerer) engine.Opts {
 		opts := engine.Opts{
@@ -107,6 +110,7 @@ func NewQueryFactory(
 				},
 				EnableNegativeOffset: true,
 				EnableAtModifier:     true,
+				Parser:               p,
 			},
 			EnableXFunctions: enableXFunctions,
 			EnableAnalysis:   true,
@@ -133,6 +137,7 @@ func NewQueryFactory(
 
 	return &QueryFactory{
 		mode:              mode,
+		parser:            p,
 		prometheus:        promEngine,
 		thanosLocal:       thanosLocal,
 		thanosDistributed: thanosDistributed,

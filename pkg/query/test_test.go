@@ -125,6 +125,7 @@ func (t *test) reset() {
 		MaxSamples:               10000,
 		Timeout:                  100 * time.Second,
 		NoStepSubqueryIntervalFn: func(int64) int64 { return durationMilliseconds(1 * time.Minute) },
+		Parser:                   parser.NewParser(parser.Options{EnableExperimentalFunctions: true}),
 	}
 	t.rootEngine = promql.NewEngine(opts)
 
@@ -301,7 +302,7 @@ func ParseLoad(lines []string, i int) (int, *loadCmd, error) {
 			i--
 			break
 		}
-		metric, vals, err := parser.ParseSeriesDesc(defLine)
+		metric, vals, err := parser.NewParser(parser.Options{EnableExperimentalFunctions: true}).ParseSeriesDesc(defLine)
 		if err != nil {
 			if perr, ok := err.(*parser.ParseErr); ok {
 				perr.LineOffset = i
@@ -324,7 +325,7 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 		at   = parts[2]
 		expr = parts[3]
 	)
-	_, err := extpromql.ParseExpr(expr)
+	_, err := extpromql.ParseExprWithParser(parser.NewParser(parser.Options{EnableExperimentalFunctions: true}), expr)
 	if err != nil {
 		if perr, ok := err.(*parser.ParseErr); ok {
 			perr.LineOffset = i
@@ -361,7 +362,7 @@ func ParseEval(lines []string, i int) (int, *evalCmd, error) {
 			cmd.expect(0, parser.SequenceValue{Value: f})
 			break
 		}
-		metric, vals, err := parser.ParseSeriesDesc(defLine)
+		metric, vals, err := parser.NewParser(parser.Options{EnableExperimentalFunctions: true}).ParseSeriesDesc(defLine)
 		if err != nil {
 			if perr, ok := err.(*parser.ParseErr); ok {
 				perr.LineOffset = i

@@ -63,6 +63,17 @@ const (
 	promqlExperimentalFunctions = "promql-experimental-functions"
 )
 
+func newPromQLParser(features []string) parser.Parser {
+	enableExperimentalFunctions := false
+	for _, feature := range features {
+		if feature == promqlExperimentalFunctions {
+			enableExperimentalFunctions = true
+			break
+		}
+	}
+	return parser.NewParser(parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions})
+}
+
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
 	comp := component.Query
@@ -222,9 +233,9 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
+		promQLParser := newPromQLParser(*featureList)
 		for _, feature := range *featureList {
 			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 			}
 			if feature == promqlAtModifier {
@@ -372,6 +383,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySeriesQuantiles,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
+			promQLParser,
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
@@ -438,6 +450,7 @@ func runQuery(
 	queryTelemetrySeriesQuantiles []float64,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
+	promQLParser parser.Parser,
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
@@ -521,6 +534,7 @@ func runQuery(
 		activeQueryTracker,
 		queryMode,
 		disableQueryFallback,
+		promQLParser,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)
