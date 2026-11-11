@@ -876,6 +876,49 @@ func TestDedupSeriesIterator_NativeHistograms(t *testing.T) {
 	}
 }
 
+func TestDedupSeriesIterator_NativeHistogramReplicaSwitchResetsHint(t *testing.T) {
+	newHistogram := func(count uint64, hint histogram.CounterResetHint) *histogram.Histogram {
+		return &histogram.Histogram{
+			CounterResetHint: hint,
+			Count:            count,
+			Sum:              float64(count),
+			Schema:           0,
+			PositiveSpans:    []histogram.Span{{Offset: 0, Length: 1}},
+			PositiveBuckets:  []int64{int64(count)},
+		}
+	}
+
+	for _, hint := range []histogram.CounterResetHint{histogram.NotCounterReset, histogram.GaugeType} {
+		t.Run(fmt.Sprintf("hint-%d", hint), func(t *testing.T) {
+			// Replica a stops after 10000 (e.g. a restart). Replica b continues
+			// after a counter reset; its chunk says "not a counter reset" because
+			// b's own previous sample is not part of the deduplicated series.
+			a := []sample{{t: 0, h: newHistogram(100, hint)}, {t: 10000, h: newHistogram(110, hint)}}
+			b := []sample{{t: 40000, h: newHistogram(5, hint)}, {t: 50000, h: newHistogram(15, hint)}}
+
+			it := newDedupSeriesIterator(
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(a)},
+				noopAdjustableSeriesIterator{newMockedSeriesIterator(b)},
+			)
+			var hints, floatHints []histogram.CounterResetHint
+			for it.Next() != chunkenc.ValNone {
+				_, h := it.AtHistogram(nil)
+				hints = append(hints, h.CounterResetHint)
+				_, fh := it.AtFloatHistogram(nil)
+				floatHints = append(floatHints, fh.CounterResetHint)
+			}
+			testutil.Ok(t, it.Err())
+
+			exp := []histogram.CounterResetHint{hint, hint, histogram.UnknownCounterReset, hint}
+			if hint == histogram.GaugeType {
+				exp = []histogram.CounterResetHint{hint, hint, hint, hint}
+			}
+			require.Equal(t, exp, hints)
+			require.Equal(t, exp, floatHints)
+		})
+	}
+}
+
 func BenchmarkDedupSeriesIterator(b *testing.B) {
 	run := func(b *testing.B, s1, s2 []sample) {
 		it := newDedupSeriesIterator(
