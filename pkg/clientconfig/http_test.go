@@ -8,7 +8,10 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
+	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -100,6 +103,31 @@ func TestNewHTTPClientConfigFromYAML(t *testing.T) {
 				},
 			},
 			err: false,
+		},
+		{
+			desc: "google_iam combined with basic_auth",
+			cfg: HTTPClientConfig{
+				BasicAuth: BasicAuth{Username: "u", Password: "p"},
+				GoogleIAM: &GoogleIAMConfig{},
+			},
+			err: true,
+		},
+		{
+			desc: "google_iam combined with bearer_token",
+			cfg: HTTPClientConfig{
+				BearerToken: "tok",
+				GoogleIAM:   &GoogleIAMConfig{},
+			},
+			err: true,
+		},
+		{
+			desc: "google_iam with missing credentials_file",
+			cfg: HTTPClientConfig{
+				GoogleIAM: &GoogleIAMConfig{
+					CredentialsFile: "testdata/does-not-exist.json",
+				},
+			},
+			err: true,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -260,4 +288,93 @@ func tlsConfigForTest(t *testing.T, clientCAs *x509.CertPool) tls.Config {
 		ClientAuth:   tls.RequireAndVerifyClientCert,
 		ClientCAs:    clientCAs,
 	}
+}
+
+func TestNewHTTPClient_GoogleIAM(t *testing.T) {
+	var tokenRequests int
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenRequests++
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"test-google-iam-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	t.Cleanup(tokenSrv.Close)
+
+	var gotHeader http.Header
+	targetSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Clone()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(targetSrv.Close)
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	testutil.Ok(t, err)
+	pkcs8Key, err := x509.MarshalPKCS8PrivateKey(key)
+	testutil.Ok(t, err)
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8Key})
+
+	credJSON, err := json.Marshal(map[string]string{
+		"type":             "service_account",
+		"project_id":       "test-project",
+		"quota_project_id": "test-quota-project",
+		"private_key_id":   "key-1",
+		"private_key":      string(keyPEM),
+		"client_email":     "test@test-project.iam.gserviceaccount.com",
+		"client_id":        "123456",
+		"token_uri":        tokenSrv.URL + "/token",
+	})
+	testutil.Ok(t, err)
+
+	credFile := filepath.Join(t.TempDir(), "sa.json")
+	testutil.Ok(t, os.WriteFile(credFile, credJSON, 0o600))
+
+	t.Run("credentials_file with custom header", func(t *testing.T) {
+		tokenRequests = 0
+		cfgs, err := LoadConfigs([]byte(fmt.Sprintf(`
+- http_config:
+    google_iam:
+      credentials_file: %s
+    http_headers:
+      X-Custom:
+        values: [val]
+  static_configs: ["localhost:9090"]
+`, credFile)))
+		testutil.Ok(t, err)
+
+		client, err := NewHTTPClient(cfgs[0].HTTPConfig.HTTPClientConfig, "query")
+		testutil.Ok(t, err)
+
+		resp, err := client.Get(targetSrv.URL)
+		testutil.Ok(t, err)
+		testutil.Ok(t, resp.Body.Close())
+
+		testutil.Equals(t, 1, tokenRequests)
+		testutil.Equals(t, "Bearer test-google-iam-token", gotHeader.Get("Authorization"))
+		testutil.Equals(t, "test-quota-project", gotHeader.Get("X-Goog-User-Project"))
+		testutil.Equals(t, "val", gotHeader.Get("X-Custom"))
+	})
+
+	t.Run("application default credentials with custom scope", func(t *testing.T) {
+		tokenRequests = 0
+		t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", credFile)
+
+		cfgs, err := LoadConfigs([]byte(`
+- http_config:
+    google_iam:
+      scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+  static_configs: ["localhost:9090"]
+`))
+		testutil.Ok(t, err)
+
+		client, err := NewHTTPClient(cfgs[0].HTTPConfig.HTTPClientConfig, "query")
+		testutil.Ok(t, err)
+
+		resp, err := client.Get(targetSrv.URL)
+		testutil.Ok(t, err)
+		testutil.Ok(t, resp.Body.Close())
+
+		testutil.Equals(t, 1, tokenRequests)
+		testutil.Equals(t, "Bearer test-google-iam-token", gotHeader.Get("Authorization"))
+	})
 }
