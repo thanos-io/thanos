@@ -23,6 +23,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 ### Fixed
 
 - [#9135](https://github.com/thanos-io/thanos/pull/9135): Tools: `tools bucket verify --repair` with the `index_known_issues` check now reports an error for downsampled blocks instead of treating them as repaired.
+- *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
 - [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
 - [#9081](https://github.com/thanos-io/thanos/pull/9081): Receive: Apply the `write.global.max_concurrency` limit to Cap'n Proto replication writes. Writes waiting for the gate are released when the router cancels them, instead of piling up on the TSDB appender of an ingester that cannot keep up.
