@@ -87,16 +87,16 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 	}
 
 	if meta.Thanos.Downsample.Resolution > 0 {
-		return errors.Wrap(err, "cannot repair downsampled blocks")
+		return errors.New("cannot repair downsampled blocks")
 	}
 
 	level.Info(ctx.Logger).Log("msg", "downloading block for repair", "id", id)
 	if err = block.Download(ctx, ctx.Logger, ctx.Bkt, id, path.Join(dir, id.String())); err != nil {
 		return errors.Wrapf(err, "download block %s", id)
 	}
-	level.Info(ctx.Logger).Log("msg", "downloaded block to be repaired", "id", id, "issue")
+	level.Info(ctx.Logger).Log("msg", "downloaded block to be repaired", "id", id, "issue", IndexKnownIssues{}.IssueID())
 
-	level.Info(ctx.Logger).Log("msg", "repairing block", "id", id, "issue")
+	level.Info(ctx.Logger).Log("msg", "repairing block", "id", id, "issue", IndexKnownIssues{}.IssueID())
 	resid, err := block.Repair(
 		ctx,
 		ctx.Logger,
@@ -121,7 +121,7 @@ func repairIndex(stats block.HealthStats, ctx Context, id ulid.ULID, meta *metad
 		return errors.Wrapf(err, "upload of %s failed", resid)
 	}
 
-	level.Info(ctx.Logger).Log("msg", "safe deleting broken block", "id", id, "issue")
+	level.Info(ctx.Logger).Log("msg", "safe deleting broken block", "id", id, "issue", IndexKnownIssues{}.IssueID())
 	if err := BackupAndDeleteDownloaded(ctx, filepath.Join(dir, id.String()), id); err != nil {
 		return errors.Wrapf(err, "safe deleting old block %s failed", id)
 	}
