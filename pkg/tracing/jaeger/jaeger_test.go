@@ -251,6 +251,13 @@ func TestParseTags(t *testing.T) {
 	}
 }
 
+func TestParseTagsEnvVarWithoutDefault(t *testing.T) {
+	t.Setenv("_TEST_PARSE_TAGS", "env-val")
+
+	testutil.Equals(t, []attribute.KeyValue{attribute.String("key", "env-val")}, parseTags("key=${_TEST_PARSE_TAGS}"))
+	testutil.Equals(t, []attribute.KeyValue{attribute.String("key", "")}, parseTags("key=${_TEST_PARSE_TAGS_UNSET}"))
+}
+
 func extractValueOfEnvVar(input string) (string, string, bool) {
 	kv := strings.SplitN(input, "=", 2)
 	_, v := strings.TrimSpace(kv[0]), strings.TrimSpace(kv[1])
