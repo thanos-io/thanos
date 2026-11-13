@@ -520,7 +520,7 @@ type SeriesStatsCounter struct {
 
 func (c *SeriesStatsCounter) CountSeries(seriesLabels []labelpb.ZLabel) {
 	seriesHash := labelpb.HashWithPrefix("", seriesLabels)
-	if c.lastSeriesHash != 0 || seriesHash != c.lastSeriesHash {
+	if c.lastSeriesHash == 0 || seriesHash != c.lastSeriesHash {
 		c.lastSeriesHash = seriesHash
 		c.Series++
 	}

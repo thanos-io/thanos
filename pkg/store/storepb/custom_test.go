@@ -768,3 +768,19 @@ func TestSeriesRequestWithMatchers(t *testing.T) {
 	testutil.Equals(t, req.MaxTime, r1.MaxTime)
 	testutil.Assert(t, req.WithMatchers() == req, "expected no copy without matchers")
 }
+
+func TestSeriesStatsCounter_CountSeries(t *testing.T) {
+	seriesA := labelpb.ZLabelsFromPromLabels(labels.FromStrings("__name__", "up", "job", "a"))
+	seriesB := labelpb.ZLabelsFromPromLabels(labels.FromStrings("__name__", "up", "job", "b"))
+
+	// A single logical series can arrive split across several responses, so the
+	// counter must only count a new series when the labelset actually changes.
+	var c SeriesStatsCounter
+	c.CountSeries(seriesA)
+	c.CountSeries(seriesA)
+	c.CountSeries(seriesB)
+	c.CountSeries(seriesB)
+	c.CountSeries(seriesA)
+
+	testutil.Equals(t, 3, c.Series)
+}
