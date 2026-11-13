@@ -17,10 +17,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
@@ -36,46 +34,16 @@ import (
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
+func (n nopAppendable) AppenderV2(_ context.Context) storage.AppenderV2 { return nopAppender{} }
 
 type nopAppender struct{}
 
-func (n nopAppender) SetOptions(opts *storage.AppendOptions) {}
-
-func (n nopAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, int64, float64, *histogram.Histogram, *histogram.FloatHistogram, storage.AOptions) (storage.SeriesRef, error) {
 	return 0, nil
 }
 
-func (n nopAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, float64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.Exemplar) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Commit() error                                        { return nil }
-func (n nopAppender) Rollback() error                                      { return nil }
-func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }
-func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.Metadata) (storage.SeriesRef, error) {
-	return 0, nil
-}
+func (n nopAppender) Commit() error   { return nil }
+func (n nopAppender) Rollback() error { return nil }
 
 type nopQueryable struct{}
 
@@ -106,10 +74,10 @@ groups:
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger:     logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
-			Context:    context.Background(),
-			Appendable: nopAppendable{},
-			Queryable:  nopQueryable{},
+			Logger:       logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
+			Context:      context.Background(),
+			AppendableV2: nopAppendable{},
+			Queryable:    nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {

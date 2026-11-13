@@ -36,6 +36,10 @@ func (s sample) T() int64 {
 	return s.t
 }
 
+func (s sample) ST() int64 {
+	return 0
+}
+
 func (s sample) F() float64 {
 	return s.f
 }
@@ -129,6 +133,10 @@ func (s *mockedSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (i
 }
 
 func (s *mockedSeriesIterator) AtT() int64 {
+	return s.samples[s.cur].t
+}
+
+func (s *mockedSeriesIterator) AtST() int64 {
 	return s.samples[s.cur].t
 }
 

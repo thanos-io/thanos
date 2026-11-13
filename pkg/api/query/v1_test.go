@@ -72,6 +72,48 @@ func TestMain(m *testing.M) {
 	custom.TolerantVerifyLeakMain(m)
 }
 
+func TestQueryFactoryExperimentalFunctions(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		engineType PromqlEngineType
+		enabled    bool
+		wantErr    bool
+	}{
+		{name: "prometheus disabled", engineType: PromqlEnginePrometheus, wantErr: true},
+		{name: "prometheus enabled", engineType: PromqlEnginePrometheus, enabled: true},
+		{name: "thanos disabled", engineType: PromqlEngineThanos, wantErr: true},
+		{name: "thanos enabled", engineType: PromqlEngineThanos, enabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			factory := NewQueryFactory(
+				prometheus.NewRegistry(),
+				log.NewNopLogger(),
+				time.Minute,
+				5*time.Minute,
+				time.Minute,
+				false,
+				nil,
+				PromqlQueryModeLocal,
+				true,
+				parser.NewParser(parser.Options{EnableExperimentalFunctions: tc.enabled}),
+			)
+			query, err := factory.makeInstantQuery(
+				context.Background(),
+				tc.engineType,
+				storage.QueryableFunc(func(_, _ int64) (storage.Querier, error) { return storage.NoopQuerier(), nil }),
+				nil,
+				planOrQuery{query: "double_exponential_smoothing(up[1h], 0.5, 0.5)"},
+				&engine.QueryOpts{},
+				time.Now(),
+			)
+			if query != nil {
+				query.Close()
+			}
+			testutil.Equals(t, tc.wantErr, err != nil)
+		})
+	}
+}
+
 type endpointTestCase struct {
 	endpoint baseAPI.ApiFunc
 	params   map[string]string
@@ -102,6 +144,7 @@ var (
 		nil,
 		PromqlQueryModeLocal,
 		false,
+		parser.NewParser(parser.Options{}),
 	)
 
 	emptyRemoteEndpointsCreate = query.NewRemoteEndpointsCreator(
@@ -2012,6 +2055,10 @@ type sample struct {
 
 func (s sample) T() int64 {
 	return s.t
+}
+
+func (s sample) ST() int64 {
+	return 0
 }
 
 func (s sample) F() float64 {

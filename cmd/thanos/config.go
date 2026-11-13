@@ -372,7 +372,7 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 	}
 
 	if common.enableAutoGoMemlimit {
-		limits, err = memlimit.SetGoMemLimitWithOpts(
+		limits, err = memlimit.Set(
 			memlimit.WithRatio(common.memlimitRatio),
 			memlimit.WithProvider(
 				memlimit.ApplyFallback(

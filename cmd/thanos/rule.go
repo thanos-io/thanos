@@ -468,7 +468,7 @@ func runRule(
 	}
 
 	var (
-		appendable storage.Appendable
+		appendable storage.AppendableV2
 		queryable  storage.Queryable
 		tsdbDB     *tsdb.DB
 	)
@@ -587,13 +587,9 @@ func runRule(
 			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
-		if len(conf.EnableFeatures) > 0 {
-			for _, feature := range conf.EnableFeatures {
-				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
-					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
-				}
-			}
+		promQLParser := newPromQLParser(conf.EnableFeatures)
+		if hasFeature(conf.EnableFeatures, promqlExperimentalFunctions) {
+			level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 		}
 
 		// Run rule evaluation and alert notifications.
@@ -627,13 +623,14 @@ func runRule(
 		managerOpts := rules.ManagerOptions{
 			NotifyFunc:             notifyFunc,
 			Logger:                 logutil.GoKitLogToSlog(logger),
-			Appendable:             appendable,
+			AppendableV2:           appendable,
 			ExternalURL:            nil,
 			Queryable:              queryable,
 			ResendDelay:            conf.resendDelay,
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
+			Parser:                 promQLParser,
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
@@ -647,7 +644,7 @@ func runRule(
 			reg,
 			conf.dataDir,
 			managerOpts,
-			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
+			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams, promQLParser),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -950,6 +947,7 @@ func queryFuncCreator(
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
 	doNotAddThanosParams bool,
+	promQLParser parser.Parser,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -1002,7 +1000,7 @@ func queryFuncCreator(
 					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{
 						PartialResponse: partialResponseStrategy == storepb.PartialResponseStrategy_WARN,
 					})
-					expr, err := extpromql.ParseExpr(qs)
+					expr, err := extpromql.ParseExprWithParser(promQLParser, qs)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
@@ -1227,7 +1225,7 @@ func openStatelessRuleStorage(
 	// TODO: add type and unit labels support?
 	remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
 		return 0, nil
-	}, dataDir, 1*time.Minute, &readyScrapeManager{}, false)
+	}, dataDir, 1*time.Minute, &readyScrapeManager{}, false, false, false)
 
 	// Open the agent WAL before applying remote storage config so that the initial
 	// WAL segment exists when QueueManager starts its WAL watcher.
