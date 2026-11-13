@@ -17,8 +17,10 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
@@ -444,4 +446,246 @@ groups:
 		return nil
 	}))
 	testutil.Equals(t, "exceeded limit of 1 with 2 alerts", thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().LastError)
+}
+
+func TestValidateAndCount_Metadata(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		yaml      string
+		expRules  int
+		expectErr bool
+	}{
+		{
+			name: "valid recording rule metadata",
+			yaml: `groups:
+- name: rec
+  partial_response_strategy: warn
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      type: counter
+      unit: requests
+      help: Total HTTP requests by job.
+`,
+			expRules: 1,
+		},
+		{
+			name: "invalid recording rule metadata type",
+			yaml: `groups:
+- name: rec
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      type: not_a_type
+`,
+			expectErr: true,
+		},
+		{
+			name: "metadata on alerting rule rejected",
+			yaml: `groups:
+- name: alert
+  rules:
+  - alert: HighErrorRate
+    expr: up == 0
+    metadata:
+      type: gauge
+`,
+			expectErr: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, errs := ValidateAndCount(strings.NewReader(tc.yaml))
+			if tc.expectErr {
+				testutil.NotOk(t, errs.Err())
+				return
+			}
+			testutil.Ok(t, errs.Err())
+			testutil.Equals(t, tc.expRules, n)
+		})
+	}
+}
+
+type recordedSample struct {
+	lset labels.Labels
+	meta metadata.Metadata
+}
+
+type recordingAppendable struct {
+	mu      sync.Mutex
+	samples map[string]recordedSample
+}
+
+func (r *recordingAppendable) AppenderV2(_ context.Context) storage.AppenderV2 {
+	return &recordingAppender{parent: r}
+}
+
+type recordingAppender struct {
+	parent  *recordingAppendable
+	pending []recordedSample
+}
+
+func (a *recordingAppender) Append(_ storage.SeriesRef, lset labels.Labels, _, _ int64, _ float64, _ *histogram.Histogram, _ *histogram.FloatHistogram, opts storage.AOptions) (storage.SeriesRef, error) {
+	a.pending = append(a.pending, recordedSample{
+		lset: lset.Copy(),
+		meta: opts.Metadata,
+	})
+	return 0, nil
+}
+
+func (a *recordingAppender) Commit() error {
+	a.parent.mu.Lock()
+	defer a.parent.mu.Unlock()
+	for _, s := range a.pending {
+		a.parent.samples[s.lset.Get(labels.MetricName)] = s
+	}
+	a.pending = nil
+	return nil
+}
+
+func (a *recordingAppender) Rollback() error {
+	a.pending = nil
+	return nil
+}
+
+func TestManager_RecordingRuleMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name                    string
+		enableTypeAndUnitLabels bool
+		expLabels               map[string]labels.Labels
+		expMeta                 map[string]metadata.Metadata
+	}{
+		{
+			name:                    "type-and-unit-labels=false",
+			enableTypeAndUnitLabels: false,
+			expLabels: map[string]labels.Labels{
+				"job:http_requests:rate5m": labels.FromStrings("__name__", "job:http_requests:rate5m"),
+				"job:http_requests_total":  labels.FromStrings("__name__", "job:http_requests_total"),
+				"job:feature_state":        labels.FromStrings("__name__", "job:feature_state"),
+			},
+			expMeta: map[string]metadata.Metadata{
+				"job:http_requests:rate5m": {
+					Type: model.MetricTypeGauge,
+					Unit: "requests_per_second",
+					Help: "Per-second rate of HTTP requests.",
+				},
+				"job:http_requests_total": {
+					Type: model.MetricTypeCounter,
+				},
+				"job:feature_state": {
+					Type: model.MetricTypeGauge,
+				},
+			},
+		},
+		{
+			name:                    "type-and-unit-labels=true",
+			enableTypeAndUnitLabels: true,
+			expLabels: map[string]labels.Labels{
+				"job:http_requests:rate5m": labels.FromStrings("__name__", "job:http_requests:rate5m", "__type__", "gauge", "__unit__", "requests_per_second"),
+				"job:http_requests_total":  labels.FromStrings("__name__", "job:http_requests_total", "__type__", "counter"),
+				"job:feature_state":        labels.FromStrings("__name__", "job:feature_state", "__type__", "stateset", "__unit__", "seconds"),
+			},
+			expMeta: map[string]metadata.Metadata{
+				"job:http_requests:rate5m": {
+					Type: model.MetricTypeGauge,
+					Unit: "requests_per_second",
+					Help: "Per-second rate of HTTP requests.",
+				},
+				"job:http_requests_total": {
+					Type: model.MetricTypeCounter,
+				},
+				"job:feature_state": {
+					Type: model.MetricTypeStateset,
+					Unit: "seconds",
+				},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ruleFile := filepath.Join(dir, "rules.yaml")
+			testutil.Ok(t, os.WriteFile(ruleFile, []byte(`groups:
+- name: metadata_group
+  partial_response_strategy: warn
+  interval: 10ms
+  rules:
+  - record: job:http_requests:rate5m
+    expr: sum(rate(http_requests_total[5m])) by (job)
+    metadata:
+      type: gauge
+      unit: requests_per_second
+      help: Per-second rate of HTTP requests.
+  - record: job:http_requests_total
+    expr: http_requests_total
+  - record: job:feature_state
+    expr: feature_state
+`), 0600))
+
+			app := &recordingAppendable{samples: make(map[string]recordedSample)}
+			mgr := NewManager(
+				t.Context(),
+				nil,
+				dir,
+				rules.ManagerOptions{
+					Logger:                  logutil.GoKitLogToSlog(log.NewNopLogger()),
+					AppendableV2:            app,
+					Queryable:               nopQueryable{},
+					AppendMetadata:          true,
+					AutoRecordingMetadata:   true,
+					EnableTypeAndUnitLabels: tc.enableTypeAndUnitLabels,
+				},
+				func(storepb.PartialResponseStrategy) rules.QueryFunc {
+					return func(_ context.Context, q string, ts time.Time) (promql.Vector, error) {
+						switch q {
+						case "http_requests_total":
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      10,
+								Metric: labels.FromStrings("__name__", "http_requests_total"),
+							}}, nil
+						case "feature_state":
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      1,
+								Metric: labels.FromStrings("__name__", "feature_state", "__type__", "stateset", "__unit__", "seconds"),
+							}}, nil
+						default:
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      2.5,
+								Metric: labels.EmptyLabels(),
+							}}, nil
+						}
+					}
+				},
+				labels.EmptyLabels(),
+				"http://localhost",
+			)
+			mgr.Run()
+			t.Cleanup(mgr.Stop)
+
+			testutil.Ok(t, mgr.Update(10*time.Millisecond, []string{ruleFile}))
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+				app.mu.Lock()
+				defer app.mu.Unlock()
+				if len(app.samples) < len(tc.expMeta) {
+					return errors.Errorf("waiting for %d recorded samples, got %d", len(tc.expMeta), len(app.samples))
+				}
+				return nil
+			}))
+
+			app.mu.Lock()
+			defer app.mu.Unlock()
+			for name, expMeta := range tc.expMeta {
+				got, ok := app.samples[name]
+				testutil.Assert(t, ok, "missing recorded sample for %s", name)
+				testutil.Equals(t, expMeta, got.meta)
+				testutil.Equals(t, tc.expLabels[name], got.lset)
+			}
+		})
+	}
 }

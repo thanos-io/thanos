@@ -61,6 +61,7 @@ const (
 	promqlAtModifier            = "promql-at-modifier"
 	queryPushdown               = "query-pushdown"
 	promqlExperimentalFunctions = "promql-experimental-functions"
+	typeAndUnitLabelsFeature    = "type-and-unit-labels"
 )
 
 func hasFeature(features []string, target string) bool {

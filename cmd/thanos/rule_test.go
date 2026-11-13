@@ -19,7 +19,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	prommetadata "github.com/prometheus/prometheus/model/metadata"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/annotations"
 
@@ -304,16 +306,19 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 	// duplicate hash detection in remoteStore.ApplyConfig; verify agentDB and
 	// remoteStore are closed on error so reusing dataDir succeeds without a lock error.
 	dupCfgYAML := fmt.Sprintf("remote_write:\n  - url: %s\n  - url: %s\n", srv.URL, srv.URL)
-	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, agent.DefaultOptions())
+	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, agent.DefaultOptions(), false)
 	testutil.NotOk(t, err)
 
+	agentOpts := agent.DefaultOptions()
+	agentOpts.EnableMetadataWALRecords = true
 	store, err := openStatelessRuleStorage(
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
 		dataDir,
 		[]byte(rwCfgYAML),
 		extLabels,
-		agent.DefaultOptions(),
+		agentOpts,
+		false,
 	)
 	testutil.Ok(t, err)
 	t.Cleanup(func() {
@@ -329,8 +334,23 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 	defer ticker.Stop()
 
 	for req == nil {
-		app := store.Appender(t.Context())
-		_, err := app.Append(0, labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"), ts, 42)
+		app := store.AppenderV2(t.Context())
+		_, err := app.Append(
+			0,
+			labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"),
+			0,
+			ts,
+			42,
+			nil,
+			nil,
+			storage.AOptions{
+				Metadata: prommetadata.Metadata{
+					Type: model.MetricTypeCounter,
+					Unit: "requests",
+					Help: "Total evaluated requests.",
+				},
+			},
+		)
 		testutil.Ok(t, err)
 		testutil.Ok(t, app.Commit())
 		ts++
@@ -349,4 +369,7 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 	testutil.Equals(t, labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"), gotLabels)
 	testutil.Assert(t, len(req.Timeseries[0].Samples) > 0, "expected at least one sample")
 	testutil.Equals(t, 42.0, req.Timeseries[0].Samples[0].Value)
+	testutil.Equals(t, writev2.Metadata_METRIC_TYPE_COUNTER, req.Timeseries[0].Metadata.Type)
+	testutil.Equals(t, "requests", req.Symbols[req.Timeseries[0].Metadata.UnitRef])
+	testutil.Equals(t, "Total evaluated requests.", req.Symbols[req.Timeseries[0].Metadata.HelpRef])
 }
