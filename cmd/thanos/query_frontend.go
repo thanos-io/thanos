@@ -412,36 +412,9 @@ func runQueryFrontend(
 	// Optionally start a gRPC server that exposes the same HTTP API over the httpgrpc protocol.
 	// Disabled by default; enabled by setting --grpc-address.
 	if cfg.grpc.bindAddress != "" {
-		tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
-			cfg.grpc.tlsSrvCert, cfg.grpc.tlsSrvKey, cfg.grpc.tlsSrvClientCA, cfg.grpc.tlsMinVersion, cfg.grpc.tlsCiphers, cfg.grpc.tlsCurves)
-		if err != nil {
-			return errors.Wrap(err, "setup gRPC server")
+		if err := addQueryFrontendGRPCServer(g, logger, reg, tracer, comp, cfg.grpc, instr(handler.ServeHTTP)); err != nil {
+			return err
 		}
-
-		httpgrpcSrv := httpgrpcserver.NewServer(instr(handler.ServeHTTP))
-
-		grpcProbe := prober.NewGRPC()
-		s := grpcserver.New(logger, reg, tracer, nil, nil, comp, grpcProbe,
-			grpcserver.WithServer(func(srv *grpc.Server) {
-				httpgrpc.RegisterHTTPServer(srv, httpgrpcSrv)
-			}),
-			grpcserver.WithListen(cfg.grpc.bindAddress),
-			grpcserver.WithGracePeriod(cfg.grpc.gracePeriod),
-			grpcserver.WithMaxConnAge(cfg.grpc.maxConnectionAge),
-			grpcserver.WithTLSConfig(tlsCfg),
-		)
-
-		g.Add(func() error {
-			grpcProbe.Healthy()
-			grpcProbe.Ready()
-
-			return s.ListenAndServe()
-		}, func(err error) {
-			grpcProbe.NotReady(err)
-			grpcProbe.NotHealthy(err)
-
-			s.Shutdown(err)
-		})
 	}
 
 	// Periodically check downstream URL to ensure it is reachable.
@@ -506,4 +479,48 @@ func extractOrgId(conf *queryFrontendConfig, r *http.Request) string {
 		}
 	}
 	return "anonymous"
+}
+
+// addQueryFrontendGRPCServer adds to g a gRPC server listening on grpcCfg.bindAddress that serves h
+// over the httpgrpc protocol.
+func addQueryFrontendGRPCServer(
+	g *run.Group,
+	logger log.Logger,
+	reg prometheus.Registerer,
+	tracer opentracing.Tracer,
+	comp component.Component,
+	grpcCfg grpcConfig,
+	h http.Handler,
+) error {
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
+		grpcCfg.tlsSrvCert, grpcCfg.tlsSrvKey, grpcCfg.tlsSrvClientCA, grpcCfg.tlsMinVersion, grpcCfg.tlsCiphers, grpcCfg.tlsCurves)
+	if err != nil {
+		return errors.Wrap(err, "setup gRPC server")
+	}
+
+	httpgrpcSrv := httpgrpcserver.NewServer(h)
+
+	grpcProbe := prober.NewGRPC()
+	s := grpcserver.New(logger, reg, tracer, nil, nil, comp, grpcProbe,
+		grpcserver.WithServer(func(srv *grpc.Server) {
+			httpgrpc.RegisterHTTPServer(srv, httpgrpcSrv)
+		}),
+		grpcserver.WithListen(grpcCfg.bindAddress),
+		grpcserver.WithGracePeriod(grpcCfg.gracePeriod),
+		grpcserver.WithMaxConnAge(grpcCfg.maxConnectionAge),
+		grpcserver.WithTLSConfig(tlsCfg),
+	)
+
+	g.Add(func() error {
+		grpcProbe.Healthy()
+		grpcProbe.Ready()
+
+		return s.ListenAndServe()
+	}, func(err error) {
+		grpcProbe.NotReady(err)
+		grpcProbe.NotHealthy(err)
+
+		s.Shutdown(err)
+	})
+	return nil
 }
