@@ -31,12 +31,14 @@ import (
 // queryInstantCodec is used to encode/decode Thanos instant query requests and responses.
 type queryInstantCodec struct {
 	partialResponse bool
+	parser          parser.Parser
 }
 
 // NewThanosQueryInstantCodec initializes a queryInstantCodec.
-func NewThanosQueryInstantCodec(partialResponse bool) *queryInstantCodec {
+func NewThanosQueryInstantCodec(partialResponse bool, p parser.Parser) *queryInstantCodec {
 	return &queryInstantCodec{
 		partialResponse: partialResponse,
+		parser:          p,
 	}
 }
 
@@ -81,7 +83,7 @@ func (c queryInstantCodec) MergeResponse(req queryrange.Request, responses ...qu
 			},
 		}
 	default:
-		v, err := vectorMerge(req, promResponses)
+		v, err := vectorMerge(c.parser, req, promResponses)
 		if err != nil {
 			return nil, err
 		}
@@ -289,10 +291,10 @@ func (c queryInstantCodec) DecodeResponse(ctx context.Context, r *http.Response,
 	return &resp, nil
 }
 
-func vectorMerge(req queryrange.Request, resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
+func vectorMerge(p parser.Parser, req queryrange.Request, resps []*queryrange.PrometheusInstantQueryResponse) (*queryrange.Vector, error) {
 	output := map[string]*queryrange.Sample{}
 	metrics := []string{} // Used to preserve the order for topk and bottomk.
-	sortPlan, err := sortPlanForQuery(req.GetQuery())
+	sortPlan, err := sortPlanForQueryWithParser(p, req.GetQuery())
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +378,11 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	expr, err := extpromql.ParseExpr(q)
+	return sortPlanForQueryWithParser(parser.NewParser(parser.Options{}), q)
+}
+
+func sortPlanForQueryWithParser(p parser.Parser, q string) (sortPlan, error) {
+	expr, err := extpromql.ParseExprWithParser(p, q)
 	if err != nil {
 		return 0, err
 	}

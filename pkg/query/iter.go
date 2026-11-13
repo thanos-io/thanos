@@ -237,6 +237,7 @@ func (errSeriesIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *hi
 	return 0, nil
 }
 func (errSeriesIterator) AtT() int64    { return 0 }
+func (errSeriesIterator) AtST() int64   { return 0 }
 func (it errSeriesIterator) Err() error { return it.err }
 
 // chunkSeriesIterator implements a series iterator on top
@@ -286,6 +287,10 @@ func (it *chunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (i
 
 func (it *chunkSeriesIterator) AtT() int64 {
 	return it.cur.AtT()
+}
+
+func (it *chunkSeriesIterator) AtST() int64 {
+	return it.cur.AtST()
 }
 
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
@@ -364,8 +369,9 @@ func (it *lazyChunkSeriesIterator) AtHistogram(h *histogram.Histogram) (int64, *
 func (it *lazyChunkSeriesIterator) AtFloatHistogram(fh *histogram.FloatHistogram) (int64, *histogram.FloatHistogram) {
 	return it.cur.AtFloatHistogram(fh)
 }
-func (it *lazyChunkSeriesIterator) AtT() int64 { return it.cur.AtT() }
-func (it *lazyChunkSeriesIterator) Err() error { return it.cur.Err() }
+func (it *lazyChunkSeriesIterator) AtT() int64  { return it.cur.AtT() }
+func (it *lazyChunkSeriesIterator) AtST() int64 { return it.cur.AtST() }
+func (it *lazyChunkSeriesIterator) Err() error  { return it.cur.Err() }
 
 func (it *lazyChunkSeriesIterator) Next() chunkenc.ValueType {
 	lastT := it.AtT()

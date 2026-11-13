@@ -145,6 +145,56 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 	}
 }
 
+func TestDedupChunkSeriesMergerPreservesXOR2StartTimestamps(t *testing.T) {
+	labels := labels.FromStrings("bar", "baz")
+	for _, tc := range []struct {
+		name             string
+		base             []chunks.Sample
+		overlap          []chunks.Sample
+		expectedEncoding chunkenc.Encoding
+		expectedST       []int64
+	}{
+		{
+			name: "XOR2 base overlapping XOR",
+			base: []chunks.Sample{
+				startTimestampSample{sample: sample{t: 1000, f: 1}, st: 100},
+				startTimestampSample{sample: sample{t: 7000, f: 7}, st: 200},
+			},
+			overlap:          []chunks.Sample{sample{t: 2000, f: 2}, sample{t: 3000, f: 3}},
+			expectedEncoding: chunkenc.EncXOR2,
+			expectedST:       []int64{100, 200},
+		},
+		{
+			name: "XOR base overlapping XOR2",
+			base: []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 7000, f: 7}},
+			overlap: []chunks.Sample{
+				startTimestampSample{sample: sample{t: 2000, f: 2}, st: 100},
+				startTimestampSample{sample: sample{t: 3000, f: 3}, st: 200},
+			},
+			expectedEncoding: chunkenc.EncXOR,
+			expectedST:       []int64{0, 0},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := NewChunkSeriesMerger()(
+				storage.NewListChunkSeriesFromSamples(labels, tc.base),
+				storage.NewListChunkSeriesFromSamples(labels, tc.overlap),
+			)
+			metas, err := storage.ExpandChunks(merged.Iterator(nil))
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, len(metas))
+			testutil.Equals(t, tc.expectedEncoding, metas[0].Chunk.Encoding())
+
+			samples, err := storage.ExpandSamples(metas[0].Chunk.Iterator(nil), nil)
+			testutil.Ok(t, err)
+			testutil.Equals(t, len(tc.expectedST), len(samples))
+			for i, s := range samples {
+				testutil.Equals(t, tc.expectedST[i], s.ST())
+			}
+		})
+	}
+}
+
 func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	m := NewChunkSeriesMerger()
 
@@ -333,6 +383,10 @@ func (h histoSample) T() int64 {
 	return h.t
 }
 
+func (h histoSample) ST() int64 {
+	return h.t
+}
+
 func (h histoSample) F() float64 {
 	return h.f
 }
@@ -462,6 +516,19 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 			testutil.Equals(t, expChks, actChks)
 		})
 	}
+}
+
+type startTimestampSample struct {
+	sample
+	st int64
+}
+
+func (s startTimestampSample) ST() int64 {
+	return s.st
+}
+
+func (s startTimestampSample) Copy() chunks.Sample {
+	return s
 }
 
 func createSamplesWithStep(start, numOfSamples, step int) []chunks.Sample {

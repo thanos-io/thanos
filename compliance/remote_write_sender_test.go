@@ -72,7 +72,7 @@ func (r internalThanosRuleSender) Run(ctx context.Context, opts sender.Options) 
     interval: 1s
     rules:
       - record: compliance:recording_rule
-        expr: vector(1)
+        expr: '{__name__=~".+"}'
 `
 	if err := os.WriteFile(ruleFile, []byte(ruleContent), 0600); err != nil {
 		return err
@@ -251,10 +251,11 @@ var senderSkips = []string{
 	// and does not emit exemplars from rule evaluations.
 	`^TestRemoteWriteSender/internal-thanos-rule/(samples_sorted|native_histograms_ordering|exemplars)/rw2$`,
 	// 5 segments: Recording/alerting rules in Thanos Ruler produce gauge samples or float histograms
-	// without start timestamps, integer histogram buckets, or scraped metric family metadata.
+	// without start timestamps, integer histogram buckets, or scraped metric family metadata, and
+	// always deduce a concrete metric type (never METRIC_TYPE_UNSPECIFIED).
 	`^TestRemoteWriteSender/internal-thanos-rule/samples/rw2/start_timestamp_for_(counters|histograms|summaries)$`,
 	`^TestRemoteWriteSender/internal-thanos-rule/native_histograms/rw2/(positive_spans_and_deltas|negative_spans_and_deltas|zero_bucket)$`,
-	`^TestRemoteWriteSender/internal-thanos-rule/metadata/rw2/type_(counter|gauge_and_unit|histogram|summary|info_and_stateset)$`,
+	`^TestRemoteWriteSender/internal-thanos-rule/metadata/rw2/(type_(counter|gauge_and_unit|histogram|summary|info_and_stateset)|untyped_metadata)$`,
 }
 
 func TestRemoteWriteSender(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/efficientgo/core/testutil"
@@ -182,7 +183,7 @@ func TestQueryInstantCodec_DecodeRequest(t *testing.T) {
 			r, err := http.NewRequest(http.MethodGet, tc.url, nil)
 			testutil.Ok(t, err)
 
-			codec := NewThanosQueryInstantCodec(tc.partialResponse)
+			codec := NewThanosQueryInstantCodec(tc.partialResponse, parser.NewParser(parser.Options{}))
 			req, err := codec.DecodeRequest(context.Background(), r, nil)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
@@ -273,7 +274,7 @@ func TestQueryInstantCodec_EncodeRequest(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			// Default partial response value doesn't matter when encoding requests.
-			codec := NewThanosQueryInstantCodec(false)
+			codec := NewThanosQueryInstantCodec(false, parser.NewParser(parser.Options{}))
 			r, err := codec.EncodeRequest(context.TODO(), tc.req)
 			if tc.expectedError != nil {
 				testutil.Equals(t, err, tc.expectedError)
@@ -286,7 +287,7 @@ func TestQueryInstantCodec_EncodeRequest(t *testing.T) {
 }
 
 func TestMergeResponse(t *testing.T) {
-	codec := NewThanosQueryInstantCodec(false)
+	codec := NewThanosQueryInstantCodec(false, parser.NewParser(parser.Options{}))
 	defaultReq := &queryrange.PrometheusRequest{
 		Query: "sum(up)",
 	}
@@ -964,7 +965,7 @@ func TestMergeResponse(t *testing.T) {
 }
 
 func TestDecodeResponse(t *testing.T) {
-	codec := NewThanosQueryInstantCodec(false)
+	codec := NewThanosQueryInstantCodec(false, parser.NewParser(parser.Options{}))
 	headers := []*queryrange.PrometheusResponseHeader{
 		{Name: "Content-Type", Values: []string{"application/json"}},
 	}

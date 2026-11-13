@@ -20,9 +20,12 @@ func ParseExpr(input string) (parser.Expr, error) {
 	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
 	maps.Copy(allFuncs, parser.Functions)
 	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	return ParseExprWithParser(parser.NewParser(parser.Options{Functions: allFuncs}), input)
+}
+
+// ParseExprWithParser parses the input PromQL expression with the provided parser.
+func ParseExprWithParser(p parser.Parser, input string) (parser.Expr, error) {
+	return p.ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of

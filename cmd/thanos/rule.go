@@ -174,7 +174,7 @@ func registerRule(app *extkingpin.App) {
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
-	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler)").Default("").StringsVar(&conf.EnableFeatures)
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler), type-and-unit-labels (enables metric type and unit labels __type__ and __unit__ in ruler)").Default("").StringsVar(&conf.EnableFeatures)
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
@@ -199,17 +199,19 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		tsdbOpts := &tsdb.Options{
-			MinBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			MaxBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
-			RetentionDuration:   int64(time.Duration(*tsdbRetention) / time.Millisecond),
-			BlockReloadInterval: time.Minute,
-			NoLockfile:          *noLockFile,
-			WALCompression:      compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			MinBlockDuration:         int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			MaxBlockDuration:         int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
+			RetentionDuration:        int64(time.Duration(*tsdbRetention) / time.Millisecond),
+			BlockReloadInterval:      time.Minute,
+			NoLockfile:               *noLockFile,
+			WALCompression:           compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			EnableMetadataWALRecords: true,
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: compressutil.ParseCompressionType(*walCompression, compression.Snappy),
-			NoLockfile:     *noLockFile,
+			WALCompression:           compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			NoLockfile:               *noLockFile,
+			EnableMetadataWALRecords: true,
 		}
 
 		// Parse and check query configuration.
@@ -468,7 +470,7 @@ func runRule(
 	}
 
 	var (
-		appendable storage.Appendable
+		appendable storage.AppendableV2
 		queryable  storage.Queryable
 		tsdbDB     *tsdb.DB
 	)
@@ -478,8 +480,10 @@ func runRule(
 		return err
 	}
 
+	enableTypeAndUnitLabels := hasFeature(conf.EnableFeatures, typeAndUnitLabelsFeature)
+
 	if len(rwCfgYAML) > 0 {
-		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts)
+		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts, enableTypeAndUnitLabels)
 		if err != nil {
 			return err
 		}
@@ -587,13 +591,12 @@ func runRule(
 			maps.Copy(parser.Functions, parse.XFunctions)
 		}
 
-		if len(conf.EnableFeatures) > 0 {
-			for _, feature := range conf.EnableFeatures {
-				if feature == promqlExperimentalFunctions {
-					parser.EnableExperimentalFunctions = true
-					level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
-				}
-			}
+		promQLParser := newPromQLParser(conf.EnableFeatures)
+		if hasFeature(conf.EnableFeatures, promqlExperimentalFunctions) {
+			level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+		}
+		if enableTypeAndUnitLabels {
+			level.Info(logger).Log("msg", "Type and unit labels enabled.", "option", typeAndUnitLabelsFeature)
 		}
 
 		// Run rule evaluation and alert notifications.
@@ -625,15 +628,19 @@ func runRule(
 		}
 
 		managerOpts := rules.ManagerOptions{
-			NotifyFunc:             notifyFunc,
-			Logger:                 logutil.GoKitLogToSlog(logger),
-			Appendable:             appendable,
-			ExternalURL:            nil,
-			Queryable:              queryable,
-			ResendDelay:            conf.resendDelay,
-			OutageTolerance:        conf.outageTolerance,
-			ForGracePeriod:         conf.forGracePeriod,
-			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
+			NotifyFunc:              notifyFunc,
+			Logger:                  logutil.GoKitLogToSlog(logger),
+			AppendableV2:            appendable,
+			ExternalURL:             nil,
+			Queryable:               queryable,
+			ResendDelay:             conf.resendDelay,
+			OutageTolerance:         conf.outageTolerance,
+			ForGracePeriod:          conf.forGracePeriod,
+			DefaultRuleQueryOffset:  func() time.Duration { return conf.queryOffset },
+			AppendMetadata:          true,
+			AutoRecordingMetadata:   true,
+			EnableTypeAndUnitLabels: enableTypeAndUnitLabels,
+			Parser:                  promQLParser,
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
@@ -647,7 +654,7 @@ func runRule(
 			reg,
 			conf.dataDir,
 			managerOpts,
-			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams),
+			queryFuncCreator(logger, queryClients, promClients, grpcEndpointSet, metrics.duplicatedQuery, metrics.ruleEvalWarnings, conf.query.httpMethod, conf.query.doNotAddThanosParams, promQLParser),
 			conf.lset,
 			// In our case the querying URL is the external URL because in Prometheus
 			// --web.external-url points to it i.e. it points at something where the user
@@ -950,6 +957,7 @@ func queryFuncCreator(
 	ruleEvalWarnings *prometheus.CounterVec,
 	httpMethod string,
 	doNotAddThanosParams bool,
+	promQLParser parser.Parser,
 ) func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 
 	// queryFunc returns query function that hits the HTTP query API of query peers in randomized order until we get a result
@@ -1002,7 +1010,7 @@ func queryFuncCreator(
 					e := query.NewRemoteEngine(logger, queryAPIClients[i], query.Opts{
 						PartialResponse: partialResponseStrategy == storepb.PartialResponseStrategy_WARN,
 					})
-					expr, err := extpromql.ParseExpr(qs)
+					expr, err := extpromql.ParseExprWithParser(promQLParser, qs)
 					if err != nil {
 						level.Error(logger).Log("err", err, "query", qs)
 						continue
@@ -1216,6 +1224,7 @@ func openStatelessRuleStorage(
 	rwCfgYAML []byte,
 	externalLabels labels.Labels,
 	agentOpts *agent.Options,
+	enableTypeAndUnitLabels bool,
 ) (storage.Storage, error) {
 	promCfg, err := parseRemoteWriteConfig(rwCfgYAML, externalLabels)
 	if err != nil {
@@ -1223,11 +1232,13 @@ func openStatelessRuleStorage(
 	}
 
 	slogger := logutil.GoKitLogToSlog(logger)
+	if agentOpts == nil {
+		agentOpts = agent.DefaultOptions()
+	}
 	// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-	// TODO: add type and unit labels support?
 	remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
 		return 0, nil
-	}, dataDir, 1*time.Minute, &readyScrapeManager{}, false)
+	}, dataDir, 1*time.Minute, &readyScrapeManager{}, enableTypeAndUnitLabels, agentOpts.EnableMetadataWALRecords, false)
 
 	// Open the agent WAL before applying remote storage config so that the initial
 	// WAL segment exists when QueueManager starts its WAL watcher.
