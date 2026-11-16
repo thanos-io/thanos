@@ -630,12 +630,24 @@ func (p *PrometheusStore) LabelValues(ctx context.Context, r *storepb.LabelValue
 		if len(matchers) == 0 {
 			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
 		}
-		sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, int(r.Limit))
-		if err != nil {
-			return nil, err
-		}
-		if len(sers) > 0 {
-			return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+		if p.labelCallsSupportMatchers() {
+			// Check existence of metric matching matchers
+			// __name__ always exists and only one result is needed
+			vals, err = p.client.LabelValuesInGRPC(ctx, p.base, "__name__", matchers, r.Start, r.End, 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(vals) > 0 {
+				return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+			}
+		} else {
+			sers, err = p.client.SeriesInGRPC(ctx, p.base, matchers, r.Start, r.End, 1)
+			if err != nil {
+				return nil, err
+			}
+			if len(sers) > 0 {
+				return &storepb.LabelValuesResponse{Values: []string{val}}, nil
+			}
 		}
 		return &storepb.LabelValuesResponse{}, nil
 	}
