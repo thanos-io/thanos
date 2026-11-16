@@ -55,7 +55,8 @@ const (
 // so we only need to cut a chunk when we are going from any histogram encoding to non-histogram encoding.
 func cutNewChunk(curEnc, prevEnc chunkenc.Encoding) bool {
 	isHist := func(c chunkenc.Encoding) bool {
-		return c == chunkenc.EncFloatHistogram || c == chunkenc.EncHistogram
+		return c == chunkenc.EncFloatHistogram || c == chunkenc.EncHistogram ||
+			c == chunkenc.EncFloatHistogramST || c == chunkenc.EncHistogramST
 	}
 
 	if isHist(curEnc) && !isHist(prevEnc) {
@@ -360,7 +361,11 @@ func (h *histogramAggregator) add(s sample) {
 	// If schema of the sample is greater than the
 	// aggregator schema, we need to reduce the resolution.
 	if fh.Schema > h.schema {
-		fh = fh.CopyToSchema(h.schema)
+		var err error
+		if fh, err = fh.CopyToSchema(h.schema); err != nil {
+			// Invalid bucket layout in stored data; same as mustHistogramOp.
+			panic(err)
+		}
 	}
 
 	if h.total > 0 {
@@ -857,7 +862,11 @@ func isHistogramAggrChunk(c *AggrChunk) bool {
 	if err != nil {
 		return false
 	}
-	return cntr.Encoding() == chunkenc.EncHistogram || cntr.Encoding() == chunkenc.EncFloatHistogram
+	switch cntr.Encoding() {
+	case chunkenc.EncHistogram, chunkenc.EncFloatHistogram, chunkenc.EncHistogramST, chunkenc.EncFloatHistogramST:
+		return true
+	}
+	return false
 }
 
 // downsampleAggr downsamples a sequence of aggregation chunks to the given resolution.
@@ -943,9 +952,9 @@ func expandChunkIterator(it chunkenc.Iterator, encoding chunkenc.Encoding, sampl
 	switch encoding {
 	case chunkenc.EncXOR, chunkenc.EncXOR2:
 		return expandXorChunkIterator(it, samples)
-	case chunkenc.EncFloatHistogram:
+	case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
 		return expandFloatHistogramChunkIterator(it, samples)
-	case chunkenc.EncHistogram:
+	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		return expandHistogramChunkIterator(it, samples)
 	default:
 		return errors.Errorf("unexpected chunk encoding %d %s", encoding, encoding)

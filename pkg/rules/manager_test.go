@@ -38,6 +38,19 @@ type nopAppendable struct{}
 
 func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
 
+// nopAppendableV2 is the AppenderV2 counterpart of nopAppendable.
+type nopAppendableV2 struct{}
+
+func (nopAppendableV2) AppenderV2(_ context.Context) storage.AppenderV2 { return nopAppenderV2{} }
+
+type nopAppenderV2 struct{}
+
+func (nopAppenderV2) Append(storage.SeriesRef, labels.Labels, int64, int64, float64, *histogram.Histogram, *histogram.FloatHistogram, storage.AppendV2Options) (storage.SeriesRef, error) {
+	return 0, nil
+}
+func (nopAppenderV2) Commit() error   { return nil }
+func (nopAppenderV2) Rollback() error { return nil }
+
 type nopAppender struct{}
 
 func (n nopAppender) SetOptions(opts *storage.AppendOptions) {}
@@ -106,10 +119,10 @@ groups:
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger:     logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
-			Context:    context.Background(),
-			Appendable: nopAppendable{},
-			Queryable:  nopQueryable{},
+			Logger:       logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
+			Context:      context.Background(),
+			AppendableV2: nopAppendableV2{},
+			Queryable:    nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {

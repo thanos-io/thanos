@@ -95,7 +95,7 @@ func TestQueryFactoryExperimentalFunctions(t *testing.T) {
 				nil,
 				PromqlQueryModeLocal,
 				true,
-				parser.NewParser(parser.Options{EnableExperimentalFunctions: tc.enabled}),
+				parser.Options{EnableExperimentalFunctions: tc.enabled},
 			)
 			query, err := factory.makeInstantQuery(
 				context.Background(),
@@ -144,7 +144,7 @@ var (
 		nil,
 		PromqlQueryModeLocal,
 		false,
-		parser.NewParser(parser.Options{}),
+		parser.Options{},
 	)
 
 	emptyRemoteEndpointsCreate = query.NewRemoteEndpointsCreator(

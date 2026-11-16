@@ -94,26 +94,42 @@ func NewQueryFactory(
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
 	disableFallback bool,
-	p parser.Parser,
+	parserOpts parser.Options,
 ) *QueryFactory {
+	p := parser.NewParser(parserOpts)
+	promOpts := func(registry prometheus.Registerer) promql.EngineOpts {
+		opts := promql.EngineOpts{
+			Logger: logutil.GoKitLogToSlog(logger),
+			Reg:    registry,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return evaluationInterval.Milliseconds()
+			},
+			EnableNegativeOffset: true,
+			EnableAtModifier:     true,
+			Parser:               p,
+		}
+		if activeQueryTracker != nil {
+			opts.ActiveQueryTracker = activeQueryTracker
+		}
+		return opts
+	}
 	makeOpts := func(registry prometheus.Registerer) engine.Opts {
 		opts := engine.Opts{
-			EngineOpts: promql.EngineOpts{
-				Logger: logutil.GoKitLogToSlog(logger),
-				Reg:    registry,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples:    math.MaxInt32,
-				Timeout:       queryTimeout,
-				LookbackDelta: lookbackDelta,
-				NoStepSubqueryIntervalFn: func(int64) int64 {
-					return evaluationInterval.Milliseconds()
-				},
-				EnableNegativeOffset: true,
-				EnableAtModifier:     true,
-				Parser:               p,
+			Logger:        logutil.GoKitLogToSlog(logger),
+			Reg:           registry,
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return evaluationInterval.Milliseconds()
 			},
-			EnableXFunctions: enableXFunctions,
-			EnableAnalysis:   true,
+			EnableExperimentalFunctions: parserOpts.EnableExperimentalFunctions,
+			EnableXFunctions:            enableXFunctions,
+			EnableAnalysis:              true,
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker
@@ -121,10 +137,10 @@ func NewQueryFactory(
 		return opts
 	}
 
-	promEngine := promql.NewEngine(makeOpts(extprom.WrapRegistererWith(
+	promEngine := promql.NewEngine(promOpts(extprom.WrapRegistererWith(
 		map[string]string{
 			"mode":   string(PromqlQueryModeLocal),
-			"engine": string(PromqlEnginePrometheus)}, reg)).EngineOpts)
+			"engine": string(PromqlEnginePrometheus)}, reg)))
 
 	thanosLocal := engine.New(makeOpts(extprom.WrapRegistererWith(
 		map[string]string{

@@ -383,8 +383,9 @@ func (h histoSample) T() int64 {
 	return h.t
 }
 
-func (h histoSample) ST() int64 {
-	return h.t
+// ST is 0 (unknown) like sample.ST; startTimestampSample covers start timestamps.
+func (histoSample) ST() int64 {
+	return 0
 }
 
 func (h histoSample) F() float64 {

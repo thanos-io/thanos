@@ -174,9 +174,9 @@ func (o *overlappingMerger) addChunk(chk chunks.Meta) {
 	switch chk.Chunk.Encoding() {
 	case chunkenc.EncXOR, chunkenc.EncXOR2:
 		o.xorIterators = append(o.xorIterators, chk.Chunk.Iterator(nil))
-	case chunkenc.EncFloatHistogram:
+	case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
 		o.floatHistIterators = append(o.floatHistIterators, chk.Chunk.Iterator(nil))
-	case chunkenc.EncHistogram:
+	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		o.histIterators = append(o.histIterators, chk.Chunk.Iterator(nil))
 	case downsample.ChunkEncAggr:
 		aggrChk := chk.Chunk.(*downsample.AggrChunk)
@@ -214,7 +214,7 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 				return it
 			}}).Iterator(nil)
 
-	case chunkenc.EncHistogram:
+	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
 				it = baseChk.Chunk.Iterator(nil)
@@ -225,7 +225,7 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 			},
 		}).Iterator(nil)
 
-	case chunkenc.EncFloatHistogram:
+	case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
 				it = baseChk.Chunk.Iterator(nil)

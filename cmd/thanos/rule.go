@@ -468,7 +468,7 @@ func runRule(
 	}
 
 	var (
-		appendable storage.Appendable
+		appendable storage.AppendableV2
 		queryable  storage.Queryable
 		tsdbDB     *tsdb.DB
 	)
@@ -627,7 +627,7 @@ func runRule(
 		managerOpts := rules.ManagerOptions{
 			NotifyFunc:             notifyFunc,
 			Logger:                 logutil.GoKitLogToSlog(logger),
-			Appendable:             appendable,
+			AppendableV2:           appendable,
 			ExternalURL:            nil,
 			Queryable:              queryable,
 			ResendDelay:            conf.resendDelay,

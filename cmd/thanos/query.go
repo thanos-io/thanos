@@ -63,7 +63,7 @@ const (
 	promqlExperimentalFunctions = "promql-experimental-functions"
 )
 
-func newPromQLParser(features []string) parser.Parser {
+func newPromQLParserOptions(features []string) parser.Options {
 	enableExperimentalFunctions := false
 	for _, feature := range features {
 		if feature == promqlExperimentalFunctions {
@@ -71,7 +71,11 @@ func newPromQLParser(features []string) parser.Parser {
 			break
 		}
 	}
-	return parser.NewParser(parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions})
+	return parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions}
+}
+
+func newPromQLParser(features []string) parser.Parser {
+	return parser.NewParser(newPromQLParserOptions(features))
 }
 
 // registerQuery registers a query command.
@@ -233,7 +237,7 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		promQLParser := newPromQLParser(*featureList)
+		promQLParserOpts := newPromQLParserOptions(*featureList)
 		for _, feature := range *featureList {
 			if feature == promqlExperimentalFunctions {
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
@@ -383,7 +387,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySeriesQuantiles,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
-			promQLParser,
+			promQLParserOpts,
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
@@ -450,7 +454,7 @@ func runQuery(
 	queryTelemetrySeriesQuantiles []float64,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
-	promQLParser parser.Parser,
+	promQLParserOpts parser.Options,
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
@@ -521,7 +525,10 @@ func runQuery(
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	var activeQueryTracker *promql.ActiveQueryTracker
 	if activeQueryDir != "" {
-		activeQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
+		var err error
+		if activeQueryTracker, err = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger)); err != nil {
+			return errors.Wrap(err, "create active query tracker")
+		}
 	}
 
 	queryCreator := apiv1.NewQueryFactory(
@@ -534,7 +541,7 @@ func runQuery(
 		activeQueryTracker,
 		queryMode,
 		disableQueryFallback,
-		promQLParser,
+		promQLParserOpts,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)
