@@ -53,6 +53,16 @@ linters:
       - linters:
           - staticcheck
         text: 'labels.MetricName is deprecated: .*'  
+      # x/net v0.60+ deprecates its HTTP/2 transport in favour of net/http's Protocols; moving to it changes
+      # transport behaviour, so it is left for a follow-up.
+      - linters:
+          - staticcheck
+        text: 'golang.org/x/net/http2\.(Transport|ConfigureTransport).* is deprecated'
+      # google.golang.org/api deprecates WithCredentialsFile; its replacement needs the credential type, a
+      # behaviour change for users, so it is left for a follow-up.
+      - linters:
+          - staticcheck
+        text: 'google.golang.org/api/option.WithCredentialsFile is deprecated'
     paths:
       - vendor
       - internal/cortex
