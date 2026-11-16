@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -71,7 +72,7 @@ func newPromQLParserOptions(features []string) parser.Options {
 			break
 		}
 	}
-	return parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions}
+	return extpromql.ParserOptions(enableExperimentalFunctions)
 }
 
 func newPromQLParser(features []string) parser.Parser {

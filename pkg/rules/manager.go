@@ -20,12 +20,12 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/rulefmt"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/rules"
 	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -264,7 +264,7 @@ func (g configRuleAdapter) validate() (errs []error) {
 	set[g.group.Name] = struct{}{}
 
 	for i, r := range g.group.Rules {
-		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation, parser.NewParser(parser.Options{})) {
+		for _, node := range r.Validate(rulefmt.RuleNode{}, model.UTF8Validation, extpromql.NewParser(false)) {
 			var ruleName string
 			if r.Alert != "" {
 				ruleName = r.Alert

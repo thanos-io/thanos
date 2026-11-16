@@ -378,7 +378,7 @@ const (
 )
 
 func sortPlanForQuery(q string) (sortPlan, error) {
-	return sortPlanForQueryWithParser(parser.NewParser(parser.Options{}), q)
+	return sortPlanForQueryWithParser(extpromql.NewParser(false), q)
 }
 
 func sortPlanForQueryWithParser(p parser.Parser, q string) (sortPlan, error) {

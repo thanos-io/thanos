@@ -11,13 +11,14 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
@@ -215,7 +216,7 @@ func TestEnforceQueryTenancy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query, parser.NewParser(parser.Options{}))
+			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query, extpromql.NewParser(false))
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tt.expectedQuery, resultQuery)

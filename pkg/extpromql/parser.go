@@ -5,19 +5,32 @@ package extpromql
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
-
-	// Ensure XFunctions are registered in parser.Functions via init().
-	_ "github.com/thanos-io/promql-engine/execution/parse"
+	"github.com/thanos-io/promql-engine/execution/parse"
 )
+
+// ParserOptions returns parser options that accept the Prometheus functions plus
+// the Thanos engine extended functions (xrate, xincrease, xdelta). promql-engine
+// no longer registers those in the global parser.Functions.
+func ParserOptions(enableExperimentalFunctions bool) parser.Options {
+	fns := maps.Clone(parser.Functions)
+	maps.Copy(fns, parse.XFunctions)
+	return parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions, Functions: fns}
+}
+
+// NewParser returns a parser built from ParserOptions.
+func NewParser(enableExperimentalFunctions bool) parser.Parser {
+	return parser.NewParser(ParserOptions(enableExperimentalFunctions))
+}
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	return ParseExprWithParser(parser.NewParser(parser.Options{}), input)
+	return ParseExprWithParser(NewParser(false), input)
 }
 
 // ParseExprWithParser parses the input PromQL expression with the provided parser.
