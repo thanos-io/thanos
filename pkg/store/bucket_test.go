@@ -3812,6 +3812,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		seriesFetchCount:                   1,
 		SeriesFetchDurationSum:             1,
 		SeriesDownloadLatencySum:           1,
+		shardDiscardedSeries:               1,
+		shardDiscardedSeriesSymbolLookups:  1,
 		chunksTouched:                      1,
 		ChunksTouchedSizeSum:               1,
 		chunksFetched:                      1,
@@ -3850,6 +3852,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		seriesFetchCount:                   100,
 		SeriesFetchDurationSum:             100,
 		SeriesDownloadLatencySum:           100,
+		shardDiscardedSeries:               100,
+		shardDiscardedSeriesSymbolLookups:  100,
 		chunksTouched:                      100,
 		ChunksTouchedSizeSum:               100,
 		chunksFetched:                      100,
@@ -3889,6 +3893,8 @@ func TestQueryStatsMerge(t *testing.T) {
 		seriesFetchCount:                   101,
 		SeriesFetchDurationSum:             101,
 		SeriesDownloadLatencySum:           101,
+		shardDiscardedSeries:               101,
+		shardDiscardedSeriesSymbolLookups:  101,
 		chunksTouched:                      101,
 		ChunksTouchedSizeSum:               101,
 		chunksFetched:                      101,
@@ -4027,6 +4033,210 @@ func TestBucketStoreStreamingSeriesLimit(t *testing.T) {
 	testutil.Equals(t, 2, len(srv.SeriesSet))
 	testutil.Equals(t, true, firstBytesLimiterChecked)
 	testutil.Equals(t, true, secondBytesLimiterChecked)
+}
+
+// TestBucketStoreSeriesDiscardedByShard asserts that the store records how many series it fully
+// decodes and then throws away because they belong to a different vertical shard, and how many
+// label value symbol lookups that costs. Querying every shard of the same block decodes each
+// series once per shard but returns it exactly once, so the discarded count is fully determined
+// by the series count and the shard count, whatever way the shard hash splits the series.
+func TestBucketStoreSeriesDiscardedByShard(t *testing.T) {
+	t.Parallel()
+
+	const (
+		totalSeries = 6
+		totalShards = 3
+		// Each series carries labels "a" and "z". The external label is held in block metadata
+		// rather than the block index, so it costs no symbol lookup.
+		labelsPerSeries = 2
+		shardingLabel   = "z"
+	)
+
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+	extLset := labels.FromStrings("region", "eu-west")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.Appender(context.Background())
+	for i := range totalSeries {
+		_, err = app.Append(0, labels.FromStrings("a", "1", shardingLabel, strconv.Itoa(i)), 0, 1)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	id := storetestutil.CreateBlockFromHead(t, auxDir, h)
+	auxBlockDir := filepath.Join(auxDir, id.String())
+	_, err = metadata.InjectThanos(logger, auxBlockDir, metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	reg := prometheus.NewRegistry()
+	bucketStore, err := NewBucketStore(
+		insBkt,
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithLogger(logger),
+		WithRegistry(reg),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	returned := 0
+	for shardIndex := range totalShards {
+		req := &storepb.SeriesRequest{
+			MinTime: timestamp.FromTime(minTime),
+			MaxTime: timestamp.FromTime(maxTime),
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+			},
+			SkipChunks: true,
+			ShardInfo: &storepb.ShardInfo{
+				ShardIndex:  int64(shardIndex),
+				TotalShards: totalShards,
+				By:          true,
+				Labels:      []string{shardingLabel},
+			},
+		}
+		srv := newStoreSeriesServer(context.Background())
+		testutil.Ok(t, bucketStore.Series(req, srv))
+		returned += len(srv.SeriesSet)
+	}
+	testutil.Equals(t, totalSeries, returned)
+
+	discarded := promtest.ToFloat64(bucketStore.metrics.seriesDiscardedByShard.WithLabelValues(tenancy.DefaultTenant))
+	testutil.Equals(t, float64(totalSeries*totalShards-totalSeries), discarded)
+
+	lookups := promtest.ToFloat64(bucketStore.metrics.seriesDiscardedByShardSymbolLookups.WithLabelValues(tenancy.DefaultTenant))
+	testutil.Equals(t, discarded*labelsPerSeries, lookups)
+}
+
+// TestBucketStoreSeriesNotDiscardedWhenUnsharded asserts the discard counters stay at zero for a
+// request that carries no shard info, so the new metrics cannot be read as waste on the
+// unsharded path.
+func TestBucketStoreSeriesNotDiscardedWhenUnsharded(t *testing.T) {
+	t.Parallel()
+
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+	extLset := labels.FromStrings("region", "eu-west")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.Appender(context.Background())
+	for i := range 6 {
+		_, err = app.Append(0, labels.FromStrings("a", "1", "z", strconv.Itoa(i)), 0, 1)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	id := storetestutil.CreateBlockFromHead(t, auxDir, h)
+	auxBlockDir := filepath.Join(auxDir, id.String())
+	_, err = metadata.InjectThanos(logger, auxBlockDir, metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	reg := prometheus.NewRegistry()
+	bucketStore, err := NewBucketStore(
+		insBkt,
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithLogger(logger),
+		WithRegistry(reg),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	req := &storepb.SeriesRequest{
+		MinTime: timestamp.FromTime(minTime),
+		MaxTime: timestamp.FromTime(maxTime),
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+		},
+		SkipChunks: true,
+	}
+	srv := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, bucketStore.Series(req, srv))
+	testutil.Equals(t, 6, len(srv.SeriesSet))
+
+	testutil.Equals(t, float64(0), promtest.ToFloat64(bucketStore.metrics.seriesDiscardedByShard.WithLabelValues(tenancy.DefaultTenant)))
+	testutil.Equals(t, float64(0), promtest.ToFloat64(bucketStore.metrics.seriesDiscardedByShardSymbolLookups.WithLabelValues(tenancy.DefaultTenant)))
 }
 
 type bytesLimiterMock struct {

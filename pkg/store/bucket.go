@@ -159,6 +159,9 @@ type bucketStoreMetrics struct {
 	lazyExpandedPostingSizeBytes                  prometheus.Counter
 	lazyExpandedPostingSeriesOverfetchedSizeBytes prometheus.Counter
 
+	seriesDiscardedByShard              *prometheus.CounterVec
+	seriesDiscardedByShardSymbolLookups *prometheus.CounterVec
+
 	cachedPostingsCompressions           *prometheus.CounterVec
 	cachedPostingsCompressionErrors      *prometheus.CounterVec
 	cachedPostingsCompressionTimeSeconds *prometheus.CounterVec
@@ -375,6 +378,16 @@ func newBucketStoreMetrics(reg prometheus.Registerer, chunkPool pool.Pool[byte])
 		Name: "thanos_bucket_store_lazy_expanded_posting_series_overfetched_size_bytes_total",
 		Help: "Total number of series size in bytes overfetched due to posting lazy expansion.",
 	})
+
+	m.seriesDiscardedByShard = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_discarded_by_shard_total",
+		Help: "Total number of series whose labels were fully resolved and which were then discarded by the query sharding shard matcher.",
+	}, []string{tenancy.MetricLabel})
+
+	m.seriesDiscardedByShardSymbolLookups = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "thanos_bucket_store_series_discarded_by_shard_symbol_lookups_total",
+		Help: "Total number of label value symbol lookups performed for series that were subsequently discarded by the query sharding shard matcher. Label names are not counted because they resolve from an in-memory map.",
+	}, []string{tenancy.MetricLabel})
 
 	return &m
 }
@@ -1364,6 +1377,11 @@ OUTER:
 		}
 
 		if !b.shardMatcher.MatchesLabels(completeLabelset) {
+			// The labels of this series were fully resolved, including one label value symbol
+			// lookup per label, and are now thrown away. Record that so the cost of resolving
+			// labels before the shard check can be measured.
+			b.indexr.stats.shardDiscardedSeries++
+			b.indexr.stats.shardDiscardedSeriesSymbolLookups += len(b.symbolizedLset)
 			continue
 		}
 
@@ -1753,6 +1771,8 @@ func (s *BucketStore) Series(req *storepb.SeriesRequest, seriesSrv storepb.Store
 		s.metrics.cachedPostingsOriginalSizeBytes.WithLabelValues(tenant).Add(float64(stats.CachedPostingsOriginalSizeSum))
 		s.metrics.cachedPostingsCompressedSizeBytes.WithLabelValues(tenant).Add(float64(stats.CachedPostingsCompressedSizeSum))
 		s.metrics.postingsSizeBytes.WithLabelValues(tenant).Observe(float64(int(stats.PostingsFetchedSizeSum) + int(stats.PostingsTouchedSizeSum)))
+		s.metrics.seriesDiscardedByShard.WithLabelValues(tenant).Add(float64(stats.shardDiscardedSeries))
+		s.metrics.seriesDiscardedByShardSymbolLookups.WithLabelValues(tenant).Add(float64(stats.shardDiscardedSeriesSymbolLookups))
 
 		if s.debugLogging {
 			level.Debug(logger).Log("msg", "stats query processed",
@@ -3924,6 +3944,15 @@ type queryStats struct {
 	SeriesFetchDurationSum   time.Duration
 	SeriesDownloadLatencySum time.Duration
 
+	// shardDiscardedSeries counts series whose label symbols were fully resolved and which
+	// were then dropped by the query sharding shard matcher, so all of that decoding work was
+	// thrown away. shardDiscardedSeriesSymbolLookups counts the label value symbol lookups
+	// spent on those series, which bounds how much work a shard check performed before full
+	// label resolution could avoid. Label names are not counted because they resolve from an
+	// in-memory map and are effectively free.
+	shardDiscardedSeries              int
+	shardDiscardedSeriesSymbolLookups int
+
 	chunksTouched            int
 	ChunksTouchedSizeSum     units.Base2Bytes
 	chunksFetched            int
@@ -3999,6 +4028,9 @@ func (s *queryStats) merge(o *queryStats) {
 	s.seriesFetchCount += o.seriesFetchCount
 	s.SeriesFetchDurationSum += o.SeriesFetchDurationSum
 	s.SeriesDownloadLatencySum += o.SeriesDownloadLatencySum
+
+	s.shardDiscardedSeries += o.shardDiscardedSeries
+	s.shardDiscardedSeriesSymbolLookups += o.shardDiscardedSeriesSymbolLookups
 
 	s.chunksTouched += o.chunksTouched
 	s.ChunksTouchedSizeSum += o.ChunksTouchedSizeSum
