@@ -346,4 +346,4 @@ replace (
 	zenhack.net/go/util => github.com/zenhack/go-util v0.0.0-20231005031245-66f5419c2aea
 )
 
-replace github.com/thanos-io/promql-engine => ../promql-engine-prom-bump
+replace github.com/thanos-io/promql-engine => github.com/alanprot/promql-engine v0.0.0-20261117162900-445e509ebb5c
