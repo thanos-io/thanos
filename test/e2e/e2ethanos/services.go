@@ -800,7 +800,7 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 	}
 
 	if len(r.relabelConfigs) > 0 {
-		relabelConfigBytes, err := yaml.Marshal(r.relabelConfigs)
+		relabelConfigBytes, err := marshalRelabelConfigs(r.relabelConfigs)
 		if err != nil {
 			return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(r.Name(), errors.Wrapf(err, "generate relabel configs: %v", relabelConfigBytes))}
 		}
@@ -1029,6 +1029,30 @@ receivers:
 	})), "http")
 }
 
+// marshalRelabelConfigs marshals relabel configs, filling unset separator and
+// replacement with the Prometheus defaults: those fields are always written,
+// so an empty value would override the default when the config is loaded.
+func marshalRelabelConfigs[C relabel.Config | *relabel.Config](cfgs []C) ([]byte, error) {
+	out := make([]relabel.Config, 0, len(cfgs))
+	for _, c := range cfgs {
+		var cfg relabel.Config
+		switch v := any(c).(type) {
+		case relabel.Config:
+			cfg = v
+		case *relabel.Config:
+			cfg = *v
+		}
+		if cfg.Separator == "" {
+			cfg.Separator = relabel.DefaultRelabelConfig.Separator
+		}
+		if cfg.Replacement == "" {
+			cfg.Replacement = relabel.DefaultRelabelConfig.Replacement
+		}
+		out = append(out, cfg)
+	}
+	return yaml.Marshal(out)
+}
+
 func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig, cacheConfig, indexCacheConfig string, extArgs []string, relabelConfig ...relabel.Config) *e2eobs.Observable {
 	f := e.Runnable(fmt.Sprintf("store-gw-%v", name)).
 		WithPorts(map[string]int{"http": 8080, "grpc": 9091}).
@@ -1043,7 +1067,7 @@ func NewStoreGW(e e2e.Environment, name string, bucketConfig client.BucketConfig
 		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store config file: %v", bucketConfig))}
 	}
 
-	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
+	relabelConfigBytes, err := marshalRelabelConfigs(relabelConfig)
 	if err != nil {
 		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(name, errors.Wrapf(err, "generate store relabel file: %v", relabelConfig))}
 	}
@@ -1104,7 +1128,7 @@ func (c *CompactorBuilder) Init(bucketConfig client.BucketConfig, relabelConfig 
 		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact config file: %v", bucketConfig))}
 	}
 
-	relabelConfigBytes, err := yaml.Marshal(relabelConfig)
+	relabelConfigBytes, err := marshalRelabelConfigs(relabelConfig)
 	if err != nil {
 		return &e2eobs.Observable{Runnable: e2e.NewFailedRunnable(c.Name(), errors.Wrapf(err, "generate compact relabel file: %v", relabelConfig))}
 	}

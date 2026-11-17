@@ -17,10 +17,8 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/exemplar"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/metadata"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/storage"
@@ -34,11 +32,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
-type nopAppendable struct{}
-
-func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
-
-// nopAppendableV2 is the AppenderV2 counterpart of nopAppendable.
+// nopAppendableV2 is a no-op storage.AppendableV2.
 type nopAppendableV2 struct{}
 
 func (nopAppendableV2) AppenderV2(_ context.Context) storage.AppenderV2 { return nopAppenderV2{} }
@@ -50,45 +44,6 @@ func (nopAppenderV2) Append(storage.SeriesRef, labels.Labels, int64, int64, floa
 }
 func (nopAppenderV2) Commit() error   { return nil }
 func (nopAppenderV2) Rollback() error { return nil }
-
-type nopAppender struct{}
-
-func (n nopAppender) SetOptions(opts *storage.AppendOptions) {}
-
-func (n nopAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, float64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.Exemplar) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Commit() error                                        { return nil }
-func (n nopAppender) Rollback() error                                      { return nil }
-func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }
-func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.Metadata) (storage.SeriesRef, error) {
-	return 0, nil
-}
 
 type nopQueryable struct{}
 

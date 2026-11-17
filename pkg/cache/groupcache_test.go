@@ -109,6 +109,7 @@ func TestMain(m *testing.M) {
 func BenchmarkGroupcacheRetrieval(b *testing.B) {
 	b.Run("h2c", func(b *testing.B) {
 		fetcher := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
+			//nolint:staticcheck // h2c via http.Transport.Protocols is a follow-up; deprecated in golang.org/x/net v0.61.
 			Transport: &http2.Transport{
 				AllowHTTP: true,
 				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {

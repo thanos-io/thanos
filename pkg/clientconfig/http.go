@@ -174,7 +174,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		// https://github.com/golang/go/issues/39750
 		// TODO: Re-Enable HTTP/2 once upstream issue is fixed.
 		// TODO: use ForceAttemptHTTP2 when we move to Go 1.13+.
-		err := http2.ConfigureTransport(rt.(*http.Transport))
+		err := http2.ConfigureTransport(rt.(*http.Transport)) //nolint:staticcheck // http.Transport.Protocols migration is a follow-up; deprecated in golang.org/x/net v0.61.
 		if err != nil {
 			return nil, err
 		}
