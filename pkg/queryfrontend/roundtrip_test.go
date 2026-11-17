@@ -967,3 +967,66 @@ func seriesResults(fail bool) (*int, http.Handler) {
 		count++
 	})
 }
+
+func TestRoundTripSeriesCacheReplicaLabels(t *testing.T) {
+	cacheConf := &queryrange.ResultsCacheConfig{CacheConfig: cortexcache.Config{
+		EnableFifoCache: true,
+		Fifocache:       cortexcache.FifoCacheConfig{MaxSizeBytes: "1MiB", MaxSizeItems: 1000, Validity: time.Hour},
+	}}
+	tpw, err := NewTripperware(Config{
+		CortexHandlerConfig: &transport.HandlerConfig{},
+		LabelsConfig:        LabelsConfig{Limits: defaultLimits, ResultsCacheConfig: cacheConf, SplitQueriesByInterval: day},
+	}, nil, log.NewNopLogger())
+	testutil.Ok(t, err)
+
+	deduplicated := []map[string]string{{"__name__": "up", "job": "api"}}
+	replicas := []map[string]string{
+		{"__name__": "up", "job": "api", "replica": "a"},
+		{"__name__": "up", "job": "api", "replica": "b"},
+	}
+	calls := 0
+	rt := newFakeRoundTripper()
+	rt.setHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		testutil.Ok(t, r.ParseForm())
+		data := replicas
+		if r.FormValue("replicaLabels[]") == "replica" {
+			data = deduplicated
+		}
+		testutil.Ok(t, json.NewEncoder(w).Encode(map[string]any{"status": "success", "data": data}))
+	}))
+	frontend := tpw(rt)
+	for _, tc := range []struct {
+		name          string
+		replicaLabels []string
+		expected      []map[string]string
+		calls         int
+	}{
+		{name: "default", expected: replicas, calls: 1},
+		{name: "replica override", replicaLabels: []string{"replica"}, expected: deduplicated, calls: 2},
+		{name: "cluster override", replicaLabels: []string{"cluster"}, expected: replicas, calls: 3},
+		{name: "cached replica override", replicaLabels: []string{"replica"}, expected: deduplicated, calls: 3},
+		{name: "cached cluster override", replicaLabels: []string{"cluster"}, expected: replicas, calls: 3},
+		{name: "cached default", expected: replicas, calls: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &ThanosSeriesRequest{Path: "/api/v1/series", Start: 0, End: 2 * hour, Dedup: true,
+				ReplicaLabels: tc.replicaLabels,
+				Matchers:      [][]*labels.Matcher{{labels.MustNewMatcher(labels.MatchEqual, "__name__", "up")}},
+			}
+			ctx := user.InjectOrgID(context.Background(), "1")
+			httpReq, err := NewThanosLabelsCodec(true, day).EncodeRequest(ctx, req)
+			testutil.Ok(t, err)
+			resp, err := frontend.RoundTrip(httpReq)
+			testutil.Ok(t, err)
+			defer func() { testutil.Ok(t, resp.Body.Close()) }()
+			testutil.Equals(t, http.StatusOK, resp.StatusCode)
+			var actual struct {
+				Data []map[string]string `json:"data"`
+			}
+			testutil.Ok(t, json.NewDecoder(resp.Body).Decode(&actual))
+			testutil.Equals(t, tc.expected, actual.Data)
+			testutil.Equals(t, tc.calls, calls)
+		})
+	}
+}

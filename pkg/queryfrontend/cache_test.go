@@ -242,3 +242,29 @@ func TestLowerStepCacheCandidates(t *testing.T) {
 
 	testutil.Equals(t, []int64(nil), lowerStepCacheCandidates(14*seconds))
 }
+
+func TestSeriesCacheKeyReplicaLabels(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		first, second []string
+		equal         bool
+	}{
+		{name: "default and empty", first: nil, second: []string{}, equal: true},
+		{name: "default and override", first: nil, second: []string{"replica"}},
+		{name: "different overrides", first: []string{"replica"}, second: []string{"cluster"}},
+		{name: "same override", first: []string{"replica"}, second: []string{"replica"}, equal: true},
+		{name: "label order", first: []string{"replica", "cluster"}, second: []string{"cluster", "replica"}, equal: true},
+		{name: "label boundaries", first: []string{"cluster,replica"}, second: []string{"cluster", "replica"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			splitter := newThanosCacheKeyGenerator()
+			req := &ThanosSeriesRequest{Start: 0, SplitInterval: time.Hour, ReplicaLabels: tc.first}
+			original := append([]string(nil), req.ReplicaLabels...)
+			first := splitter.GenerateCacheKey("tenant", req)
+			testutil.Equals(t, original, append([]string(nil), req.ReplicaLabels...))
+			req.ReplicaLabels = tc.second
+			second := splitter.GenerateCacheKey("tenant", req)
+			testutil.Equals(t, tc.equal, first == second)
+		})
+	}
+}
