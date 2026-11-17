@@ -117,12 +117,19 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
 		meta2MetricMeta, ok := meta2[metric]
 		testutil.Assert(t, ok)
 
-		sort.Slice(meta1MetricMeta, func(i, j int) bool {
-			return meta1MetricMeta[i].Help < meta1MetricMeta[j].Help
-		})
-		sort.Slice(meta2MetricMeta, func(i, j int) bool {
-			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
-		})
+		// Entries can share help and differ only by unit or type, so sort by all three.
+		sort.Slice(meta1MetricMeta, func(i, j int) bool { return metaLess(meta1MetricMeta[i], meta1MetricMeta[j]) })
+		sort.Slice(meta2MetricMeta, func(i, j int) bool { return metaLess(meta2MetricMeta[i], meta2MetricMeta[j]) })
 		testutil.Equals(t, meta1MetricMeta, meta2MetricMeta)
 	}
+}
+
+func metaLess(a, b metadatapb.Meta) bool {
+	if a.Help != b.Help {
+		return a.Help < b.Help
+	}
+	if a.Unit != b.Unit {
+		return a.Unit < b.Unit
+	}
+	return a.Type < b.Type
 }

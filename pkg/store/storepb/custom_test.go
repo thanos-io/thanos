@@ -41,7 +41,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series 
 		testutil.Ok(tb, err)
 
 		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+			a.Append(smpl.t, smpl.t, smpl.v)
 		}
 
 		ch := AggrChunk{

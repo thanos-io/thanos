@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -62,6 +63,21 @@ const (
 	queryPushdown               = "query-pushdown"
 	promqlExperimentalFunctions = "promql-experimental-functions"
 )
+
+func newPromQLParserOptions(features []string) parser.Options {
+	enableExperimentalFunctions := false
+	for _, feature := range features {
+		if feature == promqlExperimentalFunctions {
+			enableExperimentalFunctions = true
+			break
+		}
+	}
+	return extpromql.ParserOptions(enableExperimentalFunctions)
+}
+
+func newPromQLParser(features []string) parser.Parser {
+	return parser.NewParser(newPromQLParserOptions(features))
+}
 
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
@@ -222,9 +238,9 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
+		promQLParserOpts := newPromQLParserOptions(*featureList)
 		for _, feature := range *featureList {
 			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 			}
 			if feature == promqlAtModifier {
@@ -372,6 +388,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySeriesQuantiles,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
+			promQLParserOpts,
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
@@ -438,6 +455,7 @@ func runQuery(
 	queryTelemetrySeriesQuantiles []float64,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
+	promQLParserOpts parser.Options,
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
@@ -508,7 +526,10 @@ func runQuery(
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	var activeQueryTracker *promql.ActiveQueryTracker
 	if activeQueryDir != "" {
-		activeQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
+		var err error
+		if activeQueryTracker, err = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger)); err != nil {
+			return errors.Wrap(err, "create active query tracker")
+		}
 	}
 
 	queryCreator := apiv1.NewQueryFactory(
@@ -521,6 +542,7 @@ func runQuery(
 		activeQueryTracker,
 		queryMode,
 		disableQueryFallback,
+		promQLParserOpts,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)

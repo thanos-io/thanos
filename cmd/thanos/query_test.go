@@ -10,6 +10,23 @@ import (
 	"github.com/efficientgo/core/testutil"
 )
 
+func TestNewPromQLParserExperimentalFunctions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		features []string
+		wantErr  bool
+	}{
+		{name: "disabled", wantErr: true},
+		{name: "unrelated feature", features: []string{promqlAtModifier}, wantErr: true},
+		{name: "enabled", features: []string{promqlExperimentalFunctions}, wantErr: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := newPromQLParser(tc.features).ParseExpr("double_exponential_smoothing(up[1h], 0.5, 0.5)")
+			testutil.Equals(t, tc.wantErr, err != nil)
+		})
+	}
+}
+
 func TestLookbackDeltaFactory(t *testing.T) {
 	type testCase struct {
 		stepMillis int64

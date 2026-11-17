@@ -98,6 +98,7 @@ type QueryAPI struct {
 	queryableCreate       query.QueryableCreator
 	remoteEndpointsCreate query.RemoteEndpointsCreator
 	queryCreate           queryCreator
+	promQLParser          parser.Parser
 	defaultEngine         PromqlEngineType
 	lookbackDeltaCreate   func(int64) time.Duration
 	ruleGroups            rules.UnaryClient
@@ -178,6 +179,7 @@ func NewQueryAPI(
 		baseAPI:                                api.NewBaseAPI(logger, disableCORS, flagsMap),
 		logger:                                 logger,
 		queryCreate:                            queryCreate,
+		promQLParser:                           queryCreate.parser,
 		defaultEngine:                          defaultEngine,
 		lookbackDeltaCreate:                    lookbackDeltaCreate,
 		queryableCreate:                        queryableCreate,
@@ -554,7 +556,7 @@ func (qapi *QueryAPI) queryExplain(r *http.Request) (any, []error, *api.ApiError
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
+	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam, qapi.promQLParser)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -660,7 +662,7 @@ func (qapi *QueryAPI) query(r *http.Request) (any, []error, *api.ApiError, func(
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam, qapi.promQLParser)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -848,7 +850,7 @@ func (qapi *QueryAPI) queryRangeExplain(r *http.Request) (any, []error, *api.Api
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
+	queryStr, _, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam, qapi.promQLParser)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}
@@ -980,7 +982,7 @@ func (qapi *QueryAPI) queryRange(r *http.Request) (any, []error, *api.ApiError, 
 	if lookbackDeltaFromReq > 0 {
 		lookbackDelta = lookbackDeltaFromReq
 	}
-	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam)
+	queryStr, tenant, ctx, err := tenancy.RewritePromQL(ctx, r, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel, queryParam, qapi.promQLParser)
 	if err != nil {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
 	}

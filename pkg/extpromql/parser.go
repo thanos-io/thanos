@@ -11,18 +11,31 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql/parser"
-
 	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
+// ParserOptions returns parser options that accept the Prometheus functions plus
+// the Thanos engine extended functions (xrate, xincrease, xdelta). promql-engine
+// no longer registers those in the global parser.Functions.
+func ParserOptions(enableExperimentalFunctions bool) parser.Options {
+	fns := maps.Clone(parser.Functions)
+	maps.Copy(fns, parse.XFunctions)
+	return parser.Options{EnableExperimentalFunctions: enableExperimentalFunctions, Functions: fns}
+}
+
+// NewParser returns a parser built from ParserOptions.
+func NewParser(enableExperimentalFunctions bool) parser.Parser {
+	return parser.NewParser(ParserOptions(enableExperimentalFunctions))
+}
+
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	maps.Copy(allFuncs, parser.Functions)
-	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	return ParseExprWithParser(NewParser(false), input)
+}
+
+// ParseExprWithParser parses the input PromQL expression with the provided parser.
+func ParseExprWithParser(p parser.Parser, input string) (parser.Expr, error) {
+	return p.ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of

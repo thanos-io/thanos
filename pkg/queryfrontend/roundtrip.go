@@ -17,6 +17,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/promql/parser"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	"github.com/thanos-io/thanos/internal/cortex/util/validation"
@@ -34,7 +35,7 @@ const (
 var labelValuesPattern = regexp.MustCompile("/api/v1/label/.+/values$")
 
 // NewTripperware returns a Tripperware which sends requests to different sub tripperwares based on the query type.
-func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger) (queryrange.Tripperware, error) {
+func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger, p parser.Parser) (queryrange.Tripperware, error) {
 	var (
 		queryRangeLimits, labelsLimits queryrange.Limits
 		err                            error
@@ -55,7 +56,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 
 	queryRangeCodec := NewThanosQueryRangeCodec(config.QueryRangeConfig.PartialResponseStrategy)
 	labelsCodec := NewThanosLabelsCodec(config.LabelsConfig.PartialResponseStrategy, config.DefaultTimeRange)
-	queryInstantCodec := NewThanosQueryInstantCodec(config.QueryRangeConfig.PartialResponseStrategy)
+	queryInstantCodec := NewThanosQueryInstantCodec(config.QueryRangeConfig.PartialResponseStrategy, p)
 
 	queryRangeTripperware, err := newQueryRangeTripperware(
 		config.QueryRangeConfig,
@@ -63,7 +64,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		queryRangeCodec,
 		config.NumShards,
 		config.CortexHandlerConfig.QueryStatsEnabled,
-		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders)
+		prometheus.WrapRegistererWith(prometheus.Labels{"tripperware": "query_range"}, reg), logger, config.ForwardHeaders, p)
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +82,7 @@ func NewTripperware(config Config, reg prometheus.Registerer, logger log.Logger)
 		config.ForwardHeaders,
 		config.CortexHandlerConfig.QueryStatsEnabled,
 		config.QueryInstantConfig,
+		p,
 	)
 	return func(next http.RoundTripper) http.RoundTripper {
 		tripper := newRoundTripper(
@@ -169,6 +171,7 @@ func newQueryRangeTripperware(
 	reg prometheus.Registerer,
 	logger log.Logger,
 	forwardHeaders []string,
+	p parser.Parser,
 ) (queryrange.Tripperware, error) {
 	queryRangeMiddleware := []queryrange.Middleware{queryrange.NewLimitsMiddleware(limits)}
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
@@ -206,7 +209,7 @@ func newQueryRangeTripperware(
 	}
 
 	if numShards > 0 {
-		analyzer := querysharding.NewQueryAnalyzer()
+		analyzer := querysharding.NewQueryAnalyzer(p)
 		queryRangeMiddleware = append(
 			queryRangeMiddleware,
 			PromQLShardingMiddleware(analyzer, numShards, limits, codec, reg),
@@ -343,11 +346,12 @@ func newInstantQueryTripperware(
 	forwardHeaders []string,
 	forceStats bool,
 	instantQueryConfig QueryInstantConfig,
+	p parser.Parser,
 ) queryrange.Tripperware {
 	var instantQueryMiddlewares []queryrange.Middleware
 	m := queryrange.NewInstrumentMiddlewareMetrics(reg)
 	if numShards > 0 {
-		analyzer := querysharding.NewQueryAnalyzer()
+		analyzer := querysharding.NewQueryAnalyzer(p)
 		instantQueryMiddlewares = append(
 			instantQueryMiddlewares,
 			queryrange.InstrumentMiddleware("sharding", m),

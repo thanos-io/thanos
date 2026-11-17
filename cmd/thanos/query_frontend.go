@@ -306,16 +306,16 @@ func runQueryFrontend(
 		maps.Copy(parser.Functions, parse.XFunctions)
 	}
 
+	promQLParser := newPromQLParser(cfg.EnableFeatures)
 	if len(cfg.EnableFeatures) > 0 {
 		for _, feature := range cfg.EnableFeatures {
 			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
 				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 			}
 		}
 	}
 
-	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
+	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger, promQLParser)
 	if err != nil {
 		return errors.Wrap(err, "setup tripperwares")
 	}

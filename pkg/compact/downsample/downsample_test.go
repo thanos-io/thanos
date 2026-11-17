@@ -1195,20 +1195,23 @@ func TestDownsampleCounterBoundaryReset(t *testing.T) {
 }
 
 func TestExpandChunkIterator(t *testing.T) {
-	// Validate that expanding the chunk iterator filters out-of-order samples
-	// and staleness markers.
-	// Same timestamps are okay since we use them for counter markers.
-	var res []sample
-	testutil.Ok(t,
-		expandChunkIterator(
-			newSampleIterator([]sample{
-				{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 200, v: 5},
-				{t: 300, v: 6}, {t: 400, v: math.Float64frombits(value.StaleNaN)}, {t: 500, v: 5},
-			}), chunkenc.EncXOR, &res,
-		),
-	)
+	// Validate that expanding XOR and XOR2 chunk iterators filters out-of-order samples
+	// and staleness markers. Same timestamps are okay since we use them for counter markers.
+	for _, encoding := range []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR2} {
+		t.Run(encoding.String(), func(t *testing.T) {
+			var res []sample
+			testutil.Ok(t,
+				expandChunkIterator(
+					newSampleIterator([]sample{
+						{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 200, v: 5},
+						{t: 300, v: 6}, {t: 400, v: math.Float64frombits(value.StaleNaN)}, {t: 500, v: 5},
+					}), encoding, &res,
+				),
+			)
 
-	testutil.Equals(t, []sample{{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 300, v: 6}, {t: 500, v: 5}}, res)
+			testutil.Equals(t, []sample{{t: 100, v: 1}, {t: 200, v: 2}, {t: 200, v: 3}, {t: 201, v: 4}, {t: 300, v: 6}, {t: 500, v: 5}}, res)
+		})
+	}
 }
 
 var (
@@ -1622,7 +1625,7 @@ func TestDownsampleAggrAndNonEmptyXORChunks(t *testing.T) {
 	app, err := raw.Appender()
 	testutil.Ok(t, err)
 
-	app.Append(1587690005794, 42.5)
+	app.Append(0, 1587690005794, 42.5)
 
 	ser.chunks = append(ser.chunks, encodeTestAggrSeries(aggr), chunks.Meta{
 		MinTime: math.MaxInt64,
@@ -1717,14 +1720,14 @@ func chunksToSeriesIteratable(t *testing.T, inRaw [][]sample, inAggr []map[AggrT
 
 			for _, s := range samples {
 				if s.fh != nil {
-					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+					c, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.t, s.fh, false)
 					require.NoError(t, err)
 					if c != nil {
 						chk = c
 					}
 					continue
 				}
-				app.Append(s.t, s.v)
+				app.Append(0, s.t, s.v)
 			}
 			ser.chunks = append(ser.chunks, chunks.Meta{
 				MinTime: samples[0].t,
@@ -1768,10 +1771,10 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 					b.maxt = s.t
 				}
 				if at == AggrCount {
-					b.apps[at].Append(s.t, s.v)
+					b.apps[at].Append(0, s.t, s.v)
 				} else {
 					app := b.apps[at].(*chunkenc.FloatHistogramAppender)
-					_, _, _, err := app.AppendFloatHistogram(app, s.t, s.fh, false)
+					_, _, _, err := app.AppendFloatHistogram(app, s.t, s.t, s.fh, false)
 					if err != nil {
 						panic(err)
 					}
@@ -1790,7 +1793,7 @@ func encodeTestAggrSeries(v map[AggrType][]sample) chunks.Meta {
 				if s.t > b.maxt {
 					b.maxt = s.t
 				}
-				b.apps[at].Append(s.t, s.v)
+				b.apps[at].Append(0, s.t, s.v)
 			}
 		}
 		return b.encode()
@@ -2100,6 +2103,10 @@ func (s testSample) T() int64 {
 	return s.t
 }
 
+func (s testSample) ST() int64 {
+	return s.t
+}
+
 func (s testSample) F() float64 {
 	return s.f
 }
@@ -2160,6 +2167,10 @@ func (it *sampleIterator) AtFloatHistogram(*histogram.FloatHistogram) (int64, *h
 
 func (it *sampleIterator) AtT() int64 {
 	return it.l[it.i].t
+}
+
+func (it *sampleIterator) AtST() int64 {
+	return 0
 }
 
 // memBlock is an in-memory block that implements a subset of the tsdb.BlockReader interface
@@ -2716,7 +2727,7 @@ func chunksFromHistogramSamples(t *testing.T, samples []sample) []chunks.Meta {
 			chk, app = newHistogramChunk(t)
 			mint = s.t
 		}
-		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.fh, false)
+		_, _, _, err := app.AppendFloatHistogram(app.(*chunkenc.FloatHistogramAppender), s.t, s.t, s.fh, false)
 		if err != nil {
 			panic(err)
 		}

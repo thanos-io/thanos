@@ -74,7 +74,7 @@ const defaultGoogleIAMScope = "https://www.googleapis.com/auth/monitoring.read"
 
 // GoogleIAMConfig configures Google Cloud IAM authentication for HTTP clients.
 type GoogleIAMConfig struct {
-	// CredentialsFile is an optional path to a Google Cloud credentials JSON file.
+	// CredentialsFile is an optional path to a Google Cloud service account key JSON file.
 	// When empty, Application Default Credentials are used.
 	CredentialsFile string `yaml:"credentials_file"`
 	// Scopes specifies OAuth2 scopes to request. Defaults to https://www.googleapis.com/auth/monitoring.read.
@@ -174,7 +174,7 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 		// https://github.com/golang/go/issues/39750
 		// TODO: Re-Enable HTTP/2 once upstream issue is fixed.
 		// TODO: use ForceAttemptHTTP2 when we move to Go 1.13+.
-		err := http2.ConfigureTransport(rt.(*http.Transport))
+		err := http2.ConfigureTransport(rt.(*http.Transport)) //nolint:staticcheck // http.Transport.Protocols migration is a follow-up; deprecated in golang.org/x/net v0.61.
 		if err != nil {
 			return nil, err
 		}
@@ -322,7 +322,9 @@ func newGoogleIAMRoundTripper(cfg *GoogleIAMConfig, next http.RoundTripper) (htt
 		option.WithScopes(scopes...),
 	}
 	if cfg.CredentialsFile != "" {
-		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile))
+		// Accept only service account files, as Prometheus' googleiam does:
+		// WithCredentialsFile also loaded unvalidated external account configs.
+		opts = append(opts, option.WithAuthCredentialsFile(option.ServiceAccount, cfg.CredentialsFile))
 	} else {
 		creds, err := google.FindDefaultCredentials(ctx, scopes...)
 		if err != nil {
