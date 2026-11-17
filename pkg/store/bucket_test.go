@@ -4254,3 +4254,755 @@ func (c *mockBlockLifecycleCallback) PreAdd(meta metadata.Meta) error {
 	}
 	return nil
 }
+
+// symbolTableReader is an indexheader.Reader that only resolves symbols, recording every
+// reference it is asked for so a test can assert which symbols were read. The embedded nil
+// interface satisfies the rest of the contract; a test that calls anything else panics, which
+// is the intent.
+type symbolTableReader struct {
+	indexheader.Reader
+
+	symbols  map[uint32]string
+	lookedUp []uint32
+}
+
+func (r *symbolTableReader) LookupSymbol(_ context.Context, o uint32) (string, error) {
+	r.lookedUp = append(r.lookedUp, o)
+	s, ok := r.symbols[o]
+	if !ok {
+		return "", fmt.Errorf("symbol %d not in table", o)
+	}
+	return s, nil
+}
+
+// TestBlockSeriesClientShardMatches checks that resolving only the sharding labels and testing
+// the shard with them answers exactly what resolving every label and testing the complete label
+// set answers, and that the label values that do not take part in the hash are left unresolved.
+func TestBlockSeriesClientShardMatches(t *testing.T) {
+	t.Parallel()
+
+	// Reference 1 is a label name, 2 its value, and so on; the test asserts on these numbers
+	// to tell which symbols were read.
+	const (
+		refNameHostEnv  = 1
+		refValueProd    = 2
+		refNameJob      = 3
+		refValueAPI     = 4
+		refNameInstance = 5
+		refValueHostA   = 6
+		refNameRegion   = 7
+		refValueEUWest  = 8
+	)
+	symbols := map[uint32]string{
+		refNameHostEnv:  "host_env",
+		refValueProd:    "prod",
+		refNameJob:      "job",
+		refValueAPI:     "api",
+		refNameInstance: "instance",
+		refValueHostA:   "host-a",
+		refNameRegion:   "region",
+		refValueEUWest:  "eu-west",
+	}
+
+	// Label references in index order, which is sorted by label name.
+	seriesWithHostEnv := []symbolizedLabel{
+		{name: refNameHostEnv, value: refValueProd},
+		{name: refNameInstance, value: refValueHostA},
+		{name: refNameJob, value: refValueAPI},
+	}
+	seriesWithoutHostEnv := []symbolizedLabel{
+		{name: refNameInstance, value: refValueHostA},
+		{name: refNameJob, value: refValueAPI},
+	}
+
+	for _, tc := range []struct {
+		name                 string
+		symbolizedLset       []symbolizedLabel
+		extLset              labels.Labels
+		shardingLabels       []string
+		by                   bool
+		withoutReplicaLabels []string
+		totalShards          int64
+		// nilShardMatcher mimics LabelNames and LabelValues, which reuse this client with no
+		// shard matcher at all.
+		nilShardMatcher bool
+
+		expectPreCheck bool
+		// expectUnresolved lists value references that must never be looked up, because they
+		// belong to labels that do not take part in the shard hash.
+		expectUnresolved []uint32
+	}{
+		{
+			name:             "shard by a label the series carries",
+			symbolizedLset:   seriesWithHostEnv,
+			shardingLabels:   []string{"host_env"},
+			by:               true,
+			totalShards:      3,
+			expectPreCheck:   true,
+			expectUnresolved: []uint32{refValueHostA, refValueAPI},
+		},
+		{
+			name:             "shard by a label the series does not carry",
+			symbolizedLset:   seriesWithoutHostEnv,
+			shardingLabels:   []string{"host_env"},
+			by:               true,
+			totalShards:      3,
+			expectPreCheck:   true,
+			expectUnresolved: []uint32{refValueHostA, refValueAPI},
+		},
+		{
+			name:             "shard by several labels",
+			symbolizedLset:   seriesWithHostEnv,
+			shardingLabels:   []string{"host_env", "job"},
+			by:               true,
+			totalShards:      3,
+			expectPreCheck:   true,
+			expectUnresolved: []uint32{refValueHostA},
+		},
+		{
+			name:             "sharding label comes from the external labels only",
+			symbolizedLset:   seriesWithoutHostEnv,
+			extLset:          labels.FromStrings("region", "eu-west"),
+			shardingLabels:   []string{"region"},
+			by:               true,
+			totalShards:      3,
+			expectPreCheck:   true,
+			expectUnresolved: []uint32{refValueHostA, refValueAPI},
+		},
+		{
+			// The external label wins, so the series value must not decide the shard.
+			name:             "sharding label present in both the series and the external labels",
+			symbolizedLset:   seriesWithHostEnv,
+			extLset:          labels.FromStrings("host_env", "gamma"),
+			shardingLabels:   []string{"host_env"},
+			by:               true,
+			totalShards:      3,
+			expectPreCheck:   true,
+			expectUnresolved: []uint32{refValueHostA, refValueAPI},
+		},
+		{
+			// WithoutReplicaLabels drops the label before the shard matcher sees it, so no
+			// label is left to shard on and every series lands in the same shard.
+			name:                 "sharding label removed by WithoutReplicaLabels",
+			symbolizedLset:       seriesWithHostEnv,
+			extLset:              labels.FromStrings("host_env", "gamma"),
+			shardingLabels:       []string{"host_env"},
+			by:                   true,
+			withoutReplicaLabels: []string{"host_env"},
+			totalShards:          3,
+			expectPreCheck:       true,
+			expectUnresolved:     []uint32{refValueProd, refValueHostA, refValueAPI},
+		},
+		{
+			// Sharding without a label set needs every label that is not in the sharding set,
+			// so there is nothing to defer and the pre-check stays off.
+			name:           "shard without a label set",
+			symbolizedLset: seriesWithHostEnv,
+			shardingLabels: []string{"host_env"},
+			by:             false,
+			totalShards:    3,
+			expectPreCheck: false,
+		},
+		{
+			name:           "request is not sharded",
+			symbolizedLset: seriesWithHostEnv,
+			by:             true,
+			totalShards:    0,
+			expectPreCheck: false,
+		},
+		{
+			name:            "no shard matcher at all",
+			symbolizedLset:  seriesWithHostEnv,
+			shardingLabels:  []string{"host_env"},
+			by:              true,
+			totalShards:     3,
+			nilShardMatcher: true,
+			expectPreCheck:  false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var extLsetToRemove map[string]struct{}
+			if len(tc.withoutReplicaLabels) > 0 {
+				extLsetToRemove = make(map[string]struct{}, len(tc.withoutReplicaLabels))
+				for _, l := range tc.withoutReplicaLabels {
+					extLsetToRemove[l] = struct{}{}
+				}
+			}
+
+			var shardInfo *storepb.ShardInfo
+			if tc.totalShards > 0 {
+				shardInfo = &storepb.ShardInfo{
+					TotalShards: tc.totalShards,
+					By:          tc.by,
+					Labels:      tc.shardingLabels,
+				}
+			}
+
+			// The shard a series lands in is decided by hashing the complete label set, which
+			// is what the store did before the sharding labels were resolved on their own.
+			// Build it here as the reference answer.
+			referenceB := labels.NewBuilder(labels.EmptyLabels())
+			for _, s := range tc.symbolizedLset {
+				referenceB.Set(symbols[s.name], symbols[s.value])
+			}
+			referenceExtLset := tc.extLset
+			if extLsetToRemove != nil {
+				referenceExtLset = rmLabels(referenceExtLset.Copy(), extLsetToRemove)
+			}
+			reference := labelpb.ExtendSortedLabels(referenceB.Labels(), referenceExtLset)
+			if extLsetToRemove != nil {
+				reference = rmLabels(reference, extLsetToRemove)
+			}
+
+			buffers := sync.Pool{New: func() any {
+				b := make([]byte, 0, 128)
+				return &b
+			}}
+
+			matchedShards := 0
+			for shardIndex := int64(0); shardIndex < max(tc.totalShards, 1); shardIndex++ {
+				if shardInfo != nil {
+					shardInfo.ShardIndex = shardIndex
+				}
+
+				reader := &symbolTableReader{symbols: symbols}
+				blk := &bucketBlock{
+					meta:              &metadata.Meta{BlockMeta: tsdb.BlockMeta{ULID: ulid.MustNew(1, nil)}},
+					extLset:           tc.extLset,
+					indexHeaderReader: reader,
+				}
+				req := &storepb.SeriesRequest{SkipChunks: true, ShardInfo: shardInfo}
+				shardMatcher := shardInfo.Matcher(&buffers)
+				if tc.nilShardMatcher {
+					shardMatcher = nil
+				}
+
+				client := newBlockSeriesClient(
+					context.Background(),
+					log.NewNopLogger(),
+					blk,
+					req,
+					NewSeriesLimiterFactory(0)(nil),
+					NewChunksLimiterFactory(0)(nil),
+					NewBytesLimiterFactory(0)(nil),
+					nil,
+					shardMatcher,
+					false,
+					SeriesBatchSize,
+					nil,
+					nil,
+					nil,
+					extLsetToRemove,
+					false,
+					0,
+					0,
+					nil,
+					nil,
+					nil,
+					nil,
+					tenancy.DefaultTenant,
+				)
+
+				if !tc.expectPreCheck {
+					testutil.Equals(t, true, client.shardingLabels == nil)
+					continue
+				}
+				testutil.Assert(t, client.shardingLabels != nil, "expected the shard pre-check to be enabled")
+
+				client.symbolizedLset = tc.symbolizedLset
+				got, err := client.shardMatches()
+				testutil.Ok(t, err)
+
+				testutil.Equals(t, shardMatcher.MatchesLabels(reference), got)
+				if got {
+					matchedShards++
+				}
+
+				for _, ref := range tc.expectUnresolved {
+					testutil.Assert(t, !slices.Contains(reader.lookedUp, ref),
+						"symbol %d should not have been resolved, resolved %v", ref, reader.lookedUp)
+				}
+			}
+
+			if tc.expectPreCheck {
+				testutil.Equals(t, 1, matchedShards)
+			}
+		})
+	}
+}
+
+// TestBucketStoreShardedSeriesPartition runs a sharded Series request against a real block, so
+// the sharding labels are resolved through a real index header, and checks that the shards still
+// partition the series set: every series is returned by exactly one shard, and by the shard that
+// hashing its complete label set selects.
+func TestBucketStoreShardedSeriesPartition(t *testing.T) {
+	t.Parallel()
+
+	const totalShards = 3
+
+	for _, tc := range []struct {
+		name                 string
+		series               []labels.Labels
+		extLset              labels.Labels
+		shardingLabels       []string
+		by                   bool
+		withoutReplicaLabels []string
+	}{
+		{
+			name: "shard by a label every series carries",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod", "instance", "host-a"),
+				labels.FromStrings("a", "1", "host_env", "gamma", "instance", "host-b"),
+				labels.FromStrings("a", "1", "host_env", "beta", "instance", "host-c"),
+				labels.FromStrings("a", "1", "host_env", "dev", "instance", "host-d"),
+			},
+			extLset:        labels.FromStrings("region", "eu-west"),
+			shardingLabels: []string{"host_env"},
+			by:             true,
+		},
+		{
+			name: "some series do not carry the sharding label",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod"),
+				labels.FromStrings("a", "1", "instance", "host-b"),
+				labels.FromStrings("a", "1", "host_env", "beta"),
+				labels.FromStrings("a", "1", "instance", "host-d"),
+			},
+			extLset:        labels.FromStrings("region", "eu-west"),
+			shardingLabels: []string{"host_env"},
+			by:             true,
+		},
+		{
+			// The external label wins over the series label, so every series must land in the
+			// same shard however its own host_env reads.
+			name: "sharding label present in both the series and the external labels",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod", "instance", "host-a"),
+				labels.FromStrings("a", "1", "host_env", "gamma", "instance", "host-b"),
+				labels.FromStrings("a", "1", "host_env", "beta", "instance", "host-c"),
+			},
+			extLset:        labels.FromStrings("host_env", "overridden", "region", "eu-west"),
+			shardingLabels: []string{"host_env"},
+			by:             true,
+		},
+		{
+			name: "sharding label comes from the external labels only",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "instance", "host-a"),
+				labels.FromStrings("a", "1", "instance", "host-b"),
+			},
+			extLset:        labels.FromStrings("region", "eu-west"),
+			shardingLabels: []string{"region"},
+			by:             true,
+		},
+		{
+			name: "sharding label removed by WithoutReplicaLabels",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod", "instance", "host-a"),
+				labels.FromStrings("a", "1", "host_env", "gamma", "instance", "host-b"),
+				labels.FromStrings("a", "1", "host_env", "beta", "instance", "host-c"),
+			},
+			extLset:              labels.FromStrings("region", "eu-west"),
+			shardingLabels:       []string{"host_env"},
+			by:                   true,
+			withoutReplicaLabels: []string{"host_env"},
+		},
+		{
+			name: "shard without a label set",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod", "instance", "host-a"),
+				labels.FromStrings("a", "1", "host_env", "gamma", "instance", "host-b"),
+				labels.FromStrings("a", "1", "host_env", "beta", "instance", "host-c"),
+				labels.FromStrings("a", "1", "host_env", "dev", "instance", "host-d"),
+			},
+			extLset:        labels.FromStrings("region", "eu-west"),
+			shardingLabels: []string{"host_env"},
+			by:             false,
+		},
+		{
+			name: "shard by several labels",
+			series: []labels.Labels{
+				labels.FromStrings("a", "1", "host_env", "prod", "job", "api"),
+				labels.FromStrings("a", "1", "host_env", "prod", "job", "web"),
+				labels.FromStrings("a", "1", "host_env", "beta", "job", "api"),
+				labels.FromStrings("a", "1", "host_env", "beta", "job", "web"),
+			},
+			extLset:        labels.FromStrings("region", "eu-west"),
+			shardingLabels: []string{"host_env", "job"},
+			by:             true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			bucketStore := prepareStoreWithSeries(t, tc.series, tc.extLset)
+
+			newReq := func(shardInfo *storepb.ShardInfo) *storepb.SeriesRequest {
+				return &storepb.SeriesRequest{
+					MinTime:              timestamp.FromTime(minTime),
+					MaxTime:              timestamp.FromTime(maxTime),
+					Matchers:             []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"}},
+					SkipChunks:           true,
+					WithoutReplicaLabels: tc.withoutReplicaLabels,
+					ShardInfo:            shardInfo,
+				}
+			}
+
+			// What the store returns without sharding is the set the shards have to partition.
+			unshardedSrv := newStoreSeriesServer(context.Background())
+			testutil.Ok(t, bucketStore.Series(newReq(nil), unshardedSrv))
+			testutil.Equals(t, len(tc.series), len(unshardedSrv.SeriesSet))
+
+			buffers := sync.Pool{New: func() any {
+				b := make([]byte, 0, 128)
+				return &b
+			}}
+
+			seenIn := make(map[string][]int64, len(tc.series))
+			for shardIndex := int64(0); shardIndex < totalShards; shardIndex++ {
+				shardInfo := &storepb.ShardInfo{
+					ShardIndex:  shardIndex,
+					TotalShards: totalShards,
+					By:          tc.by,
+					Labels:      tc.shardingLabels,
+				}
+
+				srv := newStoreSeriesServer(context.Background())
+				testutil.Ok(t, bucketStore.Series(newReq(shardInfo), srv))
+
+				shardMatcher := shardInfo.Matcher(&buffers)
+				for _, s := range srv.SeriesSet {
+					lset := labelpb.ZLabelsToPromLabels(s.Labels)
+					seenIn[lset.String()] = append(seenIn[lset.String()], shardIndex)
+
+					// A series must only be returned by the shard its complete label set hashes
+					// to, which is what the shard matcher answers for that label set.
+					testutil.Assert(t, shardMatcher.MatchesLabels(lset),
+						"series %s returned by shard %d it does not belong to", lset.String(), shardIndex)
+				}
+			}
+
+			// Every series is returned exactly once across the shards.
+			testutil.Equals(t, len(unshardedSrv.SeriesSet), len(seenIn))
+			for _, s := range unshardedSrv.SeriesSet {
+				key := labelpb.ZLabelsToPromLabels(s.Labels).String()
+				shards, ok := seenIn[key]
+				testutil.Assert(t, ok, "series %s was not returned by any shard", key)
+				testutil.Equals(t, 1, len(shards))
+			}
+		})
+	}
+}
+
+// prepareStoreWithSeries uploads a single block holding the given series with the given external
+// labels and returns a synced store over it.
+func prepareStoreWithSeries(t *testing.T, series []labels.Labels, extLset labels.Labels) *BucketStore {
+	t.Helper()
+
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.Appender(context.Background())
+	for _, lset := range series {
+		_, err = app.Append(0, lset, 0, 1)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	id := storetestutil.CreateBlockFromHead(t, auxDir, h)
+	auxBlockDir := filepath.Join(auxDir, id.String())
+	_, err = metadata.InjectThanos(logger, auxBlockDir, metadata.Thanos{
+		Labels:     extLset.Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(
+		insBkt,
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithLogger(logger),
+		WithRegistry(prometheus.NewRegistry()),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+	return bucketStore
+}
+
+// TestBucketStoreShardedSeriesLazyExpandedPostingsCache guards the one case where testing the
+// shard early would be wrong. With lazy expanded postings, the matchers left out of the posting
+// expansion are evaluated per series, and the series that pass are written to the expanded
+// postings cache under a key that carries no shard information. A shard that stopped evaluating
+// those matchers for the series it discards would cache a posting list missing them, and the
+// other shards would then read it and lose series.
+//
+// Query one shard first so it populates the cache, then query every shard and require the union
+// to still be the complete series set.
+func TestBucketStoreShardedSeriesLazyExpandedPostingsCache(t *testing.T) {
+	t.Parallel()
+
+	const (
+		totalShards    = 3
+		seriesPerLabel = 4
+	)
+
+	series := make([]labels.Labels, 0, seriesPerLabel*2)
+	for i := range seriesPerLabel {
+		series = append(series,
+			labels.FromStrings("a", "1", "host_env", fmt.Sprintf("env-%d", i), "keep", "yes"),
+			labels.FromStrings("a", "1", "host_env", fmt.Sprintf("env-%d", i), "keep", "no"),
+		)
+	}
+
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+	bktDir := filepath.Join(tmpDir, "bkt")
+	auxDir := filepath.Join(tmpDir, "aux")
+	metaDir := filepath.Join(tmpDir, "meta")
+
+	testutil.Ok(t, os.MkdirAll(metaDir, os.ModePerm))
+	testutil.Ok(t, os.MkdirAll(auxDir, os.ModePerm))
+
+	bkt, err := filesystem.NewBucket(bktDir)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.Appender(context.Background())
+	for _, lset := range series {
+		_, err = app.Append(0, lset, 0, 1)
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	id := storetestutil.CreateBlockFromHead(t, auxDir, h)
+	auxBlockDir := filepath.Join(auxDir, id.String())
+	_, err = metadata.InjectThanos(logger, auxBlockDir, metadata.Thanos{
+		Labels:     labels.FromStrings("region", "eu-west").Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(context.Background(), logger, bkt, auxBlockDir, metadata.NoneFunc))
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, metaDir, nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(t, err)
+
+	indexCache, err := storecache.NewInMemoryIndexCacheWithConfig(logger, nil, nil, storecache.DefaultInMemoryIndexCacheConfig)
+	testutil.Ok(t, err)
+
+	bucketStore, err := NewBucketStore(
+		insBkt,
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithLogger(logger),
+		WithIndexCache(indexCache),
+		WithFilterConfig(allowAllFilterConf),
+		WithLazyExpandedPostings(true),
+		// Force the keep="yes" matcher to be left out of the posting expansion and evaluated
+		// per series instead.
+		WithBlockEstimatedMaxSeriesFunc(func(_ metadata.Meta) uint64 { return 1 }),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bucketStore.Close()) })
+
+	testutil.Ok(t, bucketStore.SyncBlocks(context.Background()))
+
+	newReq := func(shardIndex int64) *storepb.SeriesRequest {
+		return &storepb.SeriesRequest{
+			MinTime: timestamp.FromTime(minTime),
+			MaxTime: timestamp.FromTime(maxTime),
+			Matchers: []storepb.LabelMatcher{
+				{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"},
+				{Type: storepb.LabelMatcher_EQ, Name: "keep", Value: "yes"},
+			},
+			SkipChunks: true,
+			ShardInfo: &storepb.ShardInfo{
+				ShardIndex:  shardIndex,
+				TotalShards: totalShards,
+				By:          true,
+				Labels:      []string{"host_env"},
+			},
+		}
+	}
+
+	// Populate the expanded postings cache from a single shard.
+	warmSrv := newStoreSeriesServer(context.Background())
+	testutil.Ok(t, bucketStore.Series(newReq(0), warmSrv))
+
+	// Now read every shard. Whatever the first request cached, the union has to be complete.
+	seen := make(map[string]struct{}, seriesPerLabel)
+	for shardIndex := int64(0); shardIndex < totalShards; shardIndex++ {
+		srv := newStoreSeriesServer(context.Background())
+		testutil.Ok(t, bucketStore.Series(newReq(shardIndex), srv))
+		for _, s := range srv.SeriesSet {
+			lset := labelpb.ZLabelsToPromLabels(s.Labels)
+			testutil.Equals(t, "yes", lset.Get("keep"))
+			seen[lset.String()] = struct{}{}
+		}
+	}
+	testutil.Equals(t, seriesPerLabel, len(seen))
+}
+
+// BenchmarkBlockSeriesSharded measures a sharded Series request over a block whose label values
+// are mostly distinct, so the index header value symbol cache, which holds 1024 entries, misses
+// on nearly every lookup. That is the shape of block where resolving the label values of a
+// series the shard matcher then discards costs the most.
+func BenchmarkBlockSeriesSharded(b *testing.B) {
+	const (
+		numSeries       = 20000
+		labelsPerSeries = 10
+		shardingLabel   = "shard_label"
+	)
+
+	logger := log.NewNopLogger()
+	tmpDir := b.TempDir()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(b, err)
+	b.Cleanup(func() { testutil.Ok(b, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = filepath.Join(tmpDir, "head")
+	headOpts.ChunkRange = 1000
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(b, err)
+	b.Cleanup(func() { testutil.Ok(b, h.Close()) })
+
+	app := h.Appender(context.Background())
+	builder := labels.NewScratchBuilder(labelsPerSeries + 2)
+	for i := range numSeries {
+		builder.Reset()
+		builder.Add("a", "1")
+		// A distinct value per series, so the shard hash spreads the series over the shards.
+		builder.Add(shardingLabel, fmt.Sprintf("shard-value-%d", i))
+		// Distinct values the shard hash does not need, which is the work being deferred.
+		for j := range labelsPerSeries {
+			builder.Add(fmt.Sprintf("label_%02d", j), fmt.Sprintf("value-%d-%d", j, i))
+		}
+		builder.Sort()
+		_, err = app.Append(0, builder.Labels(), 0, 1)
+		testutil.Ok(b, err)
+	}
+	testutil.Ok(b, app.Commit())
+
+	blockID := storetestutil.CreateBlockFromHead(b, tmpDir, h)
+	blockDir := filepath.Join(tmpDir, blockID.String())
+	_, err = metadata.InjectThanos(logger, blockDir, metadata.Thanos{
+		Labels:     labels.FromStrings("ext1", "1").Map(),
+		Downsample: metadata.ThanosDownsample{Resolution: 0},
+		Source:     metadata.TestSource,
+	}, nil)
+	testutil.Ok(b, err)
+	testutil.Ok(b, block.Upload(context.Background(), logger, bkt, blockDir, metadata.NoneFunc))
+
+	insBkt := objstore.WithNoopInstr(bkt)
+	baseBlockIDsFetcher := block.NewConcurrentLister(logger, insBkt)
+	metaFetcher, err := block.NewMetaFetcher(logger, 20, insBkt, baseBlockIDsFetcher, filepath.Join(tmpDir, "meta"), nil, []block.MetadataFilter{
+		block.NewTimePartitionMetaFilter(allowAllFilterConf.MinTime, allowAllFilterConf.MaxTime),
+	})
+	testutil.Ok(b, err)
+
+	bucketStore, err := NewBucketStore(
+		insBkt,
+		metaFetcher,
+		"",
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		20,
+		DefaultPostingOffsetInMemorySampling,
+		false,
+		false,
+		1*time.Minute,
+		WithLogger(logger),
+		WithFilterConfig(allowAllFilterConf),
+	)
+	testutil.Ok(b, err)
+	b.Cleanup(func() { testutil.Ok(b, bucketStore.Close()) })
+	testutil.Ok(b, bucketStore.SyncBlocks(context.Background()))
+
+	for _, totalShards := range []int64{2, 8, 32} {
+		b.Run(fmt.Sprintf("shards=%d", totalShards), func(b *testing.B) {
+			req := &storepb.SeriesRequest{
+				MinTime:    math.MinInt64,
+				MaxTime:    math.MaxInt64,
+				Matchers:   []storepb.LabelMatcher{{Type: storepb.LabelMatcher_EQ, Name: "a", Value: "1"}},
+				SkipChunks: true,
+				ShardInfo: &storepb.ShardInfo{
+					ShardIndex:  0,
+					TotalShards: totalShards,
+					By:          true,
+					Labels:      []string{shardingLabel},
+				},
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+			for range b.N {
+				srv := newStoreSeriesServer(context.Background())
+				testutil.Ok(b, bucketStore.Series(req, srv))
+			}
+		})
+	}
+}
