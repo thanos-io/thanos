@@ -54,6 +54,10 @@ jobs:
       - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
       - run: make docker-push
       - run: make docker-manifest
+      # Distroless variant, published with a "-distroless" tag suffix after the default busybox images.
+      - run: make docker-build docker-test DOCKER_IMAGE_VARIANT=distroless
+      - run: make docker-push docker-manifest DOCKER_IMAGE_VARIANT=distroless DOCKER_IMAGE_REPO=thanosio/thanos
+      - run: make docker-push docker-manifest DOCKER_IMAGE_VARIANT=distroless
 
   publish_release:
     executor: golang
@@ -79,6 +83,10 @@ jobs:
       - run: echo "${QUAY_PASSWORD}" | docker login -u="${QUAY_USERNAME}" quay.io --password-stdin
       - run: make docker-push DOCKER_IMAGE_TAG=$CIRCLE_TAG
       - run: make docker-manifest DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      # Distroless variant, published with a "-distroless" tag suffix after the default busybox images.
+      - run: make docker-build docker-test DOCKER_IMAGE_VARIANT=distroless
+      - run: make docker-push docker-manifest DOCKER_IMAGE_VARIANT=distroless DOCKER_IMAGE_REPO=thanosio/thanos DOCKER_IMAGE_TAG=$CIRCLE_TAG
+      - run: make docker-push docker-manifest DOCKER_IMAGE_VARIANT=distroless DOCKER_IMAGE_TAG=$CIRCLE_TAG
 
 workflows:
   version: 2
