@@ -22,7 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- Query Frontend: Include replica labels in series response cache keys to prevent returning results with the wrong deduplication settings.
+- [#9152](https://github.com/thanos-io/thanos/pull/9152) Thanos Query Frontend: Include replica labels in series response cache keys to prevent returning results with the wrong deduplication settings.
 
 - *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
