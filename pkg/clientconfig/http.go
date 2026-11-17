@@ -74,7 +74,7 @@ const defaultGoogleIAMScope = "https://www.googleapis.com/auth/monitoring.read"
 
 // GoogleIAMConfig configures Google Cloud IAM authentication for HTTP clients.
 type GoogleIAMConfig struct {
-	// CredentialsFile is an optional path to a Google Cloud credentials JSON file.
+	// CredentialsFile is an optional path to a Google Cloud service account key JSON file.
 	// When empty, Application Default Credentials are used.
 	CredentialsFile string `yaml:"credentials_file"`
 	// Scopes specifies OAuth2 scopes to request. Defaults to https://www.googleapis.com/auth/monitoring.read.
@@ -322,7 +322,9 @@ func newGoogleIAMRoundTripper(cfg *GoogleIAMConfig, next http.RoundTripper) (htt
 		option.WithScopes(scopes...),
 	}
 	if cfg.CredentialsFile != "" {
-		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile))
+		// Accept only service account files, as Prometheus' googleiam does:
+		// WithCredentialsFile also loaded unvalidated external account configs.
+		opts = append(opts, option.WithAuthCredentialsFile(option.ServiceAccount, cfg.CredentialsFile))
 	} else {
 		creds, err := google.FindDefaultCredentials(ctx, scopes...)
 		if err != nil {
