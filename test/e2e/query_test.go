@@ -625,6 +625,12 @@ func TestQueryLabelValues(t *testing.T) {
 			return len(res) == 0
 		},
 	)
+
+	labelValues(t, ctx, q.Endpoint("http"), "prometheus", []*labels.Matcher{{Type: labels.MatchRegexp, Name: "instance", Value: ".*localhost.*"}},
+		timestamp.FromTime(now.Add(-time.Hour)), timestamp.FromTime(now.Add(time.Hour)), 0, func(res []string) bool {
+			return len(res) == 1 && res[0] == "prom-alone"
+		},
+	)
 }
 
 func TestQuerySeries(t *testing.T) {
