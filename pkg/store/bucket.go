@@ -1108,6 +1108,12 @@ type blockSeriesClient struct {
 	entries          []seriesEntry
 	hasMorePostings  bool
 	batchSize        int
+
+	// State for testing the shard matcher before resolving every label value symbol, set only
+	// when the request shards by a label set. See blockSeriesClient.shardMatches.
+	shardingLabels map[string]struct{}
+	shardExtLset   labels.Labels
+	shardLsetB     *labels.Builder
 }
 
 func newBlockSeriesClient(
@@ -1143,6 +1149,36 @@ func newBlockSeriesClient(
 	extLset := b.extLset
 	if extLsetToRemove != nil {
 		extLset = rmLabels(extLset.Copy(), extLsetToRemove)
+	}
+
+	// A request that shards by a label set can be tested against the shard matcher before
+	// every label value symbol is resolved, because only the sharding labels enter the hash.
+	// Precompute what that needs per block: the sharding label names that survive
+	// WithoutReplicaLabels, and the external labels among them. LabelNames and LabelValues
+	// reuse this client with no shard matcher at all, hence the nil check.
+	var (
+		shardingLabels map[string]struct{}
+		shardExtLset   labels.Labels
+		shardLsetB     *labels.Builder
+	)
+	if shardMatcher != nil && shardMatcher.IsSharded() && req.ShardInfo != nil && req.ShardInfo.By {
+		shardingLabels = make(map[string]struct{}, len(req.ShardInfo.Labels))
+		for _, name := range req.ShardInfo.Labels {
+			// rmLabels drops the label from the complete label set before the shard matcher
+			// sees it, so it cannot take part in the hash.
+			if _, removed := extLsetToRemove[name]; removed {
+				continue
+			}
+			shardingLabels[name] = struct{}{}
+		}
+		shardExtLsetB := labels.NewBuilder(labels.EmptyLabels())
+		extLset.Range(func(l labels.Label) {
+			if _, ok := shardingLabels[l.Name]; ok {
+				shardExtLsetB.Set(l.Name, l.Value)
+			}
+		})
+		shardExtLset = shardExtLsetB.Labels()
+		shardLsetB = labels.NewBuilder(labels.EmptyLabels())
 	}
 
 	return &blockSeriesClient{
@@ -1181,6 +1217,10 @@ func newBlockSeriesClient(
 		tenant:             tenant,
 
 		b: labels.NewBuilder(labels.EmptyLabels()),
+
+		shardingLabels: shardingLabels,
+		shardExtLset:   shardExtLset,
+		shardLsetB:     shardLsetB,
 	}
 }
 
@@ -1287,6 +1327,11 @@ func (b *blockSeriesClient) nextBatch(tenant string) error {
 	b.i = end
 
 	lazyExpandedPosting := b.lazyPostings.lazyExpanded()
+	// Test the shard before resolving the remaining label values, when the request shards by a
+	// label set. Lazy expanded postings are excluded: their matchers have to be evaluated for
+	// every series so that b.expandedPostings, which is cached under a key that carries no
+	// shard information, stays correct for the other shards.
+	preShardCheck := b.shardingLabels != nil && !lazyExpandedPosting
 	postingsBatch := b.lazyPostings.postings[start:end]
 	if len(postingsBatch) == 0 {
 		b.hasMorePostings = false
@@ -1334,6 +1379,16 @@ OUTER:
 			continue
 		}
 
+		if preShardCheck {
+			ok, err := b.shardMatches()
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+		}
+
 		if err := b.indexr.LookupLabelsSymbols(b.ctx, b.symbolizedLset, b.b); err != nil {
 			return errors.Wrap(err, "Lookup labels symbols")
 		}
@@ -1363,7 +1418,9 @@ OUTER:
 			completeLabelset = rmLabels(completeLabelset, b.extLsetToRemove)
 		}
 
-		if !b.shardMatcher.MatchesLabels(completeLabelset) {
+		// shardMatches above hashes the same labels with the same values in the same order as
+		// the complete label set would, so testing the shard again here would be redundant.
+		if !preShardCheck && !b.shardMatcher.MatchesLabels(completeLabelset) {
 			continue
 		}
 
@@ -3548,6 +3605,46 @@ func (r *bucketIndexReader) LookupLabelsSymbols(ctx context.Context, symbolized 
 		b.Set(ln, lv)
 	}
 	return nil
+}
+
+// shardMatches resolves only the labels that take part in the shard hash and tests the shard
+// matcher with them, so a series belonging to another shard can be skipped before its remaining
+// label values are resolved.
+//
+// Resolving a label name and resolving a label value do not cost the same. An index header
+// serves names from a map that holds every label name of the block, while values go through a
+// small direct mapped cache; on a block with many distinct values that cache mostly misses, so
+// a value costs a lookup in the symbol table and a write lock to populate the cache. The shard
+// matcher hashes only the sharding labels, which are typically one label out of many.
+//
+// Valid only when b.shardingLabels is set, which newBlockSeriesClient does when the request
+// shards by a label set. Sharding without a label set needs every label that is not in the
+// sharding set, so there is nothing to defer.
+func (b *blockSeriesClient) shardMatches() (bool, error) {
+	b.shardLsetB.Reset(labels.EmptyLabels())
+	for _, s := range b.symbolizedLset {
+		ln, err := b.indexr.dec.LookupSymbol(b.ctx, s.name)
+		if err != nil {
+			return false, errors.Wrap(err, "lookup label name")
+		}
+		if _, ok := b.shardingLabels[ln]; !ok {
+			continue
+		}
+		lv, err := b.indexr.dec.LookupSymbol(b.ctx, s.value)
+		if err != nil {
+			return false, errors.Wrap(err, "lookup label value")
+		}
+		b.shardLsetB.Set(ln, lv)
+	}
+	// External labels win over series labels of the same name, as labelpb.ExtendSortedLabels
+	// does when nextBatch builds the complete label set.
+	b.shardExtLset.Range(func(l labels.Label) {
+		b.shardLsetB.Set(l.Name, l.Value)
+	})
+
+	// A series carrying none of the sharding labels hashes an empty buffer, so every such
+	// series lands in the same shard. That matches what the complete label set would do.
+	return b.shardMatcher.MatchesLabels(b.shardLsetB.Labels()), nil
 }
 
 // decodeSeriesForTime decodes a series entry from the given byte slice decoding only chunk metas that are within given min and max time.
