@@ -141,22 +141,6 @@ func (r *remoteWriteConfigReloader) reload() error {
 	return r.applyConfig(cfg)
 }
 
-func parseRemoteWriteConfig(content []byte, externalLabels labels.Labels) (*config.Config, error) {
-	var rwCfg struct {
-		RemoteWriteConfigs []*config.RemoteWriteConfig `yaml:"remote_write,omitempty"`
-	}
-	if err := yaml.Unmarshal(content, &rwCfg); err != nil {
-		return nil, errors.Wrapf(err, "failed to parse remote write config %v", string(content))
-	}
-
-	return &config.Config{
-		GlobalConfig: config.GlobalConfig{
-			ExternalLabels: labelsTSDBToProm(externalLabels),
-		},
-		RemoteWriteConfigs: rwCfg.RemoteWriteConfigs,
-	}, nil
-}
-
 func reloadRemoteWriteConfig(logger log.Logger, reloader *remoteWriteConfigReloader, reloadMsg chan error) {
 	err := reloader.reload()
 	if err != nil {
@@ -559,6 +543,11 @@ func runRule(
 			}, func(error) {
 				close(done)
 			})
+		}
+		rwReloader = &remoteWriteConfigReloader{
+			loadConfig:     conf.rwConfig.Content,
+			applyConfig:    fanoutStore.remoteStore.ApplyConfig,
+			externalLabels: labelsTSDBToProm(conf.lset),
 		}
 		appendable = fanoutStore
 		// Use a separate queryable to restore the ALERTS firing states.
@@ -1281,6 +1270,11 @@ func parseRemoteWriteConfig(rwCfgYAML []byte, externalLabels labels.Labels) (*co
 	}, nil
 }
 
+type statelessRuleStorage struct {
+	storage.Storage
+	remoteStore *remote.Storage
+}
+
 func openStatelessRuleStorage(
 	logger log.Logger,
 	reg prometheus.Registerer,
@@ -1288,7 +1282,7 @@ func openStatelessRuleStorage(
 	rwCfgYAML []byte,
 	externalLabels labels.Labels,
 	agentOpts *agent.Options,
-) (storage.Storage, error) {
+) (*statelessRuleStorage, error) {
 	promCfg, err := parseRemoteWriteConfig(rwCfgYAML, externalLabels)
 	if err != nil {
 		return nil, err
@@ -1320,5 +1314,5 @@ func openStatelessRuleStorage(
 		return nil, errors.Wrap(err, "applying config to remote storage")
 	}
 
-	return storage.NewFanout(slogger, agentDB, remoteStore), nil
+	return &statelessRuleStorage{Storage: storage.NewFanout(slogger, agentDB, remoteStore), remoteStore: remoteStore}, nil
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"testing"
 	"time"
@@ -17,11 +18,17 @@ import (
 	extflag "github.com/efficientgo/tools/extkingpin"
 	"github.com/go-kit/log"
 	"github.com/golang/snappy"
+	"github.com/oklog/run"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/common/route"
+	"github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/annotations"
 
@@ -174,6 +181,26 @@ func TestRunRuleRemoteWriteReloadSetup(t *testing.T) {
 	)
 	testutil.Ok(t, err)
 	testutil.NotOk(t, g.Run())
+}
+
+func TestStatelessRuleStorageRemoteWriteReload(t *testing.T) {
+	t.Parallel()
+
+	configContent := []byte("remote_write:\n- url: http://localhost:12345/api/v1/write\n")
+	store, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), t.TempDir(), configContent, labels.EmptyLabels(), agent.DefaultOptions())
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, store.Close()) })
+
+	reloader := &remoteWriteConfigReloader{
+		loadConfig:     func() ([]byte, error) { return configContent, nil },
+		applyConfig:    store.remoteStore.ApplyConfig,
+		externalLabels: labels.EmptyLabels(),
+	}
+	configContent = []byte("remote_write:\n- url: http://localhost:12346/api/v1/write\n")
+	testutil.Ok(t, reloader.reload())
+
+	configContent = []byte("remote_write:\n- unknown_field: invalid\n")
+	testutil.NotOk(t, reloader.reload())
 }
 
 func TestRemoteWriteConfigReloaderErrors(t *testing.T) {
