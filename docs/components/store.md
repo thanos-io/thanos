@@ -645,7 +645,7 @@ This configuration sends up to three additional requests if the initial request 
 
 ## Index Header
 
-In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build by downloading specific pieces of original block's index, stored on local disk and then mmaped and used by Store Gateway.
+In order to query series inside blocks from object storage, Store Gateway has to know certain initial info from each block index. In order to achieve so, on startup the Gateway builds an `index-header` for each block and stores it on local disk; such `index-header` is build by downloading specific pieces of original block's index, stored on local disk and then mapped and used by Store Gateway.
 
 For more information, please refer to the [Binary index-header](../operating/binary-index-header.md) operational guide.
 
