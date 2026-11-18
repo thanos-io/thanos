@@ -5,7 +5,7 @@ In order to query series inside blocks from object storage, [Store Gateway](../c
 - symbols table to unintern string values
 - postings offset for posting lookup
 
-In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk. Such `index-header` file is then mmaped and used by Store Gateway, but never uploaded back to the object storage.
+In order to achieve so, on startup for each block `index-header` is built from pieces of original block's index and stored on disk. Such `index-header` file is then mapped and used by Store Gateway, but never uploaded back to the object storage.
 
 ## Format (version 1)
 
