@@ -26,9 +26,9 @@ func (ThanosResponseExtractor) ExtractForStep(_, _, _ int64, resp queryrange.Res
 func (ThanosResponseExtractor) ResponseWithoutHeaders(resp queryrange.Response) queryrange.Response {
 	switch tr := resp.(type) {
 	case *ThanosLabelsResponse:
-		return &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+		return &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: tr.Data, Warnings: tr.Warnings}
 	case *ThanosSeriesResponse:
-		return &ThanosSeriesResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+		return &ThanosSeriesResponse{Status: queryrange.StatusSuccess, Data: tr.Data, Warnings: tr.Warnings}
 	}
 	return resp
 }
@@ -36,9 +36,9 @@ func (ThanosResponseExtractor) ResponseWithoutHeaders(resp queryrange.Response) 
 func (ThanosResponseExtractor) ResponseWithoutStats(resp queryrange.Response) queryrange.Response {
 	switch tr := resp.(type) {
 	case *ThanosLabelsResponse:
-		return &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+		return &ThanosLabelsResponse{Status: queryrange.StatusSuccess, Data: tr.Data, Warnings: tr.Warnings}
 	case *ThanosSeriesResponse:
-		return &ThanosSeriesResponse{Status: queryrange.StatusSuccess, Data: tr.Data}
+		return &ThanosSeriesResponse{Status: queryrange.StatusSuccess, Data: tr.Data, Warnings: tr.Warnings}
 	}
 	return resp
 }

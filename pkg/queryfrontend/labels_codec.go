@@ -10,6 +10,7 @@ import (
 	io "io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,7 +44,7 @@ func NewThanosLabelsCodec(partialResponse bool, defaultMetadataTimeRange time.Du
 }
 
 // MergeResponse merges multiple responses into a single Response. It needs to dedup the responses and ensure the order.
-func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange.Response) (queryrange.Response, error) {
+func (c labelsCodec) MergeResponse(req queryrange.Request, responses ...queryrange.Response) (queryrange.Response, error) {
 	if len(responses) == 0 {
 		// Empty response for label_names, label_values and series API.
 		return &ThanosLabelsResponse{
@@ -52,14 +53,30 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 		}, nil
 	}
 
+	var limit int
+	switch r := req.(type) {
+	case *ThanosLabelsRequest:
+		limit = r.Limit
+	case *ThanosSeriesRequest:
+		limit = r.Limit
+	}
+	var warnings []string
+	addWarnings := func(values []string) {
+		for _, w := range values {
+			if !slices.Contains(warnings, w) {
+				warnings = append(warnings, w)
+			}
+		}
+	}
 	switch responses[0].(type) {
 	case *ThanosLabelsResponse:
-		if len(responses) == 1 {
+		if len(responses) == 1 && (limit == 0 || len(responses[0].(*ThanosLabelsResponse).Data) <= limit) {
 			return responses[0], nil
 		}
 		set := make(map[string]struct{})
 
 		for _, res := range responses {
+			addWarnings(res.(*ThanosLabelsResponse).Warnings)
 			for _, value := range res.(*ThanosLabelsResponse).Data {
 				if _, ok := set[value]; !ok {
 					set[value] = struct{}{}
@@ -72,15 +89,21 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 		}
 
 		sort.Strings(lbls)
+		if limit > 0 && len(lbls) > limit {
+			lbls = lbls[:limit]
+			addWarnings([]string{metadataLimitWarning})
+		}
 		return &ThanosLabelsResponse{
-			Status: queryrange.StatusSuccess,
-			Data:   lbls,
+			Status:   queryrange.StatusSuccess,
+			Data:     lbls,
+			Warnings: warnings,
 		}, nil
 	case *ThanosSeriesResponse:
 		seriesData := make(labelpb.ZLabelSets, 0)
 
 		uniqueSeries := make(map[string]struct{})
 		for _, res := range responses {
+			addWarnings(res.(*ThanosSeriesResponse).Warnings)
 			for _, series := range res.(*ThanosSeriesResponse).Data {
 				s := series.PromLabels().String()
 				if _, ok := uniqueSeries[s]; !ok {
@@ -91,9 +114,14 @@ func (c labelsCodec) MergeResponse(_ queryrange.Request, responses ...queryrange
 		}
 
 		sort.Sort(seriesData)
+		if limit > 0 && len(seriesData) > limit {
+			seriesData = seriesData[:limit]
+			addWarnings([]string{metadataLimitWarning})
+		}
 		return &ThanosSeriesResponse{
-			Status: queryrange.StatusSuccess,
-			Data:   seriesData,
+			Status:   queryrange.StatusSuccess,
+			Data:     seriesData,
+			Warnings: warnings,
 		}, nil
 	default:
 		return nil, httpgrpc.Errorf(http.StatusInternalServerError, "invalid response format")
@@ -134,6 +162,9 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			"start":                      []string{encodeTime(thanosReq.Start)},
 			"end":                        []string{encodeTime(thanosReq.End)},
 			queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
+		}
+		if thanosReq.Limit > 0 {
+			params.Set("limit", strconv.Itoa(thanosReq.Limit))
 		}
 		if len(thanosReq.Matchers) > 0 {
 			params[queryv1.MatcherParam] = matchersToStringSlice(thanosReq.Matchers)
@@ -176,6 +207,9 @@ func (c labelsCodec) EncodeRequest(ctx context.Context, r queryrange.Request) (*
 			queryv1.DedupParam:           []string{strconv.FormatBool(thanosReq.Dedup)},
 			queryv1.PartialResponseParam: []string{strconv.FormatBool(thanosReq.PartialResponse)},
 			queryv1.ReplicaLabelsParam:   thanosReq.ReplicaLabels,
+		}
+		if thanosReq.Limit > 0 {
+			params.Set("limit", strconv.Itoa(thanosReq.Limit))
 		}
 		if len(thanosReq.Matchers) > 0 {
 			params[queryv1.MatcherParam] = matchersToStringSlice(thanosReq.Matchers)
@@ -286,6 +320,10 @@ func (c labelsCodec) parseLabelsRequest(r *http.Request, op string, forwardHeade
 		result ThanosLabelsRequest
 		err    error
 	)
+	result.Limit, err = parseMetadataLimit(r.FormValue("limit"))
+	if err != nil {
+		return nil, err
+	}
 	result.Start, result.End, err = parseMetadataTimeRange(r, c.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, err
@@ -340,6 +378,10 @@ func (c labelsCodec) parseSeriesRequest(r *http.Request, forwardHeaders []string
 		result ThanosSeriesRequest
 		err    error
 	)
+	result.Limit, err = parseMetadataLimit(r.FormValue("limit"))
+	if err != nil {
+		return nil, err
+	}
 	result.Start, result.End, err = parseMetadataTimeRange(r, c.defaultMetadataTimeRange)
 	if err != nil {
 		return nil, err
@@ -428,4 +470,21 @@ func parseTimeParam(r *http.Request, paramName string, defaultValue time.Time) (
 		return 0, err
 	}
 	return result, nil
+}
+
+const metadataLimitWarning = "results truncated due to limit"
+
+// parseMetadataLimit follows the Query API's limit validation; zero means unlimited.
+func parseMetadataLimit(value string) (int, error) {
+	if value == "" {
+		return 0, nil
+	}
+	limit, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, httpgrpc.Errorf(http.StatusBadRequest, "cannot parse %q to a valid limit", value)
+	}
+	if limit < 0 {
+		return 0, httpgrpc.Errorf(http.StatusBadRequest, "limit must be non-negative")
+	}
+	return limit, nil
 }
