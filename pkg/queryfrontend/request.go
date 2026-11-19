@@ -252,6 +252,7 @@ func (r *ThanosQueryInstantRequest) String() string { return "" }
 func (r *ThanosQueryInstantRequest) ProtoMessage() {}
 
 type ThanosLabelsRequest struct {
+	Limit           int
 	Start           int64
 	End             int64
 	Label           string
@@ -343,6 +344,7 @@ func (r *ThanosLabelsRequest) String() string { return "" }
 func (r *ThanosLabelsRequest) ProtoMessage() {}
 
 type ThanosSeriesRequest struct {
+	Limit           int
 	Path            string
 	Start           int64
 	End             int64
