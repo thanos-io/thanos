@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"testing"
@@ -829,6 +830,17 @@ func testCompactWithStoreGateway(t *testing.T, penaltyDedup bool) {
 		testutil.Ok(t, block.Delete(ctx, log.NewNopLogger(), bkt, downsampledRawID))
 
 		testutil.Ok(t, str.Stop())
+		// docker stop can return before --rm has released the container name.
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			out, err := exec.CommandContext(ctx, "docker", "ps", "--all", "--quiet", "--filter", "name=^/"+e.Name()+"-"+str.Name()+"$").Output()
+			if err != nil {
+				return err
+			}
+			if len(bytes.TrimSpace(out)) != 0 {
+				return fmt.Errorf("waiting for stopped store gateway container to be removed")
+			}
+			return nil
+		}))
 		testutil.Ok(t, e2e.StartAndWaitReady(str))
 		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
 			return str.WaitSumMetricsWithOptions(

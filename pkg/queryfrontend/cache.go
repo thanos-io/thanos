@@ -103,6 +103,8 @@ func (t thanosCacheKeyGenerator) generateQueryRangeCacheKey(userID string, tr *T
 	buf.WriteString(userID)
 	buf.WriteByte(':')
 	buf.WriteString(tr.Query)
+	buf.WriteByte(':')
+	buf.WriteString(stepAlignmentTimezone(tr))
 	writeCacheKeyInt64(buf, step)
 	writeCacheKeyInt64(buf, splitInterval)
 	writeCacheKeyInt64(buf, currentInterval)
@@ -124,6 +126,13 @@ func (t thanosCacheKeyGenerator) generateQueryRangeCacheKey(userID string, tr *T
 	}
 
 	return cacheKey
+}
+
+func stepAlignmentTimezone(r *ThanosQueryRangeRequest) string {
+	if r.StepAlignmentLocation == nil {
+		return time.UTC.String()
+	}
+	return r.StepAlignmentLocation.String()
 }
 
 // commonQuerySteps bounds alternative cache lookups to common dashboard query steps.

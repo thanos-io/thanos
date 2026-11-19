@@ -71,6 +71,12 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 			expectedError:   errStepTooSmall,
 		},
 		{
+			name:            "cannot parse timezone",
+			url:             "/api/v1/query_range?start=123&end=456&step=1&timezone=invalid",
+			partialResponse: false,
+			expectedError:   httpgrpc.Errorf(http.StatusBadRequest, `cannot parse "invalid" as a time zone`),
+		},
+		{
 			name:            "cannot parse dedup",
 			url:             "/api/v1/query_range?start=123&end=456&step=1&dedup=bar",
 			partialResponse: false,
@@ -197,6 +203,15 @@ func TestQueryRangeCodec_DecodeRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestQueryRangeCodec_DecodeRequestTimezone(t *testing.T) {
+	r, err := http.NewRequest(http.MethodGet, "/api/v1/query_range?start=123&end=456&step=1&timezone=Asia%2FShanghai", nil)
+	testutil.Ok(t, err)
+
+	req, err := NewThanosQueryRangeCodec(false).DecodeRequest(context.Background(), r, nil)
+	testutil.Ok(t, err)
+	testutil.Equals(t, "Asia/Shanghai", req.(*ThanosQueryRangeRequest).StepAlignmentLocation.String())
 }
 
 func TestQueryRangeCodec_EncodeRequest(t *testing.T) {

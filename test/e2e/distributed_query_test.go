@@ -56,15 +56,17 @@ func TestDistributedQueryExecution(t *testing.T) {
 	testutil.Ok(t, e2e.StartAndWaitReady(distQry))
 
 	// Use current time to make debugging through UI easier.
-	now := time.Now()
+	now := time.Now().Truncate(time.Second)
 	nowFunc := func() time.Time { return now }
-	timeOffset := nowFunc().UnixNano()
+	// Keep distinct samples before the query time, including near a second boundary.
+	timeOffset := now.Add(-2 * time.Minute).UnixNano()
 	samples := []fakeMetricSample{
-		{"i1", 1, timeOffset + 30*1000*1000}, {"i1", 2, timeOffset + 60*1000*1000}, {"i1", 3, timeOffset + 90*1000*1000},
-		{"i2", 5, timeOffset + 30*1000*1000}, {"i2", 6, timeOffset + 60*1000*1000}, {"i2", 7, timeOffset + 90*1000*1000},
-		{"i3", 9, timeOffset + 30*1000*1000}, {"i3", 10, timeOffset + 60*1000*1000}, {"i3", 11, timeOffset + 90*1000*1000},
+		{"i1", 1, timeOffset + int64(30*time.Second)}, {"i1", 2, timeOffset + int64(60*time.Second)}, {"i1", 3, timeOffset + int64(90*time.Second)},
+		{"i2", 5, timeOffset + int64(30*time.Second)}, {"i2", 6, timeOffset + int64(60*time.Second)}, {"i2", 7, timeOffset + int64(90*time.Second)},
+		{"i3", 9, timeOffset + int64(30*time.Second)}, {"i3", 10, timeOffset + int64(60*time.Second)}, {"i3", 11, timeOffset + int64(90*time.Second)},
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom1, samples))
 	testutil.Ok(t, synthesizeFakeMetricSamples(ctx, prom2, samples))
 
@@ -79,7 +81,7 @@ func TestDistributedQueryExecution(t *testing.T) {
 		fanoutQryRangeResult = res
 		return nil
 	})
-	rangeQuery(t, ctx, fanoutQry.Endpoint("http"), queryFunc, nowFunc().UnixMilli(), nowFunc().Add(5*time.Minute).UnixMilli(), 30, queryOpts, func(res model.Matrix) error {
+	rangeQuery(t, ctx, distQry.Endpoint("http"), queryFunc, nowFunc().UnixMilli(), nowFunc().Add(5*time.Minute).UnixMilli(), 30, queryOpts, func(res model.Matrix) error {
 		distQryRangeResult = res
 		return nil
 	})
@@ -91,7 +93,7 @@ func TestDistributedQueryExecution(t *testing.T) {
 	queryAndAssert(t, ctx, distQry.Endpoint("http"), queryFunc, nowFunc, queryOpts, model.Vector{
 		{
 			Metric:    map[model.LabelName]model.LabelValue{},
-			Value:     30,
+			Value:     108,
 			Timestamp: 0,
 		},
 	})

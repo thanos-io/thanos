@@ -18,7 +18,7 @@ A data source is a very generalized definition of a component that produces or c
 
 Thanos provides two components that act as data sources: the Prometheus sidecar and rule nodes.
 
-The sidecar implements the gRPC service on top of Prometheus' [HTTP and remote-read APIs](https://prometheus.io/docs/querying/api/). The rule node directly implements it on top of the Prometheus storage engine it is running.
+The sidecar implements the gRPC service on top of Prometheus' [HTTP and remote-read APIs](https://prometheus.io/docs/prometheus/latest/querying/api/). The rule node directly implements it on top of the Prometheus storage engine it is running.
 
 #### Metric Data Backup
 
