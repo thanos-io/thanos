@@ -45,7 +45,7 @@ func TestStatus(t *testing.T) {
 			NB: Made with asciiflow.com - you can copy & paste the above there to modify.
 		*/
 		t.Parallel()
-		e, err := e2e.New(e2e.WithName("haingest-haprom"))
+		e, err := e2e.New(e2e.WithName("status-haingest"))
 		testutil.Ok(t, err)
 		t.Cleanup(e2ethanos.CleanScenario(t, e))
 

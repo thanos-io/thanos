@@ -19,7 +19,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 
 	var skips []string
-	skips = append(skips, receiverSkips...)
+	skips = append(skips, senderSkips...)
 	if existing := flag.Lookup("test.skip").Value.String(); existing != "" {
 		skips = append([]string{existing}, skips...)
 	}

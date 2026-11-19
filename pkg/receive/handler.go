@@ -12,6 +12,7 @@ import (
 	stdlog "log"
 	"math"
 	"math/rand"
+	"mime"
 	"net"
 	"net/http"
 	"slices"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/colega/zeropool"
 
@@ -31,12 +33,15 @@ import (
 	"github.com/mwitkow/go-conntrack"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	remoteapi "github.com/prometheus/client_golang/exp/api/remote"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
+	"github.com/prometheus/prometheus/model/value"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb"
 	writev2 "github.com/thanos-io/thanos/pkg/store/storepb/prompb/io/prometheus/write/v2"
 	"go.opentelemetry.io/otel/attribute"
@@ -544,150 +549,173 @@ func (h *Handler) retryAfterDuration() time.Duration {
 	return util.DurationWithJitter(h.options.RetryAfterBackoff, h.options.RetryAfterJitter)
 }
 
-func determineRWVersion(r *http.Request) (int, error) {
-	if r.Header.Get("X-Prometheus-Remote-Write-Version") != "2.0.0" {
-		return 1, nil
-	}
+const (
+	remoteWriteAcceptHeaderValue = "application/x-protobuf, application/x-protobuf;proto=prometheus.WriteRequest, application/x-protobuf;proto=io.prometheus.write.v2.Request, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=none, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless, application/x-protobuf;proto=io.prometheus.write.v2.Request;mode=stateless-st"
+
+	// TODO(bwplotka): Switch to remoteapi.WriteMode and remoteapi.ParseContentType once github.com/prometheus/prometheus is upgraded past v0.309.1.
+	rwModeNone        = "none"
+	rwModeStateless   = "stateless"
+	rwModeStatelessST = "stateless-st"
+)
+
+func determineRWVersion(r *http.Request) (int, string, error) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
-		return 0, fmt.Errorf("missing Content-Type header")
+		if r.Header.Get(remote.RemoteWriteVersionHeader) == remote.RemoteWriteVersion20HeaderValue {
+			return 0, "", fmt.Errorf("missing Content-Type header")
+		}
+		return 1, "", nil
 	}
-	if ct == "application/x-protobuf;proto=io.prometheus.write.v2.Request" {
-		return 2, nil
+
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err != nil || mediaType != "application/x-protobuf" {
+		return 0, "", fmt.Errorf("unsupported Content-Type %q", ct)
 	}
-	if ct == "application/x-protobuf" {
-		return 1, nil
+
+	var (
+		rwVersion = 1
+		mode      string
+		hasMode   bool
+	)
+	for k, v := range params {
+		switch k {
+		case "proto":
+			switch remoteapi.WriteMessageType(v) {
+			case remoteapi.WriteV1MessageType:
+				rwVersion = 1
+			case remoteapi.WriteV2MessageType:
+				rwVersion = 2
+			default:
+				return 0, "", fmt.Errorf("unsupported remote write proto %q in Content-Type %q", v, ct)
+			}
+		case "mode":
+			hasMode = true
+			mode = v
+		default:
+			return 0, "", fmt.Errorf("unexpected parameter %q in Content-Type %q", k, ct)
+		}
 	}
-	if ct == "application/x-protobuf;proto=prometheus.WriteRequest" {
-		return 1, nil
+
+	if hasMode {
+		if rwVersion != 2 {
+			return 0, "", fmt.Errorf("mode parameter is only supported with io.prometheus.write.v2.Request in Content-Type %q", ct)
+		}
+		switch mode {
+		case rwModeNone, rwModeStateless, rwModeStatelessST:
+		default:
+			return 0, "", fmt.Errorf("unsupported remote write mode %q in Content-Type %q", mode, ct)
+		}
 	}
-	return 0, fmt.Errorf("required headers Content-Type and/or X-Prometheus-Remote-Write-Version not found")
+
+	return rwVersion, mode, nil
 }
 
-func translateV2ToV1(w writev2.Request) *prompb.WriteRequest {
+func translateV2ToV1(w writev2.Request, mode string) (*prompb.WriteRequest, error) {
+	for _, sym := range w.Symbols {
+		if !utf8.ValidString(sym) {
+			return nil, errors.New("invalid UTF-8 in symbol table")
+		}
+	}
+	if len(w.Timeseries) > 0 && (len(w.Symbols) == 0 || w.Symbols[0] != "") {
+		return nil, errors.New("symbol table must start with an empty string")
+	}
+
 	// TODO(GiedriusS): somehow ensure programmatically that all fields are set and we don't miss anything.
 	out := &prompb.WriteRequest{
 		Timeseries: make([]prompb.TimeSeries, 0, len(w.Timeseries)),
 	}
 
 	for _, t := range w.Timeseries {
-		v1Ts := prompb.TimeSeries{}
-
-		v1Ts.Labels = make([]labelpb.ZLabel, 0, len(t.LabelsRefs)/2)
-		for i := 0; i+1 < len(t.LabelsRefs); i += 2 {
-			v1Ts.Labels = append(v1Ts.Labels, labelpb.ZLabel{
-				Name:  w.Symbols[t.LabelsRefs[i]],
-				Value: w.Symbols[t.LabelsRefs[i+1]],
-			})
+		v1Ts, err := t.ToV1Series(w.Symbols)
+		if err != nil {
+			return nil, err
 		}
-
-		if len(t.Samples) > 0 {
-			v1Ts.Samples = make([]prompb.Sample, 0, len(t.Samples))
-			for _, v2s := range t.Samples {
-				v1Ts.Samples = append(v1Ts.Samples, prompb.Sample{
-					Timestamp: v2s.Timestamp,
-					Value:     v2s.Value,
-				})
+		if mode == rwModeStateless || mode == rwModeStatelessST {
+			if err := validateV2SeriesMode(t, v1Ts.Labels, mode); err != nil {
+				return nil, err
 			}
 		}
-
-		if len(t.Exemplars) > 0 {
-			v1Ts.Exemplars = make([]prompb.Exemplar, 0, len(t.Exemplars))
-			for _, e := range t.Exemplars {
-				v1Exemplar := prompb.Exemplar{
-					Value:     e.Value,
-					Timestamp: e.Timestamp,
-					Labels:    make([]labelpb.ZLabel, 0, len(e.LabelsRefs)/2),
-				}
-				for i := 0; i+1 < len(e.LabelsRefs); i += 2 {
-					v1Exemplar.Labels = append(v1Exemplar.Labels, labelpb.ZLabel{
-						Name:  w.Symbols[e.LabelsRefs[i]],
-						Value: w.Symbols[e.LabelsRefs[i+1]],
-					})
-				}
-				v1Ts.Exemplars = append(v1Ts.Exemplars, v1Exemplar)
-			}
-		}
-
-		if len(t.Histograms) > 0 {
-			v1Ts.Histograms = make([]prompb.Histogram, 0, len(t.Histograms))
-			for _, h := range t.Histograms {
-				v1Histogram := prompb.Histogram{
-					Sum:            h.Sum,
-					Schema:         h.Schema,
-					ZeroThreshold:  h.ZeroThreshold,
-					NegativeSpans:  translateV2SpansToV1(h.NegativeSpans),
-					NegativeDeltas: h.NegativeDeltas,
-					NegativeCounts: h.NegativeCounts,
-					PositiveSpans:  translateV2SpansToV1(h.PositiveSpans),
-					PositiveDeltas: h.PositiveDeltas,
-					PositiveCounts: h.PositiveCounts,
-					ResetHint:      prompb.Histogram_ResetHint(h.ResetHint),
-					Timestamp:      h.Timestamp,
-					CustomValues:   h.CustomValues,
-				}
-
-				switch c := h.Count.(type) {
-				case *writev2.Histogram_CountInt:
-					v1Histogram.Count = &prompb.Histogram_CountInt{CountInt: c.CountInt}
-				case *writev2.Histogram_CountFloat:
-					v1Histogram.Count = &prompb.Histogram_CountFloat{CountFloat: c.CountFloat}
-				}
-
-				switch zc := h.ZeroCount.(type) {
-				case *writev2.Histogram_ZeroCountInt:
-					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountInt{ZeroCountInt: zc.ZeroCountInt}
-				case *writev2.Histogram_ZeroCountFloat:
-					v1Histogram.ZeroCount = &prompb.Histogram_ZeroCountFloat{ZeroCountFloat: zc.ZeroCountFloat}
-				}
-
-				v1Ts.Histograms = append(v1Ts.Histograms, v1Histogram)
-			}
-		}
-
 		out.Timeseries = append(out.Timeseries, v1Ts)
 	}
-	return out
+	return out, nil
 }
 
-func translateV2SpansToV1(spans []writev2.BucketSpan) []prompb.BucketSpan {
-	if len(spans) == 0 {
+func validateV2SeriesMode(t writev2.TimeSeries, lbls []labelpb.ZLabel, mode string) error {
+	if len(t.Samples) == 0 && len(t.Histograms) == 0 {
+		return fmt.Errorf("time series must contain at least one sample or histogram in %s mode", mode)
+	}
+	if t.Metadata.Type == writev2.Metadata_METRIC_TYPE_UNSPECIFIED {
+		return fmt.Errorf("metadata metric type must be specified in %s mode", mode)
+	}
+	if len(t.Samples) > 0 && (t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM || t.Metadata.Type == writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM) {
+		return fmt.Errorf("classic histogram float samples are not allowed with histogram metadata in %s mode", mode)
+	}
+	if len(t.Histograms) > 0 && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_HISTOGRAM && t.Metadata.Type != writev2.Metadata_METRIC_TYPE_GAUGEHISTOGRAM {
+		return fmt.Errorf("histograms require histogram or gaugehistogram metadata in %s mode", mode)
+	}
+	if mode != rwModeStatelessST {
 		return nil
 	}
-	out := make([]prompb.BucketSpan, len(spans))
-	for i, s := range spans {
-		out[i] = prompb.BucketSpan{Offset: s.Offset, Length: s.Length}
+
+	if len(t.Samples) > 0 {
+		var metricName string
+		for _, l := range lbls {
+			if l.Name == labels.MetricName {
+				metricName = l.Value
+				break
+			}
+		}
+		requiresST := t.Metadata.Type == writev2.Metadata_METRIC_TYPE_COUNTER ||
+			(t.Metadata.Type == writev2.Metadata_METRIC_TYPE_SUMMARY && (strings.HasSuffix(metricName, "_sum") || strings.HasSuffix(metricName, "_count")))
+		if requiresST {
+			for _, v2s := range t.Samples {
+				if !value.IsStaleNaN(v2s.Value) && v2s.StartTimestamp == 0 {
+					return errors.New("sample missing start_timestamp in stateless-st mode")
+				}
+			}
+		}
 	}
-	return out
+	if len(t.Histograms) > 0 && t.Metadata.Type == writev2.Metadata_METRIC_TYPE_HISTOGRAM {
+		for _, h := range t.Histograms {
+			if !value.IsStaleNaN(h.Sum) && h.StartTimestamp == 0 {
+				return errors.New("histogram sample missing start_timestamp in stateless-st mode")
+			}
+		}
+	}
+	return nil
 }
 
-func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {
+func (h *Handler) handleV2HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, reqBuf []byte, mode string, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) {
+	remote.WriteResponseStats{}.SetHeaders(w)
+
 	var wreq writev2.Request
 	if err := proto.Unmarshal(reqBuf, &wreq); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	translatedReq := translateV2ToV1(wreq)
-	if err := h.handleV1HTTP(ctx, w, r, translatedReq, tLogger, tenantHTTP, requestLimiter); err != nil {
+	translatedReq, err := translateV2ToV1(wreq, mode)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.handleWriteRequestHTTP(ctx, w, r, translatedReq, 2, tLogger, tenantHTTP, requestLimiter); err != nil {
 		return
 	}
 
 	// NOTE(GiedriusS): This part of the spec is still not 100% clear regarding async
 	// writes so just tell Prometheus that we accepted all data.
-	var ts, hs, es int
-
+	var stats remote.WriteResponseStats
 	for _, i := range wreq.Timeseries {
-		hs += len(i.Histograms)
-		ts += len(i.Samples)
-		es += len(i.Exemplars)
+		stats.Histograms += len(i.Histograms)
+		stats.Samples += len(i.Samples)
+		stats.Exemplars += len(i.Exemplars)
 	}
-	w.Header().Set("X-Prometheus-Remote-Write-Samples-Written", fmt.Sprintf("%d", ts))
-	w.Header().Set("X-Prometheus-Remote-Write-Histograms-Written", fmt.Sprintf("%d", hs))
-	w.Header().Set("X-Prometheus-Remote-Write-Exemplars-Written", fmt.Sprintf("%d", es))
+	stats.SetHeaders(w)
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
+func (h *Handler) handleWriteRequestHTTP(ctx context.Context, w http.ResponseWriter, r *http.Request, wreq *prompb.WriteRequest, rwVersion int, tLogger log.Logger, tenantHTTP string, requestLimiter requestLimiter) error {
 	var err error
 
 	rep := uint64(0)
@@ -734,6 +762,9 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 	}
 
 	responseStatusCode := http.StatusOK
+	if rwVersion == 2 {
+		responseStatusCode = http.StatusNoContent
+	}
 	tenantStats, err := h.handleRequest(ctx, rep, []wreqTenantTuple{
 		{
 			tenant: tenantHTTP,
@@ -750,6 +781,9 @@ func (h *Handler) handleV1HTTP(ctx context.Context, w http.ResponseWriter, r *ht
 			responseStatusCode = http.StatusServiceUnavailable
 		case errConflict:
 			responseStatusCode = http.StatusConflict
+			if rwVersion == 2 {
+				responseStatusCode = http.StatusBadRequest
+			}
 		case errBadReplica:
 			responseStatusCode = http.StatusBadRequest
 		case errValidation:
@@ -787,6 +821,22 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	tLogger := log.With(h.logger, "tenant", tenantHTTP)
 	span.SetTag("tenant", tenantHTTP)
+
+	if enc := r.Header.Get("Content-Encoding"); enc != "" && enc != string(remoteapi.SnappyBlockCompression) {
+		w.Header().Set("Accept-Encoding", string(remoteapi.SnappyBlockCompression))
+		http.Error(w, fmt.Sprintf("unsupported Content-Encoding %q; only snappy is supported", enc), http.StatusUnsupportedMediaType)
+		return
+	}
+
+	rwVersion, rwMode, err := determineRWVersion(r)
+	if err != nil {
+		w.Header().Set("Accept", remoteWriteAcceptHeaderValue)
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return
+	}
+	if rwVersion == 2 {
+		remote.WriteResponseStats{}.SetHeaders(w)
+	}
 
 	writeGate := h.Limiter.WriteGate()
 	tracing.DoInSpan(r.Context(), "receive_write_gate_ismyturn", func(ctx context.Context) {
@@ -841,12 +891,6 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rwVersion, err := determineRWVersion(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
 	switch rwVersion {
 	case 1:
 		// NOTE: Due to zero copy ZLabels, Labels used from WriteRequests keeps memory
@@ -857,9 +901,9 @@ func (h *Handler) receiveHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		_ = h.handleV1HTTP(ctx, w, r, &wreq, tLogger, tenantHTTP, requestLimiter)
+		_ = h.handleWriteRequestHTTP(ctx, w, r, &wreq, 1, tLogger, tenantHTTP, requestLimiter)
 	case 2:
-		h.handleV2HTTP(ctx, w, r, reqBuf, tLogger, tenantHTTP, requestLimiter)
+		h.handleV2HTTP(ctx, w, r, reqBuf, rwMode, tLogger, tenantHTTP, requestLimiter)
 	default:
 		panic("unsupported remote_write version")
 	}
