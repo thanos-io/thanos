@@ -22,7 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#9158](https://github.com/thanos-io/thanos/issues/9158) Query Frontend: Honor metadata API limits after merging time splits, preserve truncation warnings, and bypass caching for limited requests.
+- [#9159](https://github.com/thanos-io/thanos/pull/9159) Query Frontend: Honor metadata API limits after merging time splits, preserve truncation warnings, and bypass caching for limited requests.
 
 - *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
