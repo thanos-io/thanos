@@ -1,0 +1,16 @@
+# Pinned to the multi-architecture image index. The image for the target architecture
+# is selected via `docker build --platform`, see the docker-build target in the Makefile.
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:aafe993665bf6200db38a02c11a9351e782a84b6a45e7f33b6695638c88e3931
+# The base image runs as the nonroot user (UID/GID 65532).
+
+LABEL maintainer="The Thanos Authors"
+LABEL org.opencontainers.image.source="https://github.com/thanos-io/thanos"
+# Keep in sync with the image reference in FROM (Dependabot only updates the digest there).
+LABEL org.opencontainers.image.base.name="gcr.io/distroless/static-debian13:nonroot"
+
+ARG ARCH="amd64"
+ARG OS="linux"
+
+COPY .build/${OS}-${ARCH}/thanos /bin/thanos
+
+ENTRYPOINT [ "/bin/thanos" ]

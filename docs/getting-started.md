@@ -26,6 +26,8 @@ You can find the latest Thanos release [here](https://github.com/thanos-io/thano
 
 Main should be stable and usable. Every commit to main builds docker image named `main-<date>-<sha>` in [quay.io/thanos/thanos](https://quay.io/repository/thanos/thanos) and [thanosio/thanos dockerhub (mirror)](https://hub.docker.com/r/thanosio/thanos)
 
+Every image is also published as a [distroless](https://github.com/GoogleContainerTools/distroless) variant with a `-distroless` tag suffix, e.g. `main-<date>-<sha>-distroless`. The distroless images contain no shell or package manager and run as the `nonroot` user (UID/GID `65532`) instead of UID `1001`, so make sure existing data directories are writable by that user (e.g. via `fsGroup` in Kubernetes) when switching.
+
 We also perform minor releases every 6 weeks.
 
 During that, we build tarballs for major platforms and release docker images.
