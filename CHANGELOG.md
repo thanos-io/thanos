@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#9163](https://github.com/thanos-io/thanos/pull/9163): Query-Frontend: Fix vertical sharding of `without` aggregations over several metric names (e.g. `sum without (pod) ({__name__=~"a|b"})`) returning split groups: the metric name is now excluded from the shard hash like the other `without` labels.
 - *: Update `github.com/go-jose/go-jose/v4` to v4.1.9 to fix [CVE-2026-116587](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q), [CVE-2026-116586](https://github.com/go-jose/go-jose/security/advisories/GHSA-vvm8-gf78-28g4) and [CVE-2026-116585](https://github.com/go-jose/go-jose/security/advisories/GHSA-4w3g-jfj2-cw2q): excess CPU when parsing JWKs with crafted RSA keys, and panics in JSON parsing and CBC-HMAC processing.
 - *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
