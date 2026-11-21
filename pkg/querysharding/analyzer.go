@@ -18,6 +18,7 @@ package querysharding
 
 import (
 	"fmt"
+	"slices"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/prometheus/common/model"
@@ -127,6 +128,12 @@ func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 			shardingLabels := make([]string, 0)
 			if len(n.Grouping) > 0 {
 				shardingLabels = n.Grouping
+			}
+			// Aggregating without labels drops the metric name from the group
+			// key, so series that only differ by name belong to the same group
+			// and must not be split across shards.
+			if n.Without {
+				shardingLabels = append(slices.Clip(shardingLabels), model.MetricNameLabel)
 			}
 			analysis = analysis.scopeToLabels(shardingLabels, !n.Without)
 		}
