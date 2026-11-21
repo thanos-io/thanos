@@ -206,12 +206,12 @@ sum by (container) (
 		{
 			name:           "aggregation without grouping",
 			expression:     "sum without (pod) (http_requests_total)",
-			shardingLabels: []string{"pod"},
+			shardingLabels: []string{"pod", model.MetricNameLabel},
 		},
 		{
 			name:           "multiple aggregations with without grouping",
 			expression:     "max without (pod) (sum without (pod, cluster) (http_requests_total))",
-			shardingLabels: []string{"pod", "cluster"},
+			shardingLabels: []string{"pod", "cluster", model.MetricNameLabel},
 		},
 		{
 			name:           "binary expression with outer without grouping",
@@ -244,22 +244,22 @@ http_requests_total`,
 		{
 			name:           "histogram quantile without",
 			expression:     "histogram_quantile(0.95, sum(rate(metric[1m])) without (le, cluster))",
-			shardingLabels: []string{"cluster", "le"},
+			shardingLabels: []string{"cluster", "le", model.MetricNameLabel},
 		},
 		{
 			name:           "aggregate without expression with label_replace, sharding label is not dynamic",
 			expression:     `sum without (dst_label) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
-			shardingLabels: []string{"dst_label"},
+			shardingLabels: []string{"dst_label", model.MetricNameLabel},
 		},
 		{
 			name:           "aggregate without expression with label_join, sharding label is not dynamic",
 			expression:     `sum without (dst_label) (label_join(metric, "dst_label", ",", "src_label"))`,
-			shardingLabels: []string{"dst_label"},
+			shardingLabels: []string{"dst_label", model.MetricNameLabel},
 		},
 		{
 			name:           "aggregate without expression with label_replace",
 			expression:     `sum without (pod) (label_replace(metric, "dst_label", "$1", "src_label", "re"))`,
-			shardingLabels: []string{"pod", "dst_label"},
+			shardingLabels: []string{"pod", "dst_label", model.MetricNameLabel},
 		},
 		{
 			name:           "binary expression",
