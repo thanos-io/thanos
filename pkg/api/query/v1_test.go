@@ -1270,6 +1270,65 @@ func TestMetadataEndpoints(t *testing.T) {
 	}
 }
 
+func TestLabelValuesUTF8(t *testing.T) {
+	dir := t.TempDir()
+	opts := tsdb.DefaultOptions()
+	opts.RetentionDuration = math.MaxInt64
+	db, err := tsdb.Open(dir, nil, nil, opts, nil)
+	testutil.Ok(t, err)
+	defer func() { testutil.Ok(t, db.Close()) }()
+
+	now := time.Now()
+	app := db.Appender(context.Background())
+	lbls := labels.FromStrings("__name__", "http.requests.total", "http.request.method", "GET")
+	for i := range int64(3) {
+		_, err := app.Append(0, lbls, now.Add(-time.Hour).UnixMilli()+(i*60_000), float64(i))
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	timeout := 100 * time.Second
+	api := &QueryAPI{
+		baseAPI: &baseAPI.BaseAPI{
+			Now: func() time.Time { return now },
+		},
+		queryableCreate:       query.NewQueryableCreator(nil, nil, newProxyStoreWithTSDBStore(db), 2, timeout, dedup.AlgorithmPenalty, 1),
+		remoteEndpointsCreate: emptyRemoteEndpointsCreate,
+		queryCreate:           queryFactory,
+		defaultEngine:         PromqlEnginePrometheus,
+		lookbackDeltaCreate:   func(m int64) time.Duration { return time.Duration(0) },
+		gate:                  gate.New(nil, 4, gate.Queries),
+		queryRangeHist: promauto.With(prometheus.NewRegistry()).NewHistogram(prometheus.HistogramOpts{
+			Name: "query_range_hist",
+		}),
+		seriesStatsAggregatorFactory: &store.NoopSeriesStatsAggregatorFactory{},
+		tenantHeader:                 "thanos-tenant",
+		defaultTenant:                "default-tenant",
+	}
+
+	for _, test := range []endpointTestCase{
+		{
+			endpoint: api.labelValues,
+			params:   map[string]string{"name": "http.request.method"},
+			response: []string{"GET"},
+		},
+		{
+			// Escaped form sent by clients without UTF-8 support.
+			endpoint: api.labelValues,
+			params:   map[string]string{"name": "U__http_2e_request_2e_method"},
+			response: []string{"GET"},
+		},
+		{
+			endpoint: api.labelValues,
+			params:   map[string]string{"name": "http.request.method"},
+			query:    url.Values{"match[]": []string{`{"http.requests.total", "http.request.method"="GET"}`}},
+			response: []string{"GET"},
+		},
+	} {
+		testEndpoint(t, test, fmt.Sprintf("name=%s", test.params["name"]), reflect.DeepEqual)
+	}
+}
+
 func TestStoresEndpoint(t *testing.T) {
 	apiWithNotEndpoints := &QueryAPI{
 		endpointStatus: func() []query.EndpointStatus {
