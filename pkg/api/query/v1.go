@@ -245,8 +245,8 @@ func (qapi *QueryAPI) Register(r *route.Router, tracer opentracing.Tracer, logge
 
 	r.Get("/stores", instr("stores", qapi.stores))
 
-	r.Get("/alerts", instr("alerts", NewAlertsHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
-	r.Get("/rules", instr("rules", NewRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse)))
+	r.Get("/alerts", instr("alerts", newAlertsHandler(qapi.ruleGroups, qapi.enableRulePartialResponse, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel)))
+	r.Get("/rules", instr("rules", newRulesHandler(qapi.ruleGroups, qapi.enableRulePartialResponse, qapi.tenantHeader, qapi.defaultTenant, qapi.tenantCertField, qapi.enforceTenancy, qapi.tenantLabel)))
 
 	r.Get("/targets", instr("targets", NewTargetsHandler(qapi.targets, qapi.enableTargetPartialResponse)))
 
@@ -1410,9 +1410,32 @@ func NewTargetsHandler(client targets.UnaryClient, enablePartialResponse bool) f
 	}
 }
 
+// tenantMatcher returns a metric selector string matching the tenant of the
+// request, or an error if the tenant cannot be determined. It is used to
+// restrict rules and alerts to the requesting tenant when tenancy is enforced,
+// mirroring how tenancy is enforced on the query endpoints. The tenant label
+// is present on rules because rule sources enrich rule labels with their
+// external labels (see pkg/rules), so filtering on it is reliable.
+func tenantMatcher(r *http.Request, tenantHeader string, defaultTenant string, tenantCertField string, tenantLabel string) (string, error) {
+	tenant, err := tenancy.GetTenantFromHTTP(r, tenantHeader, defaultTenant, tenantCertField)
+	if err != nil {
+		return "", err
+	}
+	m := &labels.Matcher{
+		Name:  tenantLabel,
+		Type:  labels.MatchEqual,
+		Value: tenant,
+	}
+	return "{" + m.String() + "}", nil
+}
+
 // NewAlertsHandler created handler compatible with HTTP /api/v1/alerts https://prometheus.io/docs/prometheus/latest/querying/api/#alerts
 // which uses gRPC Unary Rules API (Rules API works for both /alerts and /rules).
 func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
+	return newAlertsHandler(client, enablePartialResponse, "", "", "", false, "")
+}
+
+func newAlertsHandler(client rules.UnaryClient, enablePartialResponse bool, tenantHeader string, defaultTenant string, tenantCertField string, enforceTenancy bool, tenantLabel string) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
@@ -1428,10 +1451,16 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 			err      error
 		)
 
-		// TODO(bwplotka): Allow exactly the same functionality as query API: passing replica, dedup and partial response as HTTP params as well.
 		req := &rulespb.RulesRequest{
 			Type:                    rulespb.RulesRequest_ALERT,
 			PartialResponseStrategy: ps,
+		}
+		if enforceTenancy {
+			matcher, err := tenantMatcher(r, tenantHeader, defaultTenant, tenantCertField, tenantLabel)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+			}
+			req.MatcherString = append(req.MatcherString, matcher)
 		}
 		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
 			groups, warnings, err = client.Rules(ctx, req)
@@ -1459,6 +1488,10 @@ func NewAlertsHandler(client rules.UnaryClient, enablePartialResponse bool) func
 // NewRulesHandler created handler compatible with HTTP /api/v1/rules https://prometheus.io/docs/prometheus/latest/querying/api/#rules
 // which uses gRPC Unary Rules API.
 func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(*http.Request) (any, []error, *api.ApiError, func()) {
+	return newRulesHandler(client, enablePartialResponse, "", "", "", false, "")
+}
+
+func newRulesHandler(client rules.UnaryClient, enablePartialResponse bool, tenantHeader string, defaultTenant string, tenantCertField string, enforceTenancy bool, tenantLabel string) func(*http.Request) (any, []error, *api.ApiError, func()) {
 	ps := storepb.PartialResponseStrategy_ABORT
 	if enablePartialResponse {
 		ps = storepb.PartialResponseStrategy_WARN
@@ -1495,6 +1528,13 @@ func NewRulesHandler(client rules.UnaryClient, enablePartialResponse bool) func(
 			RuleName:                r.Form[RuleNameParam],
 			RuleGroup:               r.Form[RuleGroupParam],
 			File:                    r.Form[FileParam],
+		}
+		if enforceTenancy {
+			matcher, err := tenantMatcher(r, tenantHeader, defaultTenant, tenantCertField, tenantLabel)
+			if err != nil {
+				return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: err}, func() {}
+			}
+			req.MatcherString = append(req.MatcherString, matcher)
 		}
 		tracing.DoInSpan(ctx, "retrieve_rules", func(ctx context.Context) {
 			groups, warnings, err = client.Rules(ctx, req)

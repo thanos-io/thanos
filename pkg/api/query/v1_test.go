@@ -58,6 +58,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/query"
+	thanosrules "github.com/thanos-io/thanos/pkg/rules"
 	"github.com/thanos-io/thanos/pkg/rules/rulespb"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
@@ -2018,6 +2019,130 @@ func TestRulesHandler(t *testing.T) {
 			testutil.Equals(t, string(exp), string(got))
 		})
 	}
+}
+
+// stubRulesServer is a rulespb.RulesServer returning fixed groups, used to
+// exercise the real filtering in rules.GRPCClient from the HTTP handlers.
+type stubRulesServer struct {
+	groups []*rulespb.RuleGroup
+}
+
+func (s stubRulesServer) Rules(_ *rulespb.RulesRequest, srv rulespb.Rules_RulesServer) error {
+	for _, g := range s.groups {
+		if err := srv.Send(rulespb.NewRuleGroupRulesResponse(g)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func tenancyTestGroups() []*rulespb.RuleGroup {
+	mkRule := func(name, tenant string) *rulespb.Rule {
+		return rulespb.NewRecordingRule(&rulespb.RecordingRule{
+			Name:   name,
+			Query:  "sum(up)",
+			Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "tenant", Value: tenant}}},
+		})
+	}
+	return []*rulespb.RuleGroup{
+		{
+			Name:  "grp",
+			File:  "/path/to/groupfile1",
+			Rules: []*rulespb.Rule{mkRule("rec-tenant1", "tenant1"), mkRule("rec-tenant2", "tenant2"), rulespb.NewRecordingRule(&rulespb.RecordingRule{Name: "rec-no-tenant", Query: "sum(up)"})},
+		},
+		{
+			Name:  "grp2",
+			File:  "/path/to/groupfile2",
+			Rules: []*rulespb.Rule{mkRule("rec2-tenant2", "tenant2")},
+		},
+	}
+}
+
+func ruleNames(groups *rulespb.RuleGroups) []string {
+	var names []string
+	for _, g := range groups.Groups {
+		for _, r := range g.Rules {
+			names = append(names, r.GetName())
+		}
+	}
+	return names
+}
+
+func TestRulesHandlerEnforceTenancy(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		enforce       bool
+		tenantHeader  string
+		setHeader     bool
+		expectedNames []string
+		expectedErr   baseAPI.ErrorType
+	}{
+		{name: "tenant2 only sees own rules", enforce: true, tenantHeader: "tenant2", setHeader: true, expectedNames: []string{"rec-tenant2", "rec2-tenant2"}},
+		{name: "tenant1 only sees own rules", enforce: true, tenantHeader: "tenant1", setHeader: true, expectedNames: []string{"rec-tenant1"}},
+		{name: "missing header falls back to default tenant with no rules", enforce: true, expectedNames: nil},
+		{name: "tenancy not enforced returns all rules", enforce: false, tenantHeader: "tenant2", setHeader: true, expectedNames: []string{"rec-no-tenant", "rec-tenant1", "rec-tenant2", "rec2-tenant2"}},
+		{name: "invalid tenant is rejected", enforce: true, tenantHeader: "../tenant2", setHeader: true, expectedErr: baseAPI.ErrorBadData},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var handler func(*http.Request) (any, []error, *baseAPI.ApiError, func())
+			client := thanosrules.NewGRPCClient(stubRulesServer{groups: tenancyTestGroups()})
+			if tc.enforce {
+				handler = newRulesHandler(client, false, "THANOS-TENANT", "default-tenant", "", true, "tenant")
+			} else {
+				handler = NewRulesHandler(client, false)
+			}
+			req, err := http.NewRequest(http.MethodGet, "http://example.com/rules", nil)
+			testutil.Ok(t, err)
+			if tc.setHeader {
+				req.Header.Set("THANOS-TENANT", tc.tenantHeader)
+			}
+			res, _, apiError, releaseResources := handler(req)
+			defer releaseResources()
+			if tc.expectedErr != "" {
+				testutil.Assert(t, apiError != nil && apiError.Typ == tc.expectedErr, "expected %v error, got %v", tc.expectedErr, apiError)
+				return
+			}
+			testutil.Assert(t, apiError == nil, "unexpected error %v", apiError)
+			groups, ok := res.(*rulespb.RuleGroups)
+			testutil.Assert(t, ok, "expected *rulespb.RuleGroups, got %T", res)
+			testutil.Equals(t, tc.expectedNames, ruleNames(groups))
+		})
+	}
+}
+
+func TestAlertsHandlerEnforceTenancy(t *testing.T) {
+	mkAlert := func(name, tenant, instance string) *rulespb.Rule {
+		return rulespb.NewAlertingRule(&rulespb.Alert{
+			Name:   name,
+			Query:  "sum(up) == 2",
+			Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "tenant", Value: tenant}}},
+			Alerts: []*rulespb.AlertInstance{{Labels: labelpb.ZLabelSet{Labels: []labelpb.ZLabel{{Name: "instance", Value: instance}}}, State: rulespb.AlertState_FIRING, Value: "1"}},
+		})
+	}
+	groups := []*rulespb.RuleGroup{
+		{Name: "grp", File: "/path/to/groupfile1", Rules: []*rulespb.Rule{mkAlert("alert-tenant1", "tenant1", "i1"), mkAlert("alert-tenant2", "tenant2", "i2")}},
+	}
+	handler := newAlertsHandler(thanosrules.NewGRPCClient(stubRulesServer{groups: groups}), false, "THANOS-TENANT", "default-tenant", "", true, "tenant")
+
+	req, err := http.NewRequest(http.MethodGet, "http://example.com/alerts", nil)
+	testutil.Ok(t, err)
+	req.Header.Set("THANOS-TENANT", "tenant2")
+	res, _, apiError, releaseResources := handler(req)
+	defer releaseResources()
+	testutil.Assert(t, apiError == nil, "unexpected error %v", apiError)
+
+	alertsField := reflect.ValueOf(res).FieldByName("Alerts")
+	testutil.Assert(t, alertsField.IsValid(), "expected alerts response, got %T", res)
+	var instances []string
+	for i := range alertsField.Len() {
+		inst := alertsField.Index(i).Interface().(*rulespb.AlertInstance)
+		for _, l := range inst.Labels.Labels {
+			if l.Name == "instance" {
+				instances = append(instances, l.Value)
+			}
+		}
+	}
+	testutil.Equals(t, []string{"i2"}, instances)
 }
 
 func BenchmarkQueryResultEncoding(b *testing.B) {

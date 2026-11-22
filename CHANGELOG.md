@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
+- [#8140](https://github.com/thanos-io/thanos/issues/8140): Query: Enforce tenancy on the `/api/v1/rules` and `/api/v1/alerts` endpoints when `--query.enforce-tenancy` is enabled, so only rules and alerts carrying the requesting tenant's label (as configured with `--query.tenant-label-name`) are returned instead of the rules of all tenants.
 - [#6931](https://github.com/thanos-io/thanos/issues/6931): Query/Store: Quote UTF-8 label and metric names in PromQL text generated from StoreAPI matchers and query hints so it stays parsable, and support escaped (`U__`) label names on the `/api/v1/label/:name/values` endpoint.
 - *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
