@@ -521,7 +521,8 @@ type postingValueOffsets struct {
 }
 
 type postingOffset struct {
-	// label value.
+	// Label value, or for a sampled entry other than a label name's first and last, the
+	// shortest prefix of it that sorts after the previous value in the postings offset table.
 	value string
 	// offset of this entry in posting offset table in index-header file.
 	tableOff int
@@ -737,6 +738,9 @@ func (r *BinaryReader) init() (err error) {
 					// on valueCount.
 					if (valueCount-1)%r.postingOffsetsInMemSampling != 0 {
 						r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
+					} else {
+						// The last value was sampled as a separator. Keep it in full, as lookups and LabelValues use it as the upper bound.
+						lastValueFull(r.postings[string(lastName)], lastValue)
 					}
 					r.postings[string(lastName)].lastValOffset = int64(postingsOffset - crc32.Size)
 					lastName = nil
@@ -745,13 +749,23 @@ func (r *BinaryReader) init() (err error) {
 				valueCount = 0
 			}
 
+			prevValue := lastValue
 			lastName = name
 			lastValue = value
 			lastTableOff = labelOffset
 			valueCount++
 
 			if (valueCount-1)%r.postingOffsetsInMemSampling == 0 {
-				r.postings[string(name)].offsets = append(r.postings[string(name)].offsets, postingOffset{value: string(value), tableOff: labelOffset})
+				var key string
+				if valueCount > 1 {
+					// No entry lies between prevValue and value, so any separator between them
+					// orders lookups exactly like value does, at a fraction of its length.
+					key = shortestSeparator(prevValue, value)
+				} else {
+					// The first value of each label name has no previous entry to separate from, so it is kept in full.
+					key = string(value)
+				}
+				r.postings[string(name)].offsets = append(r.postings[string(name)].offsets, postingOffset{value: key, tableOff: labelOffset})
 			}
 
 			return nil
@@ -762,6 +776,8 @@ func (r *BinaryReader) init() (err error) {
 			if (valueCount-1)%r.postingOffsetsInMemSampling != 0 {
 				// Always include last value for each label name if not included already based on valueCount.
 				r.postings[string(lastName)].offsets = append(r.postings[string(lastName)].offsets, postingOffset{value: string(lastValue), tableOff: lastTableOff})
+			} else {
+				lastValueFull(r.postings[string(lastName)], lastValue)
 			}
 			// In any case lastValOffset is unknown as don't have next posting anymore. Guess from TOC table.
 			// In worst case we will overfetch a few bytes.
@@ -790,6 +806,28 @@ func (r *BinaryReader) init() (err error) {
 	r.dec = &index.Decoder{LookupSymbol: r.LookupSymbol}
 
 	return nil
+}
+
+// shortestSeparator returns the shortest prefix of cur that sorts after prev, so prev < sep <= cur.
+// Equality with cur is safe here: the key marks where a lookup starts scanning the table, not where
+// a range ends. Table values are sorted and unique, so prev < cur; otherwise cur is returned whole.
+func shortestSeparator(prev, cur []byte) string {
+	n := 0
+	for n < len(prev) && n < len(cur) && prev[n] == cur[n] {
+		n++
+	}
+	if n >= len(cur) {
+		return string(cur)
+	}
+	return string(cur[:n+1])
+}
+
+// lastValueFull replaces the last sampled entry's separator with the full value.
+func lastValueFull(e *postingValueOffsets, value []byte) {
+	last := &e.offsets[len(e.offsets)-1]
+	if len(last.value) != len(value) {
+		last.value = string(value)
+	}
 }
 
 func (r *BinaryReader) IndexVersion() (int, error) {
@@ -946,13 +984,17 @@ func (r *BinaryReader) postingsOffset(name string, values ...string) ([]index.Ra
 				break
 			}
 
-			if valueIndex != len(values) && wantedValue <= e.offsets[i+1].value {
-				// Increment i when wanted value is same as next offset.
-				if wantedValue == e.offsets[i+1].value {
-					i++
+			if valueIndex != len(values) {
+				if wantedValue < e.offsets[i+1].value {
+					// wantedValue is before the next sampled entry, let's iterate further to add those.
+					continue
 				}
-				// wantedValue is smaller or same as the next offset we know about, let's iterate further to add those.
-				continue
+				if i+2 == len(e.offsets) || wantedValue < e.offsets[i+2].value {
+					// wantedValue is in the next sampled range. Keep iterating into it instead of
+					// searching again: e.offsets[i+1].value may be a separator shorter than the value.
+					i++
+					continue
+				}
 			}
 
 			// Nothing wanted or wantedValue is larger than next offset we know about.
