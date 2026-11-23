@@ -20,7 +20,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/thanos-io/promql-engine/execution/parse"
+	"github.com/weaveworks/common/httpgrpc"
+	httpgrpcserver "github.com/weaveworks/common/httpgrpc/server"
 	"github.com/weaveworks/common/user"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v2"
 
 	cortexfrontend "github.com/thanos-io/thanos/internal/cortex/frontend"
@@ -37,15 +40,18 @@ import (
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/queryfrontend"
 	"github.com/thanos-io/thanos/pkg/runutil"
+	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/tenancy"
+	"github.com/thanos-io/thanos/pkg/tls"
 	"github.com/thanos-io/thanos/pkg/tracing"
 )
 
 type queryFrontendConfig struct {
 	queryfrontend.Config
 	http           httpConfig
+	grpc           grpcConfig
 	webDisableCORS bool
 	orgIdHeaders   []string
 }
@@ -69,6 +75,8 @@ func registerQueryFrontend(app *extkingpin.App) {
 	}
 
 	cfg.http.registerFlag(cmd)
+	// The gRPC server is disabled by default; it is only started when --grpc-address is set.
+	cfg.grpc.registerFlagWithDefaultAddress(cmd, "")
 
 	cmd.Flag("web.disable-cors", "Whether to disable CORS headers to be set by Thanos. By default Thanos sets CORS headers to be allowed by all.").
 		Default("false").BoolVar(&cfg.webDisableCORS)
@@ -354,6 +362,31 @@ func runQueryFrontend(
 	logMiddleware := logging.NewHTTPServerMiddleware(logger, httpLogOpts...)
 	ins := extpromhttp.NewTenantInstrumentationMiddleware(cfg.TenantHeader, cfg.DefaultTenant, reg, nil)
 
+	// instr wraps the query frontend handler with the same middleware chain (orgID injection, CORS,
+	// tracing, instrumentation, request logging) regardless of whether it is served over HTTP or gRPC.
+	instr := func(f http.HandlerFunc) http.HandlerFunc {
+		hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			orgId := extractOrgId(cfg, r)
+			name := "query-frontend"
+			if !cfg.webDisableCORS {
+				api.SetCORS(w)
+			}
+			middleware.RequestID(
+				tracing.HTTPMiddleware(
+					tracer,
+					name,
+					logger,
+					ins.NewHandler(
+						name,
+						logMiddleware.HTTPMiddleware(name, f),
+					),
+					// Cortex frontend middlewares require orgID.
+				),
+			).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
+		})
+		return hf
+	}
+
 	// Start metrics HTTP server.
 	{
 		srv := httpserver.New(logger, reg, comp, httpProbe,
@@ -362,28 +395,6 @@ func runQueryFrontend(
 			httpserver.WithTLSConfig(cfg.http.tlsConfig),
 		)
 
-		instr := func(f http.HandlerFunc) http.HandlerFunc {
-			hf := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				orgId := extractOrgId(cfg, r)
-				name := "query-frontend"
-				if !cfg.webDisableCORS {
-					api.SetCORS(w)
-				}
-				middleware.RequestID(
-					tracing.HTTPMiddleware(
-						tracer,
-						name,
-						logger,
-						ins.NewHandler(
-							name,
-							logMiddleware.HTTPMiddleware(name, f),
-						),
-						// Cortex frontend middlewares require orgID.
-					),
-				).ServeHTTP(w, r.WithContext(user.InjectOrgID(r.Context(), orgId)))
-			})
-			return hf
-		}
 		srv.Handle("/", instr(handler.ServeHTTP))
 
 		g.Add(func() error {
@@ -396,6 +407,14 @@ func runQueryFrontend(
 
 			srv.Shutdown(err)
 		})
+	}
+
+	// Optionally start a gRPC server that exposes the same HTTP API over the httpgrpc protocol.
+	// Disabled by default; enabled by setting --grpc-address.
+	if cfg.grpc.bindAddress != "" {
+		if err := addQueryFrontendGRPCServer(g, logger, reg, tracer, comp, cfg.grpc, instr(handler.ServeHTTP)); err != nil {
+			return err
+		}
 	}
 
 	// Periodically check downstream URL to ensure it is reachable.
@@ -460,4 +479,48 @@ func extractOrgId(conf *queryFrontendConfig, r *http.Request) string {
 		}
 	}
 	return "anonymous"
+}
+
+// addQueryFrontendGRPCServer adds to g a gRPC server listening on grpcCfg.bindAddress that serves h
+// over the httpgrpc protocol.
+func addQueryFrontendGRPCServer(
+	g *run.Group,
+	logger log.Logger,
+	reg prometheus.Registerer,
+	tracer opentracing.Tracer,
+	comp component.Component,
+	grpcCfg grpcConfig,
+	h http.Handler,
+) error {
+	tlsCfg, err := tls.NewServerConfig(log.With(logger, "protocol", "gRPC"),
+		grpcCfg.tlsSrvCert, grpcCfg.tlsSrvKey, grpcCfg.tlsSrvClientCA, grpcCfg.tlsMinVersion, grpcCfg.tlsCiphers, grpcCfg.tlsCurves)
+	if err != nil {
+		return errors.Wrap(err, "setup gRPC server")
+	}
+
+	httpgrpcSrv := httpgrpcserver.NewServer(h)
+
+	grpcProbe := prober.NewGRPC()
+	s := grpcserver.New(logger, reg, tracer, nil, nil, comp, grpcProbe,
+		grpcserver.WithServer(func(srv *grpc.Server) {
+			httpgrpc.RegisterHTTPServer(srv, httpgrpcSrv)
+		}),
+		grpcserver.WithListen(grpcCfg.bindAddress),
+		grpcserver.WithGracePeriod(grpcCfg.gracePeriod),
+		grpcserver.WithMaxConnAge(grpcCfg.maxConnectionAge),
+		grpcserver.WithTLSConfig(tlsCfg),
+	)
+
+	g.Add(func() error {
+		grpcProbe.Healthy()
+		grpcProbe.Ready()
+
+		return s.ListenAndServe()
+	}, func(err error) {
+		grpcProbe.NotReady(err)
+		grpcProbe.NotHealthy(err)
+
+		s.Shutdown(err)
+	})
+	return nil
 }
