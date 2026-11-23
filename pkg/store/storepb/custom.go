@@ -15,6 +15,7 @@ import (
 
 	"github.com/gogo/protobuf/types"
 	"github.com/pkg/errors"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
 	"google.golang.org/grpc/codes"
 
@@ -453,7 +454,17 @@ func PromMatchersToString(ms ...*labels.Matcher) string {
 }
 
 func (m *LabelMatcher) PromString() string {
-	return fmt.Sprintf("%s%s%q", m.Name, m.Type.PromString(), m.Value)
+	return fmt.Sprintf("%s%s%q", QuoteLabelName(m.Name), m.Type.PromString(), m.Value)
+}
+
+// QuoteLabelName returns name unchanged if it is a legacy-valid label name,
+// or as a quoted PromQL string literal otherwise, so that UTF-8 label and
+// metric names stay parsable in PromQL text (see prometheus/prometheus#13095).
+func QuoteLabelName(name string) string {
+	if model.LegacyValidation.IsValidLabelName(name) {
+		return name
+	}
+	return strconv.Quote(name)
 }
 
 func (m *LabelMatcher) GetName() string {

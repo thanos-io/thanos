@@ -1076,6 +1076,12 @@ func (qapi *QueryAPI) labelValues(r *http.Request) (any, []error, *api.ApiError,
 	ctx := r.Context()
 	name := route.Param(ctx, "name")
 
+	// Clients that cannot send UTF-8 label names may send the escaped form
+	// (e.g. U__http_2e_request_2e_method); unescape it like Prometheus does.
+	if strings.HasPrefix(name, "U__") {
+		name = model.UnescapeName(name, model.ValueEncodingEscaping)
+	}
+
 	if !model.UTF8Validation.IsValidLabelName(name) {
 		return nil, nil, &api.ApiError{Typ: api.ErrorBadData, Err: errors.Errorf("invalid label name: %q", name)}, func() {}
 	}

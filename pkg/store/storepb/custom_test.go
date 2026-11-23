@@ -510,6 +510,14 @@ func TestMatchersToString_Translate(t *testing.T) {
 			// We cannot use up{__name__!="up"} in this case.
 			expected: `{__name__="up", __name__!="up"}`,
 		},
+		{
+			// UTF-8 metric and label names must be quoted to stay parsable.
+			ms: []LabelMatcher{
+				{Name: "__name__", Type: LabelMatcher_EQ, Value: "http.requests.total"},
+				{Name: "http.request.method", Type: LabelMatcher_EQ, Value: "GET"},
+			},
+			expected: `{__name__="http.requests.total", "http.request.method"="GET"}`,
+		},
 	} {
 		t.Run(c.expected, func(t *testing.T) {
 			testutil.Equals(t, c.expected, MatchersToString(c.ms...))
@@ -713,6 +721,35 @@ func TestSeriesRequestToPromQL(t *testing.T) {
 				},
 			},
 			expected: `sum by (job) projection without (instance,pod) ({__name__="http_requests_total"})`,
+		},
+		{
+			name: "Query with UTF-8 matchers, grouping and projection",
+			r: &SeriesRequest{
+				Matchers: []LabelMatcher{
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "__name__",
+						Value: "http.requests.total",
+					},
+					{
+						Type:  LabelMatcher_EQ,
+						Name:  "http.request.method",
+						Value: "GET",
+					},
+				},
+				QueryHints: &QueryHints{
+					Func: &Func{
+						Name: "sum",
+					},
+					Grouping: &Grouping{
+						By:     true,
+						Labels: []string{"http.request.method"},
+					},
+					ProjectionLabels:  []string{"http.request.method", "__name__"},
+					ProjectionInclude: true,
+				},
+			},
+			expected: `sum by ("http.request.method") projection ("http.request.method",__name__) ({__name__="http.requests.total", "http.request.method"="GET"})`,
 		},
 		{
 			name: "Query with projection hints and range",

@@ -31,7 +31,7 @@ func (m *QueryHints) projectionToPromQL() string {
 		op = "projection without"
 	}
 
-	return fmt.Sprintf("%s (%s) ", op, strings.Join(m.ProjectionLabels, ","))
+	return fmt.Sprintf("%s (%s) ", op, strings.Join(quoteLabelNames(m.ProjectionLabels), ","))
 }
 
 func (m *Grouping) toPromQL() string {
@@ -49,7 +49,15 @@ func (m *Grouping) toPromQL() string {
 		op = "without"
 	}
 
-	return fmt.Sprintf("%s (%s)", op, strings.Join(m.Labels, ","))
+	return fmt.Sprintf("%s (%s)", op, strings.Join(quoteLabelNames(m.Labels), ","))
+}
+
+func quoteLabelNames(names []string) []string {
+	quoted := make([]string, len(names))
+	for i, name := range names {
+		quoted[i] = QuoteLabelName(name)
+	}
+	return quoted
 }
 
 func (m *Range) toPromQL() string {
