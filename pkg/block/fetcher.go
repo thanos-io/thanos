@@ -813,7 +813,7 @@ func (f *LabelShardedMetaFilter) Filter(_ context.Context, metas map[ulid.ULID]*
 			b.Set(k, v)
 		}
 
-		if !relabel.ProcessBuilder(&b, f.relabelConfig...) {
+		if !relabel.ProcessBuilder(&b, f.relabelConfig...) || b.Labels().IsEmpty() {
 			synced.WithLabelValues(labelExcludedMeta).Inc()
 			delete(metas, id)
 		}
