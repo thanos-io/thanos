@@ -344,6 +344,9 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 	return lset.Labels(), nil
 }
 
+// goMemLimitRefreshInterval is how often to re-read the cgroup memory limit.
+const goMemLimitRefreshInterval = time.Minute
+
 type goMemLimitConfig struct {
 	enableAutoGoMemlimit bool
 	memlimitRatio        float64
@@ -380,6 +383,7 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 					memlimit.FromSystem,
 				),
 			),
+			memlimit.WithRefreshInterval(goMemLimitRefreshInterval),
 		)
 		if err != nil {
 			return -1, errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
