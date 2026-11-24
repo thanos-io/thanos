@@ -91,6 +91,10 @@ func (t thanosCacheKeyGenerator) generateQueryRangeCacheKey(userID string, tr *T
 	i := 0
 	for ; i < len(t.resolutions) && t.resolutions[i] > tr.MaxSourceResolution; i++ {
 	}
+	if tr.ExplicitRaw {
+		// Keep explicit raw results separate from the Querier's default resolution.
+		i = len(t.resolutions)
+	}
 	shardInfoKey := generateShardInfoKey(tr)
 	replicaLabels := append([]string(nil), tr.ReplicaLabels...)
 	sort.Strings(replicaLabels)
