@@ -11,6 +11,7 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -101,14 +102,12 @@ func (bf *BlockFilter) Filter(b *metadata.Meta) bool {
 	return true
 }
 
-type blockFilterFunc func(b *metadata.Meta) bool
-
 // TODO: Add filters field.
 type replicationScheme struct {
 	fromBkt objstore.InstrumentedBucketReader
 	toBkt   objstore.Bucket
 
-	blockFilter blockFilterFunc
+	blockFilter *BlockFilter
 	fetcher     thanosblock.MetadataFetcher
 
 	logger  log.Logger
@@ -144,7 +143,7 @@ func newReplicationMetrics(reg prometheus.Registerer) *replicationMetrics {
 func newReplicationScheme(
 	logger log.Logger,
 	metrics *replicationMetrics,
-	blockFilter blockFilterFunc,
+	blockFilter *BlockFilter,
 	fetcher thanosblock.MetadataFetcher,
 	from objstore.InstrumentedBucketReader,
 	to objstore.Bucket,
@@ -178,7 +177,7 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 	}
 
 	for id, meta := range metas {
-		if rs.blockFilter(meta) {
+		if rs.blockFilter.Filter(meta) {
 			level.Info(rs.logger).Log("msg", "adding block to be replicated", "block_uuid", id.String())
 			availableBlocks = append(availableBlocks, meta)
 		}
@@ -190,13 +189,32 @@ func (rs *replicationScheme) execute(ctx context.Context) error {
 		return availableBlocks[i].MinTime < availableBlocks[j].MinTime
 	})
 
+	pendingIDs := make(map[ulid.ULID]struct{}, len(rs.blockFilter.blockIDs))
+	for _, id := range rs.blockFilter.blockIDs {
+		pendingIDs[id] = struct{}{}
+	}
+	var replicationErr error
 	for _, b := range availableBlocks {
 		if err := rs.ensureBlockIsReplicated(ctx, b.ULID); err != nil {
-			return errors.Wrapf(err, "ensure block %v is replicated", b.ULID.String())
+			replicationErr = errors.Wrapf(err, "ensure block %v is replicated", b.ULID.String())
+			break
 		}
+		delete(pendingIDs, b.ULID)
 	}
 
-	return nil
+	if len(pendingIDs) == 0 {
+		return replicationErr
+	}
+	ids := make([]string, 0, len(pendingIDs))
+	for id := range pendingIDs {
+		ids = append(ids, id.String())
+	}
+	slices.Sort(ids)
+	msg := "could not replicate requested blocks: " + strings.Join(ids, ", ")
+	if replicationErr != nil {
+		return errors.Wrap(replicationErr, msg)
+	}
+	return errors.New(msg)
 }
 
 // ensureBlockIsReplicated ensures that a block present in the origin bucket is
