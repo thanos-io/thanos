@@ -768,3 +768,39 @@ func TestSeriesRequestWithMatchers(t *testing.T) {
 	testutil.Equals(t, req.MaxTime, r1.MaxTime)
 	testutil.Assert(t, req.WithMatchers() == req, "expected no copy without matchers")
 }
+
+func TestChunkXOR2MarshalAndNumSamples(t *testing.T) {
+	c := chunkenc.NewXOR2Chunk()
+	app, err := c.Appender()
+	testutil.Ok(t, err)
+	app.Append(100, 1000, 1.5)
+	app.Append(100, 2000, 2.5)
+	app.Append(150, 3000, 3.5)
+
+	orig := &Chunk{
+		Type: Chunk_XOR2,
+		Data: c.Bytes(),
+		Hash: 42,
+	}
+	testutil.Equals(t, 3, orig.XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2}).XORNumSamples())
+
+	raw, err := orig.Marshal()
+	testutil.Ok(t, err)
+
+	var decoded Chunk
+	testutil.Ok(t, decoded.Unmarshal(raw))
+	testutil.Equals(t, Chunk_XOR2, decoded.Type)
+	testutil.Equals(t, uint64(42), decoded.Hash)
+	testutil.Equals(t, c.Bytes(), decoded.Data)
+	testutil.Equals(t, 3, decoded.XORNumSamples())
+
+	var stats SeriesStatsCounter
+	stats.Count(&Series{
+		Labels: []labelpb.ZLabel{{Name: "__name__", Value: "up"}},
+		Chunks: []AggrChunk{{MinTime: 1000, MaxTime: 3000, Raw: &decoded}},
+	})
+	testutil.Equals(t, 1, stats.Series)
+	testutil.Equals(t, 1, stats.Chunks)
+	testutil.Equals(t, 3, stats.Samples)
+}

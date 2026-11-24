@@ -25,6 +25,7 @@ message Chunk {
     XOR = 0;
     HISTOGRAM = 1;
     FLOAT_HISTOGRAM = 2;
+    XOR2 = 3;
   }
   Encoding type  = 1;
   bytes data     = 2;
