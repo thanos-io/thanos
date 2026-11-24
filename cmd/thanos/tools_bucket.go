@@ -35,7 +35,6 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
-	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"gopkg.in/yaml.v3"
@@ -1160,6 +1159,23 @@ func registerBucketMarkBlock(app extkingpin.AppClause, objStoreConfig *extflag.P
 	})
 }
 
+// checkDownsampledRewrite rejects rewrites that would re-encode aggregated chunks of a downsampled block.
+func checkDownsampledRewrite(meta *metadata.Meta, deletions []metadata.DeletionRequest, relabels []*relabel.Config) error {
+	res := meta.Thanos.Downsample.Resolution
+	if res == downsample.ResLevel0 {
+		return nil
+	}
+	if len(relabels) > 0 {
+		return errors.Errorf("block %s is downsampled (resolution %d): only whole-series deletions are supported, got relabel config", meta.ULID, res)
+	}
+	for _, d := range deletions {
+		if len(d.Intervals) > 0 {
+			return errors.Errorf("block %s is downsampled (resolution %d): only whole-series deletions are supported, got deletion with intervals", meta.ULID, res)
+		}
+	}
+	return nil
+}
+
 func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.PathOrContent) {
 	cmd := app.Command(component.Rewrite.String(), "Rewrite chosen blocks in the bucket, while deleting or modifying series "+
 		"Resulted block has modified stats in meta.json. Additionally compaction.sources are altered to not confuse readers of meta.json. "+
@@ -1240,9 +1256,20 @@ func registerBucketRewrite(app extkingpin.AppClause, objStoreConfig *extflag.Pat
 
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			chunkPool := chunkenc.NewPool()
+			// Downsampled blocks hold aggregated chunks, which the Prometheus pool cannot decode.
+			chunkPool := downsample.NewPool()
 			changeLog := compactv2.NewChangeLog(io.Discard)
 			stubCounter := promauto.With(nil).NewCounter(prometheus.CounterOpts{})
+			// Check all blocks before rewriting any of them.
+			for _, id := range ids {
+				meta, err := block.DownloadMeta(ctx, logger, insBkt, id)
+				if err != nil {
+					return errors.Wrapf(err, "download meta of %v", id)
+				}
+				if err := checkDownsampledRewrite(&meta, deletions, relabels); err != nil {
+					return err
+				}
+			}
 			for _, id := range ids {
 				// Delete series from block & modify.
 				level.Info(logger).Log("msg", "downloading block", "source", id)
