@@ -886,3 +886,94 @@ func readBlockChunkBytes(t *testing.T, bDir string) map[string][][]byte {
 	testutil.Ok(t, all.Err())
 	return res
 }
+
+func TestCompactor_WriteSeries_DeletionPreservesXOR2(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := log.NewNopLogger()
+	tmpDir := t.TempDir()
+
+	srcID := ulid.MustNew(1, nil)
+	srcDir := filepath.Join(tmpDir, srcID.String())
+	testutil.Ok(t, os.MkdirAll(srcDir, os.ModePerm))
+	d, err := block.NewDiskWriter(ctx, logger, srcDir)
+	testutil.Ok(t, err)
+	testutil.Ok(t, d.AddSymbol("__name__"))
+	testutil.Ok(t, d.AddSymbol("xor2_del"))
+
+	chk := chunkenc.NewXOR2Chunk()
+	app, err := chk.Appender()
+	testutil.Ok(t, err)
+	app.Append(50, 1000, 1.0)
+	app.Append(50, 2000, 2.0)
+	app.Append(100, 3000, 3.0)
+
+	chks := []chunks.Meta{{Chunk: chk, MinTime: 1000, MaxTime: 3000}}
+	testutil.Ok(t, d.WriteChunks(chks...))
+	testutil.Ok(t, d.AddSeries(0, labels.FromStrings("__name__", "xor2_del"), chks...))
+	_, err = d.Flush()
+	testutil.Ok(t, err)
+	srcMeta := metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{Version: 1, ULID: srcID, MinTime: 1000, MaxTime: 3001},
+		Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+	}
+	testutil.Ok(t, srcMeta.WriteToDir(logger, srcDir))
+
+	b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), srcDir, downsample.NewPool(), nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, b.Close()) })
+
+	outID := ulid.MustNew(2, nil)
+	outDir := filepath.Join(tmpDir, outID.String())
+	outWriter, err := block.NewDiskWriter(ctx, logger, outDir)
+	testutil.Ok(t, err)
+
+	var changes bytes.Buffer
+	comp := New(tmpDir, logger, &changeLog{w: &changes}, downsample.NewPool())
+	delMod := WithDeletionModifier(metadata.DeletionRequest{
+		Matchers:  []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_del")},
+		Intervals: tombstones.Intervals{{Mint: 1500, Maxt: 2500}},
+	})
+	testutil.Ok(t, comp.WriteSeries(ctx, []block.Reader{b}, outWriter, NewProgressLogger(logger, 1), delMod))
+	testutil.Ok(t, os.MkdirAll(outDir, os.ModePerm))
+	_, err = outWriter.Flush()
+	testutil.Ok(t, err)
+	outMeta := metadata.Meta{
+		BlockMeta: tsdb.BlockMeta{Version: 1, ULID: outID, MinTime: 1000, MaxTime: 3001},
+		Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+	}
+	testutil.Ok(t, outMeta.WriteToDir(logger, outDir))
+
+	outBlk, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), outDir, downsample.NewPool(), nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, outBlk.Close()) })
+
+	cq, err := tsdb.NewBlockChunkQuerier(outBlk, 0, 5000)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, cq.Close()) })
+
+	ss := cq.Select(ctx, false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_del"))
+	testutil.Assert(t, ss.Next())
+	chksIt := ss.At().Iterator(nil)
+	testutil.Assert(t, chksIt.Next())
+	gotChk := chksIt.At().Chunk
+	testutil.Equals(t, chunkenc.EncXOR2, gotChk.Encoding())
+
+	it := gotChk.Iterator(nil)
+	for _, want := range []struct {
+		st, t int64
+		v     float64
+	}{
+		{st: 50, t: 1000, v: 1.0},
+		{st: 100, t: 3000, v: 3.0},
+	} {
+		testutil.Equals(t, chunkenc.ValFloat, it.Next())
+		ts, v := it.At()
+		testutil.Equals(t, want.t, ts)
+		testutil.Equals(t, want.v, v)
+		testutil.Equals(t, want.st, it.AtST())
+	}
+	testutil.Equals(t, chunkenc.ValNone, it.Next())
+	testutil.Ok(t, it.Err())
+}

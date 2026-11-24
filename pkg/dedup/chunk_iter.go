@@ -17,6 +17,13 @@ import (
 // NewChunkSeriesMerger merges several chunk series into one.
 // Deduplication is based on penalty based deduplication algorithm without handling counter reset.
 func NewChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
+	return NewChunkSeriesMergerWithFloatEncoding(chunkenc.EncXOR)
+}
+
+// NewChunkSeriesMergerWithFloatEncoding is like NewChunkSeriesMerger, but re-encoded
+// overlapping float chunks use floatEncoding (EncXOR or EncXOR2; anything else behaves
+// like EncXOR). Samples carrying a start timestamp always use EncXOR2.
+func NewChunkSeriesMergerWithFloatEncoding(floatEncoding chunkenc.Encoding) storage.VerticalChunkSeriesMergeFunc {
 	return func(series ...storage.ChunkSeries) storage.ChunkSeries {
 		if len(series) == 0 {
 			return nil
@@ -29,7 +36,8 @@ func NewChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
 					iterators = append(iterators, s.Iterator(nil))
 				}
 				return &dedupChunksIterator{
-					iterators: iterators,
+					iterators:     iterators,
+					floatEncoding: floatEncoding,
 				}
 			},
 		}
@@ -37,8 +45,9 @@ func NewChunkSeriesMerger() storage.VerticalChunkSeriesMergeFunc {
 }
 
 type dedupChunksIterator struct {
-	iterators []chunks.Iterator
-	h         chunkIteratorHeap
+	iterators     []chunks.Iterator
+	floatEncoding chunkenc.Encoding
+	h             chunkIteratorHeap
 
 	err  error
 	curr chunks.Meta
@@ -69,7 +78,7 @@ func (d *dedupChunksIterator) Next() bool {
 	}
 
 	var (
-		om       = newOverlappingMerger()
+		om       = newOverlappingMerger(d.floatEncoding)
 		oMaxTime = d.curr.MaxTime
 		prev     = d.curr
 	)
@@ -85,6 +94,7 @@ func (d *dedupChunksIterator) Next() bool {
 
 		if next.MinTime == prev.MinTime &&
 			next.MaxTime == prev.MaxTime &&
+			next.Chunk.Encoding() == prev.Chunk.Encoding() &&
 			bytes.Equal(next.Chunk.Bytes(), prev.Chunk.Bytes()) {
 			// 1:1 duplicates, skip it.
 		} else {
@@ -151,6 +161,7 @@ func (h *chunkIteratorHeap) Pop() any {
 }
 
 type overlappingMerger struct {
+	floatEncoding      chunkenc.Encoding
 	xorIterators       []chunkenc.Iterator
 	histIterators      []chunkenc.Iterator
 	floatHistIterators []chunkenc.Iterator
@@ -159,8 +170,9 @@ type overlappingMerger struct {
 	samplesMergeFunc func(a, b chunkenc.Iterator) chunkenc.Iterator
 }
 
-func newOverlappingMerger() *overlappingMerger {
+func newOverlappingMerger(floatEncoding chunkenc.Encoding) *overlappingMerger {
 	return &overlappingMerger{
+		floatEncoding: floatEncoding,
 		samplesMergeFunc: func(a, b chunkenc.Iterator) chunkenc.Iterator {
 			return newDedupSeriesIterator(
 				noopAdjustableSeriesIterator{a},
@@ -205,14 +217,14 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 	switch baseChk.Chunk.Encoding() {
 	case chunkenc.EncXOR, chunkenc.EncXOR2:
 		// If XOR encoding, we need to deduplicate the samples and re-encode them to chunks.
-		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
+		return storage.NewSeriesToChunkEncoderWithFloatEncoding(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
 				it = baseChk.Chunk.Iterator(nil)
 				for _, i := range o.xorIterators {
 					it = o.samplesMergeFunc(it, i)
 				}
 				return it
-			}}).Iterator(nil)
+			}}, o.floatEncoding).Iterator(nil)
 
 	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{

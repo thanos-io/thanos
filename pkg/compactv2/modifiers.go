@@ -320,8 +320,13 @@ func (p *delChunkSeriesIterator) Next() bool {
 		return true
 	}
 
-	// Re-encode the chunk if iterator is provider. This means that it has some samples to be deleted or chunk is opened.
-	newChunk := chunkenc.NewXORChunk()
+	// Re-encode the chunk if iterator is provided. This means that it has some samples to be deleted or chunk is opened.
+	var newChunk chunkenc.Chunk
+	if p.currChkMeta.Chunk.Encoding() == chunkenc.EncXOR2 {
+		newChunk = chunkenc.NewXOR2Chunk()
+	} else {
+		newChunk = chunkenc.NewXORChunk()
+	}
 	app, err := newChunk.Appender()
 	if err != nil {
 		p.err = err
@@ -341,11 +346,11 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 	t, v := p.currDelIter.At()
 	p.curr.MinTime = t
-	app.Append(0, t, v)
+	app.Append(p.currDelIter.AtST(), t, v)
 
 	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
-		app.Append(0, t, v)
+		app.Append(p.currDelIter.AtST(), t, v)
 	}
 	if err := p.currDelIter.Err(); err != nil {
 		p.err = errors.Wrap(err, "iterate chunk while re-encoding")
