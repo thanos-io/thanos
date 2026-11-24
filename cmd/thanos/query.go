@@ -35,6 +35,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/extprom"
 	extpromhttp "github.com/thanos-io/thanos/pkg/extprom/http"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/info"
 	"github.com/thanos-io/thanos/pkg/info/infopb"
@@ -62,6 +63,21 @@ const (
 	queryPushdown               = "query-pushdown"
 	promqlExperimentalFunctions = "promql-experimental-functions"
 )
+
+func hasFeature(features []string, target string) bool {
+	for _, f := range features {
+		for _, part := range strings.Split(f, ",") {
+			if strings.TrimSpace(part) == target {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func newPromQLParser(features []string, enableXFunctions bool) parser.Parser {
+	return extpromql.NewParser(hasFeature(features, promqlExperimentalFunctions), enableXFunctions)
+}
 
 // registerQuery registers a query command.
 func registerQuery(app *extkingpin.App) {
@@ -222,20 +238,18 @@ func registerQuery(app *extkingpin.App) {
 			return errors.Wrap(err, "parse federation labels")
 		}
 
-		for _, feature := range *featureList {
-			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
-				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
-			}
-			if feature == promqlAtModifier {
-				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
-			}
-			if feature == promqlNegativeOffset {
-				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlNegativeOffset)
-			}
-			if feature == queryPushdown {
-				level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently deprecated and therefore ignored.", "option", queryPushdown)
-			}
+		enableExperimentalFunctions := hasFeature(*featureList, promqlExperimentalFunctions)
+		if enableExperimentalFunctions {
+			level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
+		}
+		if hasFeature(*featureList, promqlAtModifier) {
+			level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlAtModifier)
+		}
+		if hasFeature(*featureList, promqlNegativeOffset) {
+			level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently enabled and therefore a no-op.", "option", promqlNegativeOffset)
+		}
+		if hasFeature(*featureList, queryPushdown) {
+			level.Warn(logger).Log("msg", "This option for --enable-feature is now permanently deprecated and therefore ignored.", "option", queryPushdown)
 		}
 
 		httpLogOpts, err := logging.ParseHTTPOptions(reqLogConfig)
@@ -372,6 +386,7 @@ func registerQuery(app *extkingpin.App) {
 			*queryTelemetrySeriesQuantiles,
 			storeRateLimits,
 			*extendedFunctionsEnabled,
+			enableExperimentalFunctions,
 			store.NewTSDBSelector(tsdbSelector),
 			apiv1.PromqlEngineType(*defaultEngine),
 			apiv1.PromqlQueryMode(*promqlQueryMode),
@@ -438,6 +453,7 @@ func runQuery(
 	queryTelemetrySeriesQuantiles []float64,
 	storeRateLimits store.SeriesSelectLimits,
 	extendedFunctionsEnabled bool,
+	enableExperimentalFunctions bool,
 	tsdbSelector *store.TSDBSelector,
 	defaultEngine apiv1.PromqlEngineType,
 	queryMode apiv1.PromqlQueryMode,
@@ -475,7 +491,7 @@ func runQuery(
 		rulesProxy       = rules.NewProxy(logger, endpointSet.GetRulesClients)
 		targetsProxy     = targets.NewProxy(logger, endpointSet.GetTargetsClients)
 		metadataProxy    = metadata.NewProxy(logger, endpointSet.GetMetricMetadataClients)
-		exemplarsProxy   = exemplars.NewProxy(logger, endpointSet.GetExemplarsStores, selectorLset)
+		exemplarsProxy   = exemplars.NewProxy(logger, endpointSet.GetExemplarsStores, selectorLset, exemplars.WithParser(extpromql.NewParser(enableExperimentalFunctions, extendedFunctionsEnabled)))
 		statusProxy      = status.NewProxy(logger, endpointSet.GetStatusClients)
 		queryableCreator = query.NewQueryableCreator(
 			logger,
@@ -508,7 +524,11 @@ func runQuery(
 	// Otherwise, the nil active query tracker from existing engine options will be used.
 	var activeQueryTracker *promql.ActiveQueryTracker
 	if activeQueryDir != "" {
-		activeQueryTracker = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
+		var err error
+		activeQueryTracker, err = promql.NewActiveQueryTracker(activeQueryDir, maxConcurrentQueries, logutil.GoKitLogToSlog(logger))
+		if err != nil {
+			return errors.Wrapf(err, "initialize active query tracker at %q", activeQueryDir)
+		}
 	}
 
 	queryCreator := apiv1.NewQueryFactory(
@@ -521,6 +541,7 @@ func runQuery(
 		activeQueryTracker,
 		queryMode,
 		disableQueryFallback,
+		enableExperimentalFunctions,
 	)
 
 	lookbackDeltaCreator := LookbackDeltaFactory(lookbackDelta, dynamicLookbackDelta)

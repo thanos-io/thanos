@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus-community/prom-label-proxy/injectproxy"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/promql/parser"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/thanos-io/thanos/pkg/extpromql"
@@ -140,7 +141,7 @@ func GetTenantFromGRPCMetadata(ctx context.Context) (string, bool) {
 	return md.Get(DefaultTenantHeader)[0], true
 }
 
-func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (string, error) {
+func EnforceQueryTenancy(tenantLabel string, tenant string, query string, p parser.Parser) (string, error) {
 	labelMatcher := &labels.Matcher{
 		Name:  tenantLabel,
 		Type:  labels.MatchEqual,
@@ -149,7 +150,7 @@ func EnforceQueryTenancy(tenantLabel string, tenant string, query string) (strin
 
 	e := injectproxy.NewPromQLEnforcer(false, labelMatcher)
 
-	expr, err := extpromql.ParseExpr(query)
+	expr, err := extpromql.ParseExprWithParser(p, query)
 	if err != nil {
 		return "", errors.Wrap(err, "error parsing query string, when enforcing tenenacy")
 	}
@@ -201,7 +202,7 @@ func getLabelMatchers(formMatchers []string, tenant string, enforceTenancy bool,
 // This function will:
 // - Get tenant from HTTP header and add it to context.
 // - if tenancy is enforced, add a tenant matcher to the promQL expression.
-func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, queryStr string) (string, string, context.Context, error) {
+func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, defaultTenantID string, certTenantField string, enforceTenancy bool, tenantLabel string, queryStr string, p parser.Parser) (string, string, context.Context, error) {
 	tenant, err := GetTenantFromHTTP(r, tenantHeader, defaultTenantID, certTenantField)
 	if err != nil {
 		return "", "", ctx, err
@@ -209,7 +210,7 @@ func RewritePromQL(ctx context.Context, r *http.Request, tenantHeader string, de
 	ctx = context.WithValue(ctx, TenantKey, tenant)
 
 	if enforceTenancy {
-		queryStr, err = EnforceQueryTenancy(tenantLabel, tenant, queryStr)
+		queryStr, err = EnforceQueryTenancy(tenantLabel, tenant, queryStr, p)
 		return queryStr, tenant, ctx, err
 	}
 	return queryStr, tenant, ctx, nil

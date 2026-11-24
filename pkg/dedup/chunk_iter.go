@@ -172,11 +172,11 @@ func newOverlappingMerger() *overlappingMerger {
 
 func (o *overlappingMerger) addChunk(chk chunks.Meta) {
 	switch chk.Chunk.Encoding() {
-	case chunkenc.EncXOR:
+	case chunkenc.EncXOR, chunkenc.EncXOR2:
 		o.xorIterators = append(o.xorIterators, chk.Chunk.Iterator(nil))
-	case chunkenc.EncFloatHistogram:
+	case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
 		o.floatHistIterators = append(o.floatHistIterators, chk.Chunk.Iterator(nil))
-	case chunkenc.EncHistogram:
+	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		o.histIterators = append(o.histIterators, chk.Chunk.Iterator(nil))
 	case downsample.ChunkEncAggr:
 		aggrChk := chk.Chunk.(*downsample.AggrChunk)
@@ -203,7 +203,7 @@ func (o *overlappingMerger) empty() bool {
 func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 	var it chunkenc.Iterator
 	switch baseChk.Chunk.Encoding() {
-	case chunkenc.EncXOR:
+	case chunkenc.EncXOR, chunkenc.EncXOR2:
 		// If XOR encoding, we need to deduplicate the samples and re-encode them to chunks.
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
@@ -214,7 +214,7 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 				return it
 			}}).Iterator(nil)
 
-	case chunkenc.EncHistogram:
+	case chunkenc.EncHistogram, chunkenc.EncHistogramST:
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
 				it = baseChk.Chunk.Iterator(nil)
@@ -225,7 +225,7 @@ func (o *overlappingMerger) iterator(baseChk chunks.Meta) chunks.Iterator {
 			},
 		}).Iterator(nil)
 
-	case chunkenc.EncFloatHistogram:
+	case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
 		return storage.NewSeriesToChunkEncoder(&storage.SeriesEntry{
 			SampleIteratorFn: func(_ chunkenc.Iterator) chunkenc.Iterator {
 				it = baseChk.Chunk.Iterator(nil)
@@ -345,7 +345,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 	)
 	for it.Next() != chunkenc.ValNone {
 		lastT, lastV = it.At()
-		appender.Append(lastT, lastV)
+		appender.Append(0, lastT, lastV)
 	}
 	if err := it.Err(); err != nil {
 		return nil, err
@@ -358,7 +358,7 @@ func (a *aggrChunkIterator) toChunk(at downsample.AggrType, minTime, maxTime int
 
 	// Encode last sample for AggrCounter.
 	if at == downsample.AggrCounter {
-		appender.Append(lastT, lastV)
+		appender.Append(0, lastT, lastV)
 	}
 
 	return &chunks.Meta{
