@@ -535,6 +535,12 @@ Flags:
                                  histograms. This flag is a no-op now and will
                                  be removed in the future. Native histogram
                                  ingestion is always enabled.
+      --tsdb.float-chunk-encoding=xor
+                                 Chunk encoding to use for float samples
+                                 in local TSDB. Supported values are: "xor"
+                                 (default) and "xor2". Warning: XOR2 blocks
+                                 cannot be read by older Thanos or Prometheus
+                                 versions without XOR2 support.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

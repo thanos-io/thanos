@@ -117,6 +117,7 @@ type ruleConfig struct {
 	extendedFunctionsEnabled   bool
 	EnableFeatures             []string
 	tsdbEnableNativeHistograms bool
+	tsdbFloatChunkEncoding     string
 }
 
 const (
@@ -183,6 +184,10 @@ func registerRule(app *extkingpin.App) {
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
 		Default("true").BoolVar(&conf.tsdbEnableNativeHistograms)
 
+	cmd.Flag("tsdb.float-chunk-encoding",
+		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: XOR2 blocks cannot be read by older Thanos or Prometheus versions without XOR2 support.").
+		Default(config.FloatChunkEncodingXOR).EnumVar(&conf.tsdbFloatChunkEncoding, config.FloatChunkEncodingXOR, config.FloatChunkEncodingXOR2)
+
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
 
 	conf.objStoreConfig = extkingpin.RegisterCommonObjStoreFlags(cmd, "", false)
@@ -201,6 +206,11 @@ func registerRule(app *extkingpin.App) {
 			return errors.Wrap(err, "parse alert query url")
 		}
 
+		floatChunkEncoding, err := parseFloatChunkEncoding(conf.tsdbFloatChunkEncoding)
+		if err != nil {
+			return err
+		}
+
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
 			MaxBlockDuration:    int64(time.Duration(*tsdbBlockDuration) / time.Millisecond),
@@ -208,6 +218,7 @@ func registerRule(app *extkingpin.App) {
 			BlockReloadInterval: time.Minute,
 			NoLockfile:          *noLockFile,
 			WALCompression:      compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			FloatChunkEncoding:  floatChunkEncoding,
 		}
 
 		agentOpts := &agent.Options{

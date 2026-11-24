@@ -19,6 +19,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	promtest "github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
@@ -225,4 +226,30 @@ func TestCleanupDownsampleCacheFolder(t *testing.T) {
 
 	_, err = os.Stat(dir)
 	testutil.Assert(t, os.IsNotExist(err), "index cache dir should not exist at the end of execution")
+}
+
+func TestParseFloatChunkEncoding(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		in      string
+		want    chunkenc.Encoding
+		wantErr bool
+	}{
+		{name: "empty_defaults_to_xor", in: "", want: chunkenc.EncXOR},
+		{name: "xor", in: "xor", want: chunkenc.EncXOR},
+		{name: "xor2", in: "xor2", want: chunkenc.EncXOR2},
+		{name: "invalid", in: "XOR2", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseFloatChunkEncoding(tc.in)
+			if tc.wantErr {
+				testutil.NotOk(t, err)
+				return
+			}
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.want, got)
+		})
+	}
 }
