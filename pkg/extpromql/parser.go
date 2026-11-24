@@ -15,6 +15,10 @@ import (
 	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
+// defaultParser is concurrency-safe because parser.NewParser clones opts.Functions
+// once and uses per-call pooled parser state.
+var defaultParser = NewParser(false, true)
+
 // NewParser returns a PromQL parser configured with optional experimental and extended functions.
 // When enableXFunctions is true, parser.Functions is cloned so package-level state is never mutated.
 func NewParser(enableExperimental, enableXFunctions bool) parser.Parser {
@@ -32,14 +36,14 @@ func NewParser(enableExperimental, enableXFunctions bool) parser.Parser {
 
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	return ParseExprWithParser(NewParser(false, true), input)
+	return defaultParser.ParseExpr(input)
 }
 
 // ParseExprWithParser parses the input PromQL expression with the provided parser.
 // If p is nil, it falls back to ParseExpr.
 func ParseExprWithParser(p parser.Parser, input string) (parser.Expr, error) {
 	if p == nil {
-		return ParseExpr(input)
+		return defaultParser.ParseExpr(input)
 	}
 	return p.ParseExpr(input)
 }
