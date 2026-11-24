@@ -94,6 +94,14 @@ expr: <string>
 # Labels to add or overwrite before storing the result.
 labels:
   [ <labelname>: <labelvalue> ]
+
+# Metric metadata for the recorded time series. When omitted, metric type
+# (and unit, when --enable-feature=type-and-unit-labels is enabled) is
+# deduced automatically.
+metadata:
+  [ type: <string> ]
+  [ unit: <string> ]
+  [ help: <string> ]
 ```
 
 Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--endpoint <thanos-ruler-ip>` command-line argument to the Thanos Query command.
@@ -516,6 +524,8 @@ Flags:
       --enable-feature= ...      Comma separated feature names to enable. Valid
                                  options for now: promql-experimental-functions
                                  (enables promql experimental functions for
+                                 ruler), type-and-unit-labels (enables metric
+                                 type and unit labels __type__ and __unit__ in
                                  ruler)
       --[no-]tsdb.enable-native-histograms
                                  (Deprecated) Enables the ingestion of native

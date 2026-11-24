@@ -19,7 +19,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
+	prommetadata "github.com/prometheus/prometheus/model/metadata"
 	writev2 "github.com/prometheus/prometheus/prompb/io/prometheus/write/v2"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb/agent"
 	"github.com/prometheus/prometheus/util/annotations"
 
@@ -304,49 +306,117 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 	// duplicate hash detection in remoteStore.ApplyConfig; verify agentDB and
 	// remoteStore are closed on error so reusing dataDir succeeds without a lock error.
 	dupCfgYAML := fmt.Sprintf("remote_write:\n  - url: %s\n  - url: %s\n", srv.URL, srv.URL)
-	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, agent.DefaultOptions())
+	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, nil, false)
 	testutil.NotOk(t, err)
 
-	store, err := openStatelessRuleStorage(
-		log.NewNopLogger(),
-		prometheus.NewRegistry(),
-		dataDir,
-		[]byte(rwCfgYAML),
-		extLabels,
-		agent.DefaultOptions(),
-	)
-	testutil.Ok(t, err)
-	t.Cleanup(func() {
-		testutil.Ok(t, store.Close())
-	})
+	for _, tc := range []struct {
+		name                    string
+		enableTypeAndUnitLabels bool
+		appendLabels            labels.Labels
+		appendMeta              prommetadata.Metadata
+		expLabels               labels.Labels
+		expType                 writev2.Metadata_MetricType
+		expUnit                 string
+		expHelp                 string
+	}{
+		{
+			name:                    "type-and-unit-labels=false",
+			enableTypeAndUnitLabels: false,
+			appendLabels:            labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"),
+			appendMeta: prommetadata.Metadata{
+				Type: model.MetricTypeCounter,
+				Unit: "requests",
+				Help: "Total evaluated requests.",
+			},
+			expLabels: labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"),
+			expType:   writev2.Metadata_METRIC_TYPE_COUNTER,
+			expUnit:   "requests",
+			expHelp:   "Total evaluated requests.",
+		},
+		{
+			name:                    "type-and-unit-labels=true",
+			enableTypeAndUnitLabels: true,
+			appendLabels:            labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod"),
+			appendMeta: prommetadata.Metadata{
+				Help: "Total evaluated requests.",
+			},
+			expLabels: labels.FromStrings("__name__", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod", "replica", "0"),
+			expType:   writev2.Metadata_METRIC_TYPE_COUNTER,
+			expUnit:   "requests",
+			expHelp:   "Total evaluated requests.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Drain any buffered request from previous subtest.
+			for len(reqCh) > 0 {
+				<-reqCh
+			}
 
-	var (
-		req      *writev2.Request
-		ts       = time.Now().Add(time.Second).UnixMilli()
-		deadline = time.After(3 * time.Second)
-		ticker   = time.NewTicker(50 * time.Millisecond)
-	)
-	defer ticker.Stop()
+			subDataDir := dataDir
+			if tc.enableTypeAndUnitLabels {
+				subDataDir = t.TempDir()
+			}
+			agentOpts := agent.DefaultOptions()
+			agentOpts.EnableMetadataWALRecords = true
+			store, err := openStatelessRuleStorage(
+				log.NewNopLogger(),
+				prometheus.NewRegistry(),
+				subDataDir,
+				[]byte(rwCfgYAML),
+				extLabels,
+				agentOpts,
+				tc.enableTypeAndUnitLabels,
+			)
+			testutil.Ok(t, err)
+			t.Cleanup(func() {
+				testutil.Ok(t, store.Close())
+			})
 
-	for req == nil {
-		app := store.Appender(t.Context())
-		_, err := app.Append(0, labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"), ts, 42)
-		testutil.Ok(t, err)
-		testutil.Ok(t, app.Commit())
-		ts++
+			var (
+				req      *writev2.Request
+				ts       = time.Now().Add(time.Second).UnixMilli()
+				deadline = time.After(3 * time.Second)
+				ticker   = time.NewTicker(50 * time.Millisecond)
+			)
+			defer ticker.Stop()
 
-		select {
-		case req = <-reqCh:
-		case <-ticker.C:
-		case <-deadline:
-			t.Fatal("timed out waiting for remote write v2 request")
-		}
+			for req == nil {
+				app := store.AppenderV2(t.Context())
+				_, err := app.Append(
+					0,
+					tc.appendLabels,
+					0,
+					ts,
+					42,
+					nil,
+					nil,
+					storage.AOptions{
+						Metadata: tc.appendMeta,
+					},
+				)
+				testutil.Ok(t, err)
+				testutil.Ok(t, app.Commit())
+				ts++
+
+				select {
+				case req = <-reqCh:
+				case <-ticker.C:
+				case <-deadline:
+					t.Fatal("timed out waiting for remote write v2 request")
+				}
+			}
+
+			testutil.Assert(t, len(req.Timeseries) > 0, "expected at least one timeseries")
+			gotLabels, err := req.Timeseries[0].ToLabels(&labels.ScratchBuilder{}, req.Symbols)
+			testutil.Ok(t, err)
+			testutil.Equals(t, tc.expLabels, gotLabels)
+			testutil.Assert(t, len(req.Timeseries[0].Samples) > 0, "expected at least one sample")
+			testutil.Equals(t, 42.0, req.Timeseries[0].Samples[0].Value)
+			testutil.Equals(t, tc.expType, req.Timeseries[0].Metadata.Type)
+			testutil.Assert(t, int(req.Timeseries[0].Metadata.UnitRef) < len(req.Symbols), "UnitRef out of symbol table bounds")
+			testutil.Assert(t, int(req.Timeseries[0].Metadata.HelpRef) < len(req.Symbols), "HelpRef out of symbol table bounds")
+			testutil.Equals(t, tc.expUnit, req.Symbols[req.Timeseries[0].Metadata.UnitRef])
+			testutil.Equals(t, tc.expHelp, req.Symbols[req.Timeseries[0].Metadata.HelpRef])
+		})
 	}
-
-	testutil.Assert(t, len(req.Timeseries) > 0, "expected at least one timeseries")
-	gotLabels, err := req.Timeseries[0].ToLabels(&labels.ScratchBuilder{}, req.Symbols)
-	testutil.Ok(t, err)
-	testutil.Equals(t, labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"), gotLabels)
-	testutil.Assert(t, len(req.Timeseries[0].Samples) > 0, "expected at least one sample")
-	testutil.Equals(t, 42.0, req.Timeseries[0].Samples[0].Value)
 }
