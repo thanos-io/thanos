@@ -299,7 +299,9 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	promQLParser := newPromQLParser(cfg.EnableFeatures, cfg.EnableXFunctions)
+	// NOTE: Preserve previous query-frontend default behavior where extpromql.ParseExpr
+	// always accepted x-functions regardless of --query-frontend.enable-x-functions.
+	promQLParser := newPromQLParser(cfg.EnableFeatures, true)
 	if hasFeature(cfg.EnableFeatures, promqlExperimentalFunctions) {
 		level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 	}
