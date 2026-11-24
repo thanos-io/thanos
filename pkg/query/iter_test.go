@@ -8,6 +8,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/prometheus/prometheus/model/histogram"
+	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/prometheus/prometheus/tsdb/tsdbutil"
 	"github.com/stretchr/testify/require"
@@ -256,4 +257,78 @@ func makeHistWithHint(i int64, hint histogram.CounterResetHint) *histogram.Histo
 	h := tsdbutil.GenerateTestHistogram(i)
 	h.CounterResetHint = hint
 	return h
+}
+
+func TestChunkSeriesIterator_XOR2(t *testing.T) {
+	t.Parallel()
+
+	xorChk := chunkenc.NewXORChunk()
+	xorApp, err := xorChk.Appender()
+	require.NoError(t, err)
+	xorApp.Append(0, 1000, 1.0)
+	xorApp.Append(0, 2000, 2.0)
+
+	xor2Chk := chunkenc.NewXOR2Chunk()
+	xor2App, err := xor2Chk.Appender()
+	require.NoError(t, err)
+	xor2App.Append(2500, 3000, 3.0)
+	xor2App.Append(2500, 4000, 4.0)
+
+	type wantSample struct {
+		st, t int64
+		v     float64
+	}
+	wantMixed := []wantSample{
+		{st: 0, t: 1000, v: 1.0},
+		{st: 0, t: 2000, v: 2.0},
+		{st: 2500, t: 3000, v: 3.0},
+		{st: 2500, t: 4000, v: 4.0},
+	}
+
+	assertSamples := func(t *testing.T, it chunkenc.Iterator, want []wantSample) {
+		t.Helper()
+		var got []wantSample
+		for it.Next() != chunkenc.ValNone {
+			ts, v := it.At()
+			got = append(got, wantSample{st: it.AtST(), t: ts, v: v})
+		}
+		require.NoError(t, it.Err())
+		require.Equal(t, want, got)
+	}
+
+	t.Run("lazy_mixed_xor_and_xor2", func(t *testing.T) {
+		it := newLazyChunkSeriesIterator([]*storepb.Chunk{
+			{Type: storepb.Chunk_XOR, Data: xorChk.Bytes()},
+			{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()},
+		})
+		assertSamples(t, it, wantMixed)
+	})
+
+	t.Run("chunk_series_raw_xor2", func(t *testing.T) {
+		aggrChunks := []storepb.AggrChunk{
+			{MinTime: 1000, MaxTime: 2000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: xorChk.Bytes()}},
+			{MinTime: 3000, MaxTime: 4000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()}},
+		}
+		for _, aggrs := range [][]storepb.Aggr{
+			{storepb.Aggr_COUNT},
+			{storepb.Aggr_SUM, storepb.Aggr_COUNT},
+		} {
+			series := newChunkSeries(labels.FromStrings("__name__", "xor2_metric"), aggrChunks, 1000, 4000, aggrs)
+			assertSamples(t, series.Iterator(nil), wantMixed)
+		}
+
+		// Aggr_COUNTER wraps chunks in ApplyCounterResetsIterator which synthesizes monotonic values (st=0).
+		counterSeries := newChunkSeries(labels.FromStrings("__name__", "xor2_metric"), aggrChunks, 1000, 4000, []storepb.Aggr{storepb.Aggr_COUNTER})
+		assertSamples(t, counterSeries.Iterator(nil), []wantSample{
+			{st: 0, t: 1000, v: 1.0},
+			{st: 0, t: 2000, v: 2.0},
+			{st: 0, t: 3000, v: 3.0},
+			{st: 0, t: 4000, v: 4.0},
+		})
+	})
+
+	t.Run("get_first_iterator_xor2", func(t *testing.T) {
+		it := getFirstIterator(&storepb.Chunk{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()})
+		assertSamples(t, it, wantMixed[2:])
+	})
 }

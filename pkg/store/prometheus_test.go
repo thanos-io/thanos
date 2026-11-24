@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/timestamp"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/efficientgo/core/testutil"
@@ -26,6 +29,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/promclient"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
+	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -451,4 +455,87 @@ func TestPrometheusStore_Series_ChunkHashCalculation_Integration(t *testing.T) {
 		want := xxhash.Sum64(chunk.Raw.Data)
 		testutil.Equals(t, want, got)
 	}
+}
+
+func TestPrometheusStore_Series_StreamedXOR2(t *testing.T) {
+	t.Parallel()
+
+	c := chunkenc.NewXOR2Chunk()
+	app, err := c.Appender()
+	testutil.Ok(t, err)
+	app.Append(50, 1000, 1.5)
+	app.Append(50, 2000, 2.5)
+	app.Append(100, 3000, 3.5)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse")
+		cw := remote.NewChunkedWriter(w, nil)
+		resp := &prompb.ChunkedReadResponse{
+			ChunkedSeries: []*prompb.ChunkedSeries{
+				{
+					Labels: []labelpb.ZLabel{{Name: "__name__", Value: "xor2_remote"}},
+					Chunks: []prompb.Chunk{
+						{
+							MinTimeMs: 1000,
+							MaxTimeMs: 3000,
+							Type:      prompb.Chunk_XOR2,
+							Data:      c.Bytes(),
+						},
+					},
+				},
+			},
+		}
+		b, err := resp.Marshal()
+		testutil.Ok(t, err)
+		_, err = cw.Write(b)
+		testutil.Ok(t, err)
+	}))
+	t.Cleanup(ts.Close)
+
+	u, err := url.Parse(ts.URL)
+	testutil.Ok(t, err)
+
+	proxy, err := NewPrometheusStore(nil, nil, promclient.NewDefaultClient(), u, component.Sidecar,
+		func() labels.Labels { return labels.FromStrings("region", "eu-west") },
+		func() (int64, int64) { return 0, math.MaxInt64 },
+		nil,
+	)
+	testutil.Ok(t, err)
+
+	srv := newStoreSeriesServer(t.Context())
+	testutil.Ok(t, proxy.Series(&storepb.SeriesRequest{
+		MinTime: 1000,
+		MaxTime: 3000,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "xor2_remote"},
+		},
+	}, srv))
+
+	testutil.Equals(t, 1, len(srv.SeriesSet))
+	testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
+
+	raw := srv.SeriesSet[0].Chunks[0].Raw
+	testutil.Equals(t, storepb.Chunk_XOR2, raw.Type)
+	testutil.Equals(t, 3, raw.XORNumSamples())
+	testutil.Equals(t, xxhash.Sum64(c.Bytes()), raw.Hash)
+
+	chk, err := chunkenc.FromData(chunkenc.EncXOR2, raw.Data)
+	testutil.Ok(t, err)
+	it := chk.Iterator(nil)
+	for _, want := range []struct {
+		st, t int64
+		v     float64
+	}{
+		{st: 50, t: 1000, v: 1.5},
+		{st: 50, t: 2000, v: 2.5},
+		{st: 100, t: 3000, v: 3.5},
+	} {
+		testutil.Equals(t, chunkenc.ValFloat, it.Next())
+		gotT, gotV := it.At()
+		testutil.Equals(t, want.t, gotT)
+		testutil.Equals(t, want.v, gotV)
+		testutil.Equals(t, want.st, it.AtST())
+	}
+	testutil.Equals(t, chunkenc.ValNone, it.Next())
+	testutil.Ok(t, it.Err())
 }

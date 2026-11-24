@@ -1424,3 +1424,63 @@ func TestMaxResolutionFromSelectHints(t *testing.T) {
 		})
 	}
 }
+
+func TestQuerier_XOR2(t *testing.T) {
+	t.Parallel()
+
+	mkXOR2Series := func(lset labels.Labels, smpls []sample) *storepb.SeriesResponse {
+		c := chunkenc.NewXOR2Chunk()
+		a, err := c.Appender()
+		testutil.Ok(t, err)
+		for _, s := range smpls {
+			a.Append(s.t-10, s.t, s.v)
+		}
+		var lbls []labelpb.ZLabel
+		lset.Range(func(l labels.Label) {
+			lbls = append(lbls, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+		})
+		return storepb.NewSeriesResponse(&storepb.Series{
+			Labels: lbls,
+			Chunks: []storepb.AggrChunk{{
+				MinTime: smpls[0].t,
+				MaxTime: smpls[len(smpls)-1].t,
+				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: c.Bytes()},
+			}},
+		})
+	}
+
+	testProxy := &testStoreServer{
+		resps: []*storepb.SeriesResponse{
+			mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "a"), []sample{{t: 10000, v: 10}, {t: 20000, v: 20}, {t: 30000, v: 30}}),
+			mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "b"), []sample{{t: 10000, v: 5}, {t: 20000, v: 15}, {t: 30000, v: 25}}),
+		},
+	}
+
+	timeout := 10 * time.Second
+	q := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, timeout, dedup.AlgorithmPenalty, 1)(
+		false, nil, nil, 0, false, false, nil, NoopSeriesStatsReporter,
+	)
+	engine := promql.NewEngine(promql.EngineOpts{MaxSamples: math.MaxInt32, Timeout: timeout})
+
+	t.Run("sum", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(t.Context(), q, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(xor2_requests_total)", time.UnixMilli(30000))
+		testutil.Ok(t, err)
+		res := qry.Exec(t.Context())
+		testutil.Ok(t, res.Err)
+		vec, err := res.Vector()
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(vec))
+		testutil.Equals(t, 55.0, vec[0].F)
+	})
+
+	t.Run("rate", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(t.Context(), q, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(rate(xor2_requests_total[20s]))", time.UnixMilli(30000))
+		testutil.Ok(t, err)
+		res := qry.Exec(t.Context())
+		testutil.Ok(t, res.Err)
+		vec, err := res.Vector()
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(vec))
+		testutil.Equals(t, 2.0, vec[0].F)
+	})
+}
