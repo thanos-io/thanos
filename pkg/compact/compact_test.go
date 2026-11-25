@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
-	"os"
 	"path"
 	"path/filepath"
 	"sync"
@@ -941,6 +940,8 @@ func TestCompactor_XOR2(t *testing.T) {
 	}
 
 	t.Run("horizontal_preserves_xor2_verbatim", func(t *testing.T) {
+		t.Parallel()
+
 		dir := t.TempDir()
 		b1 := createBlock(t, dir, chunkenc.EncXOR2, true, []sampleSpec{{st: 100, t: 1000, v: 1}, {st: 100, t: 2000, v: 2}})
 		b2 := createBlock(t, dir, chunkenc.EncXOR2, true, []sampleSpec{{st: 200, t: 5000, v: 5}, {st: 200, t: 6000, v: 6}})
@@ -1027,6 +1028,8 @@ func TestCompactor_XOR2(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			dir := t.TempDir()
 			b1 := createBlock(t, dir, tc.inputEnc, tc.enableST, tc.b1)
 			b2 := createBlock(t, dir, tc.inputEnc, tc.enableST, tc.b2)
@@ -1050,7 +1053,6 @@ func TestCompactor_XOR2(t *testing.T) {
 			encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
 			testutil.Equals(t, []chunkenc.Encoding{tc.wantEnc}, encs)
 			testutil.Equals(t, tc.want, got)
-			_ = os.RemoveAll(outDir)
 		})
 	}
 }
