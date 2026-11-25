@@ -27,7 +27,6 @@ import (
 	"github.com/prometheus/prometheus/discovery"
 	"github.com/prometheus/prometheus/discovery/file"
 	"github.com/prometheus/prometheus/discovery/targetgroup"
-	"golang.org/x/net/http2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 	apihttp "google.golang.org/api/transport/http"
@@ -148,6 +147,9 @@ func NewHTTPClientConfigFromYAML(cfg []byte) (*HTTPClientConfig, error) {
 // given http.HTTPClientConfig and http.HTTPClientOption.
 func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig TransportConfig, name string) (http.RoundTripper, error) {
 	newRT := func(tlsConfig *tls.Config) (http.RoundTripper, error) {
+		var protocols http.Protocols
+		protocols.SetHTTP1(true)
+		protocols.SetHTTP2(true)
 		var rt http.RoundTripper = &http.Transport{
 			Proxy:                 http.ProxyURL(cfg.ProxyURL.URL),
 			MaxIdleConns:          transportConfig.MaxIdleConns,
@@ -159,24 +161,13 @@ func NewRoundTripperFromConfig(cfg config_util.HTTPClientConfig, transportConfig
 			ResponseHeaderTimeout: time.Duration(transportConfig.ResponseHeaderTimeout),
 			ExpectContinueTimeout: time.Duration(transportConfig.ExpectContinueTimeout),
 			TLSHandshakeTimeout:   time.Duration(transportConfig.TLSHandshakeTimeout),
+			Protocols:             &protocols,
 			DialContext: conntrack.NewDialContextFunc(
 				conntrack.DialWithDialer(&net.Dialer{
 					Timeout: time.Duration(transportConfig.DialerTimeout),
 				}),
 				conntrack.DialWithTracing(),
 				conntrack.DialWithName(name)),
-		}
-
-		// HTTP/2 support is golang has many problematic cornercases where
-		// dead connections would be kept and used in connection pools.
-		// https://github.com/golang/go/issues/32388
-		// https://github.com/golang/go/issues/39337
-		// https://github.com/golang/go/issues/39750
-		// TODO: Re-Enable HTTP/2 once upstream issue is fixed.
-		// TODO: use ForceAttemptHTTP2 when we move to Go 1.13+.
-		err := http2.ConfigureTransport(rt.(*http.Transport))
-		if err != nil {
-			return nil, err
 		}
 
 		// If an authorization_credentials is provided, create a round tripper that will set the
@@ -322,6 +313,7 @@ func newGoogleIAMRoundTripper(cfg *GoogleIAMConfig, next http.RoundTripper) (htt
 		option.WithScopes(scopes...),
 	}
 	if cfg.CredentialsFile != "" {
+		//nolint:staticcheck // SA1019: CredentialsFile is operator-configured and may be any supported Google credential type.
 		opts = append(opts, option.WithCredentialsFile(cfg.CredentialsFile))
 	} else {
 		creds, err := google.FindDefaultCredentials(ctx, scopes...)

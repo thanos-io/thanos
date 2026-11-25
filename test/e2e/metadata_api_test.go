@@ -4,9 +4,10 @@
 package e2e_test
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"testing"
 	"time"
 
@@ -70,6 +71,13 @@ func TestMetadataAPI_Fanout(t *testing.T) {
 	var thanosMeta map[string][]metadatapb.Meta
 	// Retry until length of metadata response is the same as Prometheus.
 	testutil.Ok(t, runutil.Retry(5*time.Second, ctx.Done(), func() error {
+		promMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+prom1.Endpoint("http")), "", -1)
+		if err != nil {
+			return err
+		}
+		if len(promMeta) == 0 {
+			return fmt.Errorf("empty metadata response from Prometheus")
+		}
 		thanosMeta, err = promclient.NewDefaultClient().MetricMetadataInGRPC(ctx, urlParse(t, "http://"+q.Endpoint("http")), "", -1)
 		if err != nil {
 			return err
@@ -117,12 +125,15 @@ func metadataEqual(t *testing.T, meta1, meta2 map[string][]metadatapb.Meta) {
 		meta2MetricMeta, ok := meta2[metric]
 		testutil.Assert(t, ok)
 
-		sort.Slice(meta1MetricMeta, func(i, j int) bool {
-			return meta1MetricMeta[i].Help < meta1MetricMeta[j].Help
-		})
-		sort.Slice(meta2MetricMeta, func(i, j int) bool {
-			return meta2MetricMeta[i].Help < meta2MetricMeta[j].Help
-		})
+		compareMeta := func(a, b metadatapb.Meta) int {
+			return cmp.Or(
+				cmp.Compare(a.Help, b.Help),
+				cmp.Compare(a.Type, b.Type),
+				cmp.Compare(a.Unit, b.Unit),
+			)
+		}
+		slices.SortFunc(meta1MetricMeta, compareMeta)
+		slices.SortFunc(meta2MetricMeta, compareMeta)
 		testutil.Equals(t, meta1MetricMeta, meta2MetricMeta)
 	}
 }

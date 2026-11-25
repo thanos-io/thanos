@@ -31,6 +31,17 @@ type Proxy struct {
 	logger         log.Logger
 	exemplars      func() []*exemplarspb.ExemplarStore
 	selectorLabels labels.Labels
+	parser         parser.Parser
+}
+
+// ProxyOption configures optional Proxy behavior.
+type ProxyOption func(*Proxy)
+
+// WithParser configures the PromQL parser used by Proxy.
+func WithParser(p parser.Parser) ProxyOption {
+	return func(proxy *Proxy) {
+		proxy.parser = p
+	}
 }
 
 // RegisterExemplarsServer register exemplars server.
@@ -41,12 +52,16 @@ func RegisterExemplarsServer(exemplarsSrv exemplarspb.ExemplarsServer) func(*grp
 }
 
 // NewProxy return new exemplars.Proxy.
-func NewProxy(logger log.Logger, exemplars func() []*exemplarspb.ExemplarStore, selectorLabels labels.Labels) *Proxy {
-	return &Proxy{
+func NewProxy(logger log.Logger, exemplars func() []*exemplarspb.ExemplarStore, selectorLabels labels.Labels, opts ...ProxyOption) *Proxy {
+	p := &Proxy{
 		logger:         logger,
 		exemplars:      exemplars,
 		selectorLabels: selectorLabels,
 	}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 type exemplarsStream struct {
@@ -60,7 +75,7 @@ func (s *Proxy) Exemplars(req *exemplarspb.ExemplarsRequest, srv exemplarspb.Exe
 	span, ctx := tracing.StartSpan(srv.Context(), "proxy_exemplars")
 	defer span.Finish()
 
-	expr, err := extpromql.ParseExpr(req.Query)
+	expr, err := extpromql.ParseExprWithParser(s.parser, req.Query)
 	if err != nil {
 		return err
 	}

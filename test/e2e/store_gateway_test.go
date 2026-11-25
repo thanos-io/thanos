@@ -87,6 +87,8 @@ metafile_content_ttl: 0s`, memcached.InternalEndpoint("memcached"))
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
 			SourceLabels: model.LabelNames{"ext1"},
+			Separator:    relabel.DefaultRelabelConfig.Separator,
+			Replacement:  relabel.DefaultRelabelConfig.Replacement,
 		},
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))
@@ -423,6 +425,8 @@ func TestStoreGatewayNoCacheFile(t *testing.T) {
 			Action:       relabel.Drop,
 			Regex:        relabel.MustNewRegexp("value2"),
 			SourceLabels: model.LabelNames{"ext1"},
+			Separator:    relabel.DefaultRelabelConfig.Separator,
+			Replacement:  relabel.DefaultRelabelConfig.Replacement,
 		},
 	)
 	testutil.Ok(t, e2e.StartAndWaitReady(s1))

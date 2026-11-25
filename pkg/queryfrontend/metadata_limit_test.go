@@ -20,6 +20,7 @@ import (
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/user"
 
@@ -40,7 +41,7 @@ func TestMetadataLimitRoundTrip(t *testing.T) {
 					if cached {
 						cfg.LabelsConfig.ResultsCacheConfig = &queryrange.ResultsCacheConfig{CacheConfig: cortexcache.Config{Cache: cortexcache.NewMockCache()}}
 					}
-					tpw, err := NewTripperware(cfg, nil, log.NewNopLogger())
+					tpw, err := NewTripperware(cfg, nil, log.NewNopLogger(), parser.NewParser(parser.Options{}))
 					testutil.Ok(t, err)
 					var calls atomic.Int32
 					expectedLimit := 0

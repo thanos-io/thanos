@@ -5,7 +5,6 @@ package main
 
 import (
 	"context"
-	"maps"
 	"net"
 	"net/http"
 	"time"
@@ -18,8 +17,6 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/promql/parser"
-	"github.com/thanos-io/promql-engine/execution/parse"
 	"github.com/weaveworks/common/user"
 	"gopkg.in/yaml.v2"
 
@@ -302,20 +299,14 @@ func runQueryFrontend(
 		return errors.Wrap(err, "error validating the config")
 	}
 
-	if cfg.EnableXFunctions {
-		maps.Copy(parser.Functions, parse.XFunctions)
+	// NOTE: Preserve previous query-frontend default behavior where extpromql.ParseExpr
+	// always accepted x-functions regardless of --query-frontend.enable-x-functions.
+	promQLParser := newPromQLParser(cfg.EnableFeatures, true)
+	if hasFeature(cfg.EnableFeatures, promqlExperimentalFunctions) {
+		level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 	}
 
-	if len(cfg.EnableFeatures) > 0 {
-		for _, feature := range cfg.EnableFeatures {
-			if feature == promqlExperimentalFunctions {
-				parser.EnableExperimentalFunctions = true
-				level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
-			}
-		}
-	}
-
-	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger)
+	tripperWare, err := queryfrontend.NewTripperware(cfg.Config, reg, logger, promQLParser)
 	if err != nil {
 		return errors.Wrap(err, "setup tripperwares")
 	}

@@ -13,19 +13,21 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 )
 
 // SplitByIntervalMiddleware creates a new Middleware that splits requests by a given interval.
-func SplitByIntervalMiddleware(interval queryrange.IntervalFn, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer) queryrange.Middleware {
+func SplitByIntervalMiddleware(interval queryrange.IntervalFn, limits queryrange.Limits, merger queryrange.Merger, registerer prometheus.Registerer, p parser.Parser) queryrange.Middleware {
 	return queryrange.MiddlewareFunc(func(next queryrange.Handler) queryrange.Handler {
 		return splitByInterval{
 			next:     next,
 			limits:   limits,
 			merger:   merger,
 			interval: interval,
+			parser:   p,
 			splitByCounter: promauto.With(registerer).NewCounter(prometheus.CounterOpts{
 				Namespace: "thanos",
 				Name:      "frontend_split_queries_total",
@@ -40,6 +42,7 @@ type splitByInterval struct {
 	limits   queryrange.Limits
 	merger   queryrange.Merger
 	interval queryrange.IntervalFn
+	parser   parser.Parser
 
 	// Metrics.
 	splitByCounter prometheus.Counter
@@ -48,7 +51,7 @@ type splitByInterval struct {
 func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryrange.Response, error) {
 	// First we're going to build new requests, one for each day, taking care
 	// to line up the boundaries with step.
-	reqs, err := splitQuery(r, s.interval(r))
+	reqs, err := splitQuery(r, s.interval(r), s.parser)
 	if err != nil {
 		return nil, err
 	}
@@ -71,14 +74,14 @@ func (s splitByInterval) Do(ctx context.Context, r queryrange.Request) (queryran
 	return response, nil
 }
 
-func splitQuery(r queryrange.Request, interval time.Duration) ([]queryrange.Request, error) {
+func splitQuery(r queryrange.Request, interval time.Duration, p parser.Parser) ([]queryrange.Request, error) {
 	var reqs []queryrange.Request
 
 	switch tr := r.(type) {
 	case *ThanosQueryRangeRequest:
 		// Replace @ modifier function to their respective constant values in the query.
 		// This way subqueries will be evaluated at the same time as the parent query.
-		query, err := queryrange.EvaluateAtModifierFunction(r.GetQuery(), r.GetStart(), r.GetEnd())
+		query, err := queryrange.EvaluateAtModifierFunctionWithParser(p, r.GetQuery(), r.GetStart(), r.GetEnd())
 		if err != nil {
 			return nil, err
 		}

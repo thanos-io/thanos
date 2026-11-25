@@ -145,6 +145,68 @@ func TestDedupChunkSeriesMerger(t *testing.T) {
 	}
 }
 
+func TestDedupChunkSeriesMergerPreservesXOR2StartTimestamps(t *testing.T) {
+	lset := labels.FromStrings("bar", "baz")
+	for _, tc := range []struct {
+		name              string
+		base              []chunks.Sample
+		overlap           []chunks.Sample
+		expectedEncodings []chunkenc.Encoding
+		expectedTS        []int64
+		expectedVals      []float64
+		expectedST        []int64
+	}{
+		{
+			name: "XOR2 base overlapping XOR",
+			base: []chunks.Sample{
+				startTimestampSample{sample: sample{t: 1000, f: 1}, st: 100},
+				startTimestampSample{sample: sample{t: 7000, f: 7}, st: 200},
+			},
+			overlap:           []chunks.Sample{sample{t: 2000, f: 2}, sample{t: 3000, f: 3}},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncXOR2},
+			expectedTS:        []int64{1000, 7000},
+			expectedVals:      []float64{1, 7},
+			expectedST:        []int64{100, 200},
+		},
+		{
+			name: "XOR base overlapping XOR2 with surviving sample",
+			base: []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 7000, f: 7}},
+			overlap: []chunks.Sample{
+				startTimestampSample{sample: sample{t: 2000, f: 2}, st: 100},
+				startTimestampSample{sample: sample{t: 20000, f: 20}, st: 200},
+			},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR2},
+			expectedTS:        []int64{1000, 7000, 20000},
+			expectedVals:      []float64{1, 7, 20},
+			expectedST:        []int64{0, 0, 200},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			merged := NewChunkSeriesMerger()(
+				storage.NewListChunkSeriesFromSamples(lset, tc.base),
+				storage.NewListChunkSeriesFromSamples(lset, tc.overlap),
+			)
+			metas, err := storage.ExpandChunks(merged.Iterator(nil))
+			testutil.Ok(t, err)
+			gotEncodings := make([]chunkenc.Encoding, 0, len(metas))
+			var samples []chunks.Sample
+			for _, m := range metas {
+				gotEncodings = append(gotEncodings, m.Chunk.Encoding())
+				chunkSamples, err := storage.ExpandSamples(m.Chunk.Iterator(nil), nil)
+				testutil.Ok(t, err)
+				samples = append(samples, chunkSamples...)
+			}
+			testutil.Equals(t, tc.expectedEncodings, gotEncodings)
+			testutil.Equals(t, len(tc.expectedST), len(samples))
+			for i, s := range samples {
+				testutil.Equals(t, tc.expectedTS[i], s.T())
+				testutil.Equals(t, tc.expectedVals[i], s.F())
+				testutil.Equals(t, tc.expectedST[i], s.ST())
+			}
+		})
+	}
+}
+
 func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 	m := NewChunkSeriesMerger()
 
@@ -324,6 +386,7 @@ func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
 
 type histoSample struct {
 	t  int64
+	st int64
 	f  float64
 	h  *histogram.Histogram
 	fh *histogram.FloatHistogram
@@ -331,6 +394,10 @@ type histoSample struct {
 
 func (h histoSample) T() int64 {
 	return h.t
+}
+
+func (h histoSample) ST() int64 {
+	return h.st
 }
 
 func (h histoSample) F() float64 {
@@ -462,6 +529,115 @@ func TestDedupChunkSeriesMerger_Histogram(t *testing.T) {
 			testutil.Equals(t, expChks, actChks)
 		})
 	}
+}
+
+func TestDedupChunkSeriesMerger_HistogramST(t *testing.T) {
+	lset := labels.FromStrings("bar", "baz")
+	intHist := histogramSample
+	floatHist := histogramSample.ToFloat(nil)
+
+	for _, tc := range []struct {
+		name              string
+		base              []chunks.Sample
+		overlap           []chunks.Sample
+		expectedEncodings []chunkenc.Encoding
+		expectedTS        []int64
+		expectedST        []int64
+	}{
+		{
+			name: "overlapping HistogramST chunks",
+			base: []chunks.Sample{
+				histoSample{t: 0, st: 100, h: intHist},
+				histoSample{t: 30000, st: 100, h: intHist},
+			},
+			overlap: []chunks.Sample{
+				histoSample{t: 30000, st: 100, h: intHist},
+				histoSample{t: 100000, st: 200, h: intHist},
+			},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncHistogramST},
+			expectedTS:        []int64{0, 30000, 100000},
+			expectedST:        []int64{100, 100, 200},
+		},
+		{
+			name: "HistogramST base overlapping non-ST Histogram",
+			base: []chunks.Sample{
+				histoSample{t: 0, st: 100, h: intHist},
+				histoSample{t: 30000, st: 100, h: intHist},
+			},
+			overlap: []chunks.Sample{
+				histoSample{t: 30000, h: intHist},
+				histoSample{t: 100000, h: intHist},
+			},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncHistogramST, chunkenc.EncHistogram},
+			expectedTS:        []int64{0, 30000, 100000},
+			expectedST:        []int64{100, 100, 0},
+		},
+		{
+			name: "overlapping FloatHistogramST chunks",
+			base: []chunks.Sample{
+				histoSample{t: 0, st: 100, fh: floatHist},
+				histoSample{t: 30000, st: 100, fh: floatHist},
+			},
+			overlap: []chunks.Sample{
+				histoSample{t: 30000, st: 100, fh: floatHist},
+				histoSample{t: 100000, st: 200, fh: floatHist},
+			},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncFloatHistogramST},
+			expectedTS:        []int64{0, 30000, 100000},
+			expectedST:        []int64{100, 100, 200},
+		},
+		{
+			name: "FloatHistogramST base overlapping non-ST FloatHistogram",
+			base: []chunks.Sample{
+				histoSample{t: 0, st: 100, fh: floatHist},
+				histoSample{t: 30000, st: 100, fh: floatHist},
+			},
+			overlap: []chunks.Sample{
+				histoSample{t: 30000, fh: floatHist},
+				histoSample{t: 100000, fh: floatHist},
+			},
+			expectedEncodings: []chunkenc.Encoding{chunkenc.EncFloatHistogramST, chunkenc.EncFloatHistogram},
+			expectedTS:        []int64{0, 30000, 100000},
+			expectedST:        []int64{100, 100, 0},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			merged := NewChunkSeriesMerger()(
+				storage.NewListChunkSeriesFromSamples(lset, tc.base),
+				storage.NewListChunkSeriesFromSamples(lset, tc.overlap),
+			)
+			metas, err := storage.ExpandChunks(merged.Iterator(nil))
+			testutil.Ok(t, err)
+			gotEncodings := make([]chunkenc.Encoding, 0, len(metas))
+			var samples []chunks.Sample
+			for _, m := range metas {
+				gotEncodings = append(gotEncodings, m.Chunk.Encoding())
+				chunkSamples, err := storage.ExpandSamples(m.Chunk.Iterator(nil), nil)
+				testutil.Ok(t, err)
+				samples = append(samples, chunkSamples...)
+			}
+			testutil.Equals(t, tc.expectedEncodings, gotEncodings)
+			testutil.Equals(t, len(tc.expectedTS), len(samples))
+			for i, s := range samples {
+				testutil.Equals(t, tc.expectedTS[i], s.T())
+				testutil.Equals(t, tc.expectedST[i], s.ST())
+			}
+		})
+	}
+}
+
+type startTimestampSample struct {
+	sample
+	st int64
+}
+
+func (s startTimestampSample) ST() int64 {
+	return s.st
+}
+
+func (s startTimestampSample) Copy() chunks.Sample {
+	return s
 }
 
 func createSamplesWithStep(start, numOfSamples, step int) []chunks.Sample {
