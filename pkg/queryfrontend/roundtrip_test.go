@@ -976,7 +976,7 @@ func TestRoundTripSeriesCacheReplicaLabels(t *testing.T) {
 	tpw, err := NewTripperware(Config{
 		CortexHandlerConfig: &transport.HandlerConfig{},
 		LabelsConfig:        LabelsConfig{Limits: defaultLimits, ResultsCacheConfig: cacheConf, SplitQueriesByInterval: day},
-	}, nil, log.NewNopLogger())
+	}, nil, log.NewNopLogger(), parser.NewParser(parser.Options{}))
 	testutil.Ok(t, err)
 
 	deduplicated := []map[string]string{{"__name__": "up", "job": "api"}}
