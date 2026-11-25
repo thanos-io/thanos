@@ -970,6 +970,7 @@ func TestCompactor_XOR2(t *testing.T) {
 		enableST      bool
 		b1, b2        []sampleSpec
 		wantEnc       chunkenc.Encoding
+		want          []sampleSpec
 	}{
 		{
 			name:          "vertical_default_xor_downgrades_st0_xor2",
@@ -978,6 +979,7 @@ func TestCompactor_XOR2(t *testing.T) {
 			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 3000, v: 3}},
 			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 4000, v: 4}},
 			wantEnc:       chunkenc.EncXOR,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}, {t: 3000, v: 3}, {t: 4000, v: 4}},
 		},
 		{
 			name:          "vertical_default_xor2_rewrites_xor_to_xor2",
@@ -986,6 +988,7 @@ func TestCompactor_XOR2(t *testing.T) {
 			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 3000, v: 3}},
 			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 4000, v: 4}},
 			wantEnc:       chunkenc.EncXOR2,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}, {t: 3000, v: 3}, {t: 4000, v: 4}},
 		},
 		{
 			name:          "vertical_default_xor_preserves_nonzero_st_as_xor2",
@@ -995,6 +998,12 @@ func TestCompactor_XOR2(t *testing.T) {
 			b1:            []sampleSpec{{st: 50, t: 1000, v: 1}, {st: 50, t: 3000, v: 3}},
 			b2:            []sampleSpec{{st: 50, t: 2000, v: 2}, {st: 50, t: 4000, v: 4}},
 			wantEnc:       chunkenc.EncXOR2,
+			want: []sampleSpec{
+				{st: 50, t: 1000, v: 1},
+				{st: 50, t: 2000, v: 2},
+				{st: 50, t: 3000, v: 3},
+				{st: 50, t: 4000, v: 4},
+			},
 		},
 		{
 			name:          "vertical_penalty_xor2_rewrites_xor_to_xor2",
@@ -1004,6 +1013,7 @@ func TestCompactor_XOR2(t *testing.T) {
 			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}},
 			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 20000, v: 20}},
 			wantEnc:       chunkenc.EncXOR2,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
 		},
 		{
 			name:          "vertical_penalty_xor_downgrades_st0_xor2",
@@ -1013,6 +1023,7 @@ func TestCompactor_XOR2(t *testing.T) {
 			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}},
 			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 20000, v: 20}},
 			wantEnc:       chunkenc.EncXOR,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1038,12 +1049,7 @@ func TestCompactor_XOR2(t *testing.T) {
 
 			encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
 			testutil.Equals(t, []chunkenc.Encoding{tc.wantEnc}, encs)
-			testutil.Assert(t, len(got) > 0, "expected compacted samples")
-			if tc.enableST {
-				for _, s := range got {
-					testutil.Equals(t, int64(50), s.st)
-				}
-			}
+			testutil.Equals(t, tc.want, got)
 			_ = os.RemoveAll(outDir)
 		})
 	}
