@@ -207,8 +207,20 @@ func TestDedupChunkSeriesMergerPreservesXOR2StartTimestamps(t *testing.T) {
 	}
 }
 
+type fakeEncodingChunk struct {
+	chunkenc.Chunk
+	enc chunkenc.Encoding
+}
+
+func (f fakeEncodingChunk) Encoding() chunkenc.Encoding { return f.enc }
+
 func TestDedupChunkSeriesMergerWithFloatEncoding(t *testing.T) {
 	t.Parallel()
+
+	type wantSample struct {
+		st, t int64
+		v     float64
+	}
 
 	lset := labels.FromStrings("bar", "baz")
 	for _, tc := range []struct {
@@ -216,21 +228,54 @@ func TestDedupChunkSeriesMergerWithFloatEncoding(t *testing.T) {
 		floatEncoding chunkenc.Encoding
 		base          []chunks.Sample
 		overlap       []chunks.Sample
-		wantEncoding  chunkenc.Encoding
+		wantEncodings []chunkenc.Encoding
+		wantBounds    [][2]int64
+		wantSamples   []wantSample
 	}{
 		{
 			name:          "overlapping_xor_reencoded_as_xor2",
 			floatEncoding: chunkenc.EncXOR2,
 			base:          []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 7000, f: 7}},
 			overlap:       []chunks.Sample{sample{t: 2000, f: 2}, sample{t: 20000, f: 20}},
-			wantEncoding:  chunkenc.EncXOR2,
+			wantEncodings: []chunkenc.Encoding{chunkenc.EncXOR2},
+			wantBounds:    [][2]int64{{1000, 20000}},
+			wantSamples:   []wantSample{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
 		},
 		{
 			name:          "overlapping_xor_reencoded_as_xor",
 			floatEncoding: chunkenc.EncXOR,
 			base:          []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 7000, f: 7}},
 			overlap:       []chunks.Sample{sample{t: 2000, f: 2}, sample{t: 20000, f: 20}},
-			wantEncoding:  chunkenc.EncXOR,
+			wantEncodings: []chunkenc.Encoding{chunkenc.EncXOR},
+			wantBounds:    [][2]int64{{1000, 20000}},
+			wantSamples:   []wantSample{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
+		},
+		{
+			name:          "unsupported_encoding_falls_back_to_xor",
+			floatEncoding: chunkenc.EncNone,
+			base:          []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 7000, f: 7}},
+			overlap:       []chunks.Sample{sample{t: 2000, f: 2}, sample{t: 20000, f: 20}},
+			wantEncodings: []chunkenc.Encoding{chunkenc.EncXOR},
+			wantBounds:    [][2]int64{{1000, 20000}},
+			wantSamples:   []wantSample{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
+		},
+		{
+			name:          "non_overlapping_xor_stays_xor_under_xor2",
+			floatEncoding: chunkenc.EncXOR2,
+			base:          []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 2000, f: 2}},
+			overlap:       []chunks.Sample{sample{t: 5000, f: 5}, sample{t: 6000, f: 6}},
+			wantEncodings: []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR},
+			wantBounds:    [][2]int64{{1000, 2000}, {5000, 6000}},
+			wantSamples:   []wantSample{{t: 1000, v: 1}, {t: 2000, v: 2}, {t: 5000, v: 5}, {t: 6000, v: 6}},
+		},
+		{
+			name:          "identical_xor_chunks_skipped_without_reencoding",
+			floatEncoding: chunkenc.EncXOR2,
+			base:          []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 2000, f: 2}},
+			overlap:       []chunks.Sample{sample{t: 1000, f: 1}, sample{t: 2000, f: 2}},
+			wantEncodings: []chunkenc.Encoding{chunkenc.EncXOR},
+			wantBounds:    [][2]int64{{1000, 2000}},
+			wantSamples:   []wantSample{{t: 1000, v: 1}, {t: 2000, v: 2}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -240,17 +285,66 @@ func TestDedupChunkSeriesMergerWithFloatEncoding(t *testing.T) {
 			)
 			metas, err := storage.ExpandChunks(merged.Iterator(nil))
 			testutil.Ok(t, err)
-			testutil.Equals(t, 1, len(metas))
-			testutil.Equals(t, tc.wantEncoding, metas[0].Chunk.Encoding())
+			testutil.Equals(t, len(tc.wantEncodings), len(metas))
 
-			samples, err := storage.ExpandSamples(metas[0].Chunk.Iterator(nil), nil)
-			testutil.Ok(t, err)
-			testutil.Equals(t, 3, len(samples))
-			testutil.Equals(t, int64(1000), samples[0].T())
-			testutil.Equals(t, int64(7000), samples[1].T())
-			testutil.Equals(t, int64(20000), samples[2].T())
+			var gotSamples []wantSample
+			for i, m := range metas {
+				testutil.Equals(t, tc.wantEncodings[i], m.Chunk.Encoding())
+				testutil.Equals(t, tc.wantBounds[i][0], m.MinTime)
+				testutil.Equals(t, tc.wantBounds[i][1], m.MaxTime)
+
+				samples, err := storage.ExpandSamples(m.Chunk.Iterator(nil), nil)
+				testutil.Ok(t, err)
+				for _, s := range samples {
+					gotSamples = append(gotSamples, wantSample{st: s.ST(), t: s.T(), v: s.F()})
+				}
+			}
+			testutil.Equals(t, tc.wantSamples, gotSamples)
 		})
 	}
+
+	t.Run("same_bytes_different_encoding_not_skipped", func(t *testing.T) {
+		xorChk := chunkenc.NewXORChunk()
+		app, err := xorChk.Appender()
+		testutil.Ok(t, err)
+		app.Append(0, 1000, 1)
+		app.Append(0, 2000, 2)
+
+		s1 := &storage.ChunkSeriesEntry{
+			Lset: lset,
+			ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+				return storage.NewListChunkSeriesIterator(chunks.Meta{MinTime: 1000, MaxTime: 2000, Chunk: xorChk})
+			},
+		}
+		s2 := &storage.ChunkSeriesEntry{
+			Lset: lset,
+			ChunkIteratorFn: func(chunks.Iterator) chunks.Iterator {
+				return storage.NewListChunkSeriesIterator(chunks.Meta{
+					MinTime: 1000,
+					MaxTime: 2000,
+					Chunk:   fakeEncodingChunk{Chunk: xorChk, enc: chunkenc.EncXOR2},
+				})
+			},
+		}
+
+		// Equal MinTime/MaxTime/Bytes with differing Encoding must not hit the 1:1 skip path,
+		// so overlappingMerger re-encodes the chunk using the configured EncXOR2 target.
+		merged := NewChunkSeriesMergerWithFloatEncoding(chunkenc.EncXOR2)(s1, s2)
+		metas, err := storage.ExpandChunks(merged.Iterator(nil))
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(metas))
+		testutil.Equals(t, chunkenc.EncXOR2, metas[0].Chunk.Encoding())
+		testutil.Equals(t, int64(1000), metas[0].MinTime)
+		testutil.Equals(t, int64(2000), metas[0].MaxTime)
+
+		samples, err := storage.ExpandSamples(metas[0].Chunk.Iterator(nil), nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 2, len(samples))
+		testutil.Equals(t, int64(1000), samples[0].T())
+		testutil.Equals(t, 1.0, samples[0].F())
+		testutil.Equals(t, int64(2000), samples[1].T())
+		testutil.Equals(t, 2.0, samples[1].F())
+	})
 }
 
 func TestDedupChunkSeriesMergerDownsampledChunks(t *testing.T) {
