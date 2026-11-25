@@ -22,8 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Fixed
 
-- [#9159](https://github.com/thanos-io/thanos/pull/9159) Query Frontend: Honor metadata API limits after merging time splits, preserve truncation warnings, and bypass caching for limited requests.
-
+- *: Update `github.com/go-jose/go-jose/v4` to v4.1.9 to fix [CVE-2026-116587](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q), [CVE-2026-116586](https://github.com/go-jose/go-jose/security/advisories/GHSA-vvm8-gf78-28g4) and [CVE-2026-116585](https://github.com/go-jose/go-jose/security/advisories/GHSA-4w3g-jfj2-cw2q): excess CPU when parsing JWKs with crafted RSA keys, and panics in JSON parsing and CBC-HMAC processing.
 - *: Update `github.com/klauspost/compress` to v1.20.2 to fix [CVE-2026-116591](https://github.com/klauspost/compress/security/advisories/GHSA-fpmh-frq8-7rj8), a panic when decoding crafted zstd input.
 - [#9113](https://github.com/thanos-io/thanos/pull/9113): Tools: Fix `tools bucket rewrite` panicking with a nil pointer dereference on downsampled blocks. Deletions of whole series now work on downsampled blocks; deletions with `intervals` and relabeling return an error instead of silently dropping data.
 - [#9090](https://github.com/thanos-io/thanos/pull/9090): Query: Scope TSDB selector matchers to each StoreAPI so external labels from other stores do not hide matching series, label names or label values.
@@ -45,6 +44,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Changed
 
+- [#9156](https://github.com/thanos-io/thanos/pull/9156): Store: Reduce index-header memory by keeping the shortest separating prefix of each sampled postings offset value instead of a copy of the full value.
 - [#6099](https://github.com/thanos-io/thanos/issues/6099): Tracing: drop the noisiest INTERNAL spans (`proxy.series`, `proxy.label_names`, `proxy.label_values`, `bucket_store_block_series`, `send_rules_response`, `send_rule_group_response`) so distributed traces stay usable; gRPC CLIENT/SERVER spans remain.
 - [#8907](https://github.com/thanos-io/thanos/pull/8907): UI: Migrate the React app (`pkg/ui/react-app`) from npm to pnpm; contributors now need pnpm 11+ instead of npm to build the Web UI.
 - [#8943](https://github.com/thanos-io/thanos/pull/8943): receive: always intern. *breaking :warning:* `--writer.intern` was removed on Thanos Receive and Receive will fail to start if that command line parameter is provided
