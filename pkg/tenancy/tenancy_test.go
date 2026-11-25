@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/thanos-io/thanos/pkg/component"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/store"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/tenancy"
@@ -210,11 +211,19 @@ func TestEnforceQueryTenancy(t *testing.T) {
 			query:         `sum by (job) (xrate(test_metric{job="test_job"}[5m]))`,
 			expectedQuery: `sum by (job) (xrate(test_metric{job="test_job",tenant_id="test-tenant"}[5m]))`,
 		},
+		{
+			name:          "with experimental functions",
+			tenantLabel:   "tenant_id",
+			tenant:        "test-tenant",
+			query:         `double_exponential_smoothing(test_metric{job="test_job"}[1h], 0.5, 0.5)`,
+			expectedQuery: `double_exponential_smoothing(test_metric{job="test_job",tenant_id="test-tenant"}[1h], 0.5, 0.5)`,
+		},
 	}
 
+	p := extpromql.NewParser(true, true)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query)
+			resultQuery, err := tenancy.EnforceQueryTenancy(tt.tenantLabel, tt.tenant, tt.query, p)
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tt.expectedQuery, resultQuery)

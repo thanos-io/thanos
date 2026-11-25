@@ -14,7 +14,6 @@ import (
 	"github.com/efficientgo/core/testutil"
 	"github.com/go-kit/log"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"go.uber.org/atomic"
 
@@ -67,9 +66,6 @@ func TestQuerier_Proxy(t *testing.T) {
 	testutil.Equals(t, 10, len(files), "%v", files)
 	cache, err := storecache.NewMatchersCache()
 	testutil.Ok(t, err)
-
-	// to enable double_exponential_smoothing, refer to https://github.com/prometheus/prometheus/pull/14930
-	parser.EnableExperimentalFunctions = true
 
 	logger := log.NewLogfmtLogger(os.Stderr)
 	t.Run("proxy", func(t *testing.T) {

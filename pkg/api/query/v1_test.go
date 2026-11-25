@@ -63,6 +63,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
+	"github.com/thanos-io/thanos/pkg/tenancy"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 	"github.com/thanos-io/thanos/pkg/testutil/testpromcompatibility"
@@ -70,6 +71,114 @@ import (
 
 func TestMain(m *testing.M) {
 	custom.TolerantVerifyLeakMain(m)
+}
+
+func TestQueryFactoryExperimentalFunctions(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		engineType         PromqlEngineType
+		mode               PromqlQueryMode
+		enableXFunctions   bool
+		enableExperimental bool
+		expr               string
+		wantErr            bool
+	}{
+		{
+			name:       "prometheus disabled",
+			engineType: PromqlEnginePrometheus,
+			mode:       PromqlQueryModeLocal,
+			expr:       "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+			wantErr:    true,
+		},
+		{
+			name:               "prometheus enabled",
+			engineType:         PromqlEnginePrometheus,
+			mode:               PromqlQueryModeLocal,
+			enableExperimental: true,
+			expr:               "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+		},
+		{
+			name:             "prometheus rejects xrate even when enableXFunctions is true",
+			engineType:       PromqlEnginePrometheus,
+			mode:             PromqlQueryModeLocal,
+			enableXFunctions: true,
+			expr:             "xrate(up[5m])",
+			wantErr:          true,
+		},
+		{
+			name:       "thanos local disabled",
+			engineType: PromqlEngineThanos,
+			mode:       PromqlQueryModeLocal,
+			expr:       "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+			wantErr:    true,
+		},
+		{
+			name:               "thanos local enabled",
+			engineType:         PromqlEngineThanos,
+			mode:               PromqlQueryModeLocal,
+			enableExperimental: true,
+			expr:               "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+		},
+		{
+			name:               "thanos distributed enabled with xfunctions",
+			engineType:         PromqlEngineThanos,
+			mode:               PromqlQueryModeDistributed,
+			enableXFunctions:   true,
+			enableExperimental: true,
+			expr:               "double_exponential_smoothing(xrate(up[5m])[1h:1m], 0.5, 0.5)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			factory := NewQueryFactory(
+				prometheus.NewRegistry(),
+				log.NewNopLogger(),
+				time.Minute,
+				5*time.Minute,
+				time.Minute,
+				tc.enableXFunctions,
+				nil,
+				tc.mode,
+				true,
+				tc.enableExperimental,
+			)
+			now := time.Now()
+			q, err := factory.makeInstantQuery(
+				context.Background(),
+				tc.engineType,
+				storage.QueryableFunc(func(_, _ int64) (storage.Querier, error) { return storage.NoopQuerier(), nil }),
+				emptyRemoteEndpointsCreate(nil, false),
+				planOrQuery{query: tc.expr},
+				&engine.QueryOpts{},
+				now,
+			)
+			if q != nil {
+				q.Close()
+			}
+			testutil.Equals(t, tc.wantErr, err != nil)
+
+			rq, rerr := factory.makeRangeQuery(
+				context.Background(),
+				tc.engineType,
+				storage.QueryableFunc(func(_, _ int64) (storage.Querier, error) { return storage.NoopQuerier(), nil }),
+				emptyRemoteEndpointsCreate(nil, false),
+				planOrQuery{query: tc.expr},
+				&engine.QueryOpts{},
+				now.Add(-time.Minute),
+				now,
+				time.Minute,
+			)
+			if rq != nil {
+				rq.Close()
+			}
+			testutil.Equals(t, tc.wantErr, rerr != nil)
+
+			if tc.enableXFunctions {
+				rewritten, err := tenancy.EnforceQueryTenancy("tenant_id", "t1", "xrate(up[5m])", factory.parser)
+				testutil.Ok(t, err)
+				testutil.Equals(t, `xrate(up{tenant_id="t1"}[5m])`, rewritten)
+			}
+		})
+	}
 }
 
 type endpointTestCase struct {
@@ -101,6 +210,7 @@ var (
 		true,
 		nil,
 		PromqlQueryModeLocal,
+		false,
 		false,
 	)
 
@@ -2012,6 +2122,10 @@ type sample struct {
 
 func (s sample) T() int64 {
 	return s.t
+}
+
+func (s sample) ST() int64 {
+	return 0
 }
 
 func (s sample) F() float64 {

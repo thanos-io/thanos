@@ -27,12 +27,14 @@ import (
 	"github.com/go-kit/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 
 	"github.com/thanos-io/promql-engine/api"
 	"github.com/thanos-io/promql-engine/engine"
 	"github.com/thanos-io/promql-engine/logicalplan"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/extpromql"
 	"github.com/thanos-io/thanos/pkg/logutil"
 )
 
@@ -76,6 +78,7 @@ type queryCreator interface {
 type QueryFactory struct {
 	mode            PromqlQueryMode
 	disableFallback bool
+	parser          parser.Parser
 
 	prometheus        *promql.Engine
 	thanosLocal       *engine.Engine
@@ -92,24 +95,27 @@ func NewQueryFactory(
 	activeQueryTracker *promql.ActiveQueryTracker,
 	mode PromqlQueryMode,
 	disableFallback bool,
+	enableExperimentalFunctions bool,
 ) *QueryFactory {
-	makeOpts := func(registry prometheus.Registerer) engine.Opts {
-		opts := engine.Opts{
-			EngineOpts: promql.EngineOpts{
-				Logger: logutil.GoKitLogToSlog(logger),
-				Reg:    registry,
-				// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
-				MaxSamples:    math.MaxInt32,
-				Timeout:       queryTimeout,
-				LookbackDelta: lookbackDelta,
-				NoStepSubqueryIntervalFn: func(int64) int64 {
-					return evaluationInterval.Milliseconds()
-				},
-				EnableNegativeOffset: true,
-				EnableAtModifier:     true,
+	// Keep XFunctions out of Prometheus's engine parser because Prometheus's evaluator
+	// looks up parsed functions directly in FunctionCalls without a nil check.
+	promParser := extpromql.NewParser(enableExperimentalFunctions, false)
+	tenancyParser := extpromql.NewParser(enableExperimentalFunctions, enableXFunctions)
+
+	makePromOpts := func(registry prometheus.Registerer) promql.EngineOpts {
+		opts := promql.EngineOpts{
+			Logger: logutil.GoKitLogToSlog(logger),
+			Reg:    registry,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return evaluationInterval.Milliseconds()
 			},
-			EnableXFunctions: enableXFunctions,
-			EnableAnalysis:   true,
+			EnableNegativeOffset: true,
+			EnableAtModifier:     true,
+			Parser:               promParser,
 		}
 		if activeQueryTracker != nil {
 			opts.ActiveQueryTracker = activeQueryTracker
@@ -117,10 +123,31 @@ func NewQueryFactory(
 		return opts
 	}
 
-	promEngine := promql.NewEngine(makeOpts(extprom.WrapRegistererWith(
+	makeOpts := func(registry prometheus.Registerer) engine.Opts {
+		opts := engine.Opts{
+			Logger: logutil.GoKitLogToSlog(logger),
+			Reg:    registry,
+			// TODO(bwplotka): Expose this as a flag: https://github.com/thanos-io/thanos/issues/703.
+			MaxSamples:    math.MaxInt32,
+			Timeout:       queryTimeout,
+			LookbackDelta: lookbackDelta,
+			NoStepSubqueryIntervalFn: func(int64) int64 {
+				return evaluationInterval.Milliseconds()
+			},
+			EnableExperimentalFunctions: enableExperimentalFunctions,
+			EnableXFunctions:            enableXFunctions,
+			EnableAnalysis:              true,
+		}
+		if activeQueryTracker != nil {
+			opts.ActiveQueryTracker = activeQueryTracker
+		}
+		return opts
+	}
+
+	promEngine := promql.NewEngine(makePromOpts(extprom.WrapRegistererWith(
 		map[string]string{
 			"mode":   string(PromqlQueryModeLocal),
-			"engine": string(PromqlEnginePrometheus)}, reg)).EngineOpts)
+			"engine": string(PromqlEnginePrometheus)}, reg)))
 
 	thanosLocal := engine.New(makeOpts(extprom.WrapRegistererWith(
 		map[string]string{
@@ -133,6 +160,7 @@ func NewQueryFactory(
 
 	return &QueryFactory{
 		mode:              mode,
+		parser:            tenancyParser,
 		prometheus:        promEngine,
 		thanosLocal:       thanosLocal,
 		thanosDistributed: thanosDistributed,

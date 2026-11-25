@@ -404,4 +404,17 @@ func Test_evaluateAtModifier(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("experimental functions with configured parser", func(t *testing.T) {
+		in := `double_exponential_smoothing(up[1h] @ start(), 0.5, 0.5)`
+		_, err := EvaluateAtModifierFunction(in, start, end)
+		require.Error(t, err)
+
+		p := extpromql.NewParser(true, false)
+		out, err := EvaluateAtModifierFunctionWithParser(p, in, start, end)
+		require.NoError(t, err)
+		expectedExpr, err := extpromql.ParseExprWithParser(p, `double_exponential_smoothing(up[1h] @ 1546300.800, 0.5, 0.5)`)
+		require.NoError(t, err)
+		require.Equal(t, expectedExpr.String(), out)
+	})
 }
