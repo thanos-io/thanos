@@ -430,7 +430,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			// will be overwritten at set.Next() call.
 			for chksIter.Next() {
 				c := chksIter.At()
-				cs.addIter(c.Chunk.Iterator(nil))
+				cs.addIter(c.Chunk.Encoding(), c.Chunk.Iterator(nil))
 			}
 			if err := chksIter.Err(); err != nil {
 				return errorOnlyStringIter{err}, nil
@@ -463,18 +463,24 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 // mergeChunkSeries build storage.ChunkSeries from several chunkenc.Iterator.
 type mergeChunkSeries struct {
-	lset labels.Labels
-	ss   []storage.Series
+	lset          labels.Labels
+	ss            []storage.Series
+	floatEncoding chunkenc.Encoding
 }
 
 func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
 	return &mergeChunkSeries{
-		lset: lset,
-		ss:   make([]storage.Series, 0),
+		lset:          lset,
+		ss:            make([]storage.Series, 0),
+		floatEncoding: chunkenc.EncXOR,
 	}
 }
 
-func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
+func (s *mergeChunkSeries) addIter(enc chunkenc.Encoding, iter chunkenc.Iterator) {
+	// Preserve XOR2 when any source float chunk in the series is XOR2-encoded.
+	if enc == chunkenc.EncXOR2 {
+		s.floatEncoding = chunkenc.EncXOR2
+	}
 	s.ss = append(s.ss, &storage.SeriesEntry{
 		SampleIteratorFn: func(iterator chunkenc.Iterator) chunkenc.Iterator {
 			return iter
@@ -491,10 +497,10 @@ func (s *mergeChunkSeries) Iterator(iterator chunks.Iterator) chunks.Iterator {
 		return nil
 	}
 	if len(s.ss) == 1 {
-		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iterator)
+		return storage.NewSeriesToChunkEncoderWithFloatEncoding(s.ss[0], s.floatEncoding).Iterator(iterator)
 	}
 
-	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iterator)
+	return storage.NewSeriesToChunkEncoderWithFloatEncoding(storage.ChainedSeriesMerge(s.ss...), s.floatEncoding).Iterator(iterator)
 }
 
 type errorOnlyStringIter struct {
