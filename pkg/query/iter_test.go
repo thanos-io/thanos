@@ -341,7 +341,7 @@ func TestChunkSeriesIterator_XOR2(t *testing.T) {
 			return &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: c.Bytes()}
 		}
 
-		// Fresh Seek(t <= 0) must not treat xor2Iterator's initial t=0 as a valid sample.
+		// Fresh Seek(t <= 0) must not treat an iterator's initial t=0 as a valid sample.
 		for _, tc := range []struct {
 			name string
 			it   func() chunkenc.Iterator

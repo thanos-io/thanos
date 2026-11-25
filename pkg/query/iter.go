@@ -281,7 +281,7 @@ func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
-		// Guard with lastVal because chunk iterators like xor2Iterator initialize t=0 before Next().
+		// Guard with lastVal because chunk iterators initialize t=0 before the first Next().
 		if it.lastVal != chunkenc.ValNone && it.AtT() >= t {
 			return it.lastVal
 		}
@@ -377,7 +377,7 @@ func (it *lazyChunkSeriesIterator) reset(c *storepb.Chunk) {
 
 func (it *lazyChunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	for {
-		// Guard with lastVal because chunk iterators like xor2Iterator initialize t=0 before Next().
+		// Guard with lastVal because chunk iterators initialize t=0 before the first Next().
 		if it.lastVal != chunkenc.ValNone && it.AtT() >= t {
 			return it.lastVal
 		}
