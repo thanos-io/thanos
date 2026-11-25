@@ -119,6 +119,11 @@ type ruleConfig struct {
 	tsdbEnableNativeHistograms bool
 }
 
+const (
+	metadataWALRecordsFeature = "metadata-wal-records"
+	typeAndUnitLabelsFeature  = "type-and-unit-labels"
+)
+
 type Expression struct {
 	Expr string
 }
@@ -172,7 +177,7 @@ func registerRule(app *extkingpin.App) {
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
-	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler)").Default("").StringsVar(&conf.EnableFeatures)
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler), metadata-wal-records (enables metadata WAL records in stateless ruler for Remote Write 2.0), type-and-unit-labels (enables metric type and unit labels __type__ and __unit__ in ruler)").Default("").StringsVar(&conf.EnableFeatures)
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
@@ -206,8 +211,9 @@ func registerRule(app *extkingpin.App) {
 		}
 
 		agentOpts := &agent.Options{
-			WALCompression: compressutil.ParseCompressionType(*walCompression, compression.Snappy),
-			NoLockfile:     *noLockFile,
+			WALCompression:           compressutil.ParseCompressionType(*walCompression, compression.Snappy),
+			NoLockfile:               *noLockFile,
+			EnableMetadataWALRecords: hasFeature(conf.EnableFeatures, metadataWALRecordsFeature),
 		}
 
 		// Parse and check query configuration.
@@ -476,8 +482,11 @@ func runRule(
 		return err
 	}
 
+	enableMetadataWALRecords := hasFeature(conf.EnableFeatures, metadataWALRecordsFeature)
+	enableTypeAndUnitLabels := hasFeature(conf.EnableFeatures, typeAndUnitLabelsFeature)
+
 	if len(rwCfgYAML) > 0 {
-		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts)
+		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts, enableTypeAndUnitLabels)
 		if err != nil {
 			return err
 		}
@@ -585,6 +594,16 @@ func runRule(
 		if hasFeature(conf.EnableFeatures, promqlExperimentalFunctions) {
 			level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 		}
+		if enableMetadataWALRecords {
+			if len(rwCfgYAML) > 0 {
+				level.Info(logger).Log("msg", "Metadata WAL records enabled.", "option", metadataWALRecordsFeature)
+			} else {
+				level.Warn(logger).Log("msg", "Metadata WAL records feature has no effect without --remote-write.config* (stateless mode).", "option", metadataWALRecordsFeature)
+			}
+		}
+		if enableTypeAndUnitLabels {
+			level.Info(logger).Log("msg", "Type and unit labels enabled.", "option", typeAndUnitLabelsFeature)
+		}
 
 		// Run rule evaluation and alert notifications.
 		notifyFunc := func(ctx context.Context, expr string, alerts ...*rules.Alert) {
@@ -624,7 +643,12 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
-			Parser:                 promQLParser,
+			// Only stateless remote-write mode with --enable-feature=metadata-wal-records has a WAL watcher that consumes metadata records.
+			// Local TSDB mode still deduces and sets __type__/__unit__ labels when type-and-unit-labels is enabled.
+			AppendMetadata:          enableMetadataWALRecords && len(rwCfgYAML) > 0,
+			AutoRecordingMetadata:   true,
+			EnableTypeAndUnitLabels: enableTypeAndUnitLabels,
+			Parser:                  promQLParser,
 		}
 		if conf.ruleConcurrentEval > 1 {
 			managerOpts.MaxConcurrentEvals = conf.ruleConcurrentEval
@@ -1208,6 +1232,7 @@ func openStatelessRuleStorage(
 	rwCfgYAML []byte,
 	externalLabels labels.Labels,
 	agentOpts *agent.Options,
+	enableTypeAndUnitLabels bool,
 ) (storage.Storage, error) {
 	promCfg, err := parseRemoteWriteConfig(rwCfgYAML, externalLabels)
 	if err != nil {
@@ -1215,11 +1240,13 @@ func openStatelessRuleStorage(
 	}
 
 	slogger := logutil.GoKitLogToSlog(logger)
+	if agentOpts == nil {
+		agentOpts = agent.DefaultOptions()
+	}
 	// flushDeadline is set to 1m, but it is for metadata watcher only so not used here.
-	// TODO: add type and unit labels support?
 	remoteStore := remote.NewStorage(slogger, reg, func() (int64, error) {
 		return 0, nil
-	}, dataDir, 1*time.Minute, &readyScrapeManager{}, false, false, false)
+	}, dataDir, 1*time.Minute, &readyScrapeManager{}, enableTypeAndUnitLabels, agentOpts.EnableMetadataWALRecords, false)
 
 	// Open the agent WAL before applying remote storage config so that the initial
 	// WAL segment exists when QueueManager starts its WAL watcher.
