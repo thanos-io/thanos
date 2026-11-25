@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/rand"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/oklog/ulid/v2"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/tsdb"
 
@@ -365,39 +367,134 @@ func TestReplicationSchemeAll(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		ctx := context.Background()
-		originBucket := objstore.NewInMemBucket()
-		targetBucket := objstore.NewInMemBucket()
-		logger := testLogger(t.Name() + "/" + c.name)
+		for _, concurrency := range []int{1, 4} {
+			t.Run(fmt.Sprintf("%s/concurrency=%d", c.name, concurrency), func(t *testing.T) {
+				ctx := context.Background()
+				originBucket := objstore.NewInMemBucket()
+				targetBucket := objstore.NewInMemBucket()
+				logger := testLogger(t.Name())
 
-		c.prepare(ctx, t, originBucket, targetBucket)
+				c.prepare(ctx, t, originBucket, targetBucket)
 
-		matcher, err := labels.NewMatcher(labels.MatchEqual, "test-labelname", "test-labelvalue")
-		testutil.Ok(t, err)
+				matcher, err := labels.NewMatcher(labels.MatchEqual, "test-labelname", "test-labelvalue")
+				testutil.Ok(t, err)
 
-		selector := labels.Selector{
-			matcher,
+				selector := labels.Selector{
+					matcher,
+				}
+				if c.selector != nil {
+					selector = c.selector
+				}
+
+				filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs).Filter
+				fetcher, err := newMetaFetcher(
+					logger, objstore.WithNoopInstr(originBucket),
+					nil,
+					minTimeDuration,
+					maxTimeDuration,
+					c.ignoreMarkedForDeletion,
+				)
+				testutil.Ok(t, err)
+
+				r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
+
+				err = r.execute(ctx, concurrency)
+				testutil.Ok(t, err)
+
+				c.assert(ctx, t, originBucket, targetBucket)
+			})
 		}
-		if c.selector != nil {
-			selector = c.selector
-		}
-
-		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs).Filter
-		fetcher, err := newMetaFetcher(
-			logger, objstore.WithNoopInstr(originBucket),
-			nil,
-			minTimeDuration,
-			maxTimeDuration,
-			32,
-			c.ignoreMarkedForDeletion,
-		)
-		testutil.Ok(t, err)
-
-		r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
-
-		err = r.execute(ctx)
-		testutil.Ok(t, err)
-
-		c.assert(ctx, t, originBucket, targetBucket)
 	}
+}
+
+func TestReplicationSchemeConcurrentBlocks(t *testing.T) {
+	ctx := context.Background()
+	originBucket := objstore.NewInMemBucket()
+	targetBucket := objstore.NewInMemBucket()
+	logger := testLogger(t.Name())
+
+	const numBlocks = 12
+	var expectedObjects int
+	for i := 0; i < numBlocks; i++ {
+		bid := testULID(int64(i * 1000))
+		meta := testMeta(bid)
+		b, err := json.Marshal(meta)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "meta.json"), bytes.NewReader(b)))
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "chunks", "000001"), bytes.NewReader([]byte("chunk-data"))))
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "index"), bytes.NewReader([]byte("index-data"))))
+		expectedObjects += 3
+	}
+
+	filter := func(m *metadata.Meta) bool { return true }
+	fetcher, err := newMetaFetcher(
+		logger, objstore.WithNoopInstr(originBucket),
+		nil,
+		minTimeDuration,
+		maxTimeDuration,
+		false,
+	)
+	testutil.Ok(t, err)
+
+	r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), targetBucket, nil)
+
+	err = r.execute(ctx, 4)
+	testutil.Ok(t, err)
+
+	testutil.Equals(t, expectedObjects, len(targetBucket.Objects()))
+	for k, v := range originBucket.Objects() {
+		targetVal, ok := targetBucket.Objects()[k]
+		testutil.Assert(t, ok, "expected object %s in target bucket", k)
+		testutil.Equals(t, v, targetVal)
+	}
+}
+
+func TestReplicationSchemeConcurrentError(t *testing.T) {
+	ctx := context.Background()
+	originBucket := objstore.NewInMemBucket()
+	logger := testLogger(t.Name())
+
+	for i := 0; i < 5; i++ {
+		bid := testULID(int64(i * 1000))
+		meta := testMeta(bid)
+		b, err := json.Marshal(meta)
+		testutil.Ok(t, err)
+
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "meta.json"), bytes.NewReader(b)))
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "chunks", "000001"), bytes.NewReader([]byte("chunk-data"))))
+		testutil.Ok(t, originBucket.Upload(ctx, path.Join(bid.String(), "index"), bytes.NewReader([]byte("index-data"))))
+	}
+
+	faultyTarget := &faultyBucket{
+		Bucket:     objstore.NewInMemBucket(),
+		failUpload: true,
+	}
+
+	filter := func(m *metadata.Meta) bool { return true }
+	fetcher, err := newMetaFetcher(
+		logger, objstore.WithNoopInstr(originBucket),
+		nil,
+		minTimeDuration,
+		maxTimeDuration,
+		false,
+	)
+	testutil.Ok(t, err)
+
+	r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, objstore.WithNoopInstr(originBucket), faultyTarget, nil)
+
+	err = r.execute(ctx, 3)
+	testutil.Assert(t, err != nil, "expected error from faulty target bucket")
+}
+
+type faultyBucket struct {
+	objstore.Bucket
+	failUpload bool
+}
+
+func (b *faultyBucket) Upload(ctx context.Context, name string, r io.Reader, opts ...objstore.ObjectUploadOption) error {
+	if b.failUpload {
+		return errors.New("upload failed")
+	}
+	return b.Bucket.Upload(ctx, name, r, opts...)
 }

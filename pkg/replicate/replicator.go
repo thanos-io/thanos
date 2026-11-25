@@ -74,10 +74,15 @@ func RunReplicate(
 	fromObjStoreConfig *extflag.PathOrContent,
 	toObjStoreConfig *extflag.PathOrContent,
 	singleRun bool,
+	concurrency int,
 	minTime, maxTime *thanosmodel.TimeOrDurationValue,
 	blockIDs []ulid.ULID,
 	ignoreMarkedForDeletion bool,
 ) error {
+	if concurrency < 1 {
+		return errors.Errorf("min concurrency is 1, but got %v", concurrency)
+	}
+
 	logger = log.With(logger, "component", "replicate")
 
 	level.Debug(logger).Log("msg", "setting up http listen-group")
@@ -162,7 +167,7 @@ func RunReplicate(
 	}, []string{"result"})
 	replicationRunDuration.WithLabelValues(labelSuccess)
 	replicationRunDuration.WithLabelValues(labelError)
-	fetcher, err := newMetaFetcher(logger, fromBkt, reg, *minTime, *maxTime, 32, ignoreMarkedForDeletion)
+	fetcher, err := newMetaFetcher(logger, fromBkt, reg, *minTime, *maxTime, ignoreMarkedForDeletion)
 	if err != nil {
 		return errors.Wrapf(err, "create meta fetcher with bucket %v", fromBkt)
 	}
@@ -189,7 +194,7 @@ func RunReplicate(
 		logger := log.With(logger, "replication-run-id", runID.String())
 		level.Info(logger).Log("msg", "running replication attempt")
 
-		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx); err != nil {
+		if err := newReplicationScheme(logger, metrics, blockFilter, fetcher, fromBkt, toBkt, reg).execute(ctx, concurrency); err != nil {
 			return errors.Wrap(err, "replication execute")
 		}
 
@@ -236,19 +241,18 @@ func newMetaFetcher(
 	reg prometheus.Registerer,
 	minTime,
 	maxTime thanosmodel.TimeOrDurationValue,
-	concurrency int,
 	ignoreMarkedForDeletion bool,
 ) (*thanosblock.MetaFetcher, error) {
 	filters := []thanosblock.MetadataFilter{
 		thanosblock.NewTimePartitionMetaFilter(minTime, maxTime),
 	}
 	if ignoreMarkedForDeletion {
-		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, concurrency))
+		filters = append(filters, thanosblock.NewIgnoreDeletionMarkFilter(logger, fromBkt, 0, thanosblock.FetcherConcurrency))
 	}
 	baseBlockIDsFetcher := thanosblock.NewConcurrentLister(logger, fromBkt)
 	return thanosblock.NewMetaFetcher(
 		logger,
-		concurrency,
+		thanosblock.FetcherConcurrency,
 		fromBkt,
 		baseBlockIDsFetcher,
 		"",

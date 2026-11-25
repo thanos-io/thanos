@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#4278](https://github.com/thanos-io/thanos/issues/4278) Tools: Add `--concurrency` flag to `tools bucket replicate` to support concurrent block replication.
 - [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
 - [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
 - [#8356](https://github.com/thanos-io/thanos/pull/8356): receive: Add retry-after backoff with jitter via header field to active-series-limiting (429) and quorum-unavailable (503) responses

@@ -135,6 +135,7 @@ type bucketReplicateConfig struct {
 	compactions []int
 	matcherStrs string
 	singleRun   bool
+	concurrency int
 }
 
 type bucketDownsampleConfig struct {
@@ -243,6 +244,8 @@ func (tbc *bucketReplicateConfig) registerBucketReplicateFlag(cmd extkingpin.Fla
 	cmd.Flag("matcher", "blocks whose external labels match this matcher will be replicated. All Prometheus matchers are supported, including =, !=, =~ and !~.").StringVar(&tbc.matcherStrs)
 
 	cmd.Flag("single-run", "Run replication only one time, then exit.").Default("false").BoolVar(&tbc.singleRun)
+
+	cmd.Flag("concurrency", "Number of goroutines to use for replicating blocks. WARNING: A value greater than 1 enables concurrent, non-sequential block replication. This means that a block from 4 weeks ago can be uploaded after a block from 2 hours ago. In the default Thanos compactor with a 30m consistency delay (https://thanos.io/tip/components/compact.md/#consistency-delay), if within 30 minutes after uploading those blocks there are still blocks to upload between them, the compactor might do compaction assuming a gap! This is solvable with vertical compaction, but it wastes extra computation and is not enabled by default. Use with care.").Default("1").IntVar(&tbc.concurrency)
 
 	return tbc
 }
@@ -784,6 +787,10 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			}
 		}
 
+		if tbc.concurrency < 1 {
+			return errors.Errorf("min concurrency is 1, but got %v", tbc.concurrency)
+		}
+
 		blockIDs := make([]ulid.ULID, 0, len(*ids))
 		for _, id := range *ids {
 			bid, err := ulid.Parse(id)
@@ -807,6 +814,7 @@ func registerBucketReplicate(app extkingpin.AppClause, objStoreConfig *extflag.P
 			objStoreConfig,
 			toObjStoreConfig,
 			tbc.singleRun,
+			tbc.concurrency,
 			minTime,
 			maxTime,
 			blockIDs,
