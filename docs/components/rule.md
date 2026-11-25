@@ -537,13 +537,14 @@ Flags:
                                  ingestion is always enabled.
       --tsdb.float-chunk-encoding=xor
                                  Chunk encoding to use for float samples
-                                 in local TSDB. Supported values are: "xor"
-                                 (default) and "xor2". Warning: upgrade all
-                                 Queriers (and any other StoreAPI clients) to a
-                                 version with XOR2 support before enabling this;
-                                 older Queriers cannot decode XOR2 chunks,
-                                 and older Thanos or Prometheus versions cannot
-                                 read XOR2 blocks.
+                                 in local TSDB. Supported values are:
+                                 "xor" (default) and "xor2". Warning: make sure
+                                 all Queriers (and any other StoreAPI clients)
+                                 are already running a Thanos version with XOR2
+                                 support before changing this flag or uploading
+                                 XOR2 blocks; older Queriers cannot decode XOR2
+                                 chunks, and older Thanos or Prometheus versions
+                                 cannot read XOR2 blocks.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

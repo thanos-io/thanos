@@ -185,7 +185,7 @@ func registerRule(app *extkingpin.App) {
 		Default("true").BoolVar(&conf.tsdbEnableNativeHistograms)
 
 	cmd.Flag("tsdb.float-chunk-encoding",
-		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: upgrade all Queriers (and any other StoreAPI clients) to a version with XOR2 support before enabling this; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
+		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
 		Default(config.FloatChunkEncodingXOR).EnumVar(&conf.tsdbFloatChunkEncoding, config.FloatChunkEncodingXOR, config.FloatChunkEncodingXOR2)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())

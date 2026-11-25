@@ -1127,7 +1127,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
 
 	cmd.Flag("tsdb.float-chunk-encoding",
-		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: upgrade all Queriers (and any other StoreAPI clients) to a version with XOR2 support before enabling this; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
+		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
 		Default(promconfig.FloatChunkEncodingXOR).EnumVar(&rc.tsdbFloatChunkEncoding, promconfig.FloatChunkEncodingXOR, promconfig.FloatChunkEncodingXOR2)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").

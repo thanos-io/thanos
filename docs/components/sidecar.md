@@ -17,6 +17,7 @@ Prometheus servers connected to the Thanos cluster via the sidecar are subject t
 * (!) The Prometheus `external_labels` section of the Prometheus configuration file has unique labels in the overall Thanos system. Those external labels will be used by the sidecar and then Thanos in many places. See [external labels](../storage.md#external-labels) docs.
 * The `--web.enable-admin-api` flag is enabled to support sidecar to get metadata from Prometheus like external labels.
 * The `--web.enable-lifecycle` flag is enabled if you want to use sidecar reloading features (`--reload.*` flags).
+* Before enabling XOR2 float chunk encoding in Prometheus or uploading XOR2 blocks, make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support; older Queriers cannot decode XOR2 chunks, and older Thanos versions cannot read XOR2 blocks.
 
 If you choose to use the sidecar to also upload data to object storage:
 
