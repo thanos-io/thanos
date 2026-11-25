@@ -114,6 +114,7 @@ func (r internalThanosRuleSender) Run(ctx context.Context, opts sender.Options) 
 		"--eval-interval=1s",
 		fmt.Sprintf("--grpc-query-endpoint=%s", lis.Addr().String()),
 		fmt.Sprintf("--remote-write.config-file=%s", rwConfigFile),
+		"--enable-feature=metadata-wal-records",
 		`--label=replica="0"`,
 	)
 }

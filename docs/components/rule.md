@@ -97,7 +97,9 @@ labels:
 
 # Metric metadata for the recorded time series. When omitted, metric type
 # (and unit, when --enable-feature=type-and-unit-labels is enabled) is
-# deduced automatically.
+# deduced automatically. Emitted over Remote Write 2.0 when
+# --enable-feature=metadata-wal-records or --enable-feature=type-and-unit-labels
+# is enabled.
 metadata:
   [ type: <string> ]
   [ unit: <string> ]
@@ -524,9 +526,10 @@ Flags:
       --enable-feature= ...      Comma separated feature names to enable. Valid
                                  options for now: promql-experimental-functions
                                  (enables promql experimental functions for
-                                 ruler), type-and-unit-labels (enables metric
-                                 type and unit labels __type__ and __unit__ in
-                                 ruler)
+                                 ruler), metadata-wal-records (enables metadata
+                                 WAL records in stateless ruler for Remote Write
+                                 2.0), type-and-unit-labels (enables metric type
+                                 and unit labels __type__ and __unit__ in ruler)
       --[no-]tsdb.enable-native-histograms
                                  (Deprecated) Enables the ingestion of native
                                  histograms. This flag is a no-op now and will

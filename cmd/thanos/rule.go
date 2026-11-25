@@ -119,7 +119,10 @@ type ruleConfig struct {
 	tsdbEnableNativeHistograms bool
 }
 
-const typeAndUnitLabelsFeature = "type-and-unit-labels"
+const (
+	metadataWALRecordsFeature = "metadata-wal-records"
+	typeAndUnitLabelsFeature  = "type-and-unit-labels"
+)
 
 type Expression struct {
 	Expr string
@@ -174,7 +177,7 @@ func registerRule(app *extkingpin.App) {
 		PlaceHolder("<endpoint>").StringsVar(&conf.grpcQueryEndpoints)
 
 	cmd.Flag("query.enable-x-functions", "Whether to enable extended rate functions (xrate, xincrease and xdelta). Only has effect when used with Thanos engine.").Default("false").BoolVar(&conf.extendedFunctionsEnabled)
-	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler), type-and-unit-labels (enables metric type and unit labels __type__ and __unit__ in ruler)").Default("").StringsVar(&conf.EnableFeatures)
+	cmd.Flag("enable-feature", "Comma separated feature names to enable. Valid options for now: promql-experimental-functions (enables promql experimental functions for ruler), metadata-wal-records (enables metadata WAL records in stateless ruler for Remote Write 2.0), type-and-unit-labels (enables metric type and unit labels __type__ and __unit__ in ruler)").Default("").StringsVar(&conf.EnableFeatures)
 
 	cmd.Flag("tsdb.enable-native-histograms",
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
@@ -210,7 +213,7 @@ func registerRule(app *extkingpin.App) {
 		agentOpts := &agent.Options{
 			WALCompression:           compressutil.ParseCompressionType(*walCompression, compression.Snappy),
 			NoLockfile:               *noLockFile,
-			EnableMetadataWALRecords: true,
+			EnableMetadataWALRecords: hasFeature(conf.EnableFeatures, metadataWALRecordsFeature),
 		}
 
 		// Parse and check query configuration.
@@ -479,6 +482,7 @@ func runRule(
 		return err
 	}
 
+	enableMetadataWALRecords := hasFeature(conf.EnableFeatures, metadataWALRecordsFeature)
 	enableTypeAndUnitLabels := hasFeature(conf.EnableFeatures, typeAndUnitLabelsFeature)
 
 	if len(rwCfgYAML) > 0 {
@@ -590,6 +594,13 @@ func runRule(
 		if hasFeature(conf.EnableFeatures, promqlExperimentalFunctions) {
 			level.Info(logger).Log("msg", "Experimental PromQL functions enabled.", "option", promqlExperimentalFunctions)
 		}
+		if enableMetadataWALRecords {
+			if len(rwCfgYAML) > 0 {
+				level.Info(logger).Log("msg", "Metadata WAL records enabled.", "option", metadataWALRecordsFeature)
+			} else {
+				level.Warn(logger).Log("msg", "Metadata WAL records feature has no effect without --remote-write.config* (stateless mode).", "option", metadataWALRecordsFeature)
+			}
+		}
 		if enableTypeAndUnitLabels {
 			level.Info(logger).Log("msg", "Type and unit labels enabled.", "option", typeAndUnitLabelsFeature)
 		}
@@ -632,9 +643,9 @@ func runRule(
 			OutageTolerance:        conf.outageTolerance,
 			ForGracePeriod:         conf.forGracePeriod,
 			DefaultRuleQueryOffset: func() time.Duration { return conf.queryOffset },
-			// Only stateless remote-write mode has a WAL watcher that consumes metadata records.
+			// Only stateless remote-write mode with --enable-feature=metadata-wal-records has a WAL watcher that consumes metadata records.
 			// Local TSDB mode still deduces and sets __type__/__unit__ labels when type-and-unit-labels is enabled.
-			AppendMetadata:          len(rwCfgYAML) > 0,
+			AppendMetadata:          enableMetadataWALRecords && len(rwCfgYAML) > 0,
 			AutoRecordingMetadata:   true,
 			EnableTypeAndUnitLabels: enableTypeAndUnitLabels,
 			Parser:                  promQLParser,

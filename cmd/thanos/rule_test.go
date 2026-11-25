@@ -309,20 +309,37 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 	_, err := openStatelessRuleStorage(log.NewNopLogger(), prometheus.NewRegistry(), dataDir, []byte(dupCfgYAML), extLabels, nil, false)
 	testutil.NotOk(t, err)
 
-	for _, tc := range []struct {
-		name                    string
-		enableTypeAndUnitLabels bool
-		appendLabels            labels.Labels
-		appendMeta              prommetadata.Metadata
-		expLabels               labels.Labels
-		expType                 writev2.Metadata_MetricType
-		expUnit                 string
-		expHelp                 string
+	for i, tc := range []struct {
+		name                     string
+		enableMetadataWALRecords bool
+		enableTypeAndUnitLabels  bool
+		appendLabels             labels.Labels
+		appendMeta               prommetadata.Metadata
+		expLabels                labels.Labels
+		expType                  writev2.Metadata_MetricType
+		expUnit                  string
+		expHelp                  string
 	}{
 		{
-			name:                    "type-and-unit-labels=false",
-			enableTypeAndUnitLabels: false,
-			appendLabels:            labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"),
+			name:                     "metadata-wal-records=false,type-and-unit-labels=false",
+			enableMetadataWALRecords: false,
+			enableTypeAndUnitLabels:  false,
+			appendLabels:             labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"),
+			appendMeta: prommetadata.Metadata{
+				Type: model.MetricTypeCounter,
+				Unit: "requests",
+				Help: "Total evaluated requests.",
+			},
+			expLabels: labels.FromStrings("__name__", "rule:evaluated_total", "env", "prod", "replica", "0"),
+			expType:   writev2.Metadata_METRIC_TYPE_UNSPECIFIED,
+			expUnit:   "",
+			expHelp:   "",
+		},
+		{
+			name:                     "metadata-wal-records=true,type-and-unit-labels=false",
+			enableMetadataWALRecords: true,
+			enableTypeAndUnitLabels:  false,
+			appendLabels:             labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "env", "prod"),
 			appendMeta: prommetadata.Metadata{
 				Type: model.MetricTypeCounter,
 				Unit: "requests",
@@ -334,9 +351,23 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 			expHelp:   "Total evaluated requests.",
 		},
 		{
-			name:                    "type-and-unit-labels=true",
-			enableTypeAndUnitLabels: true,
-			appendLabels:            labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod"),
+			name:                     "metadata-wal-records=false,type-and-unit-labels=true",
+			enableMetadataWALRecords: false,
+			enableTypeAndUnitLabels:  true,
+			appendLabels:             labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod"),
+			appendMeta: prommetadata.Metadata{
+				Help: "Total evaluated requests.",
+			},
+			expLabels: labels.FromStrings("__name__", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod", "replica", "0"),
+			expType:   writev2.Metadata_METRIC_TYPE_COUNTER,
+			expUnit:   "requests",
+			expHelp:   "",
+		},
+		{
+			name:                     "metadata-wal-records=true,type-and-unit-labels=true",
+			enableMetadataWALRecords: true,
+			enableTypeAndUnitLabels:  true,
+			appendLabels:             labels.FromStrings("__name__", "rule:placeholder", "__tmp_name", "rule:evaluated_total", "__type__", "counter", "__unit__", "requests", "env", "prod"),
 			appendMeta: prommetadata.Metadata{
 				Help: "Total evaluated requests.",
 			},
@@ -353,11 +384,11 @@ func TestOpenStatelessRuleStorage_RemoteWriteV2(t *testing.T) {
 			}
 
 			subDataDir := dataDir
-			if tc.enableTypeAndUnitLabels {
+			if i > 0 {
 				subDataDir = t.TempDir()
 			}
 			agentOpts := agent.DefaultOptions()
-			agentOpts.EnableMetadataWALRecords = true
+			agentOpts.EnableMetadataWALRecords = tc.enableMetadataWALRecords
 			store, err := openStatelessRuleStorage(
 				log.NewNopLogger(),
 				prometheus.NewRegistry(),
