@@ -119,6 +119,57 @@ type ruleConfig struct {
 	tsdbEnableNativeHistograms bool
 }
 
+type remoteWriteConfigReloader struct {
+	loadConfig     func() ([]byte, error)
+	applyConfig    func(*config.Config) error
+	externalLabels labels.Labels
+}
+
+func (r *remoteWriteConfigReloader) reload() error {
+	content, err := r.loadConfig()
+	if err != nil {
+		return errors.Wrap(err, "load remote write config")
+	}
+
+	cfg, err := parseRemoteWriteConfig(content, r.externalLabels)
+	if err != nil {
+		return err
+	}
+
+	return r.applyConfig(cfg)
+}
+
+func reloadRemoteWriteConfig(logger log.Logger, reloader *remoteWriteConfigReloader, reloadMsg chan error) {
+	err := reloader.reload()
+	if err != nil {
+		level.Error(logger).Log("msg", "reload remote write config by webhandler failed", "err", err)
+	}
+	reloadMsg <- err
+}
+
+func remoteWriteReloadHandler(remoteWriteReloadWebhandler chan chan error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		reloadMsg := make(chan error)
+		remoteWriteReloadWebhandler <- reloadMsg
+		if err := <-reloadMsg; err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
+}
+
+func newRemoteWriteReloadWebhandler(reloader *remoteWriteConfigReloader) chan chan error {
+	if reloader == nil {
+		return nil
+	}
+	return make(chan chan error)
+}
+
+func registerRemoteWriteReloadHandler(router *route.Router, reloadWebhandler chan chan error) {
+	if reloadWebhandler != nil {
+		router.Post("/-/reload-remote-write", remoteWriteReloadHandler(reloadWebhandler))
+	}
+}
+
 type Expression struct {
 	Expr string
 }
@@ -476,6 +527,7 @@ func runRule(
 		return err
 	}
 
+	var rwReloader *remoteWriteConfigReloader
 	if len(rwCfgYAML) > 0 {
 		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts)
 		if err != nil {
@@ -489,6 +541,11 @@ func runRule(
 			}, func(error) {
 				close(done)
 			})
+		}
+		rwReloader = &remoteWriteConfigReloader{
+			loadConfig:     conf.rwConfig.Content,
+			applyConfig:    fanoutStore.remoteStore.ApplyConfig,
+			externalLabels: labelsTSDBToProm(conf.lset),
 		}
 		appendable = fanoutStore
 		// Use a separate queryable to restore the ALERTS firing states.
@@ -682,6 +739,7 @@ func runRule(
 
 	// Handle reload and termination interrupts.
 	reloadWebhandler := make(chan chan error)
+	remoteWriteReloadWebhandler := newRemoteWriteReloadWebhandler(rwReloader)
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
@@ -702,6 +760,8 @@ func runRule(
 						level.Error(logger).Log("msg", "reload rules by webhandler failed", "err", err)
 					}
 					reloadMsg <- err
+				case reloadMsg := <-remoteWriteReloadWebhandler:
+					reloadRemoteWriteConfig(logger, rwReloader, reloadMsg)
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -825,6 +885,7 @@ func runRule(
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		})
+		registerRemoteWriteReloadHandler(router, remoteWriteReloadWebhandler)
 
 		ins := extpromhttp.NewInstrumentationMiddleware(reg, nil)
 
@@ -1201,6 +1262,11 @@ func parseRemoteWriteConfig(rwCfgYAML []byte, externalLabels labels.Labels) (*co
 	}, nil
 }
 
+type statelessRuleStorage struct {
+	storage.Storage
+	remoteStore *remote.Storage
+}
+
 func openStatelessRuleStorage(
 	logger log.Logger,
 	reg prometheus.Registerer,
@@ -1208,7 +1274,7 @@ func openStatelessRuleStorage(
 	rwCfgYAML []byte,
 	externalLabels labels.Labels,
 	agentOpts *agent.Options,
-) (storage.Storage, error) {
+) (*statelessRuleStorage, error) {
 	promCfg, err := parseRemoteWriteConfig(rwCfgYAML, externalLabels)
 	if err != nil {
 		return nil, err
@@ -1240,5 +1306,5 @@ func openStatelessRuleStorage(
 		return nil, errors.Wrap(err, "applying config to remote storage")
 	}
 
-	return storage.NewFanout(slogger, agentDB, remoteStore), nil
+	return &statelessRuleStorage{Storage: storage.NewFanout(slogger, agentDB, remoteStore), remoteStore: remoteStore}, nil
 }
