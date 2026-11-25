@@ -467,28 +467,30 @@ func TestPrometheusStore_Series_StreamedXOR2(t *testing.T) {
 	app.Append(50, 2000, 2.5)
 	app.Append(100, 3000, 3.5)
 
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse")
-		cw := remote.NewChunkedWriter(w, nil)
-		resp := &prompb.ChunkedReadResponse{
-			ChunkedSeries: []*prompb.ChunkedSeries{
-				{
-					Labels: []labelpb.ZLabel{{Name: "__name__", Value: "xor2_remote"}},
-					Chunks: []prompb.Chunk{
-						{
-							MinTimeMs: 1000,
-							MaxTimeMs: 3000,
-							Type:      prompb.Chunk_XOR2,
-							Data:      c.Bytes(),
-						},
+	resp := &prompb.ChunkedReadResponse{
+		ChunkedSeries: []*prompb.ChunkedSeries{
+			{
+				Labels: []labelpb.ZLabel{{Name: "__name__", Value: "xor2_remote"}},
+				Chunks: []prompb.Chunk{
+					{
+						MinTimeMs: 1000,
+						MaxTimeMs: 3000,
+						Type:      prompb.Chunk_XOR2,
+						Data:      c.Bytes(),
 					},
 				},
 			},
+		},
+	}
+	b, err := resp.Marshal()
+	testutil.Ok(t, err)
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-streamed-protobuf; proto=prometheus.ChunkedReadResponse")
+		cw := remote.NewChunkedWriter(w, nil)
+		if _, err := cw.Write(b); err != nil {
+			t.Errorf("write chunked response: %v", err)
 		}
-		b, err := resp.Marshal()
-		testutil.Ok(t, err)
-		_, err = cw.Write(b)
-		testutil.Ok(t, err)
 	}))
 	t.Cleanup(ts.Close)
 
