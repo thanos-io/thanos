@@ -21,6 +21,8 @@ option (gogoproto.goproto_unrecognized_all) = false;
 option (gogoproto.goproto_sizecache_all) = false;
 
 message Chunk {
+  // Enum values must remain equal to chunkenc.Encoding - 1 (and prompb.Chunk.Encoding - 1)
+  // because TSDBStore and PrometheusStore rely on that offset when converting encodings.
   enum Encoding {
     XOR = 0;
     HISTOGRAM = 1;

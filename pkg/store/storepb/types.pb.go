@@ -60,6 +60,8 @@ func (PartialResponseStrategy) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_121fba57de02d8e0, []int{0}
 }
 
+// Enum values must remain equal to chunkenc.Encoding - 1 (and prompb.Chunk.Encoding - 1)
+// because TSDBStore and PrometheusStore rely on that offset when converting encodings.
 type Chunk_Encoding int32
 
 const (
