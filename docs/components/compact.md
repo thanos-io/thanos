@@ -437,8 +437,11 @@ Flags:
                                 (default) and "xor2". Non-overlapping chunks
                                 keep their existing encoding; samples carrying
                                 a start timestamp always use XOR2. Warning:
-                                XOR2 blocks cannot be read by older Thanos or
-                                Prometheus versions without XOR2 support.
+                                upgrade all Queriers (and any other StoreAPI
+                                clients) to a version with XOR2 support before
+                                enabling this; older Queriers cannot decode XOR2
+                                chunks, and older Thanos or Prometheus versions
+                                cannot read XOR2 blocks.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not
