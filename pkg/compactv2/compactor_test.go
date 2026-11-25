@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -1146,6 +1147,99 @@ func TestCompactor_WriteSeries_RelabelPreservesXOR2(t *testing.T) {
 			testutil.Ok(t, chksIt.Err())
 			testutil.Assert(t, !ss.Next())
 			testutil.Ok(t, ss.Err())
+		})
+	}
+}
+
+func TestCompactor_WriteSeries_DeletionUnsupportedEncoding(t *testing.T) {
+	t.Parallel()
+
+	newHistChunk := func(t *testing.T, enc chunkenc.Encoding) chunkenc.Chunk {
+		t.Helper()
+		chk, err := chunkenc.NewEmptyChunk(enc)
+		testutil.Ok(t, err)
+		app, err := chk.Appender()
+		testutil.Ok(t, err)
+		for _, ts := range []int64{1000, 2000, 3000} {
+			var st int64
+			if enc == chunkenc.EncHistogramST || enc == chunkenc.EncFloatHistogramST {
+				st = 50
+			}
+			switch enc {
+			case chunkenc.EncHistogram, chunkenc.EncHistogramST:
+				h := &histogram.Histogram{
+					Schema:        1,
+					Count:         uint64(ts / 100),
+					Sum:           float64(ts),
+					ZeroThreshold: 0.001,
+					ZeroCount:     1,
+				}
+				_, _, app, err = app.AppendHistogram(nil, st, ts, h, true)
+			case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
+				fh := &histogram.FloatHistogram{
+					Schema:        1,
+					Count:         float64(ts / 100),
+					Sum:           float64(ts),
+					ZeroThreshold: 0.001,
+					ZeroCount:     1,
+				}
+				_, _, app, err = app.AppendFloatHistogram(nil, st, ts, fh, true)
+			default:
+				t.Fatalf("unexpected encoding %s", enc)
+			}
+			testutil.Ok(t, err)
+		}
+		return chk
+	}
+
+	for _, enc := range []chunkenc.Encoding{
+		chunkenc.EncHistogram,
+		chunkenc.EncFloatHistogram,
+		chunkenc.EncHistogramST,
+		chunkenc.EncFloatHistogramST,
+	} {
+		t.Run("enc="+enc.String(), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			logger := log.NewNopLogger()
+			tmpDir := t.TempDir()
+
+			srcID := ulid.MustNew(1, nil)
+			srcDir := filepath.Join(tmpDir, srcID.String())
+			testutil.Ok(t, os.MkdirAll(srcDir, os.ModePerm))
+			d, err := block.NewDiskWriter(ctx, logger, srcDir)
+			testutil.Ok(t, err)
+			testutil.Ok(t, d.AddSymbol("__name__"))
+			testutil.Ok(t, d.AddSymbol("hist_del"))
+
+			chks := []chunks.Meta{{Chunk: newHistChunk(t, enc), MinTime: 1000, MaxTime: 3000}}
+			testutil.Ok(t, d.WriteChunks(chks...))
+			testutil.Ok(t, d.AddSeries(0, labels.FromStrings("__name__", "hist_del"), chks...))
+			_, err = d.Flush()
+			testutil.Ok(t, err)
+			srcMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: srcID, MinTime: 1000, MaxTime: 3001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, srcMeta.WriteToDir(logger, srcDir))
+
+			b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), srcDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, b.Close()) })
+
+			outWriter, err := block.NewDiskWriter(ctx, logger, filepath.Join(tmpDir, ulid.MustNew(2, nil).String()))
+			testutil.Ok(t, err)
+
+			var changes bytes.Buffer
+			comp := New(tmpDir, logger, &changeLog{w: &changes}, downsample.NewPool())
+			delMod := WithDeletionModifier(metadata.DeletionRequest{
+				Matchers:  []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "hist_del")},
+				Intervals: tombstones.Intervals{{Mint: 1500, Maxt: 2500}},
+			})
+			err = comp.WriteSeries(ctx, []block.Reader{b}, outWriter, NewProgressLogger(logger, 1), delMod)
+			testutil.NotOk(t, err)
+			testutil.Assert(t, strings.Contains(err.Error(), "unsupported encoding "+enc.String()), "unexpected error: %v", err)
 		})
 	}
 }

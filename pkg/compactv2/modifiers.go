@@ -322,10 +322,14 @@ func (p *delChunkSeriesIterator) Next() bool {
 
 	// Re-encode the chunk if iterator is provided. This means that it has some samples to be deleted or chunk is opened.
 	var newChunk chunkenc.Chunk
-	if p.currChkMeta.Chunk.Encoding() == chunkenc.EncXOR2 {
-		newChunk = chunkenc.NewXOR2Chunk()
-	} else {
+	switch enc := p.currChkMeta.Chunk.Encoding(); enc {
+	case chunkenc.EncXOR:
 		newChunk = chunkenc.NewXORChunk()
+	case chunkenc.EncXOR2:
+		newChunk = chunkenc.NewXOR2Chunk()
+	default:
+		p.err = errors.Errorf("re-encoding chunk with unsupported encoding %s (%d) during deletion", enc, enc)
+		return false
 	}
 	app, err := newChunk.Appender()
 	if err != nil {
