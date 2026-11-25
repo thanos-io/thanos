@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/go-kit/log"
 	"github.com/oklog/ulid/v2"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"github.com/thanos-io/thanos/pkg/testutil/e2eutil"
 )
 
@@ -246,10 +248,54 @@ func TestParseFloatChunkEncoding(t *testing.T) {
 			got, err := parseFloatChunkEncoding(tc.in)
 			if tc.wantErr {
 				testutil.NotOk(t, err)
+				testutil.Equals(t, chunkenc.EncNone, got)
 				return
 			}
 			testutil.Ok(t, err)
 			testutil.Equals(t, tc.want, got)
+		})
+	}
+}
+
+func TestFloatChunkEncodingFlags(t *testing.T) {
+	t.Parallel()
+
+	newApp := func() *kingpin.Application {
+		kapp := kingpin.New("thanos", "")
+		kapp.Terminate(nil)
+		app := extkingpin.NewApp(kapp)
+		registerCompact(app)
+		registerReceive(app)
+		registerRule(app)
+		return kapp
+	}
+
+	for _, tc := range []struct {
+		cmd  string
+		flag string
+	}{
+		{cmd: "compact", flag: "compact.float-chunk-encoding"},
+		{cmd: "receive", flag: "tsdb.float-chunk-encoding"},
+		{cmd: "rule", flag: "tsdb.float-chunk-encoding"},
+	} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			t.Parallel()
+
+			kapp := newApp()
+			_, err := kapp.Parse([]string{tc.cmd})
+			testutil.Ok(t, err)
+			f := kapp.GetCommand(tc.cmd).GetFlag(tc.flag)
+			testutil.Assert(t, f != nil, "expected flag %s on %s", tc.flag, tc.cmd)
+			testutil.Equals(t, "xor", f.Model().Value.String())
+
+			kapp = newApp()
+			_, err = kapp.Parse([]string{tc.cmd, "--" + tc.flag + "=xor2"})
+			testutil.Ok(t, err)
+			testutil.Equals(t, "xor2", kapp.GetCommand(tc.cmd).GetFlag(tc.flag).Model().Value.String())
+
+			kapp = newApp()
+			_, err = kapp.Parse([]string{tc.cmd, "--" + tc.flag + "=invalid"})
+			testutil.NotOk(t, err)
 		})
 	}
 }
