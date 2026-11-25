@@ -963,6 +963,33 @@ func TestCompactor_XOR2(t *testing.T) {
 		}, got)
 	})
 
+	t.Run("horizontal_preserves_xor_under_xor2_merger", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		b1 := createBlock(t, dir, chunkenc.EncXOR, false, []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}})
+		b2 := createBlock(t, dir, chunkenc.EncXOR, false, []sampleSpec{{t: 5000, v: 5}, {t: 6000, v: 6}})
+
+		mergeFunc := storage.NewCompactingChunkSeriesMergerWithFloatEncoding(storage.ChainedSeriesMerge, func() chunkenc.Encoding {
+			return chunkenc.EncXOR2
+		})
+		comp, err := tsdb.NewLeveledCompactor(t.Context(), nil, logutil.GoKitLogToSlog(log.NewNopLogger()), []int64{10000}, downsample.NewPool(), mergeFunc)
+		testutil.Ok(t, err)
+		outDir := t.TempDir()
+		ids, err := comp.Compact(outDir, []string{b1, b2}, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(ids))
+
+		encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
+		testutil.Equals(t, []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR}, encs)
+		testutil.Equals(t, []sampleSpec{
+			{t: 1000, v: 1},
+			{t: 2000, v: 2},
+			{t: 5000, v: 5},
+			{t: 6000, v: 6},
+		}, got)
+	})
+
 	for _, tc := range []struct {
 		name          string
 		floatEncoding chunkenc.Encoding
@@ -1025,6 +1052,21 @@ func TestCompactor_XOR2(t *testing.T) {
 			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 20000, v: 20}},
 			wantEnc:       chunkenc.EncXOR,
 			want:          []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
+		},
+		{
+			name:          "vertical_penalty_xor_preserves_nonzero_st_as_xor2",
+			floatEncoding: chunkenc.EncXOR,
+			penalty:       true,
+			inputEnc:      chunkenc.EncXOR2,
+			enableST:      true,
+			b1:            []sampleSpec{{st: 50, t: 1000, v: 1}, {st: 50, t: 7000, v: 7}},
+			b2:            []sampleSpec{{st: 50, t: 2000, v: 2}, {st: 50, t: 20000, v: 20}},
+			wantEnc:       chunkenc.EncXOR2,
+			want: []sampleSpec{
+				{st: 50, t: 1000, v: 1},
+				{st: 50, t: 7000, v: 7},
+				{st: 50, t: 20000, v: 20},
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
