@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"go.uber.org/atomic"
 
+	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
@@ -171,6 +173,96 @@ func TestRateLimitedServer(t *testing.T) {
 	}
 }
 
+func TestLimitedStoreServerMetadataSeriesLimitPushdown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		noPushdown  bool
+		seriesLimit uint64
+		skipChunks  bool
+		reqLimit    int64
+		available   int
+		wantLimit   int64
+		wantSent    int
+		wantErr     string
+	}{
+		{
+			name:        "no limit in the request",
+			seriesLimit: 10, skipChunks: true, available: 100,
+			wantLimit: 11, wantSent: 10, wantErr: "failed to send series: limit 10 violated (got 11)",
+		},
+		{
+			name:        "request limit above the series limit",
+			seriesLimit: 10, skipChunks: true, reqLimit: 500, available: 100,
+			wantLimit: 11, wantSent: 10, wantErr: "failed to send series: limit 10 violated (got 11)",
+		},
+		{
+			name:        "request limit below the series limit",
+			seriesLimit: 10, skipChunks: true, reqLimit: 5, available: 100,
+			wantLimit: 5, wantSent: 5,
+		},
+		{
+			name:        "exactly the series limit",
+			seriesLimit: 10, skipChunks: true, available: 10,
+			wantLimit: 11, wantSent: 10,
+		},
+		{
+			name:        "no series limit",
+			seriesLimit: 0, skipChunks: true, available: 20,
+			wantLimit: 0, wantSent: 20,
+		},
+		{
+			name:        "request with chunks",
+			seriesLimit: 10, skipChunks: false, available: 100,
+			wantLimit: 0, wantSent: 10, wantErr: "failed to send series: limit 10 violated (got 11)",
+		},
+		{
+			name:       "pushdown not enabled",
+			noPushdown: true, seriesLimit: 10, skipChunks: true, available: 100,
+			wantLimit: 0, wantSent: 10, wantErr: "failed to send series: limit 10 violated (got 11)",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			backend := &limitHonouringStoreServer{available: test.available}
+			limits := SeriesSelectLimits{SeriesPerRequest: test.seriesLimit}
+			var opts []LimitedStoreServerOption
+			if !test.noPushdown {
+				opts = append(opts, WithMetadataSeriesLimitPushdown(limits))
+			}
+			store := NewLimitedStoreServer(backend, prometheus.NewRegistry(), limits, opts...)
+			client := storepb.ServerAsClient(store, atomic.Bool{})
+
+			req := &storepb.SeriesRequest{SkipChunks: test.skipChunks, Limit: test.reqLimit}
+			seriesClient, err := client.Series(ctx, req)
+			testutil.Ok(t, err)
+
+			sent, gotErr := 0, ""
+			for {
+				resp, err := seriesClient.Recv()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					gotErr = err.Error()
+					break
+				}
+				if resp.GetSeries() != nil {
+					sent++
+				}
+			}
+			testutil.Equals(t, test.wantErr, gotErr)
+			testutil.Equals(t, test.wantLimit, backend.gotLimit)
+			testutil.Equals(t, test.wantSent, sent)
+			testutil.Equals(t, test.reqLimit, req.Limit)
+		})
+	}
+}
+
 func makeSamples(numSamples int) []sample {
 	samples := make([]sample, numSamples)
 	for i := range samples {
@@ -191,6 +283,28 @@ func newStoreServerStub(responses []*storepb.SeriesResponse) *testStoreServer {
 func (m *testStoreServer) Series(_ *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
 	for _, r := range m.responses {
 		if err := server.Send(r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// limitHonouringStoreServer sends at most Limit series, like Prometheus does.
+type limitHonouringStoreServer struct {
+	storepb.StoreServer
+	available int
+	gotLimit  int64
+}
+
+func (m *limitHonouringStoreServer) Series(r *storepb.SeriesRequest, server storepb.Store_SeriesServer) error {
+	m.gotLimit = r.Limit
+	n := m.available
+	if r.Limit > 0 && int(r.Limit) < n {
+		n = int(r.Limit)
+	}
+	for i := 0; i < n; i++ {
+		lset := labelpb.ZLabelsFromPromLabels(labels.FromStrings("series", strconv.Itoa(i)))
+		if err := server.Send(storepb.NewSeriesResponse(&storepb.Series{Labels: lset})); err != nil {
 			return err
 		}
 	}

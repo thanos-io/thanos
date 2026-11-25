@@ -123,11 +123,29 @@ type limitedStoreServer struct {
 	newSeriesLimiter      SeriesLimiterFactory
 	newSamplesLimiter     ChunksLimiterFactory
 	failedRequestsCounter *prometheus.CounterVec
+
+	// metadataSeriesLimit is the request limit set on SkipChunks requests, 0 means none.
+	metadataSeriesLimit int64
+}
+
+// LimitedStoreServerOption configures a limitedStoreServer.
+type LimitedStoreServerOption func(s *limitedStoreServer)
+
+// WithMetadataSeriesLimitPushdown sets the request limit of SkipChunks requests to the series limit + 1,
+// so that the store does not build a response much larger than the limit before the limit is checked.
+// Use it only when the store returns each series it reads (no deduplication, no filtering), for example
+// the Prometheus sidecar. Otherwise the store can stop early and return a partial result without an error.
+func WithMetadataSeriesLimitPushdown(selectLimits SeriesSelectLimits) LimitedStoreServerOption {
+	return func(s *limitedStoreServer) {
+		if selectLimits.SeriesPerRequest > 0 {
+			s.metadataSeriesLimit = int64(selectLimits.SeriesPerRequest) + 1
+		}
+	}
 }
 
 // NewLimitedStoreServer creates a new limitedStoreServer.
-func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, selectLimits SeriesSelectLimits) storepb.StoreServer {
-	return &limitedStoreServer{
+func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer, selectLimits SeriesSelectLimits, opts ...LimitedStoreServerOption) storepb.StoreServer {
+	s := &limitedStoreServer{
 		StoreServer:       store,
 		newSeriesLimiter:  NewSeriesLimiterFactory(selectLimits.SeriesPerRequest),
 		newSamplesLimiter: NewChunksLimiterFactory(selectLimits.SamplesPerRequest),
@@ -136,9 +154,18 @@ func NewLimitedStoreServer(store storepb.StoreServer, reg prometheus.Registerer,
 			Help: "Number of select queries that were dropped due to configured limits.",
 		}, []string{"reason"}),
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *limitedStoreServer) Series(req *storepb.SeriesRequest, srv storepb.Store_SeriesServer) error {
+	if req.SkipChunks && s.metadataSeriesLimit > 0 && (req.Limit <= 0 || req.Limit > s.metadataSeriesLimit) {
+		reqCopy := *req
+		reqCopy.Limit = s.metadataSeriesLimit
+		req = &reqCopy
+	}
 	seriesLimiter := s.newSeriesLimiter(s.failedRequestsCounter.WithLabelValues("series"))
 	chunksLimiter := s.newSamplesLimiter(s.failedRequestsCounter.WithLabelValues("chunks"))
 	limitedSrv := newLimitedServer(srv, seriesLimiter, chunksLimiter)
