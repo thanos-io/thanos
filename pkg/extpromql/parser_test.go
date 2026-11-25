@@ -48,7 +48,7 @@ func TestParseMetricSelector(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			//lint:ignore faillint Testing against prometheus parser.
-			want, err := parser.ParseMetricSelector(tc.input)
+			want, err := parser.NewParser(parser.Options{}).ParseMetricSelector(tc.input)
 			if err != nil {
 				t.Fatalf("Prometheus ParseMetricSelector failed: %v", err)
 			}
@@ -61,6 +61,58 @@ func TestParseMetricSelector(t *testing.T) {
 			testutil.Equals(t, stringFmt(want), stringFmt(got))
 		})
 	}
+}
+
+func TestNewParserAndNilFallback(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		enableExperimental bool
+		enableXFunctions   bool
+		expr               string
+		wantErr            bool
+	}{
+		{
+			name:    "experimental disabled",
+			expr:    "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+			wantErr: true,
+		},
+		{
+			name:               "experimental enabled",
+			enableExperimental: true,
+			expr:               "double_exponential_smoothing(up[1h], 0.5, 0.5)",
+		},
+		{
+			name:    "xfunctions disabled",
+			expr:    "xrate(http_requests_total[5m])",
+			wantErr: true,
+		},
+		{
+			name:             "xfunctions enabled",
+			enableXFunctions: true,
+			expr:             "xrate(http_requests_total[5m])",
+		},
+		{
+			name:               "both enabled",
+			enableExperimental: true,
+			enableXFunctions:   true,
+			expr:               "double_exponential_smoothing(xrate(http_requests_total[5m])[1h:1m], 0.5, 0.5)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := extpromql.NewParser(tc.enableExperimental, tc.enableXFunctions)
+			_, err := extpromql.ParseExprWithParser(p, tc.expr)
+			testutil.Equals(t, tc.wantErr, err != nil)
+		})
+	}
+
+	t.Run("nil parser falls back to ParseExpr with xfunctions", func(t *testing.T) {
+		_, err := extpromql.ParseExprWithParser(nil, "xrate(http_requests_total[5m])")
+		testutil.Ok(t, err)
+	})
+
+	// Ensure NewParser never mutates Prometheus's global parser.Functions map.
+	_, exists := parser.Functions["xrate"]
+	testutil.Assert(t, !exists, "global parser.Functions should not be mutated with xrate")
 }
 
 func stringFmt(got []*labels.Matcher) string {

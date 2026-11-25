@@ -43,9 +43,10 @@ var (
 
 // ResultsCacheConfig is the config for the results cache.
 type ResultsCacheConfig struct {
-	CacheConfig                cache.Config `yaml:"cache"`
-	Compression                string       `yaml:"compression"`
-	CacheQueryableSamplesStats bool         `yaml:"cache_queryable_samples_stats"`
+	CacheConfig                cache.Config  `yaml:"cache"`
+	Compression                string        `yaml:"compression"`
+	CacheQueryableSamplesStats bool          `yaml:"cache_queryable_samples_stats"`
+	Parser                     parser.Parser `yaml:"-"`
 }
 
 // RegisterFlags registers flags.
@@ -342,7 +343,7 @@ func (s resultsCache) isAtModifierCachable(r Request, maxCacheTime int64) bool {
 	if !strings.Contains(query, "@") {
 		return true
 	}
-	expr, err := extpromql.ParseExpr(query)
+	expr, err := extpromql.ParseExprWithParser(s.cfg.Parser, query)
 	if err != nil {
 		// We are being pessimistic in such cases.
 		level.Warn(s.logger).Log("msg", "failed to parse query, considering @ modifier as not cachable", "query", query, "err", err)
@@ -392,7 +393,7 @@ func (s resultsCache) isOffsetCachable(r Request) bool {
 	if !strings.Contains(query, "offset") {
 		return true
 	}
-	expr, err := extpromql.ParseExpr(query)
+	expr, err := extpromql.ParseExprWithParser(s.cfg.Parser, query)
 	if err != nil {
 		level.Warn(s.logger).Log("msg", "failed to parse query, considering offset as not cachable", "query", query, "err", err)
 		return false

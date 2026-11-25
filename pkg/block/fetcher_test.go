@@ -440,6 +440,23 @@ func TestLabelShardedMetaFilter_Filter_DedupReplicaLabel(t *testing.T) {
 	}
 }
 
+func TestLabelShardedMetaFilter_Filter_EmptyLabelsAfterRelabel(t *testing.T) {
+	relabelContentYaml := `
+    - action: labeldrop
+      regex: ".*"
+    `
+	relabelConfig, err := ParseRelabelConfig([]byte(relabelContentYaml), nil)
+	testutil.Ok(t, err)
+
+	input := map[ulid.ULID]*metadata.Meta{
+		ULID(1): {Thanos: metadata.Thanos{Labels: map[string]string{"cluster": "A"}}},
+	}
+	m := newTestFetcherMetrics()
+	testutil.Ok(t, NewLabelShardedMetaFilter(relabelConfig).Filter(t.Context(), input, m.Synced, nil))
+	testutil.Equals(t, map[ulid.ULID]*metadata.Meta{}, input)
+	testutil.Equals(t, 1.0, promtest.ToFloat64(m.Synced.WithLabelValues(labelExcludedMeta)))
+}
+
 func TestLabelShardedMetaFilter_Filter_Hashmod(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()

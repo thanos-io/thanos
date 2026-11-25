@@ -252,7 +252,7 @@ func TestSplitQuery(t *testing.T) {
 		},
 	} {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			queries, err := splitQuery(tc.input, tc.interval)
+			queries, err := splitQuery(tc.input, tc.interval, nil)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, queries)
 		})
@@ -266,7 +266,7 @@ func TestSplitQuery_PromQLErrorReturnsJson(t *testing.T) {
 		Step:  15 * seconds,
 		Query: "foo{",
 	}
-	queries, err := splitQuery(input, 1*time.Hour)
+	queries, err := splitQuery(input, 1*time.Hour, nil)
 	require.Error(t, err)
 	require.Nil(t, queries)
 
@@ -283,7 +283,7 @@ func TestSplitQuery_PrometheusRequest(t *testing.T) {
 		Step:  15 * seconds,
 		Query: "foo",
 	}
-	queries, err := splitQuery(input, 1*time.Hour)
+	queries, err := splitQuery(input, 1*time.Hour, nil)
 	require.Error(t, err)
 	require.Nil(t, queries)
 
