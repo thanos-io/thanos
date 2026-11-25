@@ -264,8 +264,8 @@ func (it *chunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	// to the range we are interested in. There's not much to be gained from
 	// hopping across chunks so we just call next until we reach t.
 	for {
-		ct := it.AtT()
-		if ct >= t {
+		// Guard with lastVal because chunk iterators like xor2Iterator initialize t=0 before Next().
+		if it.lastVal != chunkenc.ValNone && it.AtT() >= t {
 			return it.lastVal
 		}
 		it.lastVal = it.Next()
@@ -296,6 +296,7 @@ func (it *chunkSeriesIterator) AtST() int64 {
 }
 
 func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
+	hasLast := it.lastVal != chunkenc.ValNone
 	lastT := it.AtT()
 
 	if valueType := it.chunks[it.i].Next(); valueType != chunkenc.ValNone {
@@ -303,15 +304,21 @@ func (it *chunkSeriesIterator) Next() chunkenc.ValueType {
 		return valueType
 	}
 	if it.Err() != nil {
+		it.lastVal = chunkenc.ValNone
 		return chunkenc.ValNone
 	}
 	if it.i >= len(it.chunks)-1 {
+		it.lastVal = chunkenc.ValNone
 		return chunkenc.ValNone
 	}
 	// Chunks are guaranteed to be ordered but not generally guaranteed to not overlap.
 	// We must ensure to skip any overlapping range between adjacent chunks.
 	it.i++
 	it.cur = it.chunks[it.i]
+	it.lastVal = chunkenc.ValNone
+	if !hasLast {
+		return it.Next()
+	}
 	return it.Seek(lastT + 1)
 }
 
@@ -338,6 +345,7 @@ func newLazyChunkSeriesIterator(chunks []*storepb.Chunk) chunkenc.Iterator {
 }
 
 func (it *lazyChunkSeriesIterator) reset(c *storepb.Chunk) {
+	it.lastVal = chunkenc.ValNone
 	if c == nil {
 		it.cur = errSeriesIterator{errors.New("nil chunk")}
 		return
@@ -352,8 +360,8 @@ func (it *lazyChunkSeriesIterator) reset(c *storepb.Chunk) {
 
 func (it *lazyChunkSeriesIterator) Seek(t int64) chunkenc.ValueType {
 	for {
-		ct := it.AtT()
-		if ct >= t {
+		// Guard with lastVal because chunk iterators like xor2Iterator initialize t=0 before Next().
+		if it.lastVal != chunkenc.ValNone && it.AtT() >= t {
 			return it.lastVal
 		}
 		it.lastVal = it.Next()
@@ -376,6 +384,7 @@ func (it *lazyChunkSeriesIterator) AtST() int64 { return it.cur.AtST() }
 func (it *lazyChunkSeriesIterator) Err() error  { return it.cur.Err() }
 
 func (it *lazyChunkSeriesIterator) Next() chunkenc.ValueType {
+	hasLast := it.lastVal != chunkenc.ValNone
 	lastT := it.AtT()
 
 	if valueType := it.cur.Next(); valueType != chunkenc.ValNone {
@@ -383,13 +392,18 @@ func (it *lazyChunkSeriesIterator) Next() chunkenc.ValueType {
 		return valueType
 	}
 	if it.Err() != nil {
+		it.lastVal = chunkenc.ValNone
 		return chunkenc.ValNone
 	}
 	if it.i >= len(it.chunks)-1 {
+		it.lastVal = chunkenc.ValNone
 		return chunkenc.ValNone
 	}
 	it.i++
 	it.reset(it.chunks[it.i])
+	if !hasLast {
+		return it.Next()
+	}
 	return it.Seek(lastT + 1)
 }
 
@@ -457,7 +471,7 @@ func newHistogramResetDetector(iterator chunkenc.Iterator) *histogramResetDetect
 
 func (it *histogramResetDetector) Seek(t int64) chunkenc.ValueType {
 	for {
-		if it.lastT >= t {
+		if it.lastValType != chunkenc.ValNone && it.lastT >= t {
 			return it.lastValType
 		}
 		if it.lastValType = it.Next(); it.lastValType == chunkenc.ValNone {
