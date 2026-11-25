@@ -770,6 +770,8 @@ func TestSeriesRequestWithMatchers(t *testing.T) {
 }
 
 func TestChunkXOR2MarshalAndNumSamples(t *testing.T) {
+	t.Parallel()
+
 	c := chunkenc.NewXOR2Chunk()
 	app, err := c.Appender()
 	testutil.Ok(t, err)
@@ -783,7 +785,19 @@ func TestChunkXOR2MarshalAndNumSamples(t *testing.T) {
 		Hash: 42,
 	}
 	testutil.Equals(t, 3, orig.XORNumSamples())
+	testutil.Equals(t, 0, (*Chunk)(nil).XORNumSamples())
 	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2, Data: []byte{0}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2, Data: []byte{0, 3}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR, Data: []byte{0}}).XORNumSamples())
+	testutil.Equals(t, 3, (&Chunk{Type: Chunk_XOR, Data: []byte{0, 3}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_HISTOGRAM, Data: []byte{0, 3, 0}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_FLOAT_HISTOGRAM, Data: []byte{0, 3, 0}}).XORNumSamples())
+
+	// Chunk.Compare must distinguish Chunk_XOR and Chunk_XOR2 even with identical bytes.
+	sameDataXOR := &Chunk{Type: Chunk_XOR, Data: c.Bytes()}
+	testutil.Assert(t, orig.Compare(sameDataXOR) != 0, "expected Chunk_XOR2 and Chunk_XOR to compare unequal")
+	testutil.Assert(t, orig.Compare(&Chunk{Type: Chunk_XOR2, Data: c.Bytes()}) == 0, "expected identical Chunk_XOR2 to compare equal")
 
 	raw, err := orig.Marshal()
 	testutil.Ok(t, err)
