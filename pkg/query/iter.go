@@ -202,13 +202,30 @@ func getFirstIterator(cs ...*storepb.Chunk) chunkenc.Iterator {
 		if c == nil {
 			continue
 		}
-		chk, err := chunkenc.FromData(chunkEncoding(c.Type), c.Data)
+		chk, err := decodeChunk(c)
 		if err != nil {
 			return errSeriesIterator{err}
 		}
 		return newHistogramResetDetector(chk.Iterator(nil))
 	}
 	return errSeriesIterator{errors.New("no valid chunk found")}
+}
+
+// decodeChunk validates the minimum header bytes before constructing a chunk so
+// malformed remote payloads return an iterator error instead of panicking in Reset().
+func decodeChunk(c *storepb.Chunk) (chunkenc.Chunk, error) {
+	enc := chunkEncoding(c.Type)
+	minLen := 0
+	switch enc {
+	case chunkenc.EncXOR:
+		minLen = 2
+	case chunkenc.EncXOR2, chunkenc.EncHistogram, chunkenc.EncFloatHistogram:
+		minLen = 3
+	}
+	if len(c.Data) < minLen {
+		return nil, errors.Errorf("chunk data too short for encoding %s: got %d bytes, need at least %d", enc, len(c.Data), minLen)
+	}
+	return chunkenc.FromData(enc, c.Data)
 }
 
 func chunkEncoding(e storepb.Chunk_Encoding) chunkenc.Encoding {
@@ -350,7 +367,7 @@ func (it *lazyChunkSeriesIterator) reset(c *storepb.Chunk) {
 		it.cur = errSeriesIterator{errors.New("nil chunk")}
 		return
 	}
-	chk, err := chunkenc.FromData(chunkEncoding(c.Type), c.Data)
+	chk, err := decodeChunk(c)
 	if err != nil {
 		it.cur = errSeriesIterator{err}
 		return
