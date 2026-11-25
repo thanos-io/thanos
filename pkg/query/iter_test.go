@@ -304,6 +304,122 @@ func TestChunkSeriesIterator_XOR2(t *testing.T) {
 		assertSamples(t, it, wantMixed)
 	})
 
+	t.Run("lazy_xor2_reuse_and_st_reset", func(t *testing.T) {
+		xor2NoST := chunkenc.NewXOR2Chunk()
+		a, err := xor2NoST.Appender()
+		require.NoError(t, err)
+		a.Append(0, 5000, 5.0)
+		a.Append(0, 6000, 6.0)
+
+		xorTail := chunkenc.NewXORChunk()
+		a, err = xorTail.Appender()
+		require.NoError(t, err)
+		a.Append(0, 7000, 7.0)
+
+		it := newLazyChunkSeriesIterator([]*storepb.Chunk{
+			{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()},
+			{Type: storepb.Chunk_XOR2, Data: xor2NoST.Bytes()},
+			{Type: storepb.Chunk_XOR, Data: xorTail.Bytes()},
+		})
+		assertSamples(t, it, []wantSample{
+			{st: 2500, t: 3000, v: 3.0},
+			{st: 2500, t: 4000, v: 4.0},
+			{st: 0, t: 5000, v: 5.0},
+			{st: 0, t: 6000, v: 6.0},
+			{st: 0, t: 7000, v: 7.0},
+		})
+	})
+
+	t.Run("seek_and_boundaries", func(t *testing.T) {
+		mkXOR2 := func(smpls ...wantSample) *storepb.Chunk {
+			c := chunkenc.NewXOR2Chunk()
+			a, err := c.Appender()
+			require.NoError(t, err)
+			for _, s := range smpls {
+				a.Append(s.st, s.t, s.v)
+			}
+			return &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: c.Bytes()}
+		}
+
+		// Fresh Seek(t <= 0) must not treat xor2Iterator's initial t=0 as a valid sample.
+		for _, tc := range []struct {
+			name string
+			it   func() chunkenc.Iterator
+		}{
+			{
+				name: "lazy",
+				it: func() chunkenc.Iterator {
+					return newLazyChunkSeriesIterator([]*storepb.Chunk{
+						mkXOR2(wantSample{st: -20, t: -10, v: 1.0}, wantSample{st: -20, t: 0, v: 2.0}),
+						mkXOR2(wantSample{st: 5, t: 10, v: 3.0}),
+					})
+				},
+			},
+			{
+				name: "chunk_series",
+				it: func() chunkenc.Iterator {
+					return newChunkSeriesIterator([]chunkenc.Iterator{
+						getFirstIterator(mkXOR2(wantSample{st: -20, t: -10, v: 1.0}, wantSample{st: -20, t: 0, v: 2.0})),
+						getFirstIterator(mkXOR2(wantSample{st: 5, t: 10, v: 3.0})),
+					})
+				},
+			},
+		} {
+			t.Run(tc.name+"_seek_before_next", func(t *testing.T) {
+				it := tc.it()
+				require.Equal(t, chunkenc.ValFloat, it.Seek(-15))
+				ts, v := it.At()
+				require.Equal(t, int64(-10), ts)
+				require.Equal(t, 1.0, v)
+				require.Equal(t, int64(-20), it.AtST())
+
+				require.Equal(t, chunkenc.ValFloat, it.Seek(0))
+				ts, v = it.At()
+				require.Equal(t, int64(0), ts)
+				require.Equal(t, 2.0, v)
+
+				require.Equal(t, chunkenc.ValFloat, it.Seek(5))
+				ts, v = it.At()
+				require.Equal(t, int64(10), ts)
+				require.Equal(t, 3.0, v)
+				require.Equal(t, int64(5), it.AtST())
+
+				require.Equal(t, chunkenc.ValNone, it.Next())
+				// Seek after exhaustion must stay exhausted rather than returning stale lastVal.
+				require.Equal(t, chunkenc.ValNone, it.Seek(0))
+				require.NoError(t, it.Err())
+			})
+		}
+
+		t.Run("empty_leading_and_negative_transition", func(t *testing.T) {
+			it := newLazyChunkSeriesIterator([]*storepb.Chunk{
+				mkXOR2(),
+				mkXOR2(wantSample{st: -30, t: -10, v: 1.0}),
+				mkXOR2(wantSample{st: -10, t: -5, v: 2.0}, wantSample{st: 0, t: 5, v: 3.0}),
+			})
+			assertSamples(t, it, []wantSample{
+				{st: -30, t: -10, v: 1.0},
+				{st: -10, t: -5, v: 2.0},
+				{st: 0, t: 5, v: 3.0},
+			})
+		})
+
+		t.Run("overlapping_xor_and_xor2", func(t *testing.T) {
+			it := newLazyChunkSeriesIterator([]*storepb.Chunk{
+				{Type: storepb.Chunk_XOR, Data: xorChk.Bytes()},
+				mkXOR2(
+					wantSample{st: 1500, t: 2000, v: 99.0},
+					wantSample{st: 2500, t: 3000, v: 3.0},
+				),
+			})
+			assertSamples(t, it, []wantSample{
+				{st: 0, t: 1000, v: 1.0},
+				{st: 0, t: 2000, v: 2.0},
+				{st: 2500, t: 3000, v: 3.0},
+			})
+		})
+	})
+
 	t.Run("chunk_series_raw_xor2", func(t *testing.T) {
 		aggrChunks := []storepb.AggrChunk{
 			{MinTime: 1000, MaxTime: 2000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: xorChk.Bytes()}},
@@ -317,18 +433,73 @@ func TestChunkSeriesIterator_XOR2(t *testing.T) {
 			assertSamples(t, series.Iterator(nil), wantMixed)
 		}
 
+		// Mix a raw XOR2 chunk with a downsampled Sum/Count chunk to cover the allRaw == false branch.
+		sumChk := chunkenc.NewXORChunk()
+		sumApp, err := sumChk.Appender()
+		require.NoError(t, err)
+		sumApp.Append(0, 5000, 20.0)
+		cntChk := chunkenc.NewXORChunk()
+		cntApp, err := cntChk.Appender()
+		require.NoError(t, err)
+		cntApp.Append(0, 5000, 4.0)
+		mixedAvgChunks := []storepb.AggrChunk{
+			{MinTime: 3000, MaxTime: 4000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()}},
+			{
+				MinTime: 5000,
+				MaxTime: 5000,
+				Sum:     &storepb.Chunk{Type: storepb.Chunk_XOR, Data: sumChk.Bytes()},
+				Count:   &storepb.Chunk{Type: storepb.Chunk_XOR, Data: cntChk.Bytes()},
+			},
+		}
+		mixedAvgSeries := newChunkSeries(labels.FromStrings("__name__", "xor2_metric"), mixedAvgChunks, 3000, 5000, []storepb.Aggr{storepb.Aggr_SUM, storepb.Aggr_COUNT})
+		assertSamples(t, mixedAvgSeries.Iterator(nil), []wantSample{
+			{st: 2500, t: 3000, v: 3.0},
+			{st: 2500, t: 4000, v: 4.0},
+			{st: 0, t: 5000, v: 5.0},
+		})
+
 		// Aggr_COUNTER wraps chunks in ApplyCounterResetsIterator which synthesizes monotonic values (st=0).
-		counterSeries := newChunkSeries(labels.FromStrings("__name__", "xor2_metric"), aggrChunks, 1000, 4000, []storepb.Aggr{storepb.Aggr_COUNTER})
+		resetXOR2 := chunkenc.NewXOR2Chunk()
+		resetApp, err := resetXOR2.Appender()
+		require.NoError(t, err)
+		resetApp.Append(2500, 3000, 1.0)
+		resetApp.Append(2500, 4000, 3.0)
+		counterChunks := []storepb.AggrChunk{
+			{MinTime: 1000, MaxTime: 2000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: xorChk.Bytes()}},
+			{MinTime: 3000, MaxTime: 4000, Raw: &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: resetXOR2.Bytes()}},
+		}
+		counterSeries := newChunkSeries(labels.FromStrings("__name__", "xor2_metric"), counterChunks, 1000, 4000, []storepb.Aggr{storepb.Aggr_COUNTER})
 		assertSamples(t, counterSeries.Iterator(nil), []wantSample{
 			{st: 0, t: 1000, v: 1.0},
 			{st: 0, t: 2000, v: 2.0},
 			{st: 0, t: 3000, v: 3.0},
-			{st: 0, t: 4000, v: 4.0},
+			{st: 0, t: 4000, v: 5.0},
 		})
 	})
 
 	t.Run("get_first_iterator_xor2", func(t *testing.T) {
 		it := getFirstIterator(&storepb.Chunk{Type: storepb.Chunk_XOR2, Data: xor2Chk.Bytes()})
 		assertSamples(t, it, wantMixed[2:])
+	})
+
+	t.Run("invalid_and_truncated_chunks", func(t *testing.T) {
+		for _, tc := range []struct {
+			name  string
+			chunk *storepb.Chunk
+		}{
+			{name: "unknown_encoding", chunk: &storepb.Chunk{Type: storepb.Chunk_Encoding(99), Data: []byte{0, 1, 2}}},
+			{name: "truncated_xor2", chunk: &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: []byte{0, 1}}},
+			{name: "truncated_xor", chunk: &storepb.Chunk{Type: storepb.Chunk_XOR, Data: []byte{0}}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				lazyIt := newLazyChunkSeriesIterator([]*storepb.Chunk{tc.chunk})
+				require.Equal(t, chunkenc.ValNone, lazyIt.Next())
+				require.Error(t, lazyIt.Err())
+
+				firstIt := getFirstIterator(tc.chunk)
+				require.Equal(t, chunkenc.ValNone, firstIt.Next())
+				require.Error(t, firstIt.Err())
+			})
+		}
 	})
 }
