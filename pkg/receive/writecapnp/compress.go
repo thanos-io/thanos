@@ -32,8 +32,9 @@ import (
 // stream and never needs an encoder. Version 1 of the preface compressed both
 // directions and is not accepted.
 //
-// Each frame is compressed independently. A packed stream cannot start with the
-// preface: decoded as a segment table it means far more segments than allowed.
+// Each frame is compressed independently. A packed stream cannot start with
+// "TZS": decoded as a segment table any 4-byte "TZS?" prefix means far more
+// segments than allowed.
 
 // Compression selects how a client encodes replicated messages.
 type Compression string
@@ -52,6 +53,10 @@ const (
 )
 
 var zstdPreface = [4]byte{'T', 'Z', 'S', 2}
+
+// errMessageTooLarge is returned when a message is too large for the peer to
+// accept. Sending it again cannot succeed, so it is not a peer failure.
+var errMessageTooLarge = errors.New("message exceeds the maximum size")
 
 const (
 	// maxMessageSize bounds a message both compressed and decompressed. It equals
@@ -149,12 +154,15 @@ func NewServerTransport(conn net.Conn) (rpc.Transport, error) {
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
 		return nil, errors.Wrap(err, "clear preface read deadline")
 	}
-	if !bytes.Equal(head, zstdPreface[:]) {
+	if !bytes.HasPrefix(head, zstdPreface[:3]) {
 		return rpc.NewTransport(codec{
 			messageDecoder: capnp.NewDecoder(packed.NewReader(br)),
 			messageEncoder: capnp.NewPackedEncoder(conn),
 			Closer:         conn,
 		}), nil
+	}
+	if head[3] != zstdPreface[3] {
+		return nil, errors.Errorf("unsupported compression preface version %d", head[3])
 	}
 	if _, err := br.Discard(len(zstdPreface)); err != nil {
 		return nil, errors.Wrap(err, "discard connection preface")
@@ -205,14 +213,26 @@ func (z *zstdFrameEncoder) Encode(m *capnp.Message) error {
 	defer z.mu.Unlock()
 	defer z.releaseBuffers()
 
+	rawSize, err := m.TotalSize()
+	if err != nil {
+		return err
+	}
+	if rawSize > maxMessageSize {
+		return errors.Wrapf(errMessageTooLarge, "%d bytes, limit %d", rawSize, maxMessageSize)
+	}
+
 	z.raw.Reset()
+	z.raw.Grow(int(rawSize))
 	if err := z.capEnc.Encode(m); err != nil {
 		return err
 	}
 	z.out = z.enc.EncodeAll(z.raw.Bytes(), z.out[:0])
+	if len(z.out) > maxMessageSize {
+		return errors.Wrapf(errMessageTooLarge, "compressed to %d bytes, limit %d", len(z.out), maxMessageSize)
+	}
 	n := binary.PutUvarint(z.lenBuf[:], uint64(len(z.out)))
 	bufs := net.Buffers{z.lenBuf[:n], z.out}
-	_, err := bufs.WriteTo(z.w)
+	_, err = bufs.WriteTo(z.w)
 	return err
 }
 
@@ -278,7 +298,18 @@ func (z *zstdFrameDecoder) Decode() (*capnp.Message, error) {
 	z.plainRd.Reset(z.plain)
 	// The capnp decoder copies the message out of plainRd, so plain may be
 	// reused or dropped as soon as Decode returns.
-	return z.capDec.Decode()
+	msg, err := z.capDec.Decode()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
+		return nil, err
+	}
+	if z.plainRd.Len() != 0 {
+		msg.Release()
+		return nil, errors.Errorf("trailing %d bytes in compressed frame", z.plainRd.Len())
+	}
+	return msg, nil
 }
 
 func (z *zstdFrameDecoder) releaseBuffers() {

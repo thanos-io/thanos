@@ -232,17 +232,38 @@ func TestZstdCodecRejectsInvalidFrames(t *testing.T) {
 		data []byte
 		err  string
 	}{
+		{"zero length frame", []byte{0}, "unexpected EOF"},
+		{"empty zstd frame", frame(enc.EncodeAll(nil, nil)), "unexpected EOF"},
 		{"length over limit", binary.AppendUvarint(nil, maxMessageSize+1), "exceeds"},
 		{"truncated frame", valid[:len(valid)-1], "unexpected EOF"},
 		{"not zstd", frame([]byte("not a zstd frame")), "decompress message"},
 		{"decompressed size over limit", frame(zstdFrameHeader(maxMessageSize + 1)), zstd.ErrDecoderSizeExceeded.Error()},
+		{"trailing bytes in frame", frame(enc.EncodeAll(append(append([]byte(nil), raw...), make([]byte, 8)...), nil)), "trailing 8 bytes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			z := newZstdFrameDecoder(bufio.NewReader(bytes.NewReader(tc.data)))
 			_, err := z.Decode()
 			require.ErrorContains(t, err, tc.err)
+			require.NotErrorIs(t, err, io.EOF, "corrupt frames must not masquerade as clean stream EOF")
 		})
 	}
+}
+
+func TestZstdEncoderRejectsOversizedMessage(t *testing.T) {
+	var buf bytes.Buffer
+	z := testCodec(t, &buf)
+
+	oversized := &capnp.Message{Arena: capnp.SingleSegment(make([]byte, maxMessageSize))}
+	err := z.Encode(oversized)
+	require.ErrorContains(t, err, "exceeds")
+	require.Zero(t, buf.Len(), "failed encode must not write partial bytes to the stream")
+
+	wr, err := Build("tenant", wireSeries(10))
+	require.NoError(t, err)
+	require.NoError(t, z.Encode(wr.Message()))
+	msg, err := z.Decode()
+	require.NoError(t, err)
+	msg.Release()
 }
 
 func TestZstdCodecDoesNotTrustDeclaredSize(t *testing.T) {
@@ -328,6 +349,19 @@ func TestServerTransportPrefaceShortRead(t *testing.T) {
 	_, err := NewServerTransport(server)
 	require.ErrorContains(t, err, "read connection preface")
 	_ = server.Close()
+}
+
+func TestServerTransportRejectsUnsupportedPrefaceVersion(t *testing.T) {
+	for _, ver := range []byte{1, 3} {
+		t.Run(fmt.Sprintf("version %d", ver), func(t *testing.T) {
+			client, server := net.Pipe()
+			// Keep the client open: net.Pipe fails SetReadDeadline once the other end is closed.
+			defer func() { _ = client.Close(); _ = server.Close() }()
+			go func() { _, _ = client.Write([]byte{'T', 'Z', 'S', ver}) }()
+			_, err := NewServerTransport(server)
+			require.ErrorContains(t, err, fmt.Sprintf("unsupported compression preface version %d", ver))
+		})
+	}
 }
 
 func TestServerTransportPrefaceTimeout(t *testing.T) {

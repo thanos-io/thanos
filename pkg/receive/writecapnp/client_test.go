@@ -6,7 +6,9 @@ package writecapnp
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,6 +85,61 @@ func blockingServer(conn net.Conn) {
 	<-c.Done()
 }
 
+// silentServer drains incoming bytes without ever replying to RPC bootstrap.
+func silentServer(conn net.Conn) {
+	_, _ = io.Copy(io.Discard, conn)
+	_ = conn.Close()
+}
+
+type nopWriter struct{}
+
+func (nopWriter) Write(context.Context, Writer_write) error { return nil }
+
+func okServer(conn net.Conn) {
+	transport, err := NewServerTransport(conn)
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	c := rpc.NewConn(transport, &rpc.Options{BootstrapClient: capnp.Client(Writer_ServerToClient(nopWriter{}))})
+	<-c.Done()
+}
+
+// Not parallel: the oversized message takes a few hundred MB while it is built.
+func TestRemoteWriteOversizedMessageKeepsConnection(t *testing.T) {
+	var dials atomic.Int32
+	dialer := dialerWithCount(&dials, pipeDialer(okServer))
+	client := NewRemoteWriteClient(dialer, log.NewNopLogger(), WithCompression(CompressionZstd))
+	defer func() { require.NoError(t, client.Close()) }()
+
+	_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{Tenant: "default", Timeseries: wireSeries(5)})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), dials.Load())
+
+	_, err = client.RemoteWrite(context.Background(), &storepb.WriteRequest{Tenant: "default", Timeseries: largeSeries(1, maxMessageSize)})
+	require.ErrorContains(t, err, "exceeds")
+	// Not Unavailable: the handler would otherwise mark a healthy peer as down.
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+
+	_, err = client.RemoteWrite(context.Background(), &storepb.WriteRequest{Tenant: "default", Timeseries: wireSeries(5)})
+	require.NoError(t, err)
+	require.Equal(t, int32(1), dials.Load(), "an oversized message must fail without tearing down or reconnecting the transport")
+}
+
+type countingDialer struct {
+	count *atomic.Int32
+	next  Dialer
+}
+
+func dialerWithCount(count *atomic.Int32, next Dialer) Dialer {
+	return &countingDialer{count: count, next: next}
+}
+
+func (d *countingDialer) DialContext(ctx context.Context) (net.Conn, error) {
+	d.count.Add(1)
+	return d.next.DialContext(ctx)
+}
+
 func TestRemoteWriteCompressionHint(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +152,7 @@ func TestRemoteWriteCompressionHint(t *testing.T) {
 	}{
 		{name: "zstd to legacy peer", dialer: pipeDialer(legacyServer), compression: CompressionZstd, timeout: 10 * time.Second, wantHint: true},
 		{name: "dial failure", dialer: &errorDialer{}, compression: CompressionZstd, timeout: 10 * time.Second},
+		{name: "zstd bootstrap timeout", dialer: pipeDialer(silentServer), compression: CompressionZstd, timeout: 100 * time.Millisecond},
 		{name: "zstd write timeout after bootstrap", dialer: pipeDialer(blockingServer), compression: CompressionZstd, timeout: 200 * time.Millisecond},
 		{name: "none write timeout", dialer: pipeDialer(blockingServer), compression: CompressionNone, timeout: 200 * time.Millisecond},
 		{name: "empty compression", dialer: &errorDialer{}, compression: "", timeout: 10 * time.Second},

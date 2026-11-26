@@ -112,6 +112,9 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return &storepb.WriteResponse{}, status.Error(codes.Canceled, fmt.Sprintf("writing to peer: %s", err.Error()))
 	}
+	if errors.Is(err, errMessageTooLarge) {
+		return &storepb.WriteResponse{}, status.Error(codes.InvalidArgument, fmt.Sprintf("writing to peer: %s", err.Error()))
+	}
 	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s", err.Error()))
 }
 
@@ -248,6 +251,7 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 	writer := Writer(r.conn.Bootstrap(ctx))
 	if err := writer.Resolve(ctx); err != nil {
 		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err, "compression", r.compression)
+		writer.Release()
 		r.closeUnlocked()
 		return errors.Wrap(err, "bootstrap capnp writer")
 	}

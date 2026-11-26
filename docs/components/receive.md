@@ -69,9 +69,9 @@ This algorithm uses a `hashmod` function over all labels to decide which receive
 
 ### Replication protocols
 
-By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'N Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
+By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'n Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
 
-In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'n Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'n Proto as follows:
 
 ```json
 [
@@ -85,7 +85,7 @@ In order to enable this mode, you can use the `receive.replication-protocol=capn
 ]
 ```
 
-Cap'N Proto replication traffic can be compressed with zstd by setting `--receive.capnproto-compression=zstd` on the receivers that send replication requests. Receivers always accept both compressed and uncompressed peers, so a fleet can be migrated without downtime: first upgrade all receivers to a version that supports compression, then enable it. A receiver that does not support compression closes compressed connections, and the sender's error says that the peer might not be upgraded yet. `--receive.capnproto-compression-concurrency` limits how many messages one process compresses at the same time; set it to the number of CPUs of the receiver if replication latency grows while CPU is not saturated.
+Cap'n Proto replication traffic can be compressed with zstd by setting `--receive.capnproto-compression=zstd` on the receivers that send replication requests. Receivers always accept both compressed and uncompressed peers, so a fleet can be migrated without downtime: first upgrade all receivers to a version that supports compression, then enable it. A receiver that does not support compression closes compressed connections, and the sender's error says that the peer might not be upgraded yet. `--receive.capnproto-compression-concurrency` limits how many messages one process compresses at the same time; set it to the number of CPUs of the receiver if replication latency grows while CPU is not saturated.
 
 ### Hashring management and autoscaling in Kubernetes
 
