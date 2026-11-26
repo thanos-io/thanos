@@ -4254,3 +4254,104 @@ func (c *mockBlockLifecycleCallback) PreAdd(meta metadata.Meta) error {
 	}
 	return nil
 }
+
+func TestBucketStore_Series_XOR2(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	tmpDir := t.TempDir()
+	logger := log.NewNopLogger()
+
+	bkt, err := filesystem.NewBucket(filepath.Join(tmpDir, "bkt"))
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bkt.Close()) })
+
+	headOpts := tsdb.DefaultHeadOptions()
+	headOpts.ChunkDirRoot = tmpDir
+	headOpts.ChunkRange = 10000
+	headOpts.FloatChunkEncoding.Store(uint32(chunkenc.EncXOR2))
+	headOpts.EnableSTStorage.Store(true)
+	h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, h.Close()) })
+
+	app := h.AppenderV2(ctx)
+	lset := labels.FromStrings("__name__", "xor2_metric", "job", "test")
+	want := []struct {
+		st, t int64
+		v     float64
+	}{
+		{st: 100, t: 1000, v: 1.5},
+		{st: 100, t: 2000, v: 2.5},
+		{st: 150, t: 3000, v: 3.5},
+	}
+	for _, s := range want {
+		_, err = app.Append(0, lset, s.st, s.t, s.v, nil, nil, storage.AOptions{})
+		testutil.Ok(t, err)
+	}
+	testutil.Ok(t, app.Commit())
+
+	blockDir := filepath.Join(tmpDir, "blocks")
+	testutil.Ok(t, os.MkdirAll(blockDir, os.ModePerm))
+	id := storetestutil.CreateBlockFromHead(t, blockDir, h)
+	bdir := filepath.Join(blockDir, id.String())
+	_, err = metadata.InjectThanos(logger, bdir, metadata.Thanos{
+		Labels: labels.FromStrings("ext", "1").Map(),
+		Source: metadata.TestSource,
+	}, nil)
+	testutil.Ok(t, err)
+	testutil.Ok(t, block.Upload(ctx, logger, bkt, bdir, metadata.NoneFunc))
+
+	instrBkt := objstore.WithNoopInstr(bkt)
+	fetcher, err := block.NewMetaFetcher(logger, 4, instrBkt, block.NewConcurrentLister(logger, instrBkt), tmpDir, nil, nil)
+	testutil.Ok(t, err)
+
+	bs, err := NewBucketStore(
+		instrBkt,
+		fetcher,
+		tmpDir,
+		NewChunksLimiterFactory(0),
+		NewSeriesLimiterFactory(0),
+		NewBytesLimiterFactory(0),
+		NewGapBasedPartitioner(PartitionerMaxGapSize),
+		10,
+		DefaultPostingOffsetInMemorySampling,
+		true,
+		false,
+		0,
+		WithLogger(logger),
+	)
+	testutil.Ok(t, err)
+	t.Cleanup(func() { testutil.Ok(t, bs.Close()) })
+	testutil.Ok(t, bs.SyncBlocks(ctx))
+
+	srv := newStoreSeriesServer(ctx)
+	testutil.Ok(t, bs.Series(&storepb.SeriesRequest{
+		MinTime: 0,
+		MaxTime: 5000,
+		Matchers: []storepb.LabelMatcher{
+			{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "xor2_metric"},
+		},
+	}, srv))
+
+	testutil.Equals(t, 1, len(srv.SeriesSet))
+	testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
+
+	raw := srv.SeriesSet[0].Chunks[0].Raw
+	testutil.Equals(t, storepb.Chunk_XOR2, raw.Type)
+	testutil.Equals(t, xxhash.Sum64(raw.Data), raw.Hash)
+	testutil.Equals(t, len(want), raw.XORNumSamples())
+
+	chk, err := chunkenc.FromData(chunkenc.EncXOR2, raw.Data)
+	testutil.Ok(t, err)
+	it := chk.Iterator(nil)
+	for _, w := range want {
+		testutil.Equals(t, chunkenc.ValFloat, it.Next())
+		gotT, gotV := it.At()
+		testutil.Equals(t, w.t, gotT)
+		testutil.Equals(t, w.v, gotV)
+		testutil.Equals(t, w.st, it.AtST())
+	}
+	testutil.Equals(t, chunkenc.ValNone, it.Next())
+	testutil.Ok(t, it.Err())
+}

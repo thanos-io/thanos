@@ -24,8 +24,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
@@ -325,16 +327,23 @@ func runCompact(
 		}
 	}()
 
+	floatChunkEncoding, err := parseFloatChunkEncoding(conf.floatChunkEncoding)
+	if err != nil {
+		return err
+	}
+
 	var mergeFunc storage.VerticalChunkSeriesMergeFunc
 	switch conf.dedupFunc {
 	case compact.DedupAlgorithmPenalty:
-		mergeFunc = dedup.NewChunkSeriesMerger()
+		mergeFunc = dedup.NewChunkSeriesMergerWithFloatEncoding(floatChunkEncoding)
 
 		if len(dedupReplicaLabels) == 0 {
 			return errors.New("penalty based deduplication needs at least one replica label specified")
 		}
 	case "":
-		mergeFunc = storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)
+		mergeFunc = storage.NewCompactingChunkSeriesMergerWithFloatEncoding(storage.ChainedSeriesMerge, func() chunkenc.Encoding {
+			return floatChunkEncoding
+		})
 
 	default:
 		return errors.Errorf("unsupported deduplication func, got %s", conf.dedupFunc)
@@ -733,6 +742,7 @@ type compactConfig struct {
 	hashFunc                                       string
 	enableVerticalCompaction                       bool
 	dedupFunc                                      string
+	floatChunkEncoding                             string
 	skipBlockWithOutOfOrderChunks                  bool
 	progressCalculateInterval                      time.Duration
 	filterConf                                     *store.FilterConfig
@@ -832,6 +842,9 @@ func (cc *compactConfig) registerFlag(cmd extkingpin.FlagClause) {
 
 	cmd.Flag("compact.skip-block-with-out-of-order-chunks", "When set to true, mark blocks containing index with out-of-order chunks for no compact instead of halting the compaction").
 		Hidden().Default("false").BoolVar(&cc.skipBlockWithOutOfOrderChunks)
+
+	cmd.Flag("compact.float-chunk-encoding", "Chunk encoding to use for float chunks re-encoded during vertical (overlapping) compaction. Supported values are: \"xor\" (default) and \"xor2\". Non-overlapping chunks keep their existing encoding; samples carrying a start timestamp always use XOR2. Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
+		Default(promconfig.FloatChunkEncodingXOR).EnumVar(&cc.floatChunkEncoding, promconfig.FloatChunkEncodingXOR, promconfig.FloatChunkEncodingXOR2)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&cc.hashFunc, "SHA256", "")

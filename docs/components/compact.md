@@ -430,6 +430,19 @@ Flags:
                                 need a different deduplication algorithm (e.g
                                 one that works well with Prometheus replicas),
                                 please set it via --deduplication.func.
+      --compact.float-chunk-encoding=xor
+                                Chunk encoding to use for float chunks
+                                re-encoded during vertical (overlapping)
+                                compaction. Supported values are: "xor"
+                                (default) and "xor2". Non-overlapping chunks
+                                keep their existing encoding; samples carrying
+                                a start timestamp always use XOR2. Warning:
+                                make sure all Queriers (and any other StoreAPI
+                                clients) are already running a Thanos version
+                                with XOR2 support before changing this flag
+                                or uploading XOR2 blocks; older Queriers
+                                cannot decode XOR2 chunks, and older Thanos or
+                                Prometheus versions cannot read XOR2 blocks.
       --hash-func=              Specify which hash function to use when
                                 calculating the hashes of produced files.
                                 If no function has been specified, it does not

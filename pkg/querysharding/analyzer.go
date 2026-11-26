@@ -36,7 +36,9 @@ type Analyzer interface {
 
 // QueryAnalyzer is an analyzer which determines
 // whether a PromQL Query is shardable and using which labels.
-type QueryAnalyzer struct{}
+type QueryAnalyzer struct {
+	parser parser.Parser
+}
 
 type CachedQueryAnalyzer struct {
 	analyzer *QueryAnalyzer
@@ -44,12 +46,12 @@ type CachedQueryAnalyzer struct {
 }
 
 // NewQueryAnalyzer creates a new QueryAnalyzer.
-func NewQueryAnalyzer() *CachedQueryAnalyzer {
+func NewQueryAnalyzer(p parser.Parser) *CachedQueryAnalyzer {
 	// Ignore the error check since it throws error
 	// only if size is <= 0.
 	cache, _ := lru.New[string, cachedValue](256)
 	return &CachedQueryAnalyzer{
-		analyzer: &QueryAnalyzer{},
+		analyzer: &QueryAnalyzer{parser: p},
 		cache:    cache,
 	}
 }
@@ -90,7 +92,7 @@ func (a *CachedQueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
 //
 // The le label is excluded from sharding.
 func (a *QueryAnalyzer) Analyze(query string) (QueryAnalysis, error) {
-	expr, err := extpromql.ParseExpr(query)
+	expr, err := extpromql.ParseExprWithParser(a.parser, query)
 	if err != nil {
 		return nonShardableQuery(), err
 	}

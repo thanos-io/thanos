@@ -177,6 +177,7 @@ message Chunk {
     XOR = 1;
     HISTOGRAM = 2;
     FLOAT_HISTOGRAM = 3;
+    XOR2 = 4;
   }
   Encoding type = 3;
   bytes data = 4;
