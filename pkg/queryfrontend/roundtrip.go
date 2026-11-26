@@ -386,6 +386,19 @@ func newInstantQueryTripperware(
 // For more information about requests that skip caching logic, please visit
 // the query-frontend documentation.
 func shouldCache(r queryrange.Request) bool {
+	// Limited metadata responses are incomplete and must not share cache entries
+	// with unlimited requests, or requests for a different limit.
+	switch req := r.(type) {
+	case *ThanosLabelsRequest:
+		if req.Limit > 0 {
+			return false
+		}
+	case *ThanosSeriesRequest:
+		if req.Limit > 0 {
+			return false
+		}
+	}
+
 	if thanosReqStoreMatcherGettable, ok := r.(ThanosRequestStoreMatcherGetter); ok {
 		if len(thanosReqStoreMatcherGettable.GetStoreMatchers()) > 0 {
 			return false

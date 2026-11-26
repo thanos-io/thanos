@@ -38,6 +38,8 @@ Query Frontend supports caching query results and reuses them on subsequent quer
 
 #### Excluded from caching
 
+* Metadata requests (`/api/v1/labels`, `/api/v1/label/<name>/values`, and `/api/v1/series`) with a positive `limit`. These responses can be truncated and cannot safely share cached results with unlimited requests.
+
 * Requests that support deduplication and having it disabled with `dedup=false`. Read more about deduplication in [Dedup documentation](query.md#deduplication-enabled).
 * Requests that specify Store Matchers.
 * Requests where downstream queriers set the header `Cache-Control=no-store` in the response:

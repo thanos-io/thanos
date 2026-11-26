@@ -486,7 +486,8 @@ test_metric{a="2", b="2"} 1`)
 
 		expectedReplicationFactor := 3.0
 
-		queryAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus)" }, time.Now, promclient.QueryOptions{
+		// Both series can appear before all asynchronous replicas are queryable.
+		queryWaitAndAssert(t, ctx, q.Endpoint("http"), func() string { return "count(up) by (prometheus)" }, time.Now, promclient.QueryOptions{
 			Deduplicate: false,
 		}, model.Vector{
 			&model.Sample{
