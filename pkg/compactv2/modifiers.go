@@ -344,7 +344,7 @@ func (p *delChunkSeriesIterator) Next() bool {
 		}
 
 		// Empty chunk, this should not happen, as we assume full deletions being filtered before this iterator.
-		p.err = errors.Wrap(err, "populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
+		p.err = errors.New("populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
 		return false
 	}
 

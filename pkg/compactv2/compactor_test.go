@@ -1243,3 +1243,32 @@ func TestCompactor_WriteSeries_DeletionUnsupportedEncoding(t *testing.T) {
 		})
 	}
 }
+
+func TestDelChunkSeriesIterator_UnexpectedEmptyChunk(t *testing.T) {
+	t.Parallel()
+
+	for _, enc := range []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR2} {
+		t.Run("enc="+enc.String(), func(t *testing.T) {
+			t.Parallel()
+
+			chk, err := chunkenc.NewEmptyChunk(enc)
+			testutil.Ok(t, err)
+
+			// Chunk metadata range [1000, 3000] is wider than the deletion interval [1500, 2500],
+			// so delGenericSeriesIterator takes the partial-rewrite path even though the chunk has no samples.
+			it := NewDelGenericSeriesIterator(
+				storage.NewListChunkSeriesIterator(chunks.Meta{
+					Chunk:   chk,
+					MinTime: 1000,
+					MaxTime: 3000,
+				}),
+				tombstones.Intervals{{Mint: 1500, Maxt: 2500}},
+				func(tombstones.Intervals) {},
+			).ToChunkSeriesIterator()
+
+			testutil.Assert(t, !it.Next())
+			testutil.NotOk(t, it.Err())
+			testutil.Assert(t, strings.Contains(it.Err().Error(), "unexpected empty chunk"), "unexpected error: %v", it.Err())
+		})
+	}
+}
