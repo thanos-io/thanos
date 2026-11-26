@@ -44,20 +44,28 @@ func NewTxGaugeVec(reg prometheus.Registerer, opts prometheus.GaugeOpts, labelNa
 	return tx
 }
 
-// ResetTx starts new transaction. Not goroutine-safe.
+// ResetTx starts new transaction.
 func (tx *TxGaugeVec) ResetTx() {
+	tx.mtx.Lock()
+	defer tx.mtx.Unlock()
+
+	tx.resetTx()
+}
+
+// resetTx starts a new transaction. The caller must hold tx.mtx.
+func (tx *TxGaugeVec) resetTx() {
 	tx.tx = tx.newMetricVal()
 }
 
-// Submit atomically and fully applies new values from existing transaction GaugeVec. Not goroutine-safe.
+// Submit atomically and fully applies new values from existing transaction GaugeVec.
 func (tx *TxGaugeVec) Submit() {
+	tx.mtx.Lock()
+	defer tx.mtx.Unlock()
+
 	if tx.tx == nil {
 		return
 	}
-
-	tx.mtx.Lock()
 	tx.current = tx.tx
-	tx.mtx.Unlock()
 }
 
 // Describe is used in Register.
@@ -85,7 +93,7 @@ func (tx *TxGaugeVec) With(labels prometheus.Labels) prometheus.Gauge {
 	defer tx.mtx.Unlock()
 
 	if tx.tx == nil {
-		tx.ResetTx()
+		tx.resetTx()
 	}
 	return tx.tx.With(labels)
 }
@@ -100,7 +108,7 @@ func (tx *TxGaugeVec) WithLabelValues(lvs ...string) prometheus.Gauge {
 	defer tx.mtx.Unlock()
 
 	if tx.tx == nil {
-		tx.ResetTx()
+		tx.resetTx()
 	}
 	return tx.tx.WithLabelValues(lvs...)
 }
