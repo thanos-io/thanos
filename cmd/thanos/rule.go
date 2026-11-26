@@ -185,7 +185,7 @@ func registerRule(app *extkingpin.App) {
 		Default("true").BoolVar(&conf.tsdbEnableNativeHistograms)
 
 	cmd.Flag("tsdb.float-chunk-encoding",
-		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
+		"Chunk encoding to use for float samples in local TSDB (ignored when --remote-write.config* is set for stateless mode). Supported values are: \"xor\" (default) and \"xor2\". Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
 		Default(config.FloatChunkEncodingXOR).EnumVar(&conf.tsdbFloatChunkEncoding, config.FloatChunkEncodingXOR, config.FloatChunkEncodingXOR2)
 
 	conf.rwConfig = extflag.RegisterPathOrContent(cmd, "remote-write.config", "YAML config for the remote-write configurations, that specify servers where samples should be sent to (see https://prometheus.io/docs/prometheus/latest/configuration/configuration/#remote_write). This automatically enables stateless mode for ruler and no series will be stored in the ruler's TSDB. If an empty config (or file) is provided, the flag is ignored and ruler is run with its own TSDB.", extflag.WithEnvSubstitution())
@@ -497,6 +497,9 @@ func runRule(
 	enableTypeAndUnitLabels := hasFeature(conf.EnableFeatures, typeAndUnitLabelsFeature)
 
 	if len(rwCfgYAML) > 0 {
+		if conf.tsdbFloatChunkEncoding != "" && conf.tsdbFloatChunkEncoding != config.FloatChunkEncodingXOR {
+			level.Warn(logger).Log("msg", "--tsdb.float-chunk-encoding has no effect when --remote-write.config* (stateless mode) is set.", "encoding", conf.tsdbFloatChunkEncoding)
+		}
 		fanoutStore, err := openStatelessRuleStorage(logger, reg, conf.dataDir, rwCfgYAML, labelsTSDBToProm(conf.lset), agentOpts, enableTypeAndUnitLabels)
 		if err != nil {
 			return err
