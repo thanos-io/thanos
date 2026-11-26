@@ -692,13 +692,17 @@ for _, elem := range elems {
 </td></tr>
 </tbody></table>
 
-#### Wrap Errors for More Context; Don't Repeat "failed ..." There.
+#### Wrap Errors for More Context
 
-We use [`pkg/errors`](https://github.com/pkg/errors) package for `errors`. We prefer it over standard wrapping with `fmt.Errorf` + `%w`, as `errors.Wrap` is explicit. It's easy to by accident replace `%w` with `%v` or to add extra inconsistent characters to the string.
+We use [`fmt.Errorf`](https://pkg.go.dev/fmt#Errorf) package for `errors`.
 
-Use [`pkg/errors.Wrap`](https://github.com/pkg/errors) to wrap errors for future context when errors occur. It's recommended to add more interesting variables to add context using `errors.Wrapf`, e.g. file names, IDs or things that fail, etc.
+Export package error variables with [`errors.New()`](https://pkg.go.dev/errors#New) so that they can be used with [`errors.Is`](https://pkg.go.dev/errors#Is). For example, if you want package users to be able to handle errors.
 
-NOTE: never prefix wrap messages with wording like `failed ... ` or `error occurred while...`. Just describe what we wanted to do when the failure occurred. Those prefixes are just noise. We are wrapping error, so it's obvious that some error occurred, right? (: Improve readability and consider avoiding those.
+Example:
+
+```go
+var ErrNoSuchHost = errors.New("no such host")
+```
 
 <table>
 <tbody>
@@ -707,7 +711,7 @@ NOTE: never prefix wrap messages with wording like `failed ... ` or `error occur
 
 ```go
 if err != nil {
-	return fmt.Errorf("error while reading from file %s: %w", f.Name, err)
+	return err
 }
 ```
 
@@ -717,7 +721,7 @@ if err != nil {
 
 ```go
 if err != nil {
-	return errors.Wrapf(err, "read file %s", f.Name)
+	return fmt.Errorf("error while reading from file %s: %w", f.Name, err)
 }
 ```
 
