@@ -5,6 +5,7 @@ package cacheutil
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/extprom"
 	"github.com/thanos-io/thanos/pkg/gate"
 	"github.com/thanos-io/thanos/pkg/model"
+	thanos_tls "github.com/thanos-io/thanos/pkg/tls"
 )
 
 const (
@@ -44,6 +46,7 @@ var (
 	errMemcachedConfigNoAddrs                  = errors.New("no memcached addresses provided")
 	errMemcachedDNSUpdateIntervalNotPositive   = errors.New("DNS provider update interval must be positive")
 	errMemcachedMaxAsyncConcurrencyNotPositive = errors.New("max async concurrency must be positive")
+	errMemcachedTLSKeyAndCertRequired          = errors.New("both client key and certificate must be provided")
 
 	defaultMemcachedClientConfig = MemcachedClientConfig{
 		Timeout:                   500 * time.Millisecond,
@@ -149,6 +152,12 @@ type MemcachedClientConfig struct {
 	// AutoDiscovery configures memached client to perform auto-discovery instead of DNS resolution
 	AutoDiscovery bool `yaml:"auto_discovery"`
 
+	// TLSEnabled enables connecting to memcached with TLS.
+	TLSEnabled bool `yaml:"tls_enabled"`
+
+	// TLSConfig to use to connect to the memcached server.
+	TLSConfig TLSConfig `yaml:"tls_config"`
+
 	// SetAsyncCircuitBreaker configures the circuit breaker for SetAsync operations.
 	SetAsyncCircuitBreaker CircuitBreakerConfig `yaml:"set_async_circuit_breaker_config"`
 }
@@ -166,6 +175,18 @@ func (c *MemcachedClientConfig) validate() error {
 	// Set async only available when MaxAsyncConcurrency > 0.
 	if c.MaxAsyncConcurrency <= 0 {
 		return errMemcachedMaxAsyncConcurrencyNotPositive
+	}
+
+	if c.TLSEnabled {
+		if (c.TLSConfig.CertFile != "") != (c.TLSConfig.KeyFile != "") {
+			return errMemcachedTLSKeyAndCertRequired
+		}
+
+		if c.TLSConfig.MinVersion != "" {
+			if _, err := thanos_tls.GetTlsVersion(c.TLSConfig.MinVersion); err != nil {
+				return errors.Wrapf(err, "tls_config.min_version invalid")
+			}
+		}
 	}
 
 	if err := c.SetAsyncCircuitBreaker.validate(); err != nil {
@@ -249,6 +270,19 @@ func NewMemcachedClientWithConfig(logger log.Logger, name string, config Memcach
 	client := memcache.NewFromSelector(selector)
 	client.Timeout = config.Timeout
 	client.MaxIdleConns = config.MaxIdleConnections
+
+	if config.TLSEnabled {
+		tlsConfig, err := thanos_tls.NewClientConfig(logger, config.TLSConfig.CertFile, config.TLSConfig.KeyFile,
+			config.TLSConfig.CAFile, config.TLSConfig.ServerName, config.TLSConfig.InsecureSkipVerify, config.TLSConfig.MinVersion)
+		if err != nil {
+			return nil, err
+		}
+
+		client.DialTimeout = func(network, address string, timeout time.Duration) (net.Conn, error) {
+			dialer := &net.Dialer{Timeout: timeout}
+			return tls.DialWithDialer(dialer, network, address, tlsConfig)
+		}
+	}
 
 	if reg != nil {
 		reg = prometheus.WrapRegistererWith(prometheus.Labels{"name": name}, reg)

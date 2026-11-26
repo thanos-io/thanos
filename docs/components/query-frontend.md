@@ -77,6 +77,14 @@ config:
   max_get_multi_batch_size: 0
   dns_provider_update_interval: 0s
   auto_discovery: false
+  tls_enabled: false
+  tls_config:
+    ca_file: ""
+    cert_file: ""
+    key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
+    min_version: ""
   set_async_circuit_breaker_config:
     enabled: false
     half_open_max_requests: 0
