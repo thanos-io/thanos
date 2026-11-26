@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"capnproto.org/go/capnp/v3/rpc"
 	"github.com/go-kit/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
