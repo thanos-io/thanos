@@ -349,6 +349,7 @@ func parseFlagLabels(s []string) (labels.Labels, error) {
 type goMemLimitConfig struct {
 	enableAutoGoMemlimit bool
 	memlimitRatio        float64
+	memlimitRefresh      time.Duration
 }
 
 func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimitConfig {
@@ -359,6 +360,10 @@ func (gml *goMemLimitConfig) registerFlag(cmd extkingpin.FlagClause) *goMemLimit
 	cmd.Flag("auto-gomemlimit.ratio",
 		"The ratio of reserved GOMEMLIMIT memory to the detected maximum container or system memory.").
 		Default("0.9").FloatVar(&gml.memlimitRatio)
+
+	cmd.Flag("auto-gomemlimit.refresh-interval",
+		"Interval at which the detected maximum container or system memory is refreshed and GOMEMLIMIT is reapplied if it has changed. Useful when the container memory limit can be resized in place. 0 disables refreshing.").
+		Default("0").DurationVar(&gml.memlimitRefresh)
 
 	return gml
 }
@@ -373,6 +378,10 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 		return limits, errors.New("--auto-gomemlimit.ratio must be greater than 0 and less than or equal to 1.")
 	}
 
+	if common.memlimitRefresh < 0 {
+		return limits, errors.New("--auto-gomemlimit.refresh-interval must be greater than or equal to 0.")
+	}
+
 	if common.enableAutoGoMemlimit {
 		limits, err = memlimit.Set(
 			memlimit.WithRatio(common.memlimitRatio),
@@ -382,6 +391,7 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 					memlimit.FromSystem,
 				),
 			),
+			memlimit.WithRefreshInterval(common.memlimitRefresh),
 		)
 		if err != nil {
 			return -1, errors.Wrap(err, "Failed to set GOMEMLIMIT automatically")
