@@ -11,10 +11,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/efficientgo/core/backoff"
 	"github.com/efficientgo/e2e"
 	e2edb "github.com/efficientgo/e2e/db"
 	e2emon "github.com/efficientgo/e2e/monitoring"
@@ -903,25 +903,7 @@ test_metric{a="2", b="2"} 1`)
 
 		testutil.Ok(t, querier.WaitSumMetricsWithOptions(e2emon.Equals(3), []string{"thanos_store_nodes_grpc_connections"}, e2emon.WaitMissingMetrics()))
 
-		// We run three avalanches, one tenant which exceeds the limit, one tenant which remains under it, and one for the unlimited tenant.
-
-		// Avalanche in this configuration, would send 5 requests each with 10 new timeseries.
-		// So without limiting we end up with 50 timeseries and 50 samples.
-		avalanche1 := e2ethanos.NewAvalanche(e, "avalanche-1",
-			e2ethanos.AvalancheOptions{
-				MetricCount:    "10",
-				SeriesCount:    "1",
-				MetricInterval: "3600",
-				SeriesInterval: "30",
-				ValueInterval:  "30",
-
-				RemoteURL:           e2ethanos.RemoteWriteEndpoint(ingestor1.InternalEndpoint("remote-write")),
-				RemoteWriteInterval: "30s",
-				RemoteBatchSize:     "10",
-				RemoteRequestCount:  "5",
-
-				TenantID: "exceed-tenant",
-			})
+		// Exercise an over-limit tenant, an under-limit tenant, and an unlimited tenant.
 
 		// Avalanche in this configuration, would send 5 requests each with 5 of the same timeseries.
 		// So we end up with 5 timeseries, 25 samples.
@@ -959,14 +941,56 @@ test_metric{a="2", b="2"} 1`)
 				TenantID: "unlimited-tenant",
 			})
 
-		testutil.Ok(t, e2e.StartAndWaitReady(avalanche1, avalanche2, avalanche3))
-
-		// Here, 4/5 requests are failed due to limiting as we ingest one initial request.
-		// 4 limited requests belong to the exceed-tenant.
-		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WithWaitBackoff(&backoff.Config{Min: 1 * time.Second, Max: 30 * time.Second, MaxRetries: 200}), e2emon.WaitMissingMetrics()))
+		testutil.Ok(t, e2e.StartAndWaitReady(avalanche2, avalanche3))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		t.Cleanup(cancel)
+		writeURL, err := url.Parse(e2ethanos.RemoteWriteEndpoint(i1Runnable.Endpoint("remote-write")))
+		testutil.Ok(t, err)
+		writer, err := remote.NewWriteClient("limited-tenant", &remote.ClientConfig{
+			URL:     &config_util.URL{URL: writeURL},
+			Timeout: model.Duration(30 * time.Second),
+			Headers: map[string]string{"THANOS-TENANT": "exceed-tenant"},
+		})
+		testutil.Ok(t, err)
+		batch := func(offset int) []byte {
+			series := make([]prompb.TimeSeries, 10)
+			for i := range series {
+				series[i] = prompb.TimeSeries{
+					Labels:  []prompb.Label{{Name: "__name__", Value: "limited_metric"}, {Name: "series", Value: fmt.Sprint(offset + i)}},
+					Samples: []prompb.Sample{{Value: 1, Timestamp: time.Now().UnixMilli()}},
+				}
+			}
+			data, err := proto.Marshal(&prompb.WriteRequest{Timeseries: series})
+			testutil.Ok(t, err)
+			return snappy.Encode(nil, data)
+		}
+		// Tenant TSDB initialization can time out under load. Retry the same series
+		// so a partially accepted request cannot increase the initial series count.
+		initialBatch := batch(0)
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			_, err := writer.Store(ctx, initialBatch, 0)
+			return err
+		}))
+		// Wait until meta-monitoring observes the initial batch before checking limits.
+		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string {
+			return `sum(prometheus_tsdb_head_series{tenant="exceed-tenant"})`
+		}, time.Now, promclient.QueryOptions{}, model.Vector{&model.Sample{Metric: model.Metric{}, Value: 10}})
+		// Probe with the initial series until the receiver refreshes its limiter cache.
+		// Repeating this batch cannot add series while the cache catches up.
+		testutil.Ok(t, runutil.Retry(time.Second, ctx.Done(), func() error {
+			_, err := writer.Store(ctx, initialBatch, 0)
+			if err != nil && strings.Contains(err.Error(), "429 Too Many Requests") {
+				return nil
+			}
+			return fmt.Errorf("waiting for active series limit: %v", err)
+		}))
+		for i := 1; i <= 3; i++ {
+			_, err := writer.Store(ctx, batch(i*10), 0)
+			testutil.NotOk(t, err)
+			testutil.Assert(t, strings.Contains(err.Error(), "429 Too Many Requests"), err.Error())
+		}
+		testutil.Ok(t, i1Runnable.WaitSumMetricsWithOptions(e2emon.Equals(4), []string{"thanos_receive_head_series_limited_requests_total"}, e2emon.WaitMissingMetrics()))
 
 		ingestor1Name := e.Name() + "-" + ingestor1.Name()
 		// Here for exceed-tenant we go above limit by 10, which results in 0 value.
@@ -1025,7 +1049,7 @@ test_metric{a="2", b="2"} 1`)
 			},
 		})
 
-		// Query meta-monitoring solution to assert that 3 requests were limited for exceed-tenant and none for under-tenant.
+		// Assert that four requests were limited for exceed-tenant and none for under-tenant.
 		queryWaitAndAssert(t, ctx, meta.GetMonitoringRunnable().Endpoint(e2edb.AccessPortName), func() string { return "thanos_receive_head_series_limited_requests_total" }, time.Now, promclient.QueryOptions{
 			Deduplicate: true,
 		}, model.Vector{

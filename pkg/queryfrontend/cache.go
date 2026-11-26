@@ -48,7 +48,9 @@ func (t thanosCacheKeyGenerator) GenerateCacheKey(userID string, r queryrange.Re
 		case *ThanosLabelsRequest:
 			return fmt.Sprintf("fe:%s:%s:%s:%d:%d", userID, tr.Label, tr.Matchers, splitInterval, currentInterval)
 		case *ThanosSeriesRequest:
-			return fmt.Sprintf("fe:%s:%s:%d:%d", userID, tr.Matchers, splitInterval, currentInterval)
+			replicaLabels := append([]string(nil), tr.ReplicaLabels...)
+			sort.Strings(replicaLabels)
+			return fmt.Sprintf("fe:%s:%s:%d:%d:%q", userID, tr.Matchers, splitInterval, currentInterval, replicaLabels)
 		}
 	}
 
