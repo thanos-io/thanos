@@ -42,6 +42,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 )
 
+// testChunkSegmentSize keeps block chunk files small. The TSDB preallocates every
+// chunk segment up to this size (512 MiB by default), which is what fills /tmp
+// when many test TSDBs persist blocks at once.
+const testChunkSegmentSize = 1 << 20
+
 func openTestRoot(t testing.TB, dir string) *os.Root {
 	t.Helper()
 	root, err := os.OpenRoot(dir)
@@ -59,12 +64,13 @@ func TestMultiTSDB(t *testing.T) {
 
 	t.Run("run fresh", func(t *testing.T) {
 		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
-			MinBlockDuration:      (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:      (2 * time.Hour).Milliseconds(),
-			RetentionDuration:     (6 * time.Hour).Milliseconds(),
-			NoLockfile:            true,
-			MaxExemplars:          100,
-			EnableExemplarStorage: true,
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+			RetentionDuration:        (6 * time.Hour).Milliseconds(),
+			NoLockfile:               true,
+			MaxExemplars:             100,
+			EnableExemplarStorage:    true,
 		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
 		t.Cleanup(m.Close)
 
@@ -139,10 +145,11 @@ func TestMultiTSDB(t *testing.T) {
 	t.Run("run on existing storage", func(t *testing.T) {
 		m := NewMultiTSDB(
 			openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
-				MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-				RetentionDuration: (6 * time.Hour).Milliseconds(),
-				NoLockfile:        true,
+				MaxBlockChunkSegmentSize: testChunkSegmentSize,
+				MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+				RetentionDuration:        (6 * time.Hour).Milliseconds(),
+				NoLockfile:               true,
 			},
 			labels.FromStrings("replica", "01"),
 			"tenant_id",
@@ -184,10 +191,11 @@ func TestMultiTSDB(t *testing.T) {
 		testutil.Ok(t, os.MkdirAll(lostFound, 0750))
 
 		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
-			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-			RetentionDuration: (6 * time.Hour).Milliseconds(),
-			NoLockfile:        true,
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+			RetentionDuration:        (6 * time.Hour).Milliseconds(),
+			NoLockfile:               true,
 		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
 		defer m.Close()
 
@@ -198,10 +206,11 @@ func TestMultiTSDB(t *testing.T) {
 	t.Run("flush with one sample produces a block", func(t *testing.T) {
 		const testTenant = "test_tenant"
 		m := NewMultiTSDB(openTestRoot(t, dir), logger, prometheus.NewRegistry(), &tsdb.Options{
-			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-			RetentionDuration: (6 * time.Hour).Milliseconds(),
-			NoLockfile:        true,
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+			RetentionDuration:        (6 * time.Hour).Milliseconds(),
+			NoLockfile:               true,
 		}, labels.FromStrings("replica", "01"), "tenant_id", nil, false, false, metadata.NoneFunc, WithGCImmediately())
 		defer m.Close()
 
@@ -464,6 +473,7 @@ func TestMultiTSDBPrune(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 					&tsdb.Options{
+						MaxBlockChunkSegmentSize: testChunkSegmentSize,
 						MinBlockDuration:  (2 * time.Hour).Milliseconds(),
 						MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
 						RetentionDuration: (10 * time.Hour).Milliseconds(),
@@ -527,10 +537,11 @@ func TestMultiTSDBRecreatePrunedTenant(t *testing.T) {
 		reg := prometheus.NewRegistry()
 		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), reg,
 			&tsdb.Options{
-				MinBlockDuration:    (2 * time.Hour).Milliseconds(),
-				MaxBlockDuration:    (2 * time.Hour).Milliseconds(),
-				RetentionDuration:   (6 * time.Hour).Milliseconds(),
-				BlockReloadInterval: 1 * time.Hour,
+				MaxBlockChunkSegmentSize: testChunkSegmentSize,
+				MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+				MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+				RetentionDuration:        (6 * time.Hour).Milliseconds(),
+				BlockReloadInterval:      1 * time.Hour,
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -588,11 +599,12 @@ func TestPeriodicHeadCompaction(t *testing.T) {
 
 		m := NewMultiTSDB(openTestRoot(t, dir), log.NewLogfmtLogger(os.Stderr), prometheus.NewRegistry(),
 			&tsdb.Options{
-				MinBlockDuration:     maxBlockDuration,
-				MaxBlockDuration:     maxBlockDuration,
-				RetentionDuration:    (24 * time.Hour).Milliseconds(),
-				OutOfOrderTimeWindow: (4 * time.Hour).Milliseconds(),
-				BlockReloadInterval:  time.Hour,
+				MaxBlockChunkSegmentSize: testChunkSegmentSize,
+				MinBlockDuration:         maxBlockDuration,
+				MaxBlockDuration:         maxBlockDuration,
+				RetentionDuration:        (24 * time.Hour).Milliseconds(),
+				OutOfOrderTimeWindow:     (4 * time.Hour).Milliseconds(),
+				BlockReloadInterval:      time.Hour,
 			},
 			labels.FromStrings("replica", "test"),
 			"tenant_id",
@@ -676,9 +688,10 @@ func TestMultiTSDBAddNewTenant(t *testing.T) {
 			dir := t.TempDir()
 			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
-					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-					RetentionDuration: (6 * time.Hour).Milliseconds(),
+					MaxBlockChunkSegmentSize: testChunkSegmentSize,
+					MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+					RetentionDuration:        (6 * time.Hour).Milliseconds(),
 				},
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
@@ -720,9 +733,10 @@ func TestMultiTSDBPruneSkipsUnreadyTenant(t *testing.T) {
 		log.NewNopLogger(),
 		prometheus.NewRegistry(),
 		&tsdb.Options{
-			MinBlockDuration:  maxBlockDuration,
-			MaxBlockDuration:  maxBlockDuration,
-			RetentionDuration: retentionDuration,
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         maxBlockDuration,
+			MaxBlockDuration:         maxBlockDuration,
+			RetentionDuration:        retentionDuration,
 		},
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
@@ -789,9 +803,10 @@ func TestAlignedHeadFlush(t *testing.T) {
 
 			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
-					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-					RetentionDuration: (6 * time.Hour).Milliseconds(),
+					MaxBlockChunkSegmentSize: testChunkSegmentSize,
+					MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+					RetentionDuration:        (6 * time.Hour).Milliseconds(),
 				},
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
@@ -864,9 +879,10 @@ func TestMultiTSDBStats(t *testing.T) {
 
 			m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 				&tsdb.Options{
-					MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-					MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-					RetentionDuration: (6 * time.Hour).Milliseconds(),
+					MaxBlockChunkSegmentSize: testChunkSegmentSize,
+					MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+					MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+					RetentionDuration:        (6 * time.Hour).Milliseconds(),
 				},
 				labels.FromStrings("replica", "test"),
 				"tenant_id",
@@ -896,9 +912,10 @@ func TestMultiTSDBWithNilStore(t *testing.T) {
 
 	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(),
 		&tsdb.Options{
-			MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-			MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-			RetentionDuration: (6 * time.Hour).Milliseconds(),
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+			MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+			RetentionDuration:        (6 * time.Hour).Milliseconds(),
 		},
 		labels.FromStrings("replica", "test"),
 		"tenant_id",
@@ -938,10 +955,11 @@ func TestProxyLabelValues(t *testing.T) {
 	dir := t.TempDir()
 	m := NewMultiTSDB(
 		openTestRoot(t, dir), nil, prometheus.NewRegistry(), &tsdb.Options{
-			RetentionDuration: 10 * time.Minute.Milliseconds(),
-			MinBlockDuration:  5 * time.Minute.Milliseconds(),
-			MaxBlockDuration:  5 * time.Minute.Milliseconds(),
-			NoLockfile:        true,
+			MaxBlockChunkSegmentSize: testChunkSegmentSize,
+			RetentionDuration:        10 * time.Minute.Milliseconds(),
+			MinBlockDuration:         5 * time.Minute.Milliseconds(),
+			MaxBlockDuration:         5 * time.Minute.Milliseconds(),
+			NoLockfile:               true,
 		},
 		labels.FromStrings("replica", "01"),
 		"tenant_id",
@@ -1032,10 +1050,11 @@ func BenchmarkMultiTSDB(b *testing.B) {
 	dir := b.TempDir()
 
 	m := NewMultiTSDB(openTestRoot(b, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
-		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-		RetentionDuration: (6 * time.Hour).Milliseconds(),
-		NoLockfile:        true,
+		MaxBlockChunkSegmentSize: testChunkSegmentSize,
+		MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+		RetentionDuration:        (6 * time.Hour).Milliseconds(),
+		NoLockfile:               true,
 	}, labels.FromStrings("replica", "test"),
 		"tenant_id",
 		nil,
@@ -1144,9 +1163,10 @@ func TestMultiTSDBDoesNotReturnPrunedTenants(t *testing.T) {
 	dir := t.TempDir()
 
 	m := NewMultiTSDB(openTestRoot(t, dir), log.NewNopLogger(), prometheus.NewRegistry(), &tsdb.Options{
-		MinBlockDuration:  (2 * time.Hour).Milliseconds(),
-		MaxBlockDuration:  (2 * time.Hour).Milliseconds(),
-		RetentionDuration: (6 * time.Hour).Milliseconds(),
+		MaxBlockChunkSegmentSize: testChunkSegmentSize,
+		MinBlockDuration:         (2 * time.Hour).Milliseconds(),
+		MaxBlockDuration:         (2 * time.Hour).Milliseconds(),
+		RetentionDuration:        (6 * time.Hour).Milliseconds(),
 	}, labels.FromStrings("replica", "test"), "tenant_id", objstore.NewInMemBucket(), false, false, metadata.NoneFunc)
 	t.Cleanup(func() {
 		m.Close()

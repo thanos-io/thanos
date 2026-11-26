@@ -49,15 +49,40 @@ type RemoteWriteClient struct {
 	dialer Dialer
 	conn   *rpc.Conn
 
-	writer Writer
-	logger log.Logger
+	writer                 Writer
+	logger                 log.Logger
+	compression            Compression
+	compressionConcurrency int
 }
 
-func NewRemoteWriteClient(dialer Dialer, logger log.Logger) *RemoteWriteClient {
-	return &RemoteWriteClient{
-		dialer: dialer,
-		logger: logger,
+type ClientOption func(*RemoteWriteClient)
+
+func WithCompression(c Compression) ClientOption {
+	return func(r *RemoteWriteClient) { r.compression = c }
+}
+
+// WithCompressionConcurrency bounds how many messages the process compresses at
+// once; encoders are shared by all clients with the same value. 0 means
+// DefaultCompressionConcurrency.
+func WithCompressionConcurrency(n int) ClientOption {
+	return func(r *RemoteWriteClient) { r.compressionConcurrency = n }
+}
+
+func NewRemoteWriteClient(dialer Dialer, logger log.Logger, opts ...ClientOption) *RemoteWriteClient {
+	r := &RemoteWriteClient{
+		dialer:                 dialer,
+		logger:                 logger,
+		compression:            CompressionNone,
+		compressionConcurrency: DefaultCompressionConcurrency,
 	}
+	for _, o := range opts {
+		o(r)
+	}
+	// NewClientTransport sends anything but zstd uncompressed; say so in logs and errors.
+	if r.compression != CompressionZstd {
+		r.compression = CompressionNone
+	}
+	return r
 }
 
 func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRequest, _ ...grpc.CallOption) (*storepb.WriteResponse, error) {
@@ -87,7 +112,19 @@ func (r *RemoteWriteClient) RemoteWrite(ctx context.Context, in *storepb.WriteRe
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return &storepb.WriteResponse{}, status.Error(codes.Canceled, fmt.Sprintf("writing to peer: %s", err.Error()))
 	}
+	if errors.Is(err, errMessageTooLarge) {
+		return &storepb.WriteResponse{}, status.Error(codes.InvalidArgument, fmt.Sprintf("writing to peer: %s", err.Error()))
+	}
 	return &storepb.WriteResponse{}, status.Error(codes.Unavailable, fmt.Sprintf("writing to peer: %s", err.Error()))
+}
+
+// compressionHint explains a failed bootstrap, which is what an old peer
+// rejecting the compression preface looks like.
+func (r *RemoteWriteClient) compressionHint() string {
+	if r.compression != CompressionZstd {
+		return ""
+	}
+	return fmt.Sprintf(" (compression=%s: a peer that was not upgraded yet closes compressed connections)", r.compression)
 }
 
 func (r *RemoteWriteClient) writeWithReconnect(ctx context.Context, numReconnects int, in *storepb.WriteRequest) (*storepb.WriteResponse, WriteError, error) {
@@ -205,12 +242,26 @@ func (r *RemoteWriteClient) connect(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to dial peer")
 	}
-	r.conn = rpc.NewConn(rpc.NewPackedStreamTransport(conn), nil)
+	transport, err := NewClientTransport(conn, r.compression, r.compressionConcurrency)
+	if err != nil {
+		_ = conn.Close()
+		return errors.Wrap(err, "set up capnp transport")
+	}
+	r.conn = rpc.NewConn(transport, nil)
 	writer := Writer(r.conn.Bootstrap(ctx))
 	if err := writer.Resolve(ctx); err != nil {
-		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err)
+		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err, "compression", r.compression)
+		writer.Release()
 		r.closeUnlocked()
-		return errors.Wrap(err, "failed to bootstrap capnp writer")
+		return errors.Wrap(err, "bootstrap capnp writer")
+	}
+	// Resolve succeeds even when the bootstrap fails; the failure is the brand
+	// of the resolved client.
+	if err, ok := capnp.Client(writer).State().Brand.Value.(error); ok {
+		level.Warn(r.logger).Log("msg", "failed to bootstrap capnp writer, closing connection", "err", err, "compression", r.compression)
+		writer.Release()
+		r.closeUnlocked()
+		return errors.Wrapf(err, "bootstrap capnp writer%s", r.compressionHint())
 	}
 
 	r.writer = writer

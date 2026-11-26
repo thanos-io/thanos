@@ -6,6 +6,7 @@ package receive
 import (
 	"context"
 	"net"
+	"sync"
 
 	"capnproto.org/go/capnp/v3"
 	"capnproto.org/go/capnp/v3/rpc"
@@ -21,6 +22,9 @@ type CapNProtoServer struct {
 	listener net.Listener
 	server   writecapnp.Writer
 	logger   log.Logger
+
+	mu     sync.Mutex
+	closed bool
 }
 
 func NewCapNProtoServer(listener net.Listener, handler *CapNProtoHandler, logger log.Logger) *CapNProtoServer {
@@ -38,11 +42,29 @@ func (c *CapNProtoServer) ListenAndServe() error {
 			return err
 		}
 
+		// Take the reference before waiting for the preface: Shutdown may release
+		// the server meanwhile, and AddRef on a released client panics.
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			_ = conn.Close()
+			continue
+		}
+		bootstrap := capnp.Client(c.server).AddRef()
+		c.mu.Unlock()
+
 		go func() {
-			rpcConn := rpc.NewConn(rpc.NewPackedStreamTransport(conn), &rpc.Options{
+			transport, err := writecapnp.NewServerTransport(conn)
+			if err != nil {
+				level.Debug(c.logger).Log("msg", "failed to set up capnproto transport", "peer", conn.RemoteAddr(), "err", err)
+				bootstrap.Release()
+				_ = conn.Close()
+				return
+			}
+			rpcConn := rpc.NewConn(transport, &rpc.Options{
 				// The BootstrapClient is the RPC interface that will be made available
 				// to the remote endpoint by default.
-				BootstrapClient: capnp.Client(c.server).AddRef(),
+				BootstrapClient: bootstrap,
 			})
 			<-rpcConn.Done()
 		}()
@@ -50,6 +72,9 @@ func (c *CapNProtoServer) ListenAndServe() error {
 }
 
 func (c *CapNProtoServer) Shutdown() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
 	c.server.Release()
 }
 

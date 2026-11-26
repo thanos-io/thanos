@@ -602,6 +602,7 @@ type ReceiveBuilder struct {
 
 	maxExemplars          int
 	capnp                 bool
+	capnpCompression      string
 	ingestion             bool
 	expandedPostingsCache bool
 	limit                 int
@@ -659,6 +660,11 @@ func (r *ReceiveBuilder) WithLabel(name, value string) *ReceiveBuilder {
 
 func (r *ReceiveBuilder) UseCapnpReplication() *ReceiveBuilder {
 	r.capnp = true
+	return r
+}
+
+func (r *ReceiveBuilder) WithCapnpCompression(compression string) *ReceiveBuilder {
+	r.capnpCompression = compression
 	return r
 }
 
@@ -739,6 +745,9 @@ func (r *ReceiveBuilder) Init() *e2eobs.Observable {
 
 	if r.capnp {
 		args["--receive.replication-protocol"] = "capnproto"
+	}
+	if r.capnpCompression != "" {
+		args["--receive.capnproto-compression"] = r.capnpCompression
 	}
 
 	hashring := r.hashringConfigs

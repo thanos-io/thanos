@@ -69,9 +69,9 @@ This algorithm uses a `hashmod` function over all labels to decide which receive
 
 ### Replication protocols
 
-By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'N Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
+By default, Receivers replicate data using Protobuf over gRPC. Deserializing protobuf-encoded messages can be resource-intensive and cause significant GC pressure. Alternatively, you can use [Cap'n Proto](https://capnproto.org/) for replication encoding and as the RPC framework.
 
-In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'N Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'N Proto as follows:
+In order to enable this mode, you can use the `receive.replication-protocol=capnproto` option on the receiver. Thanos will try to infer the Cap'n Proto address of each peer in the hashring using the existing gRPC address. You can also explicitly set the Cap'n Proto as follows:
 
 ```json
 [
@@ -84,6 +84,8 @@ In order to enable this mode, you can use the `receive.replication-protocol=capn
     }
 ]
 ```
+
+Cap'n Proto replication traffic can be compressed with zstd by setting `--receive.capnproto-compression=zstd` on the receivers that send replication requests. Receivers always accept both compressed and uncompressed peers, so a fleet can be migrated without downtime: first upgrade all receivers to a version that supports compression, then enable it. A receiver that does not support compression closes compressed connections, and the sender's error says that the peer might not be upgraded yet. `--receive.capnproto-compression-concurrency` limits how many messages one process compresses at the same time; set it to the number of CPUs of the receiver if replication latency grows while CPU is not saturated.
 
 ### Hashring management and autoscaling in Kubernetes
 
@@ -372,7 +374,7 @@ Please see the metric `thanos_receive_forward_delay_seconds` to see if you need 
 
 The following formula is used for calculating quorum:
 
-```go mdox-exec="sed -n '1392,1402p' pkg/receive/handler.go"
+```go mdox-exec="sed -n '1396,1406p' pkg/receive/handler.go"
 // writeQuorum returns minimum number of replicas that has to confirm write success before claiming replication success.
 func (h *Handler) writeQuorum() int {
 	// NOTE(GiedriusS): this is here because otherwise RF=2 doesn't make sense as all writes
@@ -599,6 +601,16 @@ Flags:
                                  The protocol to use for replicating
                                  remote-write requests. One of protobuf,
                                  capnproto
+      --receive.capnproto-compression=none
+                                 Compression of replicated Cap'n Proto messages
+                                 sent by this receiver. Receivers accept both.
+                                 One of none, zstd
+      --receive.capnproto-compression-concurrency=4
+                                 Maximum number of replicated Cap'n
+                                 Proto messages compressed at the
+                                 same time by this process when
+                                 --receive.capnproto-compression=zstd. Each slot
+                                 holds about 3 MiB of encoder state.
       --receive.capnproto-address="0.0.0.0:19391"
                                  Address for the Cap'n Proto server.
       --receive.grpc-service-config=<content>
