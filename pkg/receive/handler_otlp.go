@@ -81,7 +81,7 @@ func (h *Handler) receiveOTLPHTTP(w http.ResponseWriter, r *http.Request) {
 
 	totalSamples := 0
 	for _, ts := range metrics {
-		totalSamples += len(ts.Samples)
+		totalSamples += len(ts.Samples) + len(ts.Histograms)
 	}
 
 	if !requestLimiter.AllowSeries(tenant, int64(len(metrics))) {
