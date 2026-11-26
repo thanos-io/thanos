@@ -17,6 +17,7 @@
 package api
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,7 @@ import (
 	promLabels "github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/util/annotations"
 	promApiV1 "github.com/prometheus/prometheus/web/api/v1"
 
 	"github.com/efficientgo/core/testutil"
@@ -143,6 +145,38 @@ func TestRespondError(t *testing.T) {
 	}
 	if !reflect.DeepEqual(&res, exp) {
 		t.Fatalf("Expected response \n%v\n but got \n%v\n", res, exp)
+	}
+}
+
+func TestRespondInfosAndWarnings(t *testing.T) {
+	infoErr := fmt.Errorf("%w: metric might not be a counter", annotations.PromQLInfo)
+	warnErr := fmt.Errorf("%w: some warning", annotations.PromQLWarning)
+
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Respond(w, "test", []error{infoErr, warnErr}, log.NewNopLogger())
+	}))
+	defer s.Close()
+
+	resp, err := http.Get(s.URL)
+	if err != nil {
+		t.Fatalf("Error on test request: %s", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	defer func() { testutil.Ok(t, resp.Body.Close()) }()
+	if err != nil {
+		t.Fatalf("Error reading response body: %s", err)
+	}
+
+	var res response
+	if err = json.Unmarshal([]byte(body), &res); err != nil {
+		t.Fatalf("Error unmarshaling JSON body: %s", err)
+	}
+
+	if len(res.Infos) != 1 || res.Infos[0] != infoErr.Error() {
+		t.Fatalf("Expected infos %v but got %v", []string{infoErr.Error()}, res.Infos)
+	}
+	if len(res.Warnings) != 1 || res.Warnings[0] != warnErr.Error() {
+		t.Fatalf("Expected warnings %v but got %v", []string{warnErr.Error()}, res.Warnings)
 	}
 }
 
