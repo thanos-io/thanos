@@ -525,12 +525,14 @@ func (s *shuffleShardHashring) dedupedNodes() []Endpoint {
 // getShardSize returns the shard size for a specific tenant, taking into account any overrides.
 func (s *shuffleShardHashring) getShardSize(tenant string) int {
 	for _, override := range s.shuffleShardingConfig.Overrides {
-		switch override.TenantMatcherType {
-		case TenantMatcherTypeExact:
+		switch {
+		// An unset matcher type means exact, as documented on
+		// TenantMatcherTypeExact and handled by tenantSet.match.
+		case isExactMatcher(override.TenantMatcherType):
 			if slices.Contains(override.Tenants, tenant) {
 				return override.ShardSize
 			}
-		case TenantMatcherGlob:
+		case override.TenantMatcherType == TenantMatcherGlob:
 			for _, t := range override.Tenants {
 				matches, err := filepath.Match(t, tenant)
 				if err == nil && matches {
