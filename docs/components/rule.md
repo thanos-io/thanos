@@ -94,6 +94,16 @@ expr: <string>
 # Labels to add or overwrite before storing the result.
 labels:
   [ <labelname>: <labelvalue> ]
+
+# Metric metadata for the recorded time series. When omitted, metric type
+# (and unit, when --enable-feature=type-and-unit-labels is enabled) is
+# deduced automatically. Emitted over Remote Write 2.0 when
+# --enable-feature=metadata-wal-records or --enable-feature=type-and-unit-labels
+# is enabled.
+metadata:
+  [ type: <string> ]
+  [ unit: <string> ]
+  [ help: <string> ]
 ```
 
 Note: If you make use of recording rules, make sure that you expose your Ruler instance as a store in the Thanos Querier so that the new time series can be queried as part of Thanos Query. One of the ways you can do this is by adding a new `--endpoint <thanos-ruler-ip>` command-line argument to the Thanos Query command.
@@ -516,12 +526,26 @@ Flags:
       --enable-feature= ...      Comma separated feature names to enable. Valid
                                  options for now: promql-experimental-functions
                                  (enables promql experimental functions for
-                                 ruler)
+                                 ruler), metadata-wal-records (enables metadata
+                                 WAL records in stateless ruler for Remote Write
+                                 2.0), type-and-unit-labels (enables metric type
+                                 and unit labels __type__ and __unit__ in ruler)
       --[no-]tsdb.enable-native-histograms
                                  (Deprecated) Enables the ingestion of native
                                  histograms. This flag is a no-op now and will
                                  be removed in the future. Native histogram
                                  ingestion is always enabled.
+      --tsdb.float-chunk-encoding=xor
+                                 Chunk encoding to use for float samples in
+                                 local TSDB (ignored when --remote-write.config*
+                                 is set for stateless mode). Supported values
+                                 are: "xor" (default) and "xor2". Warning:
+                                 make sure all Queriers (and any other StoreAPI
+                                 clients) are already running a Thanos version
+                                 with XOR2 support before changing this flag
+                                 or uploading XOR2 blocks; older Queriers
+                                 cannot decode XOR2 chunks, and older Thanos or
+                                 Prometheus versions cannot read XOR2 blocks.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

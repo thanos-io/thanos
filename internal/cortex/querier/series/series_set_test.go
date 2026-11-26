@@ -115,6 +115,20 @@ func TestDeletedSeriesIterator(t *testing.T) {
 	}
 }
 
+func TestDeletedSeriesIteratorPreservesStartTimestamps(t *testing.T) {
+	it := NewDeletedSeriesIterator(
+		chunkenc.MockSeriesIterator([]int64{10, 20, 30}, []int64{100, 200, 300}, []float64{1, 2, 3}),
+		[]model.Interval{{Start: 200, End: 200}},
+	)
+
+	require.Equal(t, chunkenc.ValFloat, it.Next())
+	require.Equal(t, int64(10), it.AtST())
+	require.Equal(t, chunkenc.ValFloat, it.Next())
+	require.Equal(t, int64(30), it.AtST())
+	require.Equal(t, chunkenc.ValNone, it.Next())
+	require.NoError(t, it.Err())
+}
+
 func TestDeletedIterator_WithSeek(t *testing.T) {
 	cs := ConcreteSeries{labels: labels.FromStrings("foo", "bar")}
 	// Insert random stuff from (0, 1000).

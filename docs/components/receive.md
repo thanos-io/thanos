@@ -677,6 +677,16 @@ Flags:
                                  histograms. This flag is a no-op now and will
                                  be removed in the future. Native histogram
                                  ingestion is always enabled.
+      --tsdb.float-chunk-encoding=xor
+                                 Chunk encoding to use for float samples
+                                 in local TSDB. Supported values are:
+                                 "xor" (default) and "xor2". Warning: make sure
+                                 all Queriers (and any other StoreAPI clients)
+                                 are already running a Thanos version with XOR2
+                                 support before changing this flag or uploading
+                                 XOR2 blocks; older Queriers cannot decode XOR2
+                                 chunks, and older Thanos or Prometheus versions
+                                 cannot read XOR2 blocks.
       --hash-func=               Specify which hash function to use when
                                  calculating the hashes of produced files.
                                  If no function has been specified, it does not

@@ -797,8 +797,10 @@ test_metric{a="2", b="2"} 1`)
 			WithIngestionEnabled().
 			WithRelabelConfigs([]*relabel.Config{
 				{
-					Action: relabel.LabelDrop,
-					Regex:  relabel.MustNewRegexp("prometheus"),
+					Action:      relabel.LabelDrop,
+					Regex:       relabel.MustNewRegexp("prometheus"),
+					Separator:   relabel.DefaultRelabelConfig.Separator,
+					Replacement: relabel.DefaultRelabelConfig.Replacement,
 				},
 			}).Init()
 
@@ -1365,6 +1367,8 @@ func TestReceiveWithRelabelConfigSmoke(t *testing.T) {
 				Regex:        relabel.MustNewRegexp("(.+)"),
 				TargetLabel:  "dst_label",
 				Action:       relabel.Replace,
+				Separator:    relabel.DefaultRelabelConfig.Separator,
+				Replacement:  relabel.DefaultRelabelConfig.Replacement,
 			},
 		}).Init()
 

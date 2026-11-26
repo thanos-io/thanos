@@ -5,9 +5,7 @@ package cache
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -19,7 +17,6 @@ import (
 	"github.com/prometheus/common/route"
 	"github.com/thanos-io/objstore"
 	galaxyhttp "github.com/vimeo/galaxycache/http"
-	"golang.org/x/net/http2"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -108,13 +105,11 @@ func TestMain(m *testing.M) {
 // Benchmark retrieval of one key from one groupcache node.
 func BenchmarkGroupcacheRetrieval(b *testing.B) {
 	b.Run("h2c", func(b *testing.B) {
+		var protocols http.Protocols
+		protocols.SetUnencryptedHTTP2(true)
 		fetcher := galaxyhttp.NewHTTPFetchProtocol(&galaxyhttp.HTTPOptions{
-			Transport: &http2.Transport{
-				AllowHTTP: true,
-				DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-					var d net.Dialer
-					return d.DialContext(ctx, network, addr)
-				},
+			Transport: &http.Transport{
+				Protocols: &protocols,
 			},
 			BasePath: basePath,
 		})

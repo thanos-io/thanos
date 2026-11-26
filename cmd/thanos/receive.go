@@ -23,6 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
@@ -89,6 +90,11 @@ func registerReceive(app *extkingpin.App) {
 			return errors.Wrap(err, "error while parsing config for request logging")
 		}
 
+		floatChunkEncoding, err := parseFloatChunkEncoding(conf.tsdbFloatChunkEncoding)
+		if err != nil {
+			return err
+		}
+
 		tsdbOpts := &tsdb.Options{
 			MinBlockDuration:               int64(time.Duration(*conf.tsdbMinBlockDuration) / time.Millisecond),
 			MaxBlockDuration:               int64(time.Duration(*conf.tsdbMaxBlockDuration) / time.Millisecond),
@@ -103,6 +109,7 @@ func registerReceive(app *extkingpin.App) {
 			EnableExemplarStorage:          conf.tsdbMaxExemplars > 0,
 			HeadChunksWriteQueueSize:       int(conf.tsdbWriteQueueSize),
 			EnableMemorySnapshotOnShutdown: conf.tsdbMemorySnapshotOnShutdown,
+			FloatChunkEncoding:             floatChunkEncoding,
 		}
 
 		// Are we running in IngestorOnly, RouterOnly or RouterIngestor mode?
@@ -940,6 +947,7 @@ type receiveConfig struct {
 	tsdbWriteQueueSize           int64
 	tsdbMemorySnapshotOnShutdown bool
 	tsdbEnableNativeHistograms   bool
+	tsdbFloatChunkEncoding       string
 
 	walCompression       bool
 	noLockFile           bool
@@ -1134,6 +1142,10 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 	cmd.Flag("tsdb.enable-native-histograms",
 		"(Deprecated) Enables the ingestion of native histograms. This flag is a no-op now and will be removed in the future. Native histogram ingestion is always enabled.").
 		Default("true").BoolVar(&rc.tsdbEnableNativeHistograms)
+
+	cmd.Flag("tsdb.float-chunk-encoding",
+		"Chunk encoding to use for float samples in local TSDB. Supported values are: \"xor\" (default) and \"xor2\". Warning: make sure all Queriers (and any other StoreAPI clients) are already running a Thanos version with XOR2 support before changing this flag or uploading XOR2 blocks; older Queriers cannot decode XOR2 chunks, and older Thanos or Prometheus versions cannot read XOR2 blocks.").
+		Default(promconfig.FloatChunkEncodingXOR).EnumVar(&rc.tsdbFloatChunkEncoding, promconfig.FloatChunkEncodingXOR, promconfig.FloatChunkEncodingXOR2)
 
 	cmd.Flag("hash-func", "Specify which hash function to use when calculating the hashes of produced files. If no function has been specified, it does not happen. This permits avoiding downloading some files twice albeit at some performance cost. Possible values are: \"\", \"SHA256\".").
 		Default("").EnumVar(&rc.hashFunc, "SHA256", "")

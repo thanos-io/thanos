@@ -10,6 +10,47 @@ import (
 	"github.com/efficientgo/core/testutil"
 )
 
+func TestHasFeature(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		features []string
+		target   string
+		want     bool
+	}{
+		{name: "empty", target: promqlExperimentalFunctions, want: false},
+		{name: "single exact match", features: []string{promqlExperimentalFunctions}, target: promqlExperimentalFunctions, want: true},
+		{name: "comma separated with spaces", features: []string{" promql-at-modifier , promql-experimental-functions "}, target: promqlExperimentalFunctions, want: true},
+		{name: "repeated flags", features: []string{promqlAtModifier, "type-and-unit-labels"}, target: "type-and-unit-labels", want: true},
+		{name: "partial prefix does not match", features: []string{"type-and-unit-labels-v2"}, target: "type-and-unit-labels", want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testutil.Equals(t, tc.want, hasFeature(tc.features, tc.target))
+		})
+	}
+}
+
+func TestNewPromQLParserExperimentalFunctions(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		features         []string
+		enableXFunctions bool
+		expr             string
+		wantErr          bool
+	}{
+		{name: "disabled", expr: "double_exponential_smoothing(up[1h], 0.5, 0.5)", wantErr: true},
+		{name: "unrelated feature", features: []string{promqlAtModifier}, expr: "double_exponential_smoothing(up[1h], 0.5, 0.5)", wantErr: true},
+		{name: "enabled", features: []string{promqlExperimentalFunctions}, expr: "double_exponential_smoothing(up[1h], 0.5, 0.5)", wantErr: false},
+		{name: "comma separated enabled", features: []string{promqlAtModifier + "," + promqlExperimentalFunctions}, expr: "double_exponential_smoothing(up[1h], 0.5, 0.5)", wantErr: false},
+		{name: "xfunctions disabled", expr: "xrate(up[5m])", wantErr: true},
+		{name: "xfunctions enabled", enableXFunctions: true, expr: "xrate(up[5m])", wantErr: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := newPromQLParser(tc.features, tc.enableXFunctions).ParseExpr(tc.expr)
+			testutil.Equals(t, tc.wantErr, err != nil)
+		})
+	}
+}
+
 func TestLookbackDeltaFactory(t *testing.T) {
 	type testCase struct {
 		stepMillis int64
