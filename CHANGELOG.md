@@ -22,6 +22,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 - [#8234](https://github.com/thanos-io/thanos/pull/8234) ruler: Add flag to configure the queue for pending Alertmanager notifications
 
 ### Fixed
+- [#8684](https://github.com/thanos-io/thanos/pull/8684): Fix: EncodeAggrChunk created corrupt block if the last chunk is empty
 
 - [#9172](https://github.com/thanos-io/thanos/pull/9172): Query: Fix `Seek(t <= 0)` before the first `Next()` on `chunkSeriesIterator`, `lazyChunkSeriesIterator`, and `histogramResetDetector` returning `ValNone` prematurely when the underlying iterator initializes `t=0`.
 - *: Update `github.com/go-jose/go-jose/v4` to v4.1.9 to fix [CVE-2026-116587](https://github.com/go-jose/go-jose/security/advisories/GHSA-mgcc-cww5-fp2q), [CVE-2026-116586](https://github.com/go-jose/go-jose/security/advisories/GHSA-vvm8-gf78-28g4) and [CVE-2026-116585](https://github.com/go-jose/go-jose/security/advisories/GHSA-4w3g-jfj2-cw2q): excess CPU when parsing JWKs with crafted RSA keys, and panics in JSON parsing and CBC-HMAC processing.
