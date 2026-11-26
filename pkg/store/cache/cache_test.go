@@ -9,13 +9,16 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/tsdb"
 	"golang.org/x/crypto/blake2b"
 
 	"github.com/efficientgo/core/testutil"
+	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/testutil/custom"
 )
 
@@ -139,6 +142,49 @@ func TestCacheKey_string_ShouldGuaranteeReasonablyShortKeyLength(t *testing.T) {
 			for _, key := range testData.keys {
 				testutil.Equals(t, testData.expectedLen, len(key.String()))
 			}
+		})
+	}
+}
+
+func TestCacheTTL(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		meta        *metadata.Meta
+		expectedTTL time.Duration
+	}{
+		"30m": {
+			meta: &metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					MinTime: 1730000000000,
+					MaxTime: 1730001800000,
+				},
+			},
+			expectedTTL: time.Hour,
+		},
+		"1h": {
+			meta: &metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					MinTime: 1730000000000,
+					MaxTime: 1730003600000,
+				},
+			},
+			expectedTTL: time.Hour,
+		},
+		"1h 1m": {
+			meta: &metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{
+					MinTime: 1730000000000,
+					MaxTime: 1730003660000,
+				},
+			},
+			expectedTTL: time.Hour * 2,
+		},
+	}
+
+	for testName, testData := range tests {
+		t.Run(testName, func(t *testing.T) {
+			testutil.Equals(t, testData.expectedTTL, CacheTTL(testData.meta))
 		})
 	}
 }
