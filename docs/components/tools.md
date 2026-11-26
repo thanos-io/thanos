@@ -92,6 +92,9 @@ tools bucket upload-blocks [<flags>]
 tools rules-check --rules=RULES
     Check if the rule files are valid or not.
 
+tools stream_metric [<flags>]
+    Stream time series for a metric
+
 
 ```
 
