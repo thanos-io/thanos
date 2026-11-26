@@ -85,6 +85,7 @@ const (
 	LookbackDeltaParam       = "lookback_delta"
 	EngineParam              = "engine"
 	QueryAnalyzeParam        = "analyze"
+	TimezoneParam            = "timezone"
 	RuleNameParam            = "rule_name[]"
 	RuleGroupParam           = "rule_group[]"
 	FileParam                = "file[]"

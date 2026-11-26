@@ -44,26 +44,27 @@ type ThanosRequestDedup interface {
 }
 
 type ThanosQueryRangeRequest struct {
-	Path                string
-	Start               int64
-	End                 int64
-	Step                int64
-	Timeout             time.Duration
-	Query               string
-	Dedup               bool
-	PartialResponse     bool
-	AutoDownsampling    bool
-	MaxSourceResolution int64
-	ReplicaLabels       []string
-	StoreMatchers       [][]*labels.Matcher
-	CachingOptions      queryrange.CachingOptions
-	Headers             []*RequestHeader
-	Stats               string
-	ShardInfo           *storepb.ShardInfo
-	LookbackDelta       int64
-	Analyze             bool
-	Engine              string
-	SplitInterval       time.Duration
+	Path                  string
+	Start                 int64
+	End                   int64
+	Step                  int64
+	Timeout               time.Duration
+	Query                 string
+	Dedup                 bool
+	PartialResponse       bool
+	AutoDownsampling      bool
+	MaxSourceResolution   int64
+	ReplicaLabels         []string
+	StoreMatchers         [][]*labels.Matcher
+	CachingOptions        queryrange.CachingOptions
+	Headers               []*RequestHeader
+	Stats                 string
+	ShardInfo             *storepb.ShardInfo
+	LookbackDelta         int64
+	Analyze               bool
+	Engine                string
+	SplitInterval         time.Duration
+	StepAlignmentLocation *time.Location
 }
 
 // IsDedupEnabled returns true if deduplication is enabled.
@@ -91,6 +92,11 @@ func (r *ThanosQueryRangeRequest) GetCachingOptions() queryrange.CachingOptions 
 func (r *ThanosQueryRangeRequest) GetStats() string { return r.Stats }
 
 func (r *ThanosQueryRangeRequest) GetSplitInterval() time.Duration { return r.SplitInterval }
+
+// GetStepAlignmentLocation returns the time zone requested for step alignment.
+func (r *ThanosQueryRangeRequest) GetStepAlignmentLocation() *time.Location {
+	return r.StepAlignmentLocation
+}
 
 func (r *ThanosQueryRangeRequest) WithStats(stats string) queryrange.Request {
 	q := *r

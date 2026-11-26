@@ -272,6 +272,9 @@ class Panel extends Component<PanelProps & PathPrefixProps, PanelState> {
         params.append('engine', this.props.options.engine);
         params.append('analyze', this.props.options.analyze.toString());
         params.append('tenant', this.props.options.tenant);
+        if (this.props.useLocalTime) {
+          params.append('timezone', moment.tz.guess());
+        }
         // TODO path prefix here and elsewhere.
         break;
       case 'table':
