@@ -10,9 +10,19 @@ interface StatusPageProps {
   title: string;
 }
 
+type CustomizeValue =
+  | ((v: string, key: string) => React.ReactNode)
+  | ((v: boolean, key: string) => React.ReactNode)
+  | ((v: { url: string }[], key: string) => React.ReactNode);
+
 export const statusConfig: Record<
   string,
-  { title?: string; customizeValue?: (v: any, key: string) => any; customRow?: boolean; skip?: boolean }
+  {
+    title?: string;
+    customizeValue?: CustomizeValue;
+    customRow?: boolean;
+    skip?: boolean;
+  }
 > = {
   startTime: { title: 'Start time', customizeValue: (v: string) => new Date(v).toUTCString() },
   CWD: { title: 'Working directory' },
@@ -28,7 +38,7 @@ export const statusConfig: Record<
   storageRetention: { title: 'Storage retention' },
   activeAlertmanagers: {
     customRow: true,
-    customizeValue: (alertMgrs: { url: string }[], key) => {
+    customizeValue: (alertMgrs: { url: string }[], key: string) => {
       return (
         <Fragment key={key}>
           <tr>
@@ -59,19 +69,19 @@ export const StatusContent: FC<StatusPageProps> = ({ data, title }) => {
       <Table className="h-auto" size="sm" bordered striped>
         <tbody>
           {Object.entries(data).map(([k, v]) => {
-            const { title = k, customizeValue = (val: any) => val, customRow, skip } = statusConfig[k] || {};
+            const { title = k, customizeValue = (val: string) => val, customRow, skip } = statusConfig[k] || {};
             if (skip) {
               return null;
             }
             if (customRow) {
-              return customizeValue(v, k);
+              return customizeValue(v as never, k);
             }
             return (
               <tr key={k}>
                 <th className="capitalize-title" style={{ width: '35%' }}>
                   {title}
                 </th>
-                <td className="text-break">{customizeValue(v, title)}</td>
+                <td className="text-break">{customizeValue(v as never, title)}</td>
               </tr>
             );
           })}

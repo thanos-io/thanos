@@ -34,5 +34,5 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: pkg/ui/react-app/pnpm-lock.yaml
 
-      - run: CI=false make check-react-app
+      - run: make check-react-app
       - run: make react-app-test
