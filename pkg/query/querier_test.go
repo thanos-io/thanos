@@ -129,7 +129,7 @@ func TestQuerier_DownsampledData(t *testing.T) {
 	qry, err := engine.NewRangeQuery(
 		context.Background(),
 		q,
-		promql.NewPrometheusQueryOpts(false, 0),
+		promql.NewPrometheusQueryOpts(false, 0, nil),
 		"sum(a) by (zzz)",
 		st,
 		ed,
@@ -412,7 +412,7 @@ func TestQuerier_Select_AfterPromQL(t *testing.T) {
 						t.Cleanup(func() {
 							testutil.Ok(t, mq.Close())
 						})
-						q, err := e.NewRangeQuery(context.Background(), mq, promql.NewPrometheusQueryOpts(false, 0), tcase.equivalentQuery, timestamp.Time(tcase.hints.Start), timestamp.Time(tcase.hints.End), resolution)
+						q, err := e.NewRangeQuery(context.Background(), mq, promql.NewPrometheusQueryOpts(false, 0, nil), tcase.equivalentQuery, timestamp.Time(tcase.hints.Start), timestamp.Time(tcase.hints.End), resolution)
 						testutil.Ok(t, err)
 						t.Cleanup(q.Close)
 						res := q.Exec(context.Background())
@@ -820,7 +820,7 @@ func TestQuerier_Select(t *testing.T) {
 					// Integration test: Make sure the PromQL would select exactly the same.
 					t.Run("through PromQL with 100s step", func(t *testing.T) {
 						catcher := &querierResponseCatcher{t: t, Querier: q}
-						q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: catcher}, promql.NewPrometheusQueryOpts(false, 0), tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
+						q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: catcher}, promql.NewPrometheusQueryOpts(false, 0, nil), tcase.equivalentQuery, timestamp.Time(tcase.mint), timestamp.Time(tcase.maxt), 100*time.Second)
 						testutil.Ok(t, err)
 						t.Cleanup(q.Close)
 
@@ -1051,6 +1051,10 @@ func (s *mockedSeriesIterator) AtT() int64 {
 	return s.samples[s.cur].t
 }
 
+func (s *mockedSeriesIterator) AtST() int64 {
+	return 0
+}
+
 func (s *mockedSeriesIterator) Next() chunkenc.ValueType {
 	s.cur++
 	if s.cur >= len(s.samples) {
@@ -1097,7 +1101,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0), `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0, nil), `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1126,7 +1130,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0), `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0, nil), `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1167,7 +1171,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			MaxSamples: math.MaxInt64,
 		})
 		t.Run("Rate=5mStep=100s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0), `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0, nil), `rate(gitlab_transaction_cache_read_hit_count_total[5m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(5*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 100*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1191,7 +1195,7 @@ func TestQuerierWithDedupUnderstoodByPromQL_Rate(t *testing.T) {
 			}, vec)
 		})
 		t.Run("Rate=30mStep=500s", func(t *testing.T) {
-			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0), `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
+			q, err := e.NewRangeQuery(context.Background(), &mockedQueryable{querier: q}, promql.NewPrometheusQueryOpts(false, 0, nil), `rate(gitlab_transaction_cache_read_hit_count_total[30m])`, timestamp.Time(realSeriesWithStaleMarkerMint).Add(30*time.Minute), timestamp.Time(realSeriesWithStaleMarkerMaxt), 500*time.Second)
 			testutil.Ok(t, err)
 
 			r := q.Exec(context.Background())
@@ -1276,7 +1280,7 @@ func storeSeriesResponse(t testing.TB, lset labels.Labels, smplChunks ...[]sampl
 		testutil.Ok(t, err)
 
 		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+			a.Append(0, smpl.t, smpl.v)
 		}
 
 		ch := storepb.AggrChunk{
@@ -1417,6 +1421,125 @@ func TestMaxResolutionFromSelectHints(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			res := maxResolutionFromSelectHints(tc.maxResolutionMillis, tc.hints.Range, tc.hints.Func)
 			testutil.Equals(t, tc.expected, res)
+		})
+	}
+}
+
+func TestQuerier_XOR2(t *testing.T) {
+	t.Parallel()
+
+	mkXOR2Series := func(lset labels.Labels, smpls []sample) *storepb.SeriesResponse {
+		c := chunkenc.NewXOR2Chunk()
+		a, err := c.Appender()
+		testutil.Ok(t, err)
+		for _, s := range smpls {
+			a.Append(s.t-10, s.t, s.v)
+		}
+		var lbls []labelpb.ZLabel
+		lset.Range(func(l labels.Label) {
+			lbls = append(lbls, labelpb.ZLabel{Name: l.Name, Value: l.Value})
+		})
+		return storepb.NewSeriesResponse(&storepb.Series{
+			Labels: lbls,
+			Chunks: []storepb.AggrChunk{{
+				MinTime: smpls[0].t,
+				MaxTime: smpls[len(smpls)-1].t,
+				Raw:     &storepb.Chunk{Type: storepb.Chunk_XOR2, Data: c.Bytes()},
+			}},
+		})
+	}
+
+	testProxy := &testStoreServer{
+		resps: []*storepb.SeriesResponse{
+			mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "a"), []sample{{t: 10000, v: 10}, {t: 20000, v: 20}, {t: 30000, v: 30}}),
+			mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "b"), []sample{{t: 10000, v: 5}, {t: 20000, v: 15}, {t: 30000, v: 25}}),
+		},
+	}
+
+	timeout := 10 * time.Second
+	q := NewQueryableCreator(nil, nil, newProxyStore(testProxy), 2, timeout, dedup.AlgorithmPenalty, 1)(
+		false, nil, nil, 0, false, false, nil, NoopSeriesStatsReporter,
+	)
+	engine := promql.NewEngine(promql.EngineOpts{MaxSamples: math.MaxInt32, Timeout: timeout})
+
+	t.Run("sum", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(t.Context(), q, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(xor2_requests_total)", time.UnixMilli(30000))
+		testutil.Ok(t, err)
+		t.Cleanup(qry.Close)
+		res := qry.Exec(t.Context())
+		testutil.Ok(t, res.Err)
+		vec, err := res.Vector()
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(vec))
+		testutil.Equals(t, 55.0, vec[0].F)
+	})
+
+	t.Run("rate", func(t *testing.T) {
+		qry, err := engine.NewInstantQuery(t.Context(), q, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(rate(xor2_requests_total[20s]))", time.UnixMilli(30000))
+		testutil.Ok(t, err)
+		t.Cleanup(qry.Close)
+		res := qry.Exec(t.Context())
+		testutil.Ok(t, res.Err)
+		vec, err := res.Vector()
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(vec))
+		testutil.Equals(t, 2.0, vec[0].F)
+	})
+
+	t.Run("select_preserves_st", func(t *testing.T) {
+		qr, err := q.Querier(10000, 30000)
+		testutil.Ok(t, err)
+		t.Cleanup(func() { testutil.Ok(t, qr.Close()) })
+
+		ss := qr.Select(t.Context(), true, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_requests_total"))
+		var seen int
+		for ss.Next() {
+			seen++
+			it := ss.At().Iterator(nil)
+			var samples int
+			for it.Next() != chunkenc.ValNone {
+				samples++
+				ts, _ := it.At()
+				testutil.Equals(t, ts-10, it.AtST())
+			}
+			testutil.Ok(t, it.Err())
+			testutil.Equals(t, 3, samples)
+		}
+		testutil.Ok(t, ss.Err())
+		testutil.Equals(t, 2, seen)
+	})
+
+	for _, algo := range []string{dedup.AlgorithmPenalty, dedup.AlgorithmChain} {
+		t.Run("dedup="+algo, func(t *testing.T) {
+			dedupProxy := &testStoreServer{
+				resps: []*storepb.SeriesResponse{
+					mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "a", "replica", "0"), []sample{{t: 10000, v: 10}, {t: 20000, v: 20}, {t: 30000, v: 30}}),
+					mkXOR2Series(labels.FromStrings("__name__", "xor2_requests_total", "instance", "a", "replica", "1"), []sample{{t: 10000, v: 10}, {t: 20000, v: 20}, {t: 30000, v: 30}}),
+				},
+			}
+			dq := NewQueryableCreator(nil, nil, newProxyStore(dedupProxy), 2, timeout, algo, 1)(
+				true, []string{"replica"}, nil, 0, false, false, nil, NoopSeriesStatsReporter,
+			)
+
+			qry, err := engine.NewInstantQuery(t.Context(), dq, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(xor2_requests_total)", time.UnixMilli(30000))
+			testutil.Ok(t, err)
+			t.Cleanup(qry.Close)
+			res := qry.Exec(t.Context())
+			testutil.Ok(t, res.Err)
+			vec, err := res.Vector()
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, len(vec))
+			testutil.Equals(t, 30.0, vec[0].F)
+
+			rateQry, err := engine.NewInstantQuery(t.Context(), dq, promql.NewPrometheusQueryOpts(false, 0, nil), "sum(rate(xor2_requests_total[20s]))", time.UnixMilli(30000))
+			testutil.Ok(t, err)
+			t.Cleanup(rateQry.Close)
+			rateRes := rateQry.Exec(t.Context())
+			testutil.Ok(t, rateRes.Err)
+			rateVec, err := rateRes.Vector()
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, len(rateVec))
+			testutil.Equals(t, 1.0, rateVec[0].F)
 		})
 	}
 }

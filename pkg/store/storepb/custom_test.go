@@ -41,7 +41,7 @@ func newSeries(tb testing.TB, lset labels.Labels, smplChunks [][]sample) Series 
 		testutil.Ok(tb, err)
 
 		for _, smpl := range smpls {
-			a.Append(smpl.t, smpl.v)
+			a.Append(0, smpl.t, smpl.v)
 		}
 
 		ch := AggrChunk{
@@ -767,4 +767,54 @@ func TestSeriesRequestWithMatchers(t *testing.T) {
 	testutil.Equals(t, req.MinTime, r1.MinTime)
 	testutil.Equals(t, req.MaxTime, r1.MaxTime)
 	testutil.Assert(t, req.WithMatchers() == req, "expected no copy without matchers")
+}
+
+func TestChunkXOR2MarshalAndNumSamples(t *testing.T) {
+	t.Parallel()
+
+	c := chunkenc.NewXOR2Chunk()
+	app, err := c.Appender()
+	testutil.Ok(t, err)
+	app.Append(100, 1000, 1.5)
+	app.Append(100, 2000, 2.5)
+	app.Append(150, 3000, 3.5)
+
+	orig := &Chunk{
+		Type: Chunk_XOR2,
+		Data: c.Bytes(),
+		Hash: 42,
+	}
+	testutil.Equals(t, 3, orig.XORNumSamples())
+	testutil.Equals(t, 0, (*Chunk)(nil).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2, Data: []byte{0}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR2, Data: []byte{0, 3}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_XOR, Data: []byte{0}}).XORNumSamples())
+	testutil.Equals(t, 3, (&Chunk{Type: Chunk_XOR, Data: []byte{0, 3}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_HISTOGRAM, Data: []byte{0, 3, 0}}).XORNumSamples())
+	testutil.Equals(t, 0, (&Chunk{Type: Chunk_FLOAT_HISTOGRAM, Data: []byte{0, 3, 0}}).XORNumSamples())
+
+	// Chunk.Compare must distinguish Chunk_XOR and Chunk_XOR2 even with identical bytes.
+	sameDataXOR := &Chunk{Type: Chunk_XOR, Data: c.Bytes()}
+	testutil.Assert(t, orig.Compare(sameDataXOR) != 0, "expected Chunk_XOR2 and Chunk_XOR to compare unequal")
+	testutil.Assert(t, orig.Compare(&Chunk{Type: Chunk_XOR2, Data: c.Bytes()}) == 0, "expected identical Chunk_XOR2 to compare equal")
+
+	raw, err := orig.Marshal()
+	testutil.Ok(t, err)
+
+	var decoded Chunk
+	testutil.Ok(t, decoded.Unmarshal(raw))
+	testutil.Equals(t, Chunk_XOR2, decoded.Type)
+	testutil.Equals(t, uint64(42), decoded.Hash)
+	testutil.Equals(t, c.Bytes(), decoded.Data)
+	testutil.Equals(t, 3, decoded.XORNumSamples())
+
+	var stats SeriesStatsCounter
+	stats.Count(&Series{
+		Labels: []labelpb.ZLabel{{Name: "__name__", Value: "up"}},
+		Chunks: []AggrChunk{{MinTime: 1000, MaxTime: 3000, Raw: &decoded}},
+	})
+	testutil.Equals(t, 1, stats.Series)
+	testutil.Equals(t, 1, stats.Chunks)
+	testutil.Equals(t, 3, stats.Samples)
 }

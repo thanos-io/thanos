@@ -554,3 +554,23 @@ func TestProxyDataRace(t *testing.T) {
 	}
 	_ = p.Exemplars(req, s)
 }
+
+func TestProxy_ExperimentalFunctions(t *testing.T) {
+	logger := log.NewNopLogger()
+	query := `double_exponential_smoothing(up{cluster="A"}[1h], 0.5, 0.5)`
+	req := &exemplarspb.ExemplarsRequest{
+		Query:                   query,
+		PartialResponseStrategy: storepb.PartialResponseStrategy_WARN,
+	}
+
+	defaultProxy := NewProxy(logger, func() []*exemplarspb.ExemplarStore { return nil }, labels.EmptyLabels())
+	testutil.NotOk(t, defaultProxy.Exemplars(req, &exemplarsServer{ctx: t.Context()}))
+
+	expProxy := NewProxy(
+		logger,
+		func() []*exemplarspb.ExemplarStore { return nil },
+		labels.EmptyLabels(),
+		WithParser(extpromql.NewParser(true, false)),
+	)
+	testutil.Ok(t, expProxy.Exemplars(req, &exemplarsServer{ctx: t.Context()}))
+}

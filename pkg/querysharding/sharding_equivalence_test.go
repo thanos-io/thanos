@@ -14,6 +14,7 @@ import (
 
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/prometheus/prometheus/promql/parser"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/util/teststorage"
 	"github.com/stretchr/testify/require"
@@ -109,7 +110,7 @@ func TestShardedQueryMatchesUnsharded(t *testing.T) {
 	for _, q := range queries {
 		for _, shards := range []int64{2, 3, 5} {
 			t.Run(fmt.Sprintf("%s/%d", q, shards), func(t *testing.T) {
-				an, err := NewQueryAnalyzer().Analyze(q)
+				an, err := NewQueryAnalyzer(parser.NewParser(parser.Options{})).Analyze(q)
 				require.NoError(t, err)
 				require.True(t, an.IsShardable())
 				run := func(qa storage.Queryable) promql.Matrix {

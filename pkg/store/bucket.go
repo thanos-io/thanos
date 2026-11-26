@@ -1422,7 +1422,7 @@ func populateChunk(out *storepb.AggrChunk, in chunkenc.Chunk, aggrs []storepb.Ag
 	hasher := hashPool.Get().(hash.Hash64)
 	defer hashPool.Put(hasher)
 
-	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncHistogram || in.Encoding() == chunkenc.EncFloatHistogram {
+	if in.Encoding() == chunkenc.EncXOR || in.Encoding() == chunkenc.EncXOR2 || in.Encoding() == chunkenc.EncHistogram || in.Encoding() == chunkenc.EncFloatHistogram {
 		b, err := save(in.Bytes())
 		if err != nil {
 			return err
@@ -1502,6 +1502,8 @@ func chunkToStoreEncoding(in chunkenc.Encoding) storepb.Chunk_Encoding {
 	switch in {
 	case chunkenc.EncXOR:
 		return storepb.Chunk_XOR
+	case chunkenc.EncXOR2:
+		return storepb.Chunk_XOR2
 	case chunkenc.EncHistogram:
 		return storepb.Chunk_HISTOGRAM
 	case chunkenc.EncFloatHistogram:

@@ -15,14 +15,37 @@ import (
 	"github.com/thanos-io/promql-engine/execution/parse"
 )
 
+// defaultParser is concurrency-safe because parser.NewParser clones opts.Functions
+// once and uses per-call pooled parser state.
+var defaultParser = NewParser(false, true)
+
+// NewParser returns a PromQL parser configured with optional experimental and extended functions.
+// When enableXFunctions is true, parser.Functions is cloned so package-level state is never mutated.
+func NewParser(enableExperimental, enableXFunctions bool) parser.Parser {
+	opts := parser.Options{
+		EnableExperimentalFunctions: enableExperimental,
+	}
+	if enableXFunctions {
+		allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
+		maps.Copy(allFuncs, parser.Functions)
+		maps.Copy(allFuncs, parse.XFunctions)
+		opts.Functions = allFuncs
+	}
+	return parser.NewParser(opts)
+}
+
 // ParseExpr parses the input PromQL expression and returns the parsed representation.
 func ParseExpr(input string) (parser.Expr, error) {
-	allFuncs := make(map[string]*parser.Function, len(parse.XFunctions)+len(parser.Functions))
-	maps.Copy(allFuncs, parser.Functions)
-	maps.Copy(allFuncs, parse.XFunctions)
-	p := parser.NewParser(input, parser.WithFunctions(allFuncs))
-	defer p.Close()
-	return p.ParseExpr()
+	return defaultParser.ParseExpr(input)
+}
+
+// ParseExprWithParser parses the input PromQL expression with the provided parser.
+// If p is nil, it falls back to ParseExpr.
+func ParseExprWithParser(p parser.Parser, input string) (parser.Expr, error) {
+	if p == nil {
+		return defaultParser.ParseExpr(input)
+	}
+	return p.ParseExpr(input)
 }
 
 // ParseMetricSelector parses the provided textual metric selector into a list of

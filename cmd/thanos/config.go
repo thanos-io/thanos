@@ -21,7 +21,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
+	promconfig "github.com/prometheus/prometheus/config"
 	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 
 	"github.com/thanos-io/thanos/pkg/extgrpc"
 	"github.com/thanos-io/thanos/pkg/extgrpc/snappy"
@@ -372,7 +374,7 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 	}
 
 	if common.enableAutoGoMemlimit {
-		limits, err = memlimit.SetGoMemLimitWithOpts(
+		limits, err = memlimit.Set(
 			memlimit.WithRatio(common.memlimitRatio),
 			memlimit.WithProvider(
 				memlimit.ApplyFallback(
@@ -387,4 +389,20 @@ func configureGoAutoMemLimit(common goMemLimitConfig) (int64, error) {
 	}
 
 	return limits, nil
+}
+
+func parseFloatChunkEncoding(encoding string) (chunkenc.Encoding, error) {
+	switch encoding {
+	case "", promconfig.FloatChunkEncodingXOR:
+		return chunkenc.EncXOR, nil
+	case promconfig.FloatChunkEncodingXOR2:
+		return chunkenc.EncXOR2, nil
+	default:
+		return chunkenc.EncNone, errors.Errorf(
+			"unsupported float chunk encoding %q, supported values: %q, %q",
+			encoding,
+			promconfig.FloatChunkEncodingXOR,
+			promconfig.FloatChunkEncodingXOR2,
+		)
+	}
 }

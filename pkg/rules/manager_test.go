@@ -17,7 +17,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/prometheus/model/exemplar"
+	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/metadata"
@@ -36,46 +36,16 @@ import (
 
 type nopAppendable struct{}
 
-func (n nopAppendable) Appender(_ context.Context) storage.Appender { return nopAppender{} }
+func (n nopAppendable) AppenderV2(_ context.Context) storage.AppenderV2 { return nopAppender{} }
 
 type nopAppender struct{}
 
-func (n nopAppender) SetOptions(opts *storage.AppendOptions) {}
-
-func (n nopAppender) AppendHistogramCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
+func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, int64, float64, *histogram.Histogram, *histogram.FloatHistogram, storage.AOptions) (storage.SeriesRef, error) {
 	return 0, nil
 }
 
-func (n nopAppender) AppendHistogramSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendSTZeroSample(ref storage.SeriesRef, l labels.Labels, t, st int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Append(storage.SeriesRef, labels.Labels, int64, float64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendExemplar(storage.SeriesRef, labels.Labels, exemplar.Exemplar) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendHistogram(ref storage.SeriesRef, l labels.Labels, t int64, h *histogram.Histogram, fh *histogram.FloatHistogram) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) AppendCTZeroSample(ref storage.SeriesRef, l labels.Labels, t, ct int64) (storage.SeriesRef, error) {
-	return 0, nil
-}
-
-func (n nopAppender) Commit() error                                        { return nil }
-func (n nopAppender) Rollback() error                                      { return nil }
-func (n nopAppender) Appender(_ context.Context) (storage.Appender, error) { return n, nil }
-func (n nopAppender) UpdateMetadata(storage.SeriesRef, labels.Labels, metadata.Metadata) (storage.SeriesRef, error) {
-	return 0, nil
-}
+func (n nopAppender) Commit() error   { return nil }
+func (n nopAppender) Rollback() error { return nil }
 
 type nopQueryable struct{}
 
@@ -106,10 +76,10 @@ groups:
 		nil,
 		dir,
 		rules.ManagerOptions{
-			Logger:     logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
-			Context:    context.Background(),
-			Appendable: nopAppendable{},
-			Queryable:  nopQueryable{},
+			Logger:       logutil.GoKitLogToSlog(log.NewLogfmtLogger(os.Stderr)),
+			Context:      context.Background(),
+			AppendableV2: nopAppendable{},
+			Queryable:    nopQueryable{},
 		},
 		func(partialResponseStrategy storepb.PartialResponseStrategy) rules.QueryFunc {
 			return func(ctx context.Context, q string, t time.Time) (vectors promql.Vector, e error) {
@@ -476,4 +446,316 @@ groups:
 		return nil
 	}))
 	testutil.Equals(t, "exceeded limit of 1 with 2 alerts", thanosRuleMgr.protoRuleGroups()[0].Rules[0].GetAlert().LastError)
+}
+
+func TestValidateAndCount_Metadata(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		yaml         string
+		expRules     int
+		expErrSubstr string
+	}{
+		{
+			name: "valid recording rule metadata",
+			yaml: `groups:
+- name: rec
+  partial_response_strategy: warn
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      type: counter
+      unit: requests
+      help: Total HTTP requests by job.
+`,
+			expRules: 1,
+		},
+		{
+			name: "empty metadata on recording rule accepted",
+			yaml: `groups:
+- name: rec
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata: {}
+`,
+			expRules: 1,
+		},
+		{
+			name: "invalid recording rule metadata type",
+			yaml: `groups:
+- name: rec
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      type: not_a_type
+`,
+			expErrSubstr: "not_a_type",
+		},
+		{
+			name: "unknown metadata field rejected",
+			yaml: `groups:
+- name: rec
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      foo: bar
+`,
+			expErrSubstr: "field foo not found",
+		},
+		{
+			name: "metadata on alerting rule rejected",
+			yaml: `groups:
+- name: alert
+  rules:
+  - alert: HighErrorRate
+    expr: up == 0
+    metadata:
+      type: gauge
+`,
+			expErrSubstr: "invalid field 'metadata' in alerting rule",
+		},
+		{
+			name: "empty metadata on alerting rule rejected",
+			yaml: `groups:
+- name: alert
+  rules:
+  - alert: HighErrorRate
+    expr: up == 0
+    metadata: {}
+`,
+			expErrSubstr: "invalid field 'metadata' in alerting rule",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			n, errs := ValidateAndCount(strings.NewReader(tc.yaml))
+			if tc.expErrSubstr != "" {
+				testutil.NotOk(t, errs.Err())
+				testutil.Assert(t, strings.Contains(errs.Err().Error(), tc.expErrSubstr), "expected error containing %q, got %q", tc.expErrSubstr, errs.Err().Error())
+				return
+			}
+			testutil.Ok(t, errs.Err())
+			testutil.Equals(t, tc.expRules, n)
+		})
+	}
+}
+
+type recordedSample struct {
+	lset labels.Labels
+	meta metadata.Metadata
+}
+
+type recordingAppendable struct {
+	mu      sync.Mutex
+	samples map[string]recordedSample
+}
+
+func (r *recordingAppendable) AppenderV2(_ context.Context) storage.AppenderV2 {
+	return &recordingAppender{parent: r}
+}
+
+type recordingAppender struct {
+	parent  *recordingAppendable
+	pending []recordedSample
+}
+
+func (a *recordingAppender) Append(_ storage.SeriesRef, lset labels.Labels, _, _ int64, _ float64, _ *histogram.Histogram, _ *histogram.FloatHistogram, opts storage.AOptions) (storage.SeriesRef, error) {
+	a.pending = append(a.pending, recordedSample{
+		lset: lset.Copy(),
+		meta: opts.Metadata,
+	})
+	return 0, nil
+}
+
+func (a *recordingAppender) Commit() error {
+	a.parent.mu.Lock()
+	defer a.parent.mu.Unlock()
+	for _, s := range a.pending {
+		a.parent.samples[s.lset.Get(labels.MetricName)] = s
+	}
+	a.pending = nil
+	return nil
+}
+
+func (a *recordingAppender) Rollback() error {
+	a.pending = nil
+	return nil
+}
+
+func TestManager_RecordingRuleMetadata(t *testing.T) {
+	for _, tc := range []struct {
+		name                    string
+		appendMetadata          bool
+		enableTypeAndUnitLabels bool
+		expLabels               map[string]labels.Labels
+		expMeta                 map[string]metadata.Metadata
+	}{
+		{
+			name:                    "append-metadata=true,type-and-unit-labels=false",
+			appendMetadata:          true,
+			enableTypeAndUnitLabels: false,
+			expLabels: map[string]labels.Labels{
+				"job:http_requests:sum":      labels.FromStrings("__name__", "job:http_requests:sum"),
+				"job:http_requests_total":    labels.FromStrings("__name__", "job:http_requests_total"),
+				"job:feature_state":          labels.FromStrings("__name__", "job:feature_state"),
+				"job:feature_state_override": labels.FromStrings("__name__", "job:feature_state_override"),
+			},
+			expMeta: map[string]metadata.Metadata{
+				"job:http_requests:sum": {
+					Type: model.MetricTypeCounter,
+					Unit: "requests",
+					Help: "Total HTTP requests by job.",
+				},
+				"job:http_requests_total": {
+					Type: model.MetricTypeCounter,
+				},
+				"job:feature_state": {
+					Type: model.MetricTypeGauge,
+				},
+				"job:feature_state_override": {
+					Type: model.MetricTypeCounter,
+					Unit: "items",
+				},
+			},
+		},
+		{
+			name:                    "append-metadata=true,type-and-unit-labels=true",
+			appendMetadata:          true,
+			enableTypeAndUnitLabels: true,
+			expLabels: map[string]labels.Labels{
+				"job:http_requests:sum":      labels.FromStrings("__name__", "job:http_requests:sum", "__type__", "counter", "__unit__", "requests"),
+				"job:http_requests_total":    labels.FromStrings("__name__", "job:http_requests_total", "__type__", "counter"),
+				"job:feature_state":          labels.FromStrings("__name__", "job:feature_state", "__type__", "stateset", "__unit__", "seconds"),
+				"job:feature_state_override": labels.FromStrings("__name__", "job:feature_state_override", "__type__", "counter", "__unit__", "items"),
+			},
+			expMeta: map[string]metadata.Metadata{
+				"job:http_requests:sum": {
+					Type: model.MetricTypeCounter,
+					Unit: "requests",
+					Help: "Total HTTP requests by job.",
+				},
+				"job:http_requests_total": {
+					Type: model.MetricTypeCounter,
+				},
+				"job:feature_state": {
+					Type: model.MetricTypeStateset,
+					Unit: "seconds",
+				},
+				"job:feature_state_override": {
+					Type: model.MetricTypeCounter,
+					Unit: "items",
+				},
+			},
+		},
+		{
+			name:                    "append-metadata=false,type-and-unit-labels=true",
+			appendMetadata:          false,
+			enableTypeAndUnitLabels: true,
+			expLabels: map[string]labels.Labels{
+				"job:http_requests:sum":      labels.FromStrings("__name__", "job:http_requests:sum", "__type__", "counter", "__unit__", "requests"),
+				"job:http_requests_total":    labels.FromStrings("__name__", "job:http_requests_total", "__type__", "counter"),
+				"job:feature_state":          labels.FromStrings("__name__", "job:feature_state", "__type__", "stateset", "__unit__", "seconds"),
+				"job:feature_state_override": labels.FromStrings("__name__", "job:feature_state_override", "__type__", "counter", "__unit__", "items"),
+			},
+			expMeta: map[string]metadata.Metadata{
+				"job:http_requests:sum":      {},
+				"job:http_requests_total":    {},
+				"job:feature_state":          {},
+				"job:feature_state_override": {},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ruleFile := filepath.Join(dir, "rules.yaml")
+			testutil.Ok(t, os.WriteFile(ruleFile, []byte(`groups:
+- name: metadata_group
+  partial_response_strategy: warn
+  interval: 10ms
+  rules:
+  - record: job:http_requests:sum
+    expr: sum(http_requests_total) by (job)
+    metadata:
+      type: counter
+      unit: requests
+      help: Total HTTP requests by job.
+  - record: job:http_requests_total
+    expr: http_requests_total
+  - record: job:feature_state
+    expr: feature_state
+  - record: job:feature_state_override
+    expr: feature_state
+    metadata:
+      type: counter
+      unit: items
+`), 0600))
+
+			app := &recordingAppendable{samples: make(map[string]recordedSample)}
+			mgr := NewManager(
+				t.Context(),
+				nil,
+				dir,
+				rules.ManagerOptions{
+					Logger:                  logutil.GoKitLogToSlog(log.NewNopLogger()),
+					AppendableV2:            app,
+					Queryable:               nopQueryable{},
+					AppendMetadata:          tc.appendMetadata,
+					AutoRecordingMetadata:   true,
+					EnableTypeAndUnitLabels: tc.enableTypeAndUnitLabels,
+				},
+				func(storepb.PartialResponseStrategy) rules.QueryFunc {
+					return func(_ context.Context, q string, ts time.Time) (promql.Vector, error) {
+						switch q {
+						case "http_requests_total":
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      10,
+								Metric: labels.FromStrings("__name__", "http_requests_total"),
+							}}, nil
+						case "feature_state":
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      1,
+								Metric: labels.FromStrings("__name__", "feature_state", "__type__", "stateset", "__unit__", "seconds"),
+							}}, nil
+						default:
+							return promql.Vector{{
+								T:      ts.UnixMilli(),
+								F:      2.5,
+								Metric: labels.EmptyLabels(),
+							}}, nil
+						}
+					}
+				},
+				labels.EmptyLabels(),
+				"http://localhost",
+			)
+			mgr.Run()
+			t.Cleanup(mgr.Stop)
+
+			testutil.Ok(t, mgr.Update(10*time.Millisecond, []string{ruleFile}))
+
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			testutil.Ok(t, runutil.Retry(10*time.Millisecond, ctx.Done(), func() error {
+				app.mu.Lock()
+				defer app.mu.Unlock()
+				if len(app.samples) < len(tc.expMeta) {
+					return errors.Errorf("waiting for %d recorded samples, got %d", len(tc.expMeta), len(app.samples))
+				}
+				return nil
+			}))
+
+			app.mu.Lock()
+			defer app.mu.Unlock()
+			for name, expMeta := range tc.expMeta {
+				got, ok := app.samples[name]
+				testutil.Assert(t, ok, "missing recorded sample for %s", name)
+				testutil.Equals(t, expMeta, got.meta)
+				testutil.Equals(t, tc.expLabels[name], got.lset)
+			}
+		})
+	}
 }
