@@ -40,6 +40,22 @@ DOCKER_ARCHS       ?= amd64 arm64 ppc64le
 BUILD_DOCKER_ARCHS = $(addprefix docker-build-,$(DOCKER_ARCHS))
 TEST_DOCKER_ARCHS  = $(addprefix docker-test-,$(DOCKER_ARCHS))
 PUSH_DOCKER_ARCHS  = $(addprefix docker-push-,$(DOCKER_ARCHS))
+# Image variant handled by the docker-build, docker-test, docker-push and docker-manifest targets.
+# The busybox variant is the default one: it is built from Dockerfile.multi-arch and published without a tag suffix.
+# Any other variant <name> is built from Dockerfile.<name> and published with a "-<name>" tag suffix,
+# e.g. `make docker-build DOCKER_IMAGE_VARIANT=distroless` builds the images for v0.40.0-distroless.
+DOCKER_IMAGE_VARIANT ?= busybox
+ifeq ($(DOCKER_IMAGE_VARIANT), busybox)
+DOCKER_VARIANT_DOCKERFILE  := Dockerfile.multi-arch
+DOCKER_VARIANT_TAG_SUFFIX  :=
+# The busybox base image is pinned per architecture, see .busybox-versions.
+DOCKER_VARIANT_BUILD_ARGS   = --build-arg BASE_DOCKER_SHA="$($*)"
+else
+DOCKER_VARIANT_DOCKERFILE  := Dockerfile.$(DOCKER_IMAGE_VARIANT)
+DOCKER_VARIANT_TAG_SUFFIX  := -$(DOCKER_IMAGE_VARIANT)
+DOCKER_VARIANT_BUILD_ARGS   =
+endif
+DOCKER_VARIANT_IMAGE_TAG   = $(DOCKER_IMAGE_TAG)$(DOCKER_VARIANT_TAG_SUFFIX)
 
 # Ensure everything works even if GOPATH is not set, which is often the case.
 # The `go env GOPATH` will work for all cases for Go 1.8+.
@@ -213,17 +229,19 @@ docker-multi-stage:
 # docker-build builds docker images with multiple architectures.
 .PHONY: docker-build $(BUILD_DOCKER_ARCHS)
 docker-build: $(BUILD_DOCKER_ARCHS)
+# The platform is passed explicitly, so base images pinned to a multi-architecture index resolve to the right architecture.
 $(BUILD_DOCKER_ARCHS): docker-build-%:
-	@docker build -t "thanos-linux-$*" \
-  --build-arg BASE_DOCKER_SHA="$($*)" \
+	@echo ">> building $(DOCKER_IMAGE_VARIANT) image thanos-linux-$*$(DOCKER_VARIANT_TAG_SUFFIX)"
+	@docker build --platform "linux/$*" -t "thanos-linux-$*$(DOCKER_VARIANT_TAG_SUFFIX)" \
+  $(DOCKER_VARIANT_BUILD_ARGS) \
   --build-arg ARCH="$*" \
-  -f Dockerfile.multi-arch .
+  -f $(DOCKER_VARIANT_DOCKERFILE) .
 
 .PHONY: docker-test $(TEST_DOCKER_ARCHS)
 docker-test: $(TEST_DOCKER_ARCHS)
 $(TEST_DOCKER_ARCHS): docker-test-%:
-	@echo ">> testing image"
-	@docker run "thanos-linux-$*" --help
+	@echo ">> testing image thanos-linux-$*$(DOCKER_VARIANT_TAG_SUFFIX)"
+	@docker run --rm --platform "linux/$*" "thanos-linux-$*$(DOCKER_VARIANT_TAG_SUFFIX)" --help
 
 .PHONY: docker-e2e
 docker-e2e: ## Builds 'thanos' docker for e2e tests
@@ -234,17 +252,17 @@ docker-e2e:
 # docker-manifest push docker manifest to support multiple architectures.
 .PHONY: docker-manifest
 docker-manifest:
-	@echo ">> creating and pushing manifest"
-	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_IMAGE_TAG))
-	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)"
+	@echo ">> creating and pushing manifest $(DOCKER_IMAGE_REPO):$(DOCKER_VARIANT_IMAGE_TAG)"
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create -a "$(DOCKER_IMAGE_REPO):$(DOCKER_VARIANT_IMAGE_TAG)" $(foreach ARCH,$(DOCKER_ARCHS),$(DOCKER_IMAGE_REPO)-linux-$(ARCH):$(DOCKER_VARIANT_IMAGE_TAG))
+	@DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "$(DOCKER_IMAGE_REPO):$(DOCKER_VARIANT_IMAGE_TAG)"
 
 .PHONY: docker-push $(PUSH_DOCKER_ARCHS)
 docker-push: ## Pushes Thanos docker image build to "$(DOCKER_IMAGE_REPO):$(DOCKER_IMAGE_TAG)".
 docker-push: $(PUSH_DOCKER_ARCHS)
 $(PUSH_DOCKER_ARCHS): docker-push-%:
-	@echo ">> pushing image"
-	@docker tag "thanos-linux-$*" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
-	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_IMAGE_TAG)"
+	@echo ">> pushing image $(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_VARIANT_IMAGE_TAG)"
+	@docker tag "thanos-linux-$*$(DOCKER_VARIANT_TAG_SUFFIX)" "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_VARIANT_IMAGE_TAG)"
+	@docker push "$(DOCKER_IMAGE_REPO)-linux-$*:$(DOCKER_VARIANT_IMAGE_TAG)"
 
 .PHONY: docs
 docs: ## Generates docs for all thanos commands, localise links, ensure GitHub format.

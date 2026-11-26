@@ -12,6 +12,7 @@ We use *breaking :warning:* to mark changes that are not backward compatible (re
 
 ### Added
 
+- [#9154](https://github.com/thanos-io/thanos/pull/9154): Docker: Publish distroless container images (based on `gcr.io/distroless/static-debian13:nonroot`) for all architectures with a `-distroless` tag suffix. The existing busybox-based images are unchanged.
 - [#9172](https://github.com/thanos-io/thanos/pull/9172): *: Add end-to-end XOR2 float chunk encoding support across StoreAPI, Sidecar, Store Gateway, Query, Receive, Rule, and Compactor (`--tsdb.float-chunk-encoding` on Receive and Rule, `--compact.float-chunk-encoding` on Compactor). Upgrade all Queriers (and any other StoreAPI clients) before enabling `xor2` or uploading XOR2 blocks.
 - [#9086](https://github.com/thanos-io/thanos/pull/9086) Thanos Receive: Add `--tsdb.block-reload-interval` to configure the TSDB block reload and head-chunk memory-mapping interval.
 - [#9059](https://github.com/thanos-io/thanos/issues/9059) Store: Add `thanos_bucket_store_chunk_pool_used_bytes` and `thanos_bucket_store_chunk_pool_max_bytes` gauges for the chunk pool.
