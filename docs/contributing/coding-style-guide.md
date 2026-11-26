@@ -217,7 +217,7 @@ This is also why we recommend to scope errors if you can:
 	}
 ```
 
-While it's not yet configured, we might think consider not permitting variable shadowing with [`golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow`](https://godoc.org/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow) in future. There was even Go 2 proposal for [disabling this in the language itself, but was rejected](https://github.com/golang/go/issues/21114):
+While it's not yet configured, we might consider not permitting variable shadowing with [`golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow`](https://godoc.org/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow) in future. There was even Go 2 proposal for [disabling this in the language itself, but was rejected](https://github.com/golang/go/issues/21114):
 
 Similar to this problem is the package name shadowing. While it is less dangerous, it can cause similar issues, so avoid package shadowing if you can.
 
