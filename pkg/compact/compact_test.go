@@ -11,6 +11,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"path"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -23,15 +24,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/prometheus/prometheus/model/labels"
+	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"github.com/thanos-io/objstore"
 
 	"github.com/efficientgo/core/testutil"
 	"github.com/thanos-io/thanos/pkg/block"
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/compact/downsample"
+	"github.com/thanos-io/thanos/pkg/dedup"
 	"github.com/thanos-io/thanos/pkg/errutil"
 	"github.com/thanos-io/thanos/pkg/extprom"
+	"github.com/thanos-io/thanos/pkg/logutil"
+	storetestutil "github.com/thanos-io/thanos/pkg/store/storepb/testutil"
 )
 
 func TestHaltError(t *testing.T) {
@@ -866,6 +873,228 @@ func TestCompactExtensions(t *testing.T) {
 				testutil.Equals(t, tcase.outExtensions, ext)
 			}
 			testutil.Assert(t, len(groups) > 0)
+		})
+	}
+}
+
+func TestCompactor_XOR2(t *testing.T) {
+	t.Parallel()
+
+	type sampleSpec struct {
+		st, t int64
+		v     float64
+	}
+	createBlock := func(t *testing.T, root string, floatEnc chunkenc.Encoding, enableST bool, samples []sampleSpec) string {
+		t.Helper()
+		headDir := t.TempDir()
+		headOpts := tsdb.DefaultHeadOptions()
+		headOpts.ChunkDirRoot = headDir
+		headOpts.ChunkRange = 30000
+		headOpts.FloatChunkEncoding.Store(uint32(floatEnc))
+		headOpts.EnableSTStorage.Store(enableST)
+		h, err := tsdb.NewHead(nil, nil, nil, nil, headOpts, nil)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, h.Close()) }()
+
+		app := h.AppenderV2(t.Context())
+		lset := labels.FromStrings("__name__", "xor2_compact_metric")
+		for _, s := range samples {
+			_, err = app.Append(0, lset, s.st, s.t, s.v, nil, nil, storage.AOptions{})
+			testutil.Ok(t, err)
+		}
+		testutil.Ok(t, app.Commit())
+
+		id := storetestutil.CreateBlockFromHead(t, root, h)
+		return filepath.Join(root, id.String())
+	}
+
+	readEncodingsAndSamples := func(t *testing.T, blockDir string) ([]chunkenc.Encoding, []sampleSpec) {
+		t.Helper()
+		b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(log.NewNopLogger()), blockDir, downsample.NewPool(), nil)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, b.Close()) }()
+
+		cq, err := tsdb.NewBlockChunkQuerier(b, 0, 100000)
+		testutil.Ok(t, err)
+		defer func() { testutil.Ok(t, cq.Close()) }()
+
+		ss := cq.Select(t.Context(), false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_compact_metric"))
+		var encs []chunkenc.Encoding
+		var got []sampleSpec
+		for ss.Next() {
+			chksIt := ss.At().Iterator(nil)
+			for chksIt.Next() {
+				c := chksIt.At()
+				encs = append(encs, c.Chunk.Encoding())
+				it := c.Chunk.Iterator(nil)
+				for it.Next() != chunkenc.ValNone {
+					ts, v := it.At()
+					got = append(got, sampleSpec{st: it.AtST(), t: ts, v: v})
+				}
+				testutil.Ok(t, it.Err())
+			}
+			testutil.Ok(t, chksIt.Err())
+		}
+		testutil.Ok(t, ss.Err())
+		return encs, got
+	}
+
+	t.Run("horizontal_preserves_xor2_verbatim", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		b1 := createBlock(t, dir, chunkenc.EncXOR2, true, []sampleSpec{{st: 100, t: 1000, v: 1}, {st: 100, t: 2000, v: 2}})
+		b2 := createBlock(t, dir, chunkenc.EncXOR2, true, []sampleSpec{{st: 200, t: 5000, v: 5}, {st: 200, t: 6000, v: 6}})
+
+		comp, err := tsdb.NewLeveledCompactor(t.Context(), nil, logutil.GoKitLogToSlog(log.NewNopLogger()), []int64{10000}, downsample.NewPool(), nil)
+		testutil.Ok(t, err)
+		outDir := t.TempDir()
+		ids, err := comp.Compact(outDir, []string{b1, b2}, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(ids))
+
+		encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
+		testutil.Equals(t, []chunkenc.Encoding{chunkenc.EncXOR2, chunkenc.EncXOR2}, encs)
+		testutil.Equals(t, []sampleSpec{
+			{st: 100, t: 1000, v: 1},
+			{st: 100, t: 2000, v: 2},
+			{st: 200, t: 5000, v: 5},
+			{st: 200, t: 6000, v: 6},
+		}, got)
+	})
+
+	t.Run("horizontal_preserves_xor_under_xor2_merger", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		b1 := createBlock(t, dir, chunkenc.EncXOR, false, []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}})
+		b2 := createBlock(t, dir, chunkenc.EncXOR, false, []sampleSpec{{t: 5000, v: 5}, {t: 6000, v: 6}})
+
+		mergeFunc := storage.NewCompactingChunkSeriesMergerWithFloatEncoding(storage.ChainedSeriesMerge, func() chunkenc.Encoding {
+			return chunkenc.EncXOR2
+		})
+		comp, err := tsdb.NewLeveledCompactor(t.Context(), nil, logutil.GoKitLogToSlog(log.NewNopLogger()), []int64{10000}, downsample.NewPool(), mergeFunc)
+		testutil.Ok(t, err)
+		outDir := t.TempDir()
+		ids, err := comp.Compact(outDir, []string{b1, b2}, nil)
+		testutil.Ok(t, err)
+		testutil.Equals(t, 1, len(ids))
+
+		encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
+		testutil.Equals(t, []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR}, encs)
+		testutil.Equals(t, []sampleSpec{
+			{t: 1000, v: 1},
+			{t: 2000, v: 2},
+			{t: 5000, v: 5},
+			{t: 6000, v: 6},
+		}, got)
+	})
+
+	for _, tc := range []struct {
+		name          string
+		floatEncoding chunkenc.Encoding
+		penalty       bool
+		inputEnc      chunkenc.Encoding
+		enableST      bool
+		b1, b2        []sampleSpec
+		wantEnc       chunkenc.Encoding
+		want          []sampleSpec
+	}{
+		{
+			name:          "vertical_default_xor_downgrades_st0_xor2",
+			floatEncoding: chunkenc.EncXOR,
+			inputEnc:      chunkenc.EncXOR2,
+			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 3000, v: 3}},
+			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 4000, v: 4}},
+			wantEnc:       chunkenc.EncXOR,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}, {t: 3000, v: 3}, {t: 4000, v: 4}},
+		},
+		{
+			name:          "vertical_default_xor2_rewrites_xor_to_xor2",
+			floatEncoding: chunkenc.EncXOR2,
+			inputEnc:      chunkenc.EncXOR,
+			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 3000, v: 3}},
+			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 4000, v: 4}},
+			wantEnc:       chunkenc.EncXOR2,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 2000, v: 2}, {t: 3000, v: 3}, {t: 4000, v: 4}},
+		},
+		{
+			name:          "vertical_default_xor_preserves_nonzero_st_as_xor2",
+			floatEncoding: chunkenc.EncXOR,
+			inputEnc:      chunkenc.EncXOR2,
+			enableST:      true,
+			b1:            []sampleSpec{{st: 50, t: 1000, v: 1}, {st: 50, t: 3000, v: 3}},
+			b2:            []sampleSpec{{st: 50, t: 2000, v: 2}, {st: 50, t: 4000, v: 4}},
+			wantEnc:       chunkenc.EncXOR2,
+			want: []sampleSpec{
+				{st: 50, t: 1000, v: 1},
+				{st: 50, t: 2000, v: 2},
+				{st: 50, t: 3000, v: 3},
+				{st: 50, t: 4000, v: 4},
+			},
+		},
+		{
+			name:          "vertical_penalty_xor2_rewrites_xor_to_xor2",
+			floatEncoding: chunkenc.EncXOR2,
+			penalty:       true,
+			inputEnc:      chunkenc.EncXOR,
+			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}},
+			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 20000, v: 20}},
+			wantEnc:       chunkenc.EncXOR2,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
+		},
+		{
+			name:          "vertical_penalty_xor_downgrades_st0_xor2",
+			floatEncoding: chunkenc.EncXOR,
+			penalty:       true,
+			inputEnc:      chunkenc.EncXOR2,
+			b1:            []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}},
+			b2:            []sampleSpec{{t: 2000, v: 2}, {t: 20000, v: 20}},
+			wantEnc:       chunkenc.EncXOR,
+			want:          []sampleSpec{{t: 1000, v: 1}, {t: 7000, v: 7}, {t: 20000, v: 20}},
+		},
+		{
+			name:          "vertical_penalty_xor_preserves_nonzero_st_as_xor2",
+			floatEncoding: chunkenc.EncXOR,
+			penalty:       true,
+			inputEnc:      chunkenc.EncXOR2,
+			enableST:      true,
+			b1:            []sampleSpec{{st: 50, t: 1000, v: 1}, {st: 50, t: 7000, v: 7}},
+			b2:            []sampleSpec{{st: 50, t: 2000, v: 2}, {st: 50, t: 20000, v: 20}},
+			wantEnc:       chunkenc.EncXOR2,
+			want: []sampleSpec{
+				{st: 50, t: 1000, v: 1},
+				{st: 50, t: 7000, v: 7},
+				{st: 50, t: 20000, v: 20},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			b1 := createBlock(t, dir, tc.inputEnc, tc.enableST, tc.b1)
+			b2 := createBlock(t, dir, tc.inputEnc, tc.enableST, tc.b2)
+
+			var mergeFunc storage.VerticalChunkSeriesMergeFunc
+			if tc.penalty {
+				mergeFunc = dedup.NewChunkSeriesMergerWithFloatEncoding(tc.floatEncoding)
+			} else {
+				mergeFunc = storage.NewCompactingChunkSeriesMergerWithFloatEncoding(storage.ChainedSeriesMerge, func() chunkenc.Encoding {
+					return tc.floatEncoding
+				})
+			}
+
+			comp, err := tsdb.NewLeveledCompactor(t.Context(), nil, logutil.GoKitLogToSlog(log.NewNopLogger()), []int64{30000}, downsample.NewPool(), mergeFunc)
+			testutil.Ok(t, err)
+			outDir := t.TempDir()
+			ids, err := comp.Compact(outDir, []string{b1, b2}, nil)
+			testutil.Ok(t, err)
+			testutil.Equals(t, 1, len(ids))
+
+			encs, got := readEncodingsAndSamples(t, filepath.Join(outDir, ids[0].String()))
+			testutil.Equals(t, []chunkenc.Encoding{tc.wantEnc}, encs)
+			testutil.Equals(t, tc.want, got)
 		})
 	}
 }

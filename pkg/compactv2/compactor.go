@@ -187,5 +187,6 @@ func compactSeries(ctx context.Context, sReaders ...seriesReader) (symbols index
 		return symbols, set, nil
 	}
 	// Merge series using compacting chunk series merger.
+	// TODO(bwplotka): Use NewCompactingChunkSeriesMergerWithFloatEncoding when compactv2 supports configurable float chunk encoding for multi-block merges; samples with non-zero ST still upgrade to XOR2.
 	return symbols, storage.NewMergeChunkSeriesSet(sets, 0, storage.NewCompactingChunkSeriesMerger(storage.ChainedSeriesMerge)), nil
 }

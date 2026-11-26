@@ -320,8 +320,17 @@ func (p *delChunkSeriesIterator) Next() bool {
 		return true
 	}
 
-	// Re-encode the chunk if iterator is provider. This means that it has some samples to be deleted or chunk is opened.
-	newChunk := chunkenc.NewXORChunk()
+	// Re-encode the chunk if iterator is provided. This means that it has some samples to be deleted or chunk is opened.
+	var newChunk chunkenc.Chunk
+	switch enc := p.currChkMeta.Chunk.Encoding(); enc {
+	case chunkenc.EncXOR:
+		newChunk = chunkenc.NewXORChunk()
+	case chunkenc.EncXOR2:
+		newChunk = chunkenc.NewXOR2Chunk()
+	default:
+		p.err = errors.Errorf("re-encoding chunk with unsupported encoding %s (%d) during deletion", enc, enc)
+		return false
+	}
 	app, err := newChunk.Appender()
 	if err != nil {
 		p.err = err
@@ -335,17 +344,17 @@ func (p *delChunkSeriesIterator) Next() bool {
 		}
 
 		// Empty chunk, this should not happen, as we assume full deletions being filtered before this iterator.
-		p.err = errors.Wrap(err, "populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
+		p.err = errors.New("populateWithDelChunkSeriesIterator: unexpected empty chunk found while rewriting chunk")
 		return false
 	}
 
 	t, v := p.currDelIter.At()
 	p.curr.MinTime = t
-	app.Append(0, t, v)
+	app.Append(p.currDelIter.AtST(), t, v)
 
 	for p.currDelIter.Next() != chunkenc.ValNone {
 		t, v = p.currDelIter.At()
-		app.Append(0, t, v)
+		app.Append(p.currDelIter.AtST(), t, v)
 	}
 	if err := p.currDelIter.Err(); err != nil {
 		p.err = errors.Wrap(err, "iterate chunk while re-encoding")
@@ -425,7 +434,7 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 			// will be overwritten at set.Next() call.
 			for chksIter.Next() {
 				c := chksIter.At()
-				cs.addIter(c.Chunk.Iterator(nil))
+				cs.addIter(c.Chunk.Encoding(), c.Chunk.Iterator(nil))
 			}
 			if err := chksIter.Err(); err != nil {
 				return errorOnlyStringIter{err}, nil
@@ -458,18 +467,24 @@ func (d *RelabelModifier) Modify(_ index.StringIter, set storage.ChunkSeriesSet,
 
 // mergeChunkSeries build storage.ChunkSeries from several chunkenc.Iterator.
 type mergeChunkSeries struct {
-	lset labels.Labels
-	ss   []storage.Series
+	lset          labels.Labels
+	ss            []storage.Series
+	floatEncoding chunkenc.Encoding
 }
 
 func newChunkSeriesBuilder(lset labels.Labels) *mergeChunkSeries {
 	return &mergeChunkSeries{
-		lset: lset,
-		ss:   make([]storage.Series, 0),
+		lset:          lset,
+		ss:            make([]storage.Series, 0),
+		floatEncoding: chunkenc.EncXOR,
 	}
 }
 
-func (s *mergeChunkSeries) addIter(iter chunkenc.Iterator) {
+func (s *mergeChunkSeries) addIter(enc chunkenc.Encoding, iter chunkenc.Iterator) {
+	// Preserve XOR2 when any source float chunk in the series is XOR2-encoded.
+	if enc == chunkenc.EncXOR2 {
+		s.floatEncoding = chunkenc.EncXOR2
+	}
 	s.ss = append(s.ss, &storage.SeriesEntry{
 		SampleIteratorFn: func(iterator chunkenc.Iterator) chunkenc.Iterator {
 			return iter
@@ -486,10 +501,10 @@ func (s *mergeChunkSeries) Iterator(iterator chunks.Iterator) chunks.Iterator {
 		return nil
 	}
 	if len(s.ss) == 1 {
-		return storage.NewSeriesToChunkEncoder(s.ss[0]).Iterator(iterator)
+		return storage.NewSeriesToChunkEncoderWithFloatEncoding(s.ss[0], s.floatEncoding).Iterator(iterator)
 	}
 
-	return storage.NewSeriesToChunkEncoder(storage.ChainedSeriesMerge(s.ss...)).Iterator(iterator)
+	return storage.NewSeriesToChunkEncoderWithFloatEncoding(storage.ChainedSeriesMerge(s.ss...), s.floatEncoding).Iterator(iterator)
 }
 
 type errorOnlyStringIter struct {

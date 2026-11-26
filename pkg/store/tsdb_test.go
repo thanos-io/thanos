@@ -17,6 +17,7 @@ import (
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/storage"
 	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunkenc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -689,4 +690,68 @@ func benchTSDBStoreSeries(t testutil.TB, totalSamples, totalSeries int) {
 			ExpectedSeries: expected,
 		},
 	)
+}
+
+func TestTSDBStore_Series_XOR2(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		enableSTStorage bool
+		st              int64
+		wantST          int64
+	}{
+		{name: "without_st", enableSTStorage: false, st: 0, wantST: 0},
+		{name: "with_st", enableSTStorage: true, st: 500, wantST: 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			opts := tsdb.DefaultOptions()
+			opts.FloatChunkEncoding = chunkenc.EncXOR2
+			opts.EnableSTStorage = tc.enableSTStorage
+
+			db, err := tsdb.Open(t.TempDir(), nil, nil, opts, nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, db.Close()) })
+
+			app := db.AppenderV2(ctx)
+			lset := labels.FromStrings("__name__", "xor2_test", "a", "1")
+			for i := int64(1); i <= 3; i++ {
+				_, err = app.Append(0, lset, tc.st, i*1000, float64(i)*2.5, nil, nil, storage.AOptions{})
+				testutil.Ok(t, err)
+			}
+			testutil.Ok(t, app.Commit())
+
+			tsdbStore := NewTSDBStore(nil, db, component.Receive, labels.FromStrings("region", "eu-west"))
+			srv := newStoreSeriesServer(ctx)
+			testutil.Ok(t, tsdbStore.Series(&storepb.SeriesRequest{
+				MinTime: 0,
+				MaxTime: 5000,
+				Matchers: []storepb.LabelMatcher{
+					{Type: storepb.LabelMatcher_EQ, Name: "__name__", Value: "xor2_test"},
+				},
+			}, srv))
+
+			testutil.Equals(t, 1, len(srv.SeriesSet))
+			testutil.Equals(t, 1, len(srv.SeriesSet[0].Chunks))
+
+			raw := srv.SeriesSet[0].Chunks[0].Raw
+			testutil.Equals(t, storepb.Chunk_XOR2, raw.Type)
+			testutil.Equals(t, 3, raw.XORNumSamples())
+			testutil.Equals(t, xxhash.Sum64(raw.Data), raw.Hash)
+
+			chk, err := chunkenc.FromData(chunkenc.EncXOR2, raw.Data)
+			testutil.Ok(t, err)
+			it := chk.Iterator(nil)
+			for i := int64(1); i <= 3; i++ {
+				testutil.Equals(t, chunkenc.ValFloat, it.Next())
+				gotT, gotV := it.At()
+				testutil.Equals(t, i*1000, gotT)
+				testutil.Equals(t, float64(i)*2.5, gotV)
+				testutil.Equals(t, tc.wantST, it.AtST())
+			}
+			testutil.Equals(t, chunkenc.ValNone, it.Next())
+			testutil.Ok(t, it.Err())
+		})
+	}
 }

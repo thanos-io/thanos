@@ -535,6 +535,17 @@ Flags:
                                  histograms. This flag is a no-op now and will
                                  be removed in the future. Native histogram
                                  ingestion is always enabled.
+      --tsdb.float-chunk-encoding=xor
+                                 Chunk encoding to use for float samples in
+                                 local TSDB (ignored when --remote-write.config*
+                                 is set for stateless mode). Supported values
+                                 are: "xor" (default) and "xor2". Warning:
+                                 make sure all Queriers (and any other StoreAPI
+                                 clients) are already running a Thanos version
+                                 with XOR2 support before changing this flag
+                                 or uploading XOR2 blocks; older Queriers
+                                 cannot decode XOR2 chunks, and older Thanos or
+                                 Prometheus versions cannot read XOR2 blocks.
       --remote-write.config-file=<file-path>
                                  Path to YAML config for the remote-write
                                  configurations, that specify servers

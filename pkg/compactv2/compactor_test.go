@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/model/histogram"
 	"github.com/prometheus/prometheus/model/labels"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/storage"
@@ -885,4 +886,389 @@ func readBlockChunkBytes(t *testing.T, bDir string) map[string][][]byte {
 	}
 	testutil.Ok(t, all.Err())
 	return res
+}
+
+func TestCompactor_WriteSeries_DeletionPreservesXOR2(t *testing.T) {
+	t.Parallel()
+
+	type sampleSpec struct {
+		st, t int64
+		v     float64
+	}
+
+	for _, tc := range []struct {
+		name     string
+		enc      chunkenc.Encoding
+		input    []sampleSpec
+		delRange tombstones.Interval
+		want     []sampleSpec
+		wantMinT int64
+		wantMaxT int64
+	}{
+		{
+			name:     "xor2_middle_deletion_with_st",
+			enc:      chunkenc.EncXOR2,
+			input:    []sampleSpec{{st: 50, t: 1000, v: 1.0}, {st: 50, t: 2000, v: 2.0}, {st: 100, t: 3000, v: 3.0}},
+			delRange: tombstones.Interval{Mint: 1500, Maxt: 2500},
+			want:     []sampleSpec{{st: 50, t: 1000, v: 1.0}, {st: 100, t: 3000, v: 3.0}},
+			wantMinT: 1000,
+			wantMaxT: 3000,
+		},
+		{
+			name:     "xor2_first_sample_deletion_without_st",
+			enc:      chunkenc.EncXOR2,
+			input:    []sampleSpec{{t: 1000, v: 1.0}, {t: 2000, v: 2.0}, {t: 3000, v: 3.0}},
+			delRange: tombstones.Interval{Mint: 500, Maxt: 1500},
+			want:     []sampleSpec{{t: 2000, v: 2.0}, {t: 3000, v: 3.0}},
+			wantMinT: 2000,
+			wantMaxT: 3000,
+		},
+		{
+			name:     "xor_last_sample_deletion",
+			enc:      chunkenc.EncXOR,
+			input:    []sampleSpec{{t: 1000, v: 1.0}, {t: 2000, v: 2.0}, {t: 3000, v: 3.0}},
+			delRange: tombstones.Interval{Mint: 2500, Maxt: 3500},
+			want:     []sampleSpec{{t: 1000, v: 1.0}, {t: 2000, v: 2.0}},
+			wantMinT: 1000,
+			wantMaxT: 2000,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			logger := log.NewNopLogger()
+			tmpDir := t.TempDir()
+
+			srcID := ulid.MustNew(1, nil)
+			srcDir := filepath.Join(tmpDir, srcID.String())
+			testutil.Ok(t, os.MkdirAll(srcDir, os.ModePerm))
+			d, err := block.NewDiskWriter(ctx, logger, srcDir)
+			testutil.Ok(t, err)
+			testutil.Ok(t, d.AddSymbol("__name__"))
+			testutil.Ok(t, d.AddSymbol("xor2_del"))
+
+			chk, err := chunkenc.NewEmptyChunk(tc.enc)
+			testutil.Ok(t, err)
+			app, err := chk.Appender()
+			testutil.Ok(t, err)
+			for _, s := range tc.input {
+				app.Append(s.st, s.t, s.v)
+			}
+
+			chks := []chunks.Meta{{Chunk: chk, MinTime: tc.input[0].t, MaxTime: tc.input[len(tc.input)-1].t}}
+			testutil.Ok(t, d.WriteChunks(chks...))
+			testutil.Ok(t, d.AddSeries(0, labels.FromStrings("__name__", "xor2_del"), chks...))
+			_, err = d.Flush()
+			testutil.Ok(t, err)
+			srcMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: srcID, MinTime: 1000, MaxTime: 3001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, srcMeta.WriteToDir(logger, srcDir))
+
+			b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), srcDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, b.Close()) })
+
+			outID := ulid.MustNew(2, nil)
+			outDir := filepath.Join(tmpDir, outID.String())
+			outWriter, err := block.NewDiskWriter(ctx, logger, outDir)
+			testutil.Ok(t, err)
+
+			var changes bytes.Buffer
+			comp := New(tmpDir, logger, &changeLog{w: &changes}, downsample.NewPool())
+			delMod := WithDeletionModifier(metadata.DeletionRequest{
+				Matchers:  []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_del")},
+				Intervals: tombstones.Intervals{tc.delRange},
+			})
+			testutil.Ok(t, comp.WriteSeries(ctx, []block.Reader{b}, outWriter, NewProgressLogger(logger, 1), delMod))
+			testutil.Ok(t, os.MkdirAll(outDir, os.ModePerm))
+			_, err = outWriter.Flush()
+			testutil.Ok(t, err)
+			outMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: outID, MinTime: 1000, MaxTime: 3001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, outMeta.WriteToDir(logger, outDir))
+
+			outBlk, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), outDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, outBlk.Close()) })
+
+			cq, err := tsdb.NewBlockChunkQuerier(outBlk, 0, 5000)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, cq.Close()) })
+
+			ss := cq.Select(ctx, false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_del"))
+			testutil.Assert(t, ss.Next())
+			chksIt := ss.At().Iterator(nil)
+			testutil.Assert(t, chksIt.Next())
+			gotMeta := chksIt.At()
+			testutil.Equals(t, tc.enc, gotMeta.Chunk.Encoding())
+			testutil.Equals(t, tc.wantMinT, gotMeta.MinTime)
+			testutil.Equals(t, tc.wantMaxT, gotMeta.MaxTime)
+
+			var got []sampleSpec
+			it := gotMeta.Chunk.Iterator(nil)
+			for it.Next() != chunkenc.ValNone {
+				ts, v := it.At()
+				got = append(got, sampleSpec{st: it.AtST(), t: ts, v: v})
+			}
+			testutil.Ok(t, it.Err())
+			testutil.Equals(t, tc.want, got)
+			testutil.Assert(t, !chksIt.Next())
+			testutil.Ok(t, chksIt.Err())
+			testutil.Assert(t, !ss.Next())
+			testutil.Ok(t, ss.Err())
+		})
+	}
+}
+
+func TestCompactor_WriteSeries_RelabelPreservesXOR2(t *testing.T) {
+	t.Parallel()
+
+	type sampleSpec struct {
+		st, t int64
+		v     float64
+	}
+
+	for _, tc := range []struct {
+		name    string
+		enc     chunkenc.Encoding
+		samples []sampleSpec
+	}{
+		{
+			name:    "xor2_without_st",
+			enc:     chunkenc.EncXOR2,
+			samples: []sampleSpec{{t: 1000, v: 1.0}, {t: 2000, v: 2.0}},
+		},
+		{
+			name:    "xor2_with_st",
+			enc:     chunkenc.EncXOR2,
+			samples: []sampleSpec{{st: 50, t: 1000, v: 1.0}, {st: 100, t: 2000, v: 2.0}},
+		},
+		{
+			name:    "xor_stays_xor",
+			enc:     chunkenc.EncXOR,
+			samples: []sampleSpec{{t: 1000, v: 1.0}, {t: 2000, v: 2.0}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			logger := log.NewNopLogger()
+			tmpDir := t.TempDir()
+
+			srcID := ulid.MustNew(1, nil)
+			srcDir := filepath.Join(tmpDir, srcID.String())
+			testutil.Ok(t, os.MkdirAll(srcDir, os.ModePerm))
+			d, err := block.NewDiskWriter(ctx, logger, srcDir)
+			testutil.Ok(t, err)
+			testutil.Ok(t, d.AddSymbol("__name__"))
+			testutil.Ok(t, d.AddSymbol("env"))
+			testutil.Ok(t, d.AddSymbol("old"))
+			testutil.Ok(t, d.AddSymbol("xor2_relabel"))
+
+			chk, err := chunkenc.NewEmptyChunk(tc.enc)
+			testutil.Ok(t, err)
+			app, err := chk.Appender()
+			testutil.Ok(t, err)
+			for _, s := range tc.samples {
+				app.Append(s.st, s.t, s.v)
+			}
+
+			chks := []chunks.Meta{{Chunk: chk, MinTime: tc.samples[0].t, MaxTime: tc.samples[len(tc.samples)-1].t}}
+			testutil.Ok(t, d.WriteChunks(chks...))
+			testutil.Ok(t, d.AddSeries(0, labels.FromStrings("__name__", "xor2_relabel", "env", "old"), chks...))
+			_, err = d.Flush()
+			testutil.Ok(t, err)
+			srcMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: srcID, MinTime: 1000, MaxTime: 2001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, srcMeta.WriteToDir(logger, srcDir))
+
+			b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), srcDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, b.Close()) })
+
+			outID := ulid.MustNew(2, nil)
+			outDir := filepath.Join(tmpDir, outID.String())
+			outWriter, err := block.NewDiskWriter(ctx, logger, outDir)
+			testutil.Ok(t, err)
+
+			var changes bytes.Buffer
+			comp := New(tmpDir, logger, &changeLog{w: &changes}, downsample.NewPool())
+			relabelMod := WithRelabelModifier(&relabel.Config{
+				SourceLabels:         model.LabelNames{"env"},
+				Regex:                relabel.MustNewRegexp("old"),
+				Action:               relabel.Replace,
+				TargetLabel:          "env",
+				Replacement:          "new",
+				NameValidationScheme: model.UTF8Validation,
+			})
+			testutil.Ok(t, comp.WriteSeries(ctx, []block.Reader{b}, outWriter, NewProgressLogger(logger, 1), relabelMod))
+			testutil.Ok(t, os.MkdirAll(outDir, os.ModePerm))
+			_, err = outWriter.Flush()
+			testutil.Ok(t, err)
+			outMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: outID, MinTime: 1000, MaxTime: 2001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, outMeta.WriteToDir(logger, outDir))
+
+			outBlk, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), outDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, outBlk.Close()) })
+
+			cq, err := tsdb.NewBlockChunkQuerier(outBlk, 0, 5000)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, cq.Close()) })
+
+			ss := cq.Select(ctx, false, nil, labels.MustNewMatcher(labels.MatchEqual, "__name__", "xor2_relabel"))
+			testutil.Assert(t, ss.Next())
+			testutil.Equals(t, labels.FromStrings("__name__", "xor2_relabel", "env", "new"), ss.At().Labels())
+			chksIt := ss.At().Iterator(nil)
+			testutil.Assert(t, chksIt.Next())
+			gotMeta := chksIt.At()
+			testutil.Equals(t, tc.enc, gotMeta.Chunk.Encoding())
+
+			var got []sampleSpec
+			it := gotMeta.Chunk.Iterator(nil)
+			for it.Next() != chunkenc.ValNone {
+				ts, v := it.At()
+				got = append(got, sampleSpec{st: it.AtST(), t: ts, v: v})
+			}
+			testutil.Ok(t, it.Err())
+			testutil.Equals(t, tc.samples, got)
+			testutil.Assert(t, !chksIt.Next())
+			testutil.Ok(t, chksIt.Err())
+			testutil.Assert(t, !ss.Next())
+			testutil.Ok(t, ss.Err())
+		})
+	}
+}
+
+func TestCompactor_WriteSeries_DeletionUnsupportedEncoding(t *testing.T) {
+	t.Parallel()
+
+	newHistChunk := func(t *testing.T, enc chunkenc.Encoding) chunkenc.Chunk {
+		t.Helper()
+		chk, err := chunkenc.NewEmptyChunk(enc)
+		testutil.Ok(t, err)
+		app, err := chk.Appender()
+		testutil.Ok(t, err)
+		for _, ts := range []int64{1000, 2000, 3000} {
+			var st int64
+			if enc == chunkenc.EncHistogramST || enc == chunkenc.EncFloatHistogramST {
+				st = 50
+			}
+			switch enc {
+			case chunkenc.EncHistogram, chunkenc.EncHistogramST:
+				h := &histogram.Histogram{
+					Schema:        1,
+					Count:         uint64(ts / 100),
+					Sum:           float64(ts),
+					ZeroThreshold: 0.001,
+					ZeroCount:     1,
+				}
+				_, _, app, err = app.AppendHistogram(nil, st, ts, h, true)
+			case chunkenc.EncFloatHistogram, chunkenc.EncFloatHistogramST:
+				fh := &histogram.FloatHistogram{
+					Schema:        1,
+					Count:         float64(ts / 100),
+					Sum:           float64(ts),
+					ZeroThreshold: 0.001,
+					ZeroCount:     1,
+				}
+				_, _, app, err = app.AppendFloatHistogram(nil, st, ts, fh, true)
+			default:
+				t.Fatalf("unexpected encoding %s", enc)
+			}
+			testutil.Ok(t, err)
+		}
+		return chk
+	}
+
+	for _, enc := range []chunkenc.Encoding{
+		chunkenc.EncHistogram,
+		chunkenc.EncFloatHistogram,
+		chunkenc.EncHistogramST,
+		chunkenc.EncFloatHistogramST,
+	} {
+		t.Run("enc="+enc.String(), func(t *testing.T) {
+			t.Parallel()
+
+			ctx := t.Context()
+			logger := log.NewNopLogger()
+			tmpDir := t.TempDir()
+
+			srcID := ulid.MustNew(1, nil)
+			srcDir := filepath.Join(tmpDir, srcID.String())
+			testutil.Ok(t, os.MkdirAll(srcDir, os.ModePerm))
+			d, err := block.NewDiskWriter(ctx, logger, srcDir)
+			testutil.Ok(t, err)
+			testutil.Ok(t, d.AddSymbol("__name__"))
+			testutil.Ok(t, d.AddSymbol("hist_del"))
+
+			chks := []chunks.Meta{{Chunk: newHistChunk(t, enc), MinTime: 1000, MaxTime: 3000}}
+			testutil.Ok(t, d.WriteChunks(chks...))
+			testutil.Ok(t, d.AddSeries(0, labels.FromStrings("__name__", "hist_del"), chks...))
+			_, err = d.Flush()
+			testutil.Ok(t, err)
+			srcMeta := metadata.Meta{
+				BlockMeta: tsdb.BlockMeta{Version: 1, ULID: srcID, MinTime: 1000, MaxTime: 3001},
+				Thanos:    metadata.Thanos{Labels: map[string]string{"ext": "1"}},
+			}
+			testutil.Ok(t, srcMeta.WriteToDir(logger, srcDir))
+
+			b, err := tsdb.OpenBlock(logutil.GoKitLogToSlog(logger), srcDir, downsample.NewPool(), nil)
+			testutil.Ok(t, err)
+			t.Cleanup(func() { testutil.Ok(t, b.Close()) })
+
+			outWriter, err := block.NewDiskWriter(ctx, logger, filepath.Join(tmpDir, ulid.MustNew(2, nil).String()))
+			testutil.Ok(t, err)
+
+			var changes bytes.Buffer
+			comp := New(tmpDir, logger, &changeLog{w: &changes}, downsample.NewPool())
+			delMod := WithDeletionModifier(metadata.DeletionRequest{
+				Matchers:  []*labels.Matcher{labels.MustNewMatcher(labels.MatchEqual, "__name__", "hist_del")},
+				Intervals: tombstones.Intervals{{Mint: 1500, Maxt: 2500}},
+			})
+			err = comp.WriteSeries(ctx, []block.Reader{b}, outWriter, NewProgressLogger(logger, 1), delMod)
+			testutil.NotOk(t, err)
+			testutil.Assert(t, strings.Contains(err.Error(), "unsupported encoding "+enc.String()), "unexpected error: %v", err)
+		})
+	}
+}
+
+func TestDelChunkSeriesIterator_UnexpectedEmptyChunk(t *testing.T) {
+	t.Parallel()
+
+	for _, enc := range []chunkenc.Encoding{chunkenc.EncXOR, chunkenc.EncXOR2} {
+		t.Run("enc="+enc.String(), func(t *testing.T) {
+			t.Parallel()
+
+			chk, err := chunkenc.NewEmptyChunk(enc)
+			testutil.Ok(t, err)
+
+			// Chunk metadata range [1000, 3000] is wider than the deletion interval [1500, 2500],
+			// so delGenericSeriesIterator takes the partial-rewrite path even though the chunk has no samples.
+			it := NewDelGenericSeriesIterator(
+				storage.NewListChunkSeriesIterator(chunks.Meta{
+					Chunk:   chk,
+					MinTime: 1000,
+					MaxTime: 3000,
+				}),
+				tombstones.Intervals{{Mint: 1500, Maxt: 2500}},
+				func(tombstones.Intervals) {},
+			).ToChunkSeriesIterator()
+
+			testutil.Assert(t, !it.Next())
+			testutil.NotOk(t, it.Err())
+			testutil.Assert(t, strings.Contains(it.Err().Error(), "unexpected empty chunk"), "unexpected error: %v", it.Err())
+		})
+	}
 }
