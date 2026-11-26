@@ -54,6 +54,7 @@ type ThanosQueryRangeRequest struct {
 	PartialResponse     bool
 	AutoDownsampling    bool
 	MaxSourceResolution int64
+	ExplicitRaw         bool // The request specifies a zero max_source_resolution.
 	ReplicaLabels       []string
 	StoreMatchers       [][]*labels.Matcher
 	CachingOptions      queryrange.CachingOptions
@@ -166,6 +167,7 @@ type ThanosQueryInstantRequest struct {
 	PartialResponse     bool
 	AutoDownsampling    bool
 	MaxSourceResolution int64
+	ExplicitRaw         bool // The request specifies a zero max_source_resolution.
 	ReplicaLabels       []string
 	StoreMatchers       [][]*labels.Matcher
 	Headers             []*RequestHeader

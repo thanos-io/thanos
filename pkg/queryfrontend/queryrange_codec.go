@@ -93,14 +93,16 @@ func (c queryRangeCodec) DecodeRequest(_ context.Context, r *http.Request, forwa
 		return nil, err
 	}
 
-	if r.FormValue(queryv1.MaxSourceResolutionParam) == "auto" {
+	maxSourceResolution := r.FormValue(queryv1.MaxSourceResolutionParam)
+	if maxSourceResolution == "auto" {
 		result.AutoDownsampling = true
 		result.MaxSourceResolution = result.Step / 5
 	} else {
-		result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue(queryv1.MaxSourceResolutionParam))
+		result.MaxSourceResolution, err = parseDownsamplingParamMillis(maxSourceResolution)
 		if err != nil {
 			return nil, err
 		}
+		result.ExplicitRaw = maxSourceResolution != "" && result.MaxSourceResolution == 0
 	}
 
 	result.PartialResponse, err = parsePartialResponseParam(r.FormValue(queryv1.PartialResponseParam), c.partialResponse)
@@ -176,9 +178,7 @@ func (c queryRangeCodec) EncodeRequest(ctx context.Context, r queryrange.Request
 
 	if thanosReq.AutoDownsampling {
 		params[queryv1.MaxSourceResolutionParam] = []string{"auto"}
-	} else if thanosReq.MaxSourceResolution != 0 {
-		// Add this param only if it is set. Set to 0 will impact
-		// auto-downsampling in the querier.
+	} else if thanosReq.ExplicitRaw || thanosReq.MaxSourceResolution != 0 {
 		params[queryv1.MaxSourceResolutionParam] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
 	}
 
@@ -239,16 +239,21 @@ func parseEnableDedupParam(s string) (bool, error) {
 }
 
 func parseDownsamplingParamMillis(s string) (int64, error) {
-	var maxSourceResolution int64
-	if s != "" {
-		var err error
-		maxSourceResolution, err = parseDurationMillis(s)
-		if err != nil {
-			return maxSourceResolution, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.MaxSourceResolutionParam)
-		}
+	if s == "" {
+		return 0, nil
 	}
 
-	if maxSourceResolution < 0 {
+	// Keep the sign of fractions of a millisecond before truncating them to zero.
+	negativeSeconds := false
+	if strings.HasPrefix(s, "-") {
+		seconds, err := strconv.ParseFloat(s, 64)
+		negativeSeconds = err == nil && seconds < 0
+	}
+	maxSourceResolution, err := parseDurationMillis(s)
+	if err != nil {
+		return 0, httpgrpc.Errorf(http.StatusBadRequest, errCannotParse, queryv1.MaxSourceResolutionParam)
+	}
+	if negativeSeconds || maxSourceResolution < 0 {
 		return 0, httpgrpc.Errorf(http.StatusBadRequest, "negative max_source_resolution is not accepted. Try a positive integer")
 	}
 

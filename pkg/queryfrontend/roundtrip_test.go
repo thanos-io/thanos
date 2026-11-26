@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -26,6 +28,7 @@ import (
 	"github.com/thanos-io/thanos/internal/cortex/frontend/transport"
 	"github.com/thanos-io/thanos/internal/cortex/querier/queryrange"
 	cortexvalidation "github.com/thanos-io/thanos/internal/cortex/util/validation"
+	queryv1 "github.com/thanos-io/thanos/pkg/api/query"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 )
 
@@ -385,6 +388,100 @@ func TestRoundTripSplitIntervalMiddleware(t *testing.T) {
 			testutil.Ok(t, err)
 
 			testutil.Equals(t, tc.expected, *res)
+		})
+	}
+}
+
+func TestRoundTripMaxSourceResolution(t *testing.T) {
+	const instant = "/api/v1/query?query=foo&time=3600"
+	const queryRange = "/api/v1/query_range?query=foo&start=0&end=3600&step=1800"
+
+	for _, tc := range []struct {
+		name          string
+		path          string
+		post          bool
+		resolutions   []string
+		wantForwarded [][]string
+	}{
+		{
+			name:          "instant URL parameters",
+			path:          instant,
+			resolutions:   []string{"0s", "0", "", "auto", "5m"},
+			wantForwarded: [][]string{{"0"}, {"0"}, nil, {"auto"}, {"300"}},
+		},
+		{
+			name:          "instant form parameters",
+			path:          instant,
+			post:          true,
+			resolutions:   []string{"0s", ""},
+			wantForwarded: [][]string{{"0"}, nil},
+		},
+		{
+			name:          "range with cached default resolution",
+			path:          queryRange,
+			resolutions:   []string{"", "", "0s", "0"},
+			wantForwarded: [][]string{nil, {"0"}},
+		},
+		{
+			name:          "range with cached raw resolution",
+			path:          queryRange,
+			post:          true,
+			resolutions:   []string{"0s", "0", "", ""},
+			wantForwarded: [][]string{{"0"}, nil},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tpw, err := NewTripperware(
+				Config{
+					CortexHandlerConfig: &transport.HandlerConfig{},
+					QueryRangeConfig: QueryRangeConfig{
+						Limits:                 defaultLimits,
+						SplitQueriesByInterval: day,
+						ResultsCacheConfig: &queryrange.ResultsCacheConfig{
+							CacheConfig: cortexcache.Config{
+								EnableFifoCache: true,
+								Fifocache:       cortexcache.FifoCacheConfig{MaxSizeItems: 10, Validity: time.Hour},
+							},
+						},
+					},
+				},
+				nil,
+				log.NewNopLogger(),
+			)
+			testutil.Ok(t, err)
+
+			var forwarded [][]string
+			_, handler := promqlResults(false)
+			backend := newFakeRoundTripper()
+			backend.setHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if parseErr := r.ParseForm(); parseErr != nil {
+					http.Error(w, parseErr.Error(), http.StatusBadRequest)
+					return
+				}
+				forwarded = append(forwarded, r.Form[queryv1.MaxSourceResolutionParam])
+				handler.ServeHTTP(w, r)
+			}))
+			frontend := tpw(backend)
+			ctx := user.InjectOrgID(t.Context(), "1")
+
+			for _, resolution := range tc.resolutions {
+				params := url.Values{}
+				if resolution != "" {
+					params.Set(queryv1.MaxSourceResolutionParam, resolution)
+				}
+				var req *http.Request
+				if tc.post {
+					req = httptest.NewRequestWithContext(ctx, http.MethodPost, tc.path, strings.NewReader(params.Encode()))
+					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				} else {
+					req = httptest.NewRequestWithContext(ctx, http.MethodGet, tc.path+"&"+params.Encode(), nil)
+				}
+				resp, roundTripErr := frontend.RoundTrip(req)
+				testutil.Ok(t, roundTripErr)
+				testutil.Ok(t, resp.Body.Close())
+				testutil.Equals(t, http.StatusOK, resp.StatusCode)
+			}
+			testutil.Equals(t, tc.wantForwarded, forwarded)
 		})
 	}
 }

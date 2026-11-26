@@ -130,13 +130,15 @@ func (c queryInstantCodec) DecodeRequest(_ context.Context, r *http.Request, for
 		return nil, err
 	}
 
-	if r.FormValue(queryv1.MaxSourceResolutionParam) == "auto" {
+	maxSourceResolution := r.FormValue(queryv1.MaxSourceResolutionParam)
+	if maxSourceResolution == "auto" {
 		result.AutoDownsampling = true
 	} else {
-		result.MaxSourceResolution, err = parseDownsamplingParamMillis(r.FormValue(queryv1.MaxSourceResolutionParam))
+		result.MaxSourceResolution, err = parseDownsamplingParamMillis(maxSourceResolution)
 		if err != nil {
 			return nil, err
 		}
+		result.ExplicitRaw = maxSourceResolution != "" && result.MaxSourceResolution == 0
 	}
 
 	result.PartialResponse, err = parsePartialResponseParam(r.FormValue(queryv1.PartialResponseParam), c.partialResponse)
@@ -200,9 +202,7 @@ func (c queryInstantCodec) EncodeRequest(ctx context.Context, r queryrange.Reque
 	}
 	if thanosReq.AutoDownsampling {
 		params[queryv1.MaxSourceResolutionParam] = []string{"auto"}
-	} else if thanosReq.MaxSourceResolution != 0 {
-		// Add this param only if it is set. Set to 0 will impact
-		// auto-downsampling in the querier.
+	} else if thanosReq.ExplicitRaw || thanosReq.MaxSourceResolution != 0 {
 		params[queryv1.MaxSourceResolutionParam] = []string{encodeDurationMillis(thanosReq.MaxSourceResolution)}
 	}
 
