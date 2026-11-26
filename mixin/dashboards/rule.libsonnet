@@ -21,28 +21,28 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('Rule Group Evaluations')
         .addPanel(
-          g.panel('Rule Group Evaluations') +
+          g.timeseriesPanel('Rule Group Evaluations') +
           g.queryPanel(
             'sum by (%(ruleGroupDimensions)s) (rate(prometheus_rule_evaluations_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
             '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
-          g.panel('Rule Group Evaluations Failed') +
+          g.timeseriesPanel('Rule Group Evaluations Failed') +
           g.queryPanel(
             'sum by (%(ruleGroupDimensions)s) (rate(prometheus_rule_evaluation_failures_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
             '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
-          g.panel('Rule Group Evaluations Missed') +
+          g.timeseriesPanel('Rule Group Evaluations Missed') +
           g.queryPanel(
             'sum by (%(ruleGroupDimensions)s) (increase(prometheus_rule_group_iterations_missed_total{%(selector)s}[$__rate_interval]))' % thanos.rule.dashboard,
             '{{ rule_group }} {{ strategy }}',
           )
         )
         .addPanel(
-          g.panel('Rule Group Evaluations Too Slow') +
+          g.timeseriesPanel('Rule Group Evaluations Too Slow') +
           g.queryPanel(
             |||
               (
@@ -58,14 +58,14 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('Alert Sent')
         .addPanel(
-          g.panel('Dropped Rate', 'Shows rate of dropped alerts.') +
+          g.timeseriesPanel('Dropped Rate', 'Shows rate of dropped alerts.') +
           g.queryPanel(
             'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_dropped_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{alertmanager}}'
           )
         )
         .addPanel(
-          g.panel('Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
+          g.timeseriesPanel('Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
           g.queryPanel(
             'sum by (%(dimensions)s, alertmanager) (rate(thanos_alert_sender_alerts_sent_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{alertmanager}}'
@@ -73,7 +73,7 @@ local utils = import '../lib/utils.libsonnet';
           g.stack
         )
         .addPanel(
-          g.panel('Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
+          g.timeseriesPanel('Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
           g.qpsErrTotalPanel(
             'thanos_alert_sender_errors_total{%s}' % thanos.rule.dashboard.selector,
             'thanos_alert_sender_alerts_sent_total{%s}' % thanos.rule.dashboard.selector,
@@ -81,21 +81,21 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Sent Duration', 'Shows how long has it taken to send alerts to alert manager.') +
+          g.timeseriesPanel('Sent Duration', 'Shows how long has it taken to send alerts to alert manager.') +
           g.latencyPanel('thanos_alert_sender_latency_seconds', thanos.rule.dashboard.selector, thanos.rule.dashboard.dimensions),
         )
       )
       .addRow(
         g.row('Alert Queue')
         .addPanel(
-          g.panel('Push Rate', 'Shows rate of queued alerts.') +
+          g.timeseriesPanel('Push Rate', 'Shows rate of queued alerts.') +
           g.queryPanel(
             'sum by (%s) (rate(thanos_alert_queue_alerts_dropped_total{%s}[$__rate_interval]))' % [thanos.rule.dashboard.dimensions, thanos.rule.dashboard.selector],
             '{{job}}'
           )
         )
         .addPanel(
-          g.panel('Drop Ratio', 'Shows ratio of dropped alerts compared to the total number of queued alerts.') +
+          g.timeseriesPanel('Drop Ratio', 'Shows ratio of dropped alerts compared to the total number of queued alerts.') +
           g.qpsErrTotalPanel(
             'thanos_alert_queue_alerts_dropped_total{%s}' % thanos.rule.dashboard.selector,
             'thanos_alert_queue_alerts_pushed_total{%s}' % thanos.rule.dashboard.selector,
@@ -106,30 +106,30 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('gRPC (Unary)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Unary gRPC requests.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcUnarySelector, thanos.rule.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcUnarySelector, thanos.rule.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcUnarySelector, thanos.rule.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('gRPC (Stream)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Streamed gRPC requests.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcServerStreamSelector, thanos.rule.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcServerStreamSelector, thanos.rule.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests, in quantiles') +
           g.latencyPanel('grpc_server_handling_seconds', grpcServerStreamSelector, thanos.rule.dashboard.dimensions)
         )
       )
@@ -140,7 +140,7 @@ local utils = import '../lib/utils.libsonnet';
     __overviewRows__+:: if thanos.rule == null then [] else [
       g.row('Rule')
       .addPanel(
-        g.panel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
+        g.timeseriesPanel('Alert Sent Rate', 'Shows rate of alerts that successfully sent to alert manager.') +
         g.queryPanel(
           'sum by (%s) (rate(thanos_alert_sender_alerts_sent_total{%s}[$__rate_interval]))' % [utils.joinLabels([thanos.dashboard.overview.dimensions, 'alertmanager']), thanos.dashboard.overview.selector],
           '{{alertmanager}}'
@@ -149,7 +149,7 @@ local utils = import '../lib/utils.libsonnet';
         g.stack
       )
       .addPanel(
-        g.panel('Alert Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
+        g.timeseriesPanel('Alert Sent Errors', 'Shows ratio of errors compared to the total number of sent alerts.') +
         g.qpsErrTotalPanel(
           'thanos_alert_sender_errors_total{%s}' % thanos.dashboard.overview.selector,
           'thanos_alert_sender_alerts_sent_total{%s}' % thanos.dashboard.overview.selector,

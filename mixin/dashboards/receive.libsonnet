@@ -48,29 +48,29 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('WRITE - Incoming Request')
         .addPanel(
-          g.panel('Rate', 'Shows rate of incoming requests.') +
+          g.timeseriesPanel('Rate', 'Shows rate of incoming requests.') +
           g.httpQpsPanel('http_requests_total', receiveHandlerSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
           g.httpErrPanel('http_requests_total', receiveHandlerSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle incoming requests in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle incoming requests in quantiles.') +
           g.latencyPanel('http_request_duration_seconds', receiveHandlerSelector, thanos.receive.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('WRITE - Incoming Request (tenant focus)')
         .addPanel(
-          g.panel('Rate of write requests (by tenant and code)') +
+          g.timeseriesPanel('Rate of write requests (by tenant and code)') +
           g.queryPanel(
             'sum by (%s) (rate(http_requests_total{%s}[$__rate_interval]))' % [tenantWithHttpCodeDimensions, tenantReceiveHandlerSeclector],
             '{{code}} - {{tenant}}'
           )
         )
         .addPanel(
-          g.panel('Number of errors (by tenant and code)') +
+          g.timeseriesPanel('Number of errors (by tenant and code)') +
           g.queryPanel(
             'sum by (%s) (rate(http_requests_total{%s}[$__rate_interval]))' % [
               tenantWithHttpCodeDimensions,
@@ -80,7 +80,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Average request duration (by tenant)') +
+          g.timeseriesPanel('Average request duration (by tenant)') +
           g.queryPanel(
             'sum by (%s) (rate(http_request_duration_seconds_sum{%s}[$__rate_interval])) / sum by (%s) (http_request_duration_seconds_count{%s})' % [
               thanos.receive.dashboard.tenantDimensions,
@@ -95,7 +95,7 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('HTTP requests (tenant focus)')
         .addPanel(
-          g.panel('Average successful HTTP request size (per tenant and code, only 2XX)') +
+          g.timeseriesPanel('Average successful HTTP request size (per tenant and code, only 2XX)') +
           g.queryPanel(
             'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$__rate_interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$__rate_interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
@@ -107,7 +107,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Average failed HTTP request size (per tenant and code, non 2XX)') +
+          g.timeseriesPanel('Average failed HTTP request size (per tenant and code, non 2XX)') +
           g.queryPanel(
             'sum by (%s) (rate(http_request_size_bytes_sum{%s}[$__rate_interval])) / sum by (%s) (rate(http_request_size_bytes_count{%s}[$__rate_interval]))' % [
               thanos.receive.dashboard.tenantDimensions,
@@ -119,7 +119,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Inflight requests (per tenant and method)') +
+          g.timeseriesPanel('Inflight requests (per tenant and method)') +
           g.queryPanel(
             'sum by (%s) (http_inflight_requests{%s})' % [
               std.join(', ', [thanos.receive.dashboard.tenantDimensions, 'method']),
@@ -132,7 +132,7 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('Series & Samples (tenant focus)')
         .addPanel(
-          g.panel('Rate of series received (per tenant, only 2XX)') +
+          g.timeseriesPanel('Rate of series received (per tenant, only 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
@@ -142,7 +142,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Rate of series not written (per tenant and code, non 2XX)') +
+          g.timeseriesPanel('Rate of series not written (per tenant and code, non 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_timeseries_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
@@ -152,7 +152,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Rate of samples received (per tenant, only 2XX)') +
+          g.timeseriesPanel('Rate of samples received (per tenant, only 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_samples_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code=~"2.."']),
@@ -162,7 +162,7 @@ local utils = import '../lib/utils.libsonnet';
           )
         )
         .addPanel(
-          g.panel('Rate of samples not written (per tenant and code, non 2XX)') +
+          g.timeseriesPanel('Rate of samples not written (per tenant and code, non 2XX)') +
           g.queryPanel(
             'sum(rate(thanos_receive_write_samples_sum{%s}[$__rate_interval])) by (%s) ' % [
               utils.joinLabels([thanos.receive.dashboard.tenantSelector, 'code!~"2.."']),
@@ -175,14 +175,14 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('WRITE - Replication')
         .addPanel(
-          g.panel('Rate', 'Shows rate of replications to other receive nodes.') +
+          g.timeseriesPanel('Rate', 'Shows rate of replications to other receive nodes.') +
           g.queryPanel(
             'sum by (%s) (rate(thanos_receive_replications_total{%s}[$__rate_interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
             'all {{job}}',
           )
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of replications to other receive nodes.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of replications to other receive nodes.') +
           g.qpsErrTotalPanel(
             'thanos_receive_replications_total{%s}' % utils.joinLabels([thanos.receive.dashboard.selector, 'result="error"']),
             'thanos_receive_replications_total{%s}' % thanos.receive.dashboard.selector,
@@ -193,14 +193,14 @@ local utils = import '../lib/utils.libsonnet';
       .addRow(
         g.row('WRITE - Forward Request')
         .addPanel(
-          g.panel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
+          g.timeseriesPanel('Rate', 'Shows rate of forwarded requests to other receive nodes.') +
           g.queryPanel(
             'sum by (%s) (rate(thanos_receive_forward_requests_total{%s}[$__rate_interval]))' % [thanos.receive.dashboard.dimensions, thanos.receive.dashboard.selector],
             'all {{job}}',
           )
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of forwarded requests to other receive nodes.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of forwarded requests to other receive nodes.') +
           g.qpsErrTotalPanel(
             'thanos_receive_forward_requests_total{%s}' % utils.joinLabels([thanos.receive.dashboard.selector, 'result="error"']),
             'thanos_receive_forward_requests_total{%s}' % thanos.receive.dashboard.selector,
@@ -212,15 +212,15 @@ local utils = import '../lib/utils.libsonnet';
         // TODO(https://github.com/thanos-io/thanos/issues/3926)
         g.row('WRITE - gRPC (Unary)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcUnaryWriteSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcUnaryWriteSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcUnaryWriteSelector, thanos.receive.dashboard.dimensions)
         )
       )
@@ -228,15 +228,15 @@ local utils = import '../lib/utils.libsonnet';
         // TODO(https://github.com/thanos-io/thanos/issues/3926)
         g.row('READ - gRPC (Unary)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Unary gRPC requests from queriers.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcUnaryReadSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcUnaryReadSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcUnaryReadSelector, thanos.receive.dashboard.dimensions)
         )
       )
@@ -244,22 +244,22 @@ local utils = import '../lib/utils.libsonnet';
         // TODO(https://github.com/thanos-io/thanos/issues/3926)
         g.row('READ - gRPC (Stream)')
         .addPanel(
-          g.panel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
+          g.timeseriesPanel('Rate', 'Shows rate of handled Streamed gRPC requests from queriers.') +
           g.grpcRequestsPanel('grpc_server_handled_total', grpcServerStreamSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
+          g.timeseriesPanel('Errors', 'Shows ratio of errors compared to the total number of handled requests from queriers.') +
           g.grpcErrorsPanel('grpc_server_handled_total', grpcServerStreamSelector, thanos.receive.dashboard.dimensions)
         )
         .addPanel(
-          g.panel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
+          g.timeseriesPanel('Duration', 'Shows how long has it taken to handle requests from queriers, in quantiles.') +
           g.latencyPanel('grpc_server_handling_seconds', grpcServerStreamSelector, thanos.receive.dashboard.dimensions)
         )
       )
       .addRow(
         g.row('Last Updated')
         .addPanel(
-          g.panel('Successful Upload', 'Shows the relative time of last successful upload to the object-store bucket.') +
+          g.timeseriesPanel('Successful Upload', 'Shows the relative time of last successful upload to the object-store bucket.') +
           g.tablePanel(
             ['time() - max by (%s) (thanos_objstore_bucket_last_successful_upload_time{%s})' % [utils.joinLabels([thanos.receive.dashboard.dimensions, 'bucket']), thanos.receive.dashboard.selector]],
             {
@@ -279,12 +279,12 @@ local utils = import '../lib/utils.libsonnet';
     __overviewRows__+:: if thanos.receive == null then [] else [
       g.row('Receive')
       .addPanel(
-        g.panel('Incoming Requests Rate', 'Shows rate of incoming requests.') +
+        g.timeseriesPanel('Incoming Requests Rate', 'Shows rate of incoming requests.') +
         g.httpQpsPanel('http_requests_total', utils.joinLabels([thanos.dashboard.overview.selector, 'handler="receive"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.receive.title)
       )
       .addPanel(
-        g.panel('Incoming Requests Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
+        g.timeseriesPanel('Incoming Requests Errors', 'Shows ratio of errors compared to the total number of handled incoming requests.') +
         g.httpErrPanel('http_requests_total', utils.joinLabels([thanos.dashboard.overview.selector, 'handler="receive"']), thanos.dashboard.overview.dimensions) +
         g.addDashboardLink(thanos.receive.title)
       )
