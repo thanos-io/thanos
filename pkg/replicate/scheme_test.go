@@ -382,7 +382,7 @@ func TestReplicationSchemeAll(t *testing.T) {
 			selector = c.selector
 		}
 
-		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs).Filter
+		filter := NewBlockFilter(logger, selector, []compact.ResolutionLevel{compact.ResolutionLevelRaw}, []int{1}, c.blockIDs)
 		fetcher, err := newMetaFetcher(
 			logger, objstore.WithNoopInstr(originBucket),
 			nil,
@@ -399,5 +399,58 @@ func TestReplicationSchemeAll(t *testing.T) {
 		testutil.Ok(t, err)
 
 		c.assert(ctx, t, originBucket, targetBucket)
+	}
+}
+
+func TestReplicationSchemeMissingBlockIDs(t *testing.T) {
+	presentID, missingID, otherMissingID := testULID(0), testULID(1), testULID(2)
+	originBucket := objstore.NewInMemBucket()
+	meta, err := json.Marshal(testMeta(presentID))
+	testutil.Ok(t, err)
+	testutil.Ok(t, originBucket.Upload(t.Context(), path.Join(presentID.String(), "meta.json"), bytes.NewReader(meta)))
+	testutil.Ok(t, originBucket.Upload(t.Context(), path.Join(presentID.String(), "chunks", "000001"), bytes.NewReader(nil)))
+	testutil.Ok(t, originBucket.Upload(t.Context(), path.Join(presentID.String(), "index"), bytes.NewReader(nil)))
+
+	for _, tc := range []struct {
+		name       string
+		blockIDs   []ulid.ULID
+		missingIDs string
+		wantCopied bool
+	}{
+		{
+			name:       "Missing",
+			blockIDs:   []ulid.ULID{missingID},
+			missingIDs: missingID.String(),
+		},
+		{
+			name:       "PartiallyAvailable",
+			blockIDs:   []ulid.ULID{missingID, presentID},
+			missingIDs: missingID.String(),
+			wantCopied: true,
+		},
+		{
+			name:       "MultipleMissing",
+			blockIDs:   []ulid.ULID{otherMissingID, missingID, otherMissingID},
+			missingIDs: missingID.String() + ", " + otherMissingID.String(),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := log.NewNopLogger()
+			from := objstore.WithNoopInstr(originBucket)
+			to := objstore.NewInMemBucket()
+			filter := NewBlockFilter(logger, nil, nil, nil, tc.blockIDs)
+			fetcher, err := newMetaFetcher(logger, from, nil, minTimeDuration, maxTimeDuration, 32, false)
+			testutil.Ok(t, err)
+			r := newReplicationScheme(logger, newReplicationMetrics(nil), filter, fetcher, from, to, nil)
+
+			err = r.execute(t.Context())
+			if tc.wantCopied {
+				testutil.Equals(t, originBucket.Objects(), to.Objects())
+			} else {
+				testutil.Equals(t, 0, len(to.Objects()))
+			}
+			testutil.NotOk(t, err)
+			testutil.Equals(t, "could not replicate requested blocks: "+tc.missingIDs, err.Error())
+		})
 	}
 }

@@ -173,7 +173,7 @@ func RunReplicate(
 		resolutions,
 		compactions,
 		blockIDs,
-	).Filter
+	)
 	metrics := newReplicationMetrics(reg)
 	ctx, cancel := context.WithCancel(context.Background())
 
