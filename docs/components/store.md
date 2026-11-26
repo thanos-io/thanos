@@ -196,7 +196,11 @@ Flags:
                                  iterates through all objects in the bucket,
                                  recursively traversing into each directory.
                                  This avoids N+1 calls at the expense of having
-                                 slower bucket iterations.
+                                 slower bucket iterations. With recursive,
+                                 the deletion, no-compact and no-downsample
+                                 marker filters take marker presence from the
+                                 listing and only fetch the markers that exist
+                                 instead of probing every block.
       --block-sync-concurrency=20
                                  Number of goroutines to use when constructing
                                  index-cache.json blocks from object storage.
