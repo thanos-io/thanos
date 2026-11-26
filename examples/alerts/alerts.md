@@ -347,7 +347,7 @@ rules:
     (
       sum by (job) (rate(grpc_server_handled_total{grpc_code=~"Unknown|ResourceExhausted|Internal|Unavailable|DataLoss|DeadlineExceeded", job=~".*thanos-query.*"}[5m]))
     /
-      sum by (job) (rate(grpc_server_started_total{job=~".*thanos-query.*"}[5m]))
+      sum by (job) (rate(grpc_server_handled_total{job=~".*thanos-query.*"}[5m]))
     * 100 > 5
     )
   for: 5m
