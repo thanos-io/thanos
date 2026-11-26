@@ -604,11 +604,11 @@ Flags:
                                  sent by this receiver. Receivers accept both.
                                  One of none, zstd
       --receive.capnproto-compression-concurrency=4
-                                 Maximum number of Cap'n Proto messages
-                                 compressed at the same time by this process
-                                 when --receive.capnproto-compression=zstd.
-                                 Each slot holds about 3 MiB of encoder state.
-                                 0 means one slot per GOMAXPROCS.
+                                 Maximum number of replicated Cap'n
+                                 Proto messages compressed at the
+                                 same time by this process when
+                                 --receive.capnproto-compression=zstd. Each slot
+                                 holds about 3 MiB of encoder state.
       --receive.capnproto-address="0.0.0.0:19391"
                                  Address for the Cap'n Proto server.
       --receive.grpc-service-config=<content>

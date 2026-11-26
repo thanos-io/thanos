@@ -11,10 +11,12 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"capnproto.org/go/capnp/v3"
@@ -73,10 +75,6 @@ func zstdFrameHeader(contentSize uint64) []byte {
 	return binary.LittleEndian.AppendUint64(hdr, contentSize)
 }
 
-type nopCloser struct{ *bytes.Buffer }
-
-func (nopCloser) Close() error { return nil }
-
 func testEncoder(tb testing.TB) *zstd.Encoder {
 	tb.Helper()
 	enc, err := zstdEncoderFor(DefaultCompressionConcurrency)
@@ -84,9 +82,15 @@ func testEncoder(tb testing.TB) *zstd.Encoder {
 	return enc
 }
 
-func testCodec(tb testing.TB, buf *bytes.Buffer) *zstdCodec {
+// testZstdCodec compresses both directions, so one buffer can round trip messages.
+type testZstdCodec struct {
+	*zstdFrameEncoder
+	*zstdFrameDecoder
+}
+
+func testCodec(tb testing.TB, buf *bytes.Buffer) testZstdCodec {
 	tb.Helper()
-	return newZstdCodec(bufio.NewReader(buf), nopCloser{buf}, testEncoder(tb))
+	return testZstdCodec{newZstdFrameEncoder(buf, testEncoder(tb)), newZstdFrameDecoder(bufio.NewReader(buf))}
 }
 
 func TestZstdCodecRoundTrip(t *testing.T) {
@@ -234,11 +238,20 @@ func TestZstdCodecRejectsInvalidFrames(t *testing.T) {
 		{"decompressed size over limit", frame(zstdFrameHeader(maxMessageSize + 1)), zstd.ErrDecoderSizeExceeded.Error()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			z := newZstdCodec(bufio.NewReader(bytes.NewReader(tc.data)), nopCloser{&bytes.Buffer{}}, enc)
+			z := newZstdFrameDecoder(bufio.NewReader(bytes.NewReader(tc.data)))
 			_, err := z.Decode()
 			require.ErrorContains(t, err, tc.err)
 		})
 	}
+}
+
+func TestZstdCodecDoesNotTrustDeclaredSize(t *testing.T) {
+	// Stay below maxRetainedBufferSize, so the buffer is still there to inspect.
+	data := append(binary.AppendUvarint(nil, maxRetainedBufferSize-1), make([]byte, 100)...)
+	z := newZstdFrameDecoder(bufio.NewReader(bytes.NewReader(data)))
+	_, err := z.Decode()
+	require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	require.LessOrEqual(t, cap(z.in), minReadChunk, "input buffer must grow with received bytes, not the declared size")
 }
 
 func TestZstdCodecReleasesLargeBuffers(t *testing.T) {
@@ -294,11 +307,13 @@ func TestZstdEncoderFor(t *testing.T) {
 	require.NoError(t, err)
 	require.NotSame(t, a, c, "different concurrency must not share an encoder")
 
+	// Make GOMAXPROCS differ from the default, so 0 cannot resolve to it by accident.
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(2 * DefaultCompressionConcurrency))
 	auto, err := zstdEncoderFor(0)
 	require.NoError(t, err)
-	explicit, err := zstdEncoderFor(runtime.GOMAXPROCS(0))
+	explicit, err := zstdEncoderFor(DefaultCompressionConcurrency)
 	require.NoError(t, err)
-	require.Same(t, explicit, auto, "0 must resolve to GOMAXPROCS")
+	require.Same(t, explicit, auto, "0 must resolve to DefaultCompressionConcurrency")
 
 	_, err = zstdEncoderFor(-1)
 	require.ErrorContains(t, err, "must not be negative")
@@ -310,20 +325,104 @@ func TestServerTransportPrefaceShortRead(t *testing.T) {
 		_, _ = client.Write(zstdPreface[:2])
 		_ = client.Close()
 	}()
-	_, err := NewServerTransport(server, DefaultCompressionConcurrency)
+	_, err := NewServerTransport(server)
 	require.ErrorContains(t, err, "read connection preface")
 	_ = server.Close()
 }
 
-func TestServerTransportRejectsBadConcurrency(t *testing.T) {
-	client, server := net.Pipe()
+func TestServerTransportPrefaceTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		client, server := net.Pipe()
+		defer func() { _ = client.Close(); _ = server.Close() }()
+		go func() { _, _ = client.Write(zstdPreface[:2]) }()
+
+		start := time.Now()
+		_, err := NewServerTransport(server)
+		require.ErrorContains(t, err, "read connection preface")
+		require.ErrorIs(t, err, os.ErrDeadlineExceeded)
+		require.Equal(t, prefaceTimeout, time.Since(start))
+	})
+}
+
+func TestServerTransportClearsPrefaceDeadline(t *testing.T) {
+	for _, c := range []Compression{CompressionNone, CompressionZstd} {
+		t.Run(string(c), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				clientConn, serverConn := net.Pipe()
+				defer func() { _ = clientConn.Close(); _ = serverConn.Close() }()
+
+				go func() {
+					ct, err := NewClientTransport(clientConn, c, DefaultCompressionConcurrency)
+					if err != nil {
+						return
+					}
+					for qid := range uint32(2) {
+						if qid > 0 {
+							time.Sleep(2 * prefaceTimeout)
+						}
+						out, err := ct.NewMessage()
+						if err != nil {
+							return
+						}
+						boot, err := out.Message().NewBootstrap()
+						if err != nil {
+							return
+						}
+						boot.SetQuestionId(qid)
+						_ = out.Send()
+						out.Release()
+					}
+				}()
+
+				st, err := NewServerTransport(serverConn)
+				require.NoError(t, err)
+				for qid := range uint32(2) {
+					in, err := st.RecvMessage()
+					require.NoError(t, err, "message %d", qid)
+					boot, err := in.Message().Bootstrap()
+					require.NoError(t, err)
+					require.Equal(t, qid, boot.QuestionId())
+					in.Release()
+				}
+			})
+		})
+	}
+}
+
+func TestServerTransportRepliesPacked(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer func() { _ = clientConn.Close(); _ = serverConn.Close() }()
+
 	go func() {
-		_, _ = client.Write(zstdPreface[:])
+		if _, err := clientConn.Write(zstdPreface[:]); err != nil {
+			return
+		}
 	}()
-	_, err := NewServerTransport(server, -1)
-	require.ErrorContains(t, err, "must not be negative")
-	_ = client.Close()
-	_ = server.Close()
+	st, err := NewServerTransport(serverConn)
+	require.NoError(t, err)
+
+	go func() {
+		out, err := st.NewMessage()
+		if err != nil {
+			return
+		}
+		defer out.Release()
+		boot, err := out.Message().NewBootstrap()
+		if err != nil {
+			return
+		}
+		boot.SetQuestionId(7)
+		_ = out.Send()
+	}()
+
+	msg, err := capnp.NewPackedDecoder(clientConn).Decode()
+	require.NoError(t, err, "replies to a zstd client must be a packed stream")
+	defer msg.Release()
+	reply, err := rpccp.ReadRootMessage(msg)
+	require.NoError(t, err)
+	boot, err := reply.Bootstrap()
+	require.NoError(t, err)
+	require.Equal(t, uint32(7), boot.QuestionId())
 }
 
 type recordingConn struct {
@@ -378,7 +477,7 @@ func TestTransportsRoundTrip(t *testing.T) {
 			}
 			results := make(chan result, 1)
 			go func() {
-				st, err := NewServerTransport(serverConn, DefaultCompressionConcurrency)
+				st, err := NewServerTransport(serverConn)
 				if err != nil {
 					results <- result{err: err}
 					return
@@ -403,7 +502,25 @@ func TestTransportsRoundTrip(t *testing.T) {
 					return
 				}
 				got, err := in.Message().Message().Marshal()
-				results <- result{got: got, err: err}
+				if err != nil {
+					results <- result{err: err}
+					return
+				}
+				reply, err := st.NewMessage()
+				if err != nil {
+					results <- result{err: err}
+					return
+				}
+				defer reply.Release()
+				rb, err := reply.Message().NewBootstrap()
+				if err != nil {
+					results <- result{err: err}
+					return
+				}
+				rb.SetQuestionId(43)
+				// net.Pipe is synchronous: report first, so the client reads the reply.
+				results <- result{got: got}
+				_ = reply.Send()
 			}()
 
 			ct, err := NewClientTransport(clientConn, c, DefaultCompressionConcurrency)
@@ -425,6 +542,13 @@ func TestTransportsRoundTrip(t *testing.T) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("server did not receive the message")
 			}
+
+			reply, err := ct.RecvMessage()
+			require.NoError(t, err)
+			defer reply.Release()
+			rb, err := reply.Message().Bootstrap()
+			require.NoError(t, err)
+			require.Equal(t, uint32(43), rb.QuestionId())
 		})
 	}
 }

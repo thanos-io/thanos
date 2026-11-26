@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,7 +186,7 @@ func TestCapNProtoServer_Compression(t *testing.T) {
 
 	clients := map[writecapnp.Compression]*writecapnp.RemoteWriteClient{}
 	for _, c := range []writecapnp.Compression{writecapnp.CompressionNone, writecapnp.CompressionZstd} {
-		clients[c] = writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(c))
+		clients[c] = writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(c), writecapnp.WithCompressionConcurrency(0))
 		defer func() { require.NoError(t, clients[c].Close()) }()
 	}
 
@@ -293,31 +294,48 @@ func TestCapNProtoServer_SurvivesConnectionWithoutPreface(t *testing.T) {
 	require.NoError(t, listener.Close())
 }
 
-func TestCapNProtoServer_CompressionConcurrencyOption(t *testing.T) {
+// A connection accepted before Shutdown must not crash the server when its
+// preface arrives afterwards.
+func TestCapNProtoServer_ShutdownWithPendingConnection(t *testing.T) {
 	t.Parallel()
 
-	app := newFakeAppender(nil, nil, nil)
 	var (
-		writer   = NewCapNProtoWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: app}), &CapNProtoWriterOptions{})
-		listener = bufconn.Listen(1 << 20)
-		srv      = NewCapNProtoServer(listener, NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer, newNopLimiter(t)), log.NewNopLogger(), WithCapNProtoCompressionConcurrency(0))
+		writer   = NewCapNProtoWriter(log.NewNopLogger(), newFakeTenantAppendable(&fakeAppendable{appender: newFakeAppender(nil, nil, nil)}), &CapNProtoWriterOptions{})
+		listener = &acceptNotifyingListener{Listener: bufconn.Listen(1 << 20), accepting: make(chan struct{}, 2)}
+		srv      = NewCapNProtoServer(listener, NewCapNProtoHandler(prometheus.NewRegistry(), log.NewNopLogger(), writer, newNopLimiter(t)), log.NewNopLogger())
 	)
-	require.Equal(t, 0, srv.compressionConcurrency)
 	go func() { _ = srv.ListenAndServe() }()
-	defer srv.Shutdown()
 
-	client := writecapnp.NewRemoteWriteClient(listener, log.NewNopLogger(), writecapnp.WithCompression(writecapnp.CompressionZstd), writecapnp.WithCompressionConcurrency(0))
-	defer func() { require.NoError(t, client.Close()) }()
-
-	lset := labels.FromStrings("__name__", "m", "series", "0")
-	_, err := client.RemoteWrite(context.Background(), &storepb.WriteRequest{
-		Tenant: "default",
-		Timeseries: []prompb.TimeSeries{{
-			Labels:  labelpb.ZLabelsFromPromLabels(lset),
-			Samples: []prompb.Sample{{Timestamp: 1, Value: 1}},
-		}},
-	})
+	<-listener.accepting
+	conn, err := listener.Listener.(*bufconn.Listener).DialContext(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, []prompb.Sample{{Timestamp: 1, Value: 1}}, app.Get(lset))
+	// The server asks for the next connection only after handing this one off.
+	<-listener.accepting
+	srv.Shutdown()
+
+	client := writecapnp.NewRemoteWriteClient(dialerFunc(func(context.Context) (net.Conn, error) { return conn, nil }), log.NewNopLogger(), writecapnp.WithCompression(writecapnp.CompressionZstd))
+	defer func() { require.NoError(t, client.Close()) }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	// The result does not matter; getting one means the server goroutine did not panic.
+	_, _ = client.RemoteWrite(ctx, &storepb.WriteRequest{Tenant: "default"})
 	require.NoError(t, listener.Close())
 }
+
+// acceptNotifyingListener signals every time the server starts waiting in Accept.
+type acceptNotifyingListener struct {
+	net.Listener
+	accepting chan struct{}
+}
+
+func (l *acceptNotifyingListener) Accept() (net.Conn, error) {
+	select {
+	case l.accepting <- struct{}{}:
+	default:
+	}
+	return l.Listener.Accept()
+}
+
+type dialerFunc func(context.Context) (net.Conn, error)
+
+func (f dialerFunc) DialContext(ctx context.Context) (net.Conn, error) { return f(ctx) }

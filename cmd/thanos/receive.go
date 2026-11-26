@@ -570,7 +570,7 @@ func runReceive(
 		if err != nil {
 			return err
 		}
-		server := receive.NewCapNProtoServer(listener, handler, logger, receive.WithCapNProtoCompressionConcurrency(conf.capnpCompressionConcurrency))
+		server := receive.NewCapNProtoServer(listener, handler, logger)
 		g.Add(func() error {
 			return server.ListenAndServe()
 		}, func(err error) {
@@ -1073,7 +1073,7 @@ func (rc *receiveConfig) registerFlag(cmd extkingpin.FlagClause) {
 		Default(string(writecapnp.CompressionNone)).
 		EnumVar(&rc.capnpCompression, capnprotoCompressions...)
 
-	cmd.Flag("receive.capnproto-compression-concurrency", "Maximum number of Cap'n Proto messages compressed at the same time by this process when --receive.capnproto-compression=zstd. Each slot holds about 3 MiB of encoder state. 0 means one slot per GOMAXPROCS.").
+	cmd.Flag("receive.capnproto-compression-concurrency", "Maximum number of replicated Cap'n Proto messages compressed at the same time by this process when --receive.capnproto-compression=zstd. Each slot holds about 3 MiB of encoder state.").
 		Default(fmt.Sprintf("%d", writecapnp.DefaultCompressionConcurrency)).
 		IntVar(&rc.capnpCompressionConcurrency)
 
