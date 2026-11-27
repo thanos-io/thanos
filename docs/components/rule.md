@@ -174,7 +174,7 @@ The most important metrics to alert on are:
 
 * `thanos_alert_sender_alerts_dropped_total`. If greater than 0, it means that alerts triggered by Rule are not being sent to alertmanager which might indicate connection, incompatibility or misconfiguration problems.
 
-* `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that that rule failed to be evaluated, which results in either gap in rule or potentially ignored alert. This metric might indicate problems on the queryAPI endpoint you use. Alert heavily on this if this happens for longer than your alert thresholds. `strategy` label will tell you if failures comes from rules that tolerate [partial response](#partial-response) or not.
+* `prometheus_rule_evaluation_failures_total`. If greater than 0, it means that the rule failed to be evaluated, which results in either gap in rule or potentially ignored alert. This metric might indicate problems on the queryAPI endpoint you use. Alert heavily on this if this happens for longer than your alert thresholds. `strategy` label will tell you if failures comes from rules that tolerate [partial response](#partial-response) or not.
 
 * `prometheus_rule_group_last_duration_seconds > prometheus_rule_group_interval_seconds` If the difference is positive, it means that rule evaluation took more time than the scheduled interval, and data for some intervals could be missing. It can indicate that your query backend (e.g Querier) takes too much time to evaluate the query, i.e. that it is not fast enough to fill the rule. This might indicate other problems like slow StoreAPis or too complex query expression in rule.
 
