@@ -58,7 +58,15 @@ func (rapi *RuleAPI) Register(r *route.Router, tracer opentracing.Tracer, logger
 	instr := api.GetInstr(tracer, logger, ins, logMiddleware, rapi.disableCORS)
 
 	r.Get("/alerts", instr("alerts", func(r *http.Request) (any, []error, *api.ApiError, func()) {
-		return struct{ Alerts []*rulespb.AlertInstance }{Alerts: rapi.alerts.Active()}, nil, nil, func() {}
+		// Prometheus /api/v1/alerts uses "alerts" and an empty array when nothing is firing.
+		// A nil slice would marshal as null, which clients that decode into a list reject.
+		alerts := rapi.alerts.Active()
+		if alerts == nil {
+			alerts = []*rulespb.AlertInstance{}
+		}
+		return struct {
+			Alerts []*rulespb.AlertInstance `json:"alerts"`
+		}{Alerts: alerts}, nil, nil, func() {}
 	}))
 	r.Get("/rules", instr("rules", qapi.NewRulesHandler(rapi.ruleGroups, false)))
 }
