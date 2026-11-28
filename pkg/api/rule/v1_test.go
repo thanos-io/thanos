@@ -100,6 +100,9 @@ func TestAlertsEndpointMatchesPrometheusAPI(t *testing.T) {
 			if !ok {
 				t.Fatalf("response missing alerts: %s", body)
 			}
+			if len(tc.alerts) == 0 && string(alertsRaw) != "[]" {
+				t.Fatalf("alerts = %s, want []", alertsRaw)
+			}
 
 			var alerts []struct {
 				Labels map[string]string `json:"labels"`
